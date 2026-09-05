@@ -1,6 +1,6 @@
 # 0006 — The living-spec problem: an append-only revision log, not edit-in-place
 
-> Status: Draft
+> Status: Accepted
 > Date: 2026-07-30
 > Author: (session author)
 > Supersedes / Superseded-by: —

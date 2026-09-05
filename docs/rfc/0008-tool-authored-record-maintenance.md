@@ -1,6 +1,6 @@
 # 0008 — Tool-authored record maintenance: derived fields are a cache the tool owns
 
-> Status: Draft
+> Status: Accepted
 > Date: 2026-08-07
 > Author: (session author)
 > Supersedes / Superseded-by: —
