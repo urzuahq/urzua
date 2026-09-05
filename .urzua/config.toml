@@ -1,0 +1,17 @@
+# Urzua's own governance config -- the tool validating the repository
+# building it (SPEC-0001's self-hosting milestone). Phase A slice only
+# (SPEC-0002/0003): record types, their directories, required header fields.
+
+schema_version = 1
+
+[record_types.adr]
+dir = "docs/adr"
+required_fields = ["Status", "Date", "Author", "Deciders"]
+
+[record_types.rfc]
+dir = "docs/rfc"
+required_fields = ["Status", "Date", "Author"]
+
+[record_types.spec]
+dir = "docs/specs"
+required_fields = ["Status", "Date", "Version"]

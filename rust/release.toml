@@ -1,0 +1,9 @@
+# cargo-release config (ADR-0013). No crates.io publish -- distribution is
+# GitHub release binaries only, per publish=false on every crate.
+shared-version = true
+tag-name = "v{{version}}"
+push = true
+publish = false
+verify = false
+pre-release-commit-message = "release: v{{version}}"
+tag-message = "v{{version}}"

@@ -1,0 +1,29 @@
+# Rust — target/ is under rust/, not the repo root (ADR-0004)
+target/
+**/*.rs.bk
+*.pdb
+
+# Node
+node_modules/
+dist/
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Local agent/tooling state
+.claude/settings.local.json
+
+# Urzua's own derived/cache state (SPEC-0005) -- config.toml and templates/
+# are tracked; cache/ is derived and never authoritative.
+.urzua/cache/

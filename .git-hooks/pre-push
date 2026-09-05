@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Runs the fast checks before a push. Deliberately NOT the full test suite --
+# that runs in CI. `set -e` is load-bearing: without it, this script can
+# print "passed" while enforcing nothing, which is worse than no hook at all.
+# A check that lives only here, wired to no actual gate, is the worst of
+# both postures -- wire it here AND in CI, or don't bother.
+set -e
+
+cd "$(git rev-parse --show-toplevel)/rust"
+
+echo "pre-push: cargo fmt --check"
+cargo fmt --all -- --check
+
+echo "pre-push: cargo clippy"
+cargo clippy --workspace --all-targets --locked -- -D warnings
+
+echo "pre-push: ok"

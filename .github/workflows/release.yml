@@ -1,0 +1,97 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # Release-gating: refuse to publish unless the ci workflow concluded
+  # success for exactly this tagged commit. A tag pushed against a red or
+  # unevaluated commit must not produce a release.
+  verify-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: verify the ci workflow succeeded for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" \
+            --jq '[.check_runs[] | select(.name == "ci")][0].conclusion // "missing"')
+          echo "ci conclusion for ${{ github.sha }}: $conclusion"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::ci did not succeed for this commit -- refusing to release"
+            exit 1
+          fi
+
+  build:
+    needs: verify-ci
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install target
+        run: rustup target add ${{ matrix.target }}
+      - name: build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p urzua-cli
+      - name: package
+        run: |
+          name="urzua-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/urzua" "dist/$name/"
+          cp ../LICENSE ../README.md "dist/$name/"
+          tar -czf "dist/$name.tar.gz" -C dist "$name"
+      # Attestation requires a public repo or a paid plan on a private one
+      # (GitHub API: "Feature not available ... upgrade the billing plan, or
+      # make this repository public"). Non-blocking for now so a private-repo
+      # release still succeeds; revisit once this repo is public.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        continue-on-error: true
+        with:
+          subject-path: rust/dist/urzua-${{ matrix.target }}.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: urzua-${{ matrix.target }}
+          path: rust/dist/urzua-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      - name: create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/*.tar.gz \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

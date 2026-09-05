@@ -1,0 +1,554 @@
+//! The two seed rules (SPEC-0002 Phase A), chosen because both fire on this
+//! project's own corpus today -- a validator whose first run is green has
+//! told you nothing about itself. Plus the Phase 6 rules, each with its own
+//! planted-violation test.
+
+use crate::field_state::classify;
+use crate::record::Record;
+use crate::report::{Finding, RuleExecution, Severity};
+use crate::FieldState;
+use std::collections::HashMap;
+
+/// Rule 1: header format consistency within a record type, per a
+/// config-declared required-field list. A majority-rule inference would
+/// silently ratify whatever drifted in, so the shape is declared, not voted.
+pub fn header_required_fields(
+    records: &[Record],
+    required_by_type: &HashMap<String, Vec<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(required) = required_by_type.get(&record.record_type) else {
+            continue;
+        };
+        examined += 1;
+
+        if record.header.region.is_none() {
+            findings.push(Finding {
+                rule: "header.required-fields".to_string(),
+                severity: Severity::Error,
+                file: record.path.clone(),
+                line: None,
+ waived: None,
+                message: format!(
+                    "no header-shaped region found -- required fields {required:?} cannot be checked"
+                ),
+            });
+            continue;
+        }
+
+        for dup in record.header.duplicate_keys() {
+            findings.push(Finding {
+                rule: "header.required-fields".to_string(),
+                severity: Severity::Error,
+                file: record.path.clone(),
+                line: None,
+ waived: None,
+                message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
+            });
+        }
+
+        for field in required {
+            if record.header.get(field).is_none() {
+                findings.push(Finding {
+                    rule: "header.required-fields".to_string(),
+                    severity: Severity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "missing required header field '{field}' for record type '{}'",
+                        record.record_type
+                    ),
+                });
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "header.required-fields".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+/// Rule 2: `Implements:`/`Derives-from:` resolves to a real record. The
+/// target's status is surfaced in the message, never judged -- whether a
+/// `Draft` target is acceptable is a policy decision (RFC-0012), not this
+/// checker's call.
+pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    // Index every record by the identifiers a pointer could name: its
+    // record-type-prefixed number (e.g. "RFC-0001") parsed from the filename.
+    let mut index: HashMap<String, &Record> = HashMap::new();
+    for record in records {
+        if let Some(id) = record_id(record) {
+            index.insert(id, record);
+        }
+    }
+
+    for record in records {
+        for field_name in ["Implements", "Derives-from"] {
+            let Some(value) = record.header.get(field_name) else {
+                continue;
+            };
+            examined += 1;
+
+            for reference in extract_references(value) {
+                match index.get(&reference) {
+                    Some(target) => {
+                        let status = target.header.get("Status").unwrap_or("(no Status field)");
+                        findings.push(Finding {
+                            rule: "pointer.resolution".to_string(),
+                            severity: Severity::Warning,
+                            file: record.path.clone(),
+                            line: None,
+                            waived: None,
+                            message: format!(
+                                "{field_name}: {reference} resolves; target Status = {status}"
+                            ),
+                        });
+                    }
+                    None => {
+                        findings.push(Finding {
+                            rule: "pointer.resolution".to_string(),
+                            severity: Severity::Error,
+                            file: record.path.clone(),
+                            line: None,
+ waived: None,
+                            message: format!(
+                                "{field_name}: {reference} does not resolve to any discovered record"
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "pointer.resolution".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+/// A record's own identifier, derived from its filename: `NNNN-slug.md` in a
+/// directory whose configured type gives the prefix (e.g. `docs/rfc/0001-*`
+/// -> `RFC-0001`). Filename-derived, not header-derived, so a record can be
+/// referenced before its own header claims anything about itself.
+fn record_id(record: &Record) -> Option<String> {
+    let stem = record.path.file_stem()?.to_str()?;
+    let (number, _rest) = stem.split_once('-')?;
+    if number.len() != 4 || !number.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!(
+        "{}-{}",
+        record.record_type.to_ascii_uppercase(),
+        number
+    ))
+}
+
+/// Extract reference tokens like `RFC-0001` from a field value that may list
+/// several, comma-separated, with trailing annotation in parentheses (e.g.
+/// `RFC-0001 (Draft)`). A claim is the reference that begins an entry;
+/// everything after it up to the next comma is annotation.
+fn extract_references(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .filter_map(|entry| {
+            let entry = entry.trim();
+            let token = entry.split_whitespace().next()?;
+            let token = token.trim_end_matches(['.', ':']);
+            let is_reference = token
+                .split_once('-')
+                .map(|(prefix, num)| {
+                    prefix.chars().all(|c| c.is_ascii_uppercase())
+                        && !num.is_empty()
+                        && num.chars().all(|c| c.is_ascii_digit())
+                })
+                .unwrap_or(false);
+            is_reference.then(|| token.to_string())
+        })
+        .collect()
+}
+
+/// Rule 3 (Phase 6): a required field's *quality*, not just its presence.
+/// `header.required-fields` only asks "is the key there"; a field holding
+/// unedited template text or an explicit pending marker passes that check
+/// and still isn't a real value. Blank is reported here too (redundantly
+/// with Rule 1) so this rule's own report is self-contained.
+pub fn field_quality(
+    records: &[Record],
+    required_by_type: &HashMap<String, Vec<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(required) = required_by_type.get(&record.record_type) else {
+            continue;
+        };
+        for field in required {
+            let state = classify(record.header.get(field));
+            examined += 1;
+            let severity = match state {
+                FieldState::Present => continue,
+                FieldState::Blank => Severity::Error,
+                FieldState::Placeholder => Severity::Error,
+                FieldState::Pending => Severity::Warning,
+            };
+            findings.push(Finding {
+                rule: "field.quality".to_string(),
+                severity,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!("field '{field}' is {state:?} -- not a real, present value"),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "field.quality".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+/// Rule 4 (Phase 6): a filename's own claimed number must match its
+/// document's H1 title. A rename that updates one and not the other is
+/// silent otherwise -- nothing else in this corpus cross-checks the two.
+pub fn filename_title_consistency(
+    records: &[Record],
+    full_text: &HashMap<std::path::PathBuf, String>,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(filename_number) = filename_number(record) else {
+            continue;
+        };
+        let Some(content) = full_text.get(&record.path) else {
+            continue;
+        };
+        examined += 1;
+
+        let Some(title_number) = title_number(content) else {
+            findings.push(Finding {
+                rule: "filename.title-consistency".to_string(),
+                severity: Severity::Error,
+                file: record.path.clone(),
+                line: Some(1),
+                waived: None,
+                message: "no H1 title found to check against the filename's number".to_string(),
+            });
+            continue;
+        };
+
+        if filename_number != title_number {
+            findings.push(Finding {
+                rule: "filename.title-consistency".to_string(),
+                severity: Severity::Error,
+                file: record.path.clone(),
+                line: Some(1),
+ waived: None,
+                message: format!(
+                    "filename claims number {filename_number}, but the H1 title claims {title_number}"
+                ),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "filename.title-consistency".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+fn filename_number(record: &Record) -> Option<String> {
+    let stem = record.path.file_stem()?.to_str()?;
+    let (number, _rest) = stem.split_once('-')?;
+    (number.len() == 4 && number.chars().all(|c| c.is_ascii_digit())).then(|| number.to_string())
+}
+
+/// The document's own claimed number, from its first H1 heading: `# 0001 —
+/// Title` or `# SPEC-0001 — Title`.
+fn title_number(content: &str) -> Option<String> {
+    let first_line = content.lines().find(|l| l.starts_with("# "))?;
+    let after_hash = first_line.trim_start_matches('#').trim();
+    let first_token = after_hash.split_whitespace().next()?;
+    let digits: String = first_token.chars().filter(|c| c.is_ascii_digit()).collect();
+    (digits.len() == 4).then_some(digits)
+}
+
+/// Rule 5 (Phase 6): `Supersedes`/`Superseded-by` reciprocity. Checking only
+/// the forward claim leaves the reverse unguarded -- a record can claim to
+/// supersede something that doesn't reciprocally point back, sending a
+/// reader of the *target* to a record that denies the relation.
+pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut index: HashMap<String, &Record> = HashMap::new();
+    for record in records {
+        if let Some(id) = record_id(record) {
+            index.insert(id, record);
+        }
+    }
+
+    for record in records {
+        let Some(id) = record_id(record) else {
+            continue;
+        };
+        let Some(value) = record.header.get("Supersedes / Superseded-by") else {
+            continue;
+        };
+        if value.trim() == "—" {
+            continue;
+        }
+        examined += 1;
+
+        for reference in extract_references(value) {
+            let Some(target) = index.get(&reference) else {
+                findings.push(Finding {
+                    rule: "relation.supersession-reciprocity".to_string(),
+                    severity: Severity::Error,
+                    file: record.path.clone(),
+                    line: None,
+ waived: None,
+                    message: format!("Supersedes/Superseded-by: {reference} does not resolve to any discovered record"),
+                });
+                continue;
+            };
+            let target_value = target
+                .header
+                .get("Supersedes / Superseded-by")
+                .unwrap_or("");
+            if !target_value.contains(&id) {
+                findings.push(Finding {
+                    rule: "relation.supersession-reciprocity".to_string(),
+                    severity: Severity::Error,
+                    file: record.path.clone(),
+                    line: None,
+ waived: None,
+                    message: format!(
+                        "claims a Supersedes/Superseded-by relation with {reference}, but {reference} does not reciprocally name {id}"
+                    ),
+                });
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "relation.supersession-reciprocity".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::record::Record;
+    use std::path::PathBuf;
+
+    fn record(path: &str, record_type: &str, content: &str) -> Record {
+        Record::parse(PathBuf::from(path), record_type.to_string(), content)
+    }
+
+    #[test]
+    fn missing_required_field_is_a_finding() {
+        let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
+        let mut required = HashMap::new();
+        required.insert(
+            "adr".to_string(),
+            vec!["Status".to_string(), "Deciders".to_string()],
+        );
+
+        let (exec, findings) = header_required_fields(&[r], &required);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("Deciders"));
+    }
+
+    #[test]
+    fn a_present_required_field_produces_no_finding() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Status: Accepted\n> Deciders: someone\n",
+        );
+        let mut required = HashMap::new();
+        required.insert(
+            "adr".to_string(),
+            vec!["Status".to_string(), "Deciders".to_string()],
+        );
+
+        let (exec, findings) = header_required_fields(&[r], &required);
+        assert_eq!(exec.records_examined, 1);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn a_planted_violation_is_observed_failing() {
+        // The exact corpus defect this rule was chosen to catch: SPEC-0001's
+        // shape lacks a field SPEC-0002-0005 share.
+        let r = record(
+            "docs/specs/0001-x.md",
+            "spec",
+            "> Status: Draft\n> Embodiment: Not started\n",
+        );
+        let mut required = HashMap::new();
+        required.insert("spec".to_string(), vec!["Version".to_string()]);
+
+        let (_, findings) = header_required_fields(&[r], &required);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("Version"));
+    }
+
+    #[test]
+    fn a_resolving_pointer_surfaces_target_status_without_judging_it() {
+        let target = record("docs/rfc/0001-x.md", "rfc", "> Status: Draft\n");
+        let source = record("docs/specs/0001-x.md", "spec", "> Implements: RFC-0001\n");
+
+        let (exec, findings) = pointer_resolution(&[target, source]);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+        assert!(findings[0].message.contains("Draft"));
+    }
+
+    #[test]
+    fn a_non_resolving_pointer_is_an_error() {
+        let source = record("docs/specs/0001-x.md", "spec", "> Implements: RFC-9999\n");
+        let (_, findings) = pointer_resolution(&[source]);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn field_quality_flags_placeholder_not_just_absence() {
+        // A field present per Rule 1 (the key exists) but never actually
+        // filled in -- Rule 1 alone would pass this record.
+        let r = record("docs/adr/0001-x.md", "adr", "> Author: name\n");
+        let mut required = HashMap::new();
+        required.insert("adr".to_string(), vec!["Author".to_string()]);
+
+        let (exec, findings) = field_quality(&[r], &required);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("Placeholder"));
+    }
+
+    #[test]
+    fn field_quality_treats_pending_as_a_warning_not_an_error() {
+        let r = record("docs/adr/0001-x.md", "adr", "> Deciders: Pending\n");
+        let mut required = HashMap::new();
+        required.insert("adr".to_string(), vec!["Deciders".to_string()]);
+
+        let (_, findings) = field_quality(&[r], &required);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn field_quality_passes_a_real_value() {
+        let r = record("docs/adr/0001-x.md", "adr", "> Author: (project lead)\n");
+        let mut required = HashMap::new();
+        required.insert("adr".to_string(), vec!["Author".to_string()]);
+
+        let (_, findings) = field_quality(&[r], &required);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn filename_title_mismatch_is_a_planted_violation_observed_failing() {
+        let r = record("docs/adr/0001-x.md", "adr", "# 0002 — Wrong Number\n");
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), "# 0002 — Wrong Number\n".to_string());
+
+        let (exec, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains('1'));
+        assert!(findings[0].message.contains('2'));
+    }
+
+    #[test]
+    fn matching_filename_and_title_produce_no_finding() {
+        let r = record("docs/adr/0001-x.md", "adr", "# 0001 — Correct\n");
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), "# 0001 — Correct\n".to_string());
+
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn a_one_directional_supersession_claim_is_a_reciprocity_violation() {
+        // 0002 claims to supersede 0001, but 0001 doesn't reciprocally name
+        // 0002 -- a reader of 0001 would never know it was superseded.
+        let old = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: —\n",
+        );
+        let new = record(
+            "docs/adr/0002-y.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-0001\n",
+        );
+
+        let (exec, findings) = supersession_reciprocity(&[old, new]);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("ADR-0001"));
+    }
+
+    #[test]
+    fn a_reciprocated_supersession_produces_no_finding() {
+        let old = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-0002\n",
+        );
+        let new = record(
+            "docs/adr/0002-y.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-0001\n",
+        );
+
+        let (_, findings) = supersession_reciprocity(&[old, new]);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn an_em_dash_supersession_value_is_not_examined() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: —\n",
+        );
+        let (exec, findings) = supersession_reciprocity(&[r]);
+        assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
+    }
+}

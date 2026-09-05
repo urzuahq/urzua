@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "MIT"
+repository = "https://github.com/urzuahq/urzua"
+# Distributed as GitHub release binaries (ADR-0013), not published to
+# crates.io -- no reason for this to be publishable by accident.
+publish = false
+
+[workspace.dependencies]
+urzua-core = { path = "crates/urzua-core" }
+urzua-io = { path = "crates/urzua-io" }
+urzua-id = { path = "crates/urzua-id" }
+urzua-agdr = { path = "crates/urzua-agdr" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+# The CLI runs in the commit hot path (ADR-0001). Optimize for startup and
+# binary size over compile time.
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
