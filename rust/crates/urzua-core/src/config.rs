@@ -2,6 +2,7 @@
 //! directories, and required header fields. Phased -- this is the slice
 //! Phase A of `urzua check` needs, not the full spec.
 
+use crate::header::HeaderShape;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -22,6 +23,27 @@ pub struct RecordTypeConfig {
     pub dir: String,
     #[serde(default)]
     pub required_fields: Vec<String>,
+    /// RFC-0010: the header shape is declared per profile, never sniffed.
+    /// Omitted means the long-standing blockquote shape, so an existing
+    /// config needs no change to keep its current behavior.
+    #[serde(default)]
+    pub header_shape: HeaderShape,
+}
+
+impl<'de> Deserialize<'de> for HeaderShape {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "blockquote" => Ok(HeaderShape::Blockquote),
+            "bold-list" => Ok(HeaderShape::BoldList),
+            other => Err(serde::de::Error::custom(format!(
+                "unrecognized header_shape '{other}' -- expected \"blockquote\" or \"bold-list\""
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

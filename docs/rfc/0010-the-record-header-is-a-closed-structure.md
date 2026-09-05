@@ -155,6 +155,13 @@ directions, and it is cheap to fuzz.
 - **Where does the table-shaped header fit** — a second declared shape per profile, or a
   normalization step before parsing? At least one real corpus needs both a blockquote and a table
   form together, so this is not hypothetical.
+  **Resolved for the bold-list case**: a corpus using a bold-labelled markdown list with no
+  blockquote wrapper (`- **Key:** Value`) is common enough to warrant its own declared shape rather
+  than a normalization pass — `header_shape = "bold-list"` per record type (ADR-0016). A
+  **heading-delimited** shape (fields as their own `##` sections, evidenced against a real foreign
+  corpus — see `urzuahq/urzua#1`) remains open: it needs a different `Header.region` model, since a
+  field's value there spans a whole body section rather than one line, and is deliberately deferred
+  as its own follow-up rather than forced into the current line-based model.
 
 ## Non-goals
 

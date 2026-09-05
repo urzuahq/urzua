@@ -59,18 +59,48 @@ impl Header {
 /// 3. Pipe-delimited single line: `Key1: v1 | Key2: v2 | Key3: v3`
 ///    (each segment may itself be bold-labelled)
 ///
+/// A fourth shape is declared per profile rather than assumed (RFC-0010's
+/// open question on where a differently-shaped header fits): a bold-labelled
+/// markdown list with no blockquote wrapper at all, `- **Key:** Value`. Real
+/// corpora were found using this shape without ever wrapping it in a `>`
+/// block -- treating it as a blockquote-only variant would silently miss
+/// every field in such a corpus.
+///
 /// A blank line, a non-metadata-shaped line, or end of document ends the
 /// region. A document with no metadata-shaped line at all has `region: None`
 /// -- reportable, never treated as a header with zero fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeaderShape {
+    /// Blockquote-anchored: shapes 1-3 above. The long-standing default, so
+    /// existing configs and callers that never declare a shape keep their
+    /// current behavior unchanged.
+    #[default]
+    Blockquote,
+    /// `- **Key:** Value`, anchored by a leading markdown list marker
+    /// instead of a blockquote.
+    BoldList,
+}
+
 pub fn parse(content: &str) -> Header {
+    parse_with_shape(content, HeaderShape::Blockquote)
+}
+
+/// Parse the header using an explicitly declared shape (RFC-0010: the shape
+/// is declared per profile, never sniffed).
+pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
     let mut fields = Vec::new();
     let mut region: Option<(usize, usize)> = None;
+
+    let line_body: fn(&str) -> Option<&str> = match shape {
+        HeaderShape::Blockquote => blockquote_body,
+        HeaderShape::BoldList => bold_list_body,
+    };
 
     for (idx, raw_line) in content.lines().enumerate() {
         let line_no = idx + 1;
         let line = raw_line.trim_end();
 
-        let Some(body) = blockquote_body(line) else {
+        let Some(body) = line_body(line) else {
             if region.is_some() {
                 break;
             }
@@ -103,6 +133,17 @@ fn blockquote_body(line: &str) -> Option<&str> {
     let trimmed = line.trim_start();
     let rest = trimmed.strip_prefix('>')?;
     Some(rest.strip_prefix(' ').unwrap_or(rest))
+}
+
+/// Strip a leading `- ` or `* ` markdown list marker. The bold-key body that
+/// follows (`**Key:** Value`) is parsed by the same `parse_key_value` every
+/// other shape uses -- only the anchor differs.
+fn bold_list_body(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    let rest = trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))?;
+    Some(rest)
 }
 
 /// Parse one blockquote line's body into zero or more fields: either a
@@ -189,5 +230,33 @@ mod tests {
         let h = parse(doc);
         assert_eq!(h.region, None);
         assert!(h.fields.is_empty());
+    }
+
+    #[test]
+    fn parses_bold_list_shape() {
+        let doc = "# Title\n\n> **Decision:** some prose.\n\n- **Status:** Accepted\n- **Date:** 2026-08-14\n- **Deciders:** A B\n\n## Context\n";
+        let h = parse_with_shape(doc, HeaderShape::BoldList);
+        assert_eq!(h.get("Status"), Some("Accepted"));
+        assert_eq!(h.get("Date"), Some("2026-08-14"));
+        assert_eq!(h.get("Deciders"), Some("A B"));
+        assert_eq!(h.region, Some((5, 7)));
+    }
+
+    #[test]
+    fn bold_list_shape_does_not_recognize_a_blockquote_header() {
+        // Observed failing before it's trusted (SPEC-0002's discipline for
+        // every rule): a corpus whose real header is blockquote-shaped must
+        // report no region under the bold-list shape, not silently find
+        // something else -- a misconfigured `header_shape` must be loud.
+        let doc = "# Title\n\n> Status: Draft\n> Date: 2026-08-11\n";
+        let h = parse_with_shape(doc, HeaderShape::BoldList);
+        assert_eq!(h.region, None);
+        assert!(h.fields.is_empty());
+    }
+
+    #[test]
+    fn blockquote_shape_is_the_default_when_unspecified() {
+        let doc = "# Title\n\n> Status: Draft\n";
+        assert_eq!(parse(doc), parse_with_shape(doc, HeaderShape::Blockquote));
     }
 }

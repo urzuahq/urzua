@@ -45,6 +45,7 @@ name = "adr"
 dir = "docs/adr"
 filename = "{number}-{slug}.md"
 statuses = ["Proposed", "Accepted", "Rejected", "Withdrawn", "Superseded", "Deprecated"]
+header_shape = "blockquote"  # or "bold-list" -- RFC-0010 §5: declared, never sniffed
 
 [record_type.required_fields]
 always = ["Status", "Date", "Author", "Deciders"]
@@ -80,6 +81,11 @@ Two details carry weight:
   set for a corpus is a claim about that corpus; silently dropping a rule and reporting `ok` is the
   failure this project exists to eliminate. Downgrade to `off` is permitted and is *reported* in
   `rulesExecuted` as skipped, never omitted.
+- **The header shape is declared per record type, never auto-detected.** RFC-0010 rejects sniffing a
+  shape from content, for the same reason a rule can't be voted into existence by majority: a
+  misconfigured shape must fail loud (`no header-shaped region found`) rather than silently matching
+  the wrong lines. `header_shape` defaults to `"blockquote"` when omitted, so an existing config
+  needs no change.
 
 ## Scope declaration
 

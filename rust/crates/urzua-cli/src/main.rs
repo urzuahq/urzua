@@ -401,7 +401,12 @@ fn load_records(
             let full_path = repo_root.join(rel_path);
             match urzua_io::read_to_string(&full_path) {
                 Ok(content) => {
-                    records.push(Record::parse(rel_path.clone(), type_name.clone(), &content));
+                    records.push(Record::parse_with_shape(
+                        rel_path.clone(),
+                        type_name.clone(),
+                        &content,
+                        type_config.header_shape,
+                    ));
                     full_text.insert(rel_path.clone(), content);
                 }
                 Err(_) => continue,
