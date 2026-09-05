@@ -65,10 +65,10 @@ disappoint if something about the release shape needs to change before public la
   remembered.
 - A public launch needs no new release-mechanics work — only visibility (making the repo public)
   changes, not the pipeline.
-- Build provenance is currently a no-op in every release: the attestation step fails and is
-  swallowed by `continue-on-error` on this still-private repo. This is a known, visible gap, not a
-  silent one — worth re-checking (`git grep continue-on-error .github/workflows/release.yml`) once
-  the repo goes public, so the non-blocking escape hatch doesn't quietly outlive its reason.
+- Build provenance was a no-op in every release while this repo was private: the attestation step
+  failed and was swallowed by `continue-on-error`. Confirmed working once the repo went public — the
+  `v0.1.0` binaries carry real attestations — and `continue-on-error` was removed from the workflow at
+  that point, so the escape hatch didn't outlive its reason.
 
 ## References
 

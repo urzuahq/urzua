@@ -70,12 +70,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/urzua" "dist/$name/"
           cp ../LICENSE ../README.md "dist/$name/"
           tar -czf "dist/$name.tar.gz" -C dist "$name"
-      # Attestation requires a public repo or a paid plan on a private one
-      # (GitHub API: "Feature not available ... upgrade the billing plan, or
-      # make this repository public"). Non-blocking for now so a private-repo
-      # release still succeeds; revisit once this repo is public.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        continue-on-error: true
         with:
           subject-path: rust/dist/urzua-${{ matrix.target }}.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
