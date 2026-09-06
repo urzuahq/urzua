@@ -50,6 +50,10 @@ which motivates deciding this now rather than after v1.0.0.
   follow-up work, not implied by this ADR.
 - ADR-0007's "human-readable format is not contractual" clause still holds, now for the stderr
   rendering specifically.
+- **Narrowed by ADR-0026**: the stderr human-rendering clause in this decision (the paragraph above
+  describing it) was removed shortly after this ADR shipped — there is no second rendering at all,
+  on stderr or anywhere else. Everything else in this ADR (stdout is always the JSON report,
+  unconditionally, no `--format` flag) stands unchanged.
 
 ## References
 

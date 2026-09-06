@@ -468,17 +468,6 @@ fn run_explain(config_path: Option<PathBuf>, path: String) -> ExitCode {
     });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
 
-    eprintln!(
-        "urzua explain {path}: {} record(s) name this as evidence",
-        governing.len()
-    );
-    for g in &governing {
-        eprintln!("  [{}] {} ({})", g.via, g.record.display(), g.record_type);
-    }
-    if governing.is_empty() {
-        eprintln!("  none -- no record's Realized-by names this path.");
-    }
-
     ExitCode::from(0)
 }
 
@@ -515,12 +504,6 @@ fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
 
     let out = serde_json::json!({ "edges": edges });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
-
-    eprintln!("urzua graph: {} edge(s)", edges.len());
-    for e in &edges {
-        let marker = if e.dangling { " [DANGLING]" } else { "" };
-        eprintln!("  {} --{}--> {}{}", e.from, e.relation, e.to, marker);
-    }
 
     ExitCode::from(0)
 }
@@ -619,8 +602,8 @@ fn run_fix(
     ExitCode::from(if failed.is_empty() { 0 } else { 1 })
 }
 
-/// ADR-0023: stdout is always JSON; stderr always carries the human
-/// rendering too, so a terminal user still sees both.
+/// ADR-0026: stdout is the JSON report, unconditionally, with no second
+/// human-format rendering.
 fn print_fix_report(
     examined: usize,
     repairs: &[urzua_core::fix::Repair],
@@ -643,26 +626,6 @@ fn print_fix_report(
         "failed": failed.iter().map(|(p, e)| serde_json::json!({"record": p, "error": e})).collect::<Vec<_>>(),
     });
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
-
-    eprintln!(
-        "status: {status}  records_examined: {examined}  repairs: {}  failed: {}",
-        repairs.len(),
-        failed.len()
-    );
-    for r in repairs {
-        eprintln!(
-            "  [tier {}] {}: {} '{}' -> '{}' ({})",
-            r.tier,
-            r.record.display(),
-            r.field,
-            r.current_value,
-            r.computed_value,
-            r.evidence
-        );
-    }
-    for (path, err) in failed {
-        eprintln!("  [FAILED] {}: {err}", path.display());
-    }
 }
 
 fn report_fix_could_not_run(message: &str) -> ExitCode {
@@ -806,23 +769,6 @@ fn run_migrate_schema_report(config_path: Option<PathBuf>, field: String) -> Exi
     });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
 
-    eprintln!(
-        "urzua migrate schema --report --field {field}: {} of {} record(s) would newly fail:",
-        report.len(),
-        records.len()
-    );
-    for entry in &report {
-        eprintln!(
-            "  [{:?}] {} ({})",
-            entry.state,
-            entry.record.display(),
-            entry.record_type
-        );
-    }
-    if report.is_empty() {
-        eprintln!("  none -- every record already carries a real value for '{field}'.");
-    }
-
     ExitCode::from(0)
 }
 
@@ -908,32 +854,9 @@ fn report_could_not_run(message: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// ADR-0023: stdout is always the JSON report, unconditionally -- an agent
-/// piping stdout never has to know to ask for it. The human-readable
-/// rendering goes to stderr, always too, so a person running this directly
-/// in a terminal still sees both (they share the same terminal by default);
-/// only a consumer that captures stdout alone sees JSON only.
+/// ADR-0026: stdout is the JSON report, unconditionally, and that is the
+/// only rendering -- no second, human-format copy on stderr. There is one
+/// shape, not a machine one and a human one kept in sync by hand.
 fn print_report(report: &CheckReport) {
     println!("{}", serde_json::to_string_pretty(report).unwrap());
-
-    eprintln!(
-        "status: {:?}  files_examined: {}  blocking: {}",
-        report.status, report.files_examined, report.blocking
-    );
-    for exec in &report.rules_executed {
-        eprintln!(
-            "  rule {} examined {} record(s)",
-            exec.rule, exec.records_examined
-        );
-    }
-    for finding in &report.findings {
-        eprintln!(
-            "  [{:?}] {}:{} {} -- {}",
-            finding.severity,
-            finding.file.display(),
-            finding.line.map(|l| l.to_string()).unwrap_or_default(),
-            finding.rule,
-            finding.message
-        );
-    }
 }
