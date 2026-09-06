@@ -122,7 +122,7 @@ fn an_untracked_scratch_file_is_never_examined() {
 
     std::fs::write(dir.join("docs/adr/0002-untracked.md"), "not a real record").unwrap();
 
-    let output = run_urzua(&dir, &["check", "docs/", "--format", "json"]);
+    let output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("\"files_examined\": 1"),
@@ -162,7 +162,7 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     .unwrap();
     commit_all(&dir);
 
-    let output = run_urzua(&dir, &["check", "docs/", "--format", "json"]);
+    let output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(
         output.status.code(),

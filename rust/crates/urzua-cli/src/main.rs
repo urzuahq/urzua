@@ -48,12 +48,10 @@ enum Command {
     /// Validate records. Non-zero exit on error.
     ///
     /// Reports files examined and rules executed: a check that found nothing
-    /// must be distinguishable from a check that ran on nothing.
-    Check {
-        paths: Vec<PathBuf>,
-        #[arg(long, value_enum, default_value = "human")]
-        format: OutputFormat,
-    },
+    /// must be distinguishable from a check that ran on nothing. Stdout is
+    /// always the JSON report (ADR-0023) -- an agent piping it never has to
+    /// know to ask.
+    Check { paths: Vec<PathBuf> },
 
     /// Cross-record reconciliation: supersession reciprocity, dangling
     /// references. Embodiment consistency lives in `check` and `fix`
@@ -62,10 +60,7 @@ enum Command {
     ///
     /// Reports only. Never writes -- bulk cross-reference rewriting is a
     /// real data-loss risk without one.
-    Audit {
-        #[arg(long, value_enum, default_value = "human")]
-        format: OutputFormat,
-    },
+    Audit,
 
     /// Migrate the corpus itself: identifiers, or field-schema rollout.
     Migrate {
@@ -106,8 +101,6 @@ enum Command {
     Fix {
         #[arg(long, default_value_t = 1)]
         tier: u8,
-        #[arg(long, value_enum, default_value = "human")]
-        format: OutputFormat,
         /// Write the computed values back. Requires --ids or --force, and
         /// an identity (--by, or resolved from gh/git config). Every write
         /// appends a structural revision-log entry (ADR-0014) -- a record
@@ -147,15 +140,7 @@ enum MigrateTarget {
         report: bool,
         #[arg(long)]
         field: Option<String>,
-        #[arg(long, value_enum, default_value = "human")]
-        format: OutputFormat,
     },
-}
-
-#[derive(Clone, Copy, clap::ValueEnum)]
-enum OutputFormat {
-    Human,
-    Json,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -167,9 +152,9 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Check { paths, format } => run_check(cli.config, paths, format),
+        Command::Check { paths } => run_check(cli.config, paths),
         Command::New { .. } => not_implemented("new"),
-        Command::Audit { .. } => not_implemented("audit"),
+        Command::Audit => not_implemented("audit"),
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
         } => run_migrate_ids(cli.config, apply),
@@ -178,9 +163,8 @@ fn main() -> ExitCode {
                 MigrateTarget::Schema {
                     report: true,
                     field: Some(field),
-                    format,
                 },
-        } => run_migrate_schema_report(cli.config, field, format),
+        } => run_migrate_schema_report(cli.config, field),
         Command::Migrate {
             target: MigrateTarget::Schema { .. },
         } => {
@@ -193,12 +177,11 @@ fn main() -> ExitCode {
         Command::Doctor => run_doctor(),
         Command::Fix {
             tier,
-            format,
             apply,
             ids,
             by,
             force,
-        } => run_fix(cli.config, tier, format, apply, ids, by, force),
+        } => run_fix(cli.config, tier, apply, ids, by, force),
     }
 }
 
@@ -362,21 +345,21 @@ fn run_doctor() -> ExitCode {
     }
 }
 
-fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFormat) -> ExitCode {
+fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
-        Err(e) => return report_could_not_run(&e, format),
+        Err(e) => return report_could_not_run(&e),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => return report_could_not_run(&e, format),
+        Err(e) => return report_could_not_run(&e),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => return report_could_not_run(&e.to_string(), format),
+        Err(e) => return report_could_not_run(&e.to_string()),
     };
 
     let (records, full_text) = load_records(&repo_root, &discovered.paths, &config);
@@ -432,7 +415,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
         findings,
     };
 
-    print_report(&report, format);
+    print_report(&report);
     ExitCode::from(report.exit_code() as u8)
 }
 
@@ -440,11 +423,9 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
 /// (`--ids`, `--by`, `--force`) is not built yet -- it needs real file
 /// mutation, identity resolution, and a revision-log write-path, none of
 /// which this command touches.
-#[allow(clippy::too_many_arguments)]
 fn run_fix(
     config_path: Option<PathBuf>,
     tier: u8,
-    format: OutputFormat,
     apply: bool,
     ids: Vec<String>,
     by: Option<String>,
@@ -461,25 +442,25 @@ fn run_fix(
 
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => return report_fix_could_not_run(&e, format),
+        Err(e) => return report_fix_could_not_run(&e),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => return report_fix_could_not_run(&e, format),
+        Err(e) => return report_fix_could_not_run(&e),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => return report_fix_could_not_run(&e.to_string(), format),
+        Err(e) => return report_fix_could_not_run(&e.to_string()),
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
     let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
 
     if !apply {
-        print_fix_report(examined, &repairs, &[], format);
+        print_fix_report(examined, &repairs, &[]);
         return ExitCode::from(if examined == 0 { 2 } else { 0 });
     }
 
@@ -528,15 +509,16 @@ fn run_fix(
         }
     }
 
-    print_fix_report(examined, &applied, &failed, format);
+    print_fix_report(examined, &applied, &failed);
     ExitCode::from(if failed.is_empty() { 0 } else { 1 })
 }
 
+/// ADR-0023: stdout is always JSON; stderr always carries the human
+/// rendering too, so a terminal user still sees both.
 fn print_fix_report(
     examined: usize,
     repairs: &[urzua_core::fix::Repair],
     failed: &[(PathBuf, String)],
-    format: OutputFormat,
 ) {
     let status = if examined == 0 {
         "not-run"
@@ -548,55 +530,43 @@ fn print_fix_report(
         "repairs-available"
     };
 
-    match format {
-        OutputFormat::Json => {
-            let report = serde_json::json!({
-                "status": status,
-                "records_examined": examined,
-                "repairs": repairs,
-                "failed": failed.iter().map(|(p, e)| serde_json::json!({"record": p, "error": e})).collect::<Vec<_>>(),
-            });
-            println!("{}", serde_json::to_string_pretty(&report).unwrap());
-        }
-        OutputFormat::Human => {
-            println!(
-                "status: {status}  records_examined: {examined}  repairs: {}  failed: {}",
-                repairs.len(),
-                failed.len()
-            );
-            for r in repairs {
-                println!(
-                    "  [tier {}] {}: {} '{}' -> '{}' ({})",
-                    r.tier,
-                    r.record.display(),
-                    r.field,
-                    r.current_value,
-                    r.computed_value,
-                    r.evidence
-                );
-            }
-            for (path, err) in failed {
-                println!("  [FAILED] {}: {err}", path.display());
-            }
-        }
+    let report = serde_json::json!({
+        "status": status,
+        "records_examined": examined,
+        "repairs": repairs,
+        "failed": failed.iter().map(|(p, e)| serde_json::json!({"record": p, "error": e})).collect::<Vec<_>>(),
+    });
+    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+
+    eprintln!(
+        "status: {status}  records_examined: {examined}  repairs: {}  failed: {}",
+        repairs.len(),
+        failed.len()
+    );
+    for r in repairs {
+        eprintln!(
+            "  [tier {}] {}: {} '{}' -> '{}' ({})",
+            r.tier,
+            r.record.display(),
+            r.field,
+            r.current_value,
+            r.computed_value,
+            r.evidence
+        );
+    }
+    for (path, err) in failed {
+        eprintln!("  [FAILED] {}: {err}", path.display());
     }
 }
 
-fn report_fix_could_not_run(message: &str, format: OutputFormat) -> ExitCode {
+fn report_fix_could_not_run(message: &str) -> ExitCode {
     eprintln!("urzua fix: could not run: {message}");
-    match format {
-        OutputFormat::Json => {
-            let report = serde_json::json!({
-                "status": "not-run",
-                "records_examined": 0,
-                "repairs": [],
-            });
-            println!("{}", serde_json::to_string_pretty(&report).unwrap());
-        }
-        OutputFormat::Human => {
-            println!("status: not-run  records_examined: 0  repairs_found: 0");
-        }
-    }
+    let report = serde_json::json!({
+        "status": "not-run",
+        "records_examined": 0,
+        "repairs": [],
+    });
+    println!("{}", serde_json::to_string_pretty(&report).unwrap());
     ExitCode::from(2)
 }
 
@@ -689,11 +659,7 @@ fn run_migrate_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
 /// implemented (SPEC-0001): the former needs a human-authored `Reason` per
 /// waiver, the latter needs `urzua fix` to know a field is tool-writable,
 /// which almost none are.
-fn run_migrate_schema_report(
-    config_path: Option<PathBuf>,
-    field: String,
-    format: OutputFormat,
-) -> ExitCode {
+fn run_migrate_schema_report(config_path: Option<PathBuf>, field: String) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
         Err(e) => {
@@ -727,33 +693,28 @@ fn run_migrate_schema_report(
 
     let report = urzua_core::migrate::schema_report(&records, &field);
 
-    match format {
-        OutputFormat::Json => {
-            let out = serde_json::json!({
-                "field": field,
-                "records_examined": records.len(),
-                "would_fail": report,
-            });
-            println!("{}", serde_json::to_string_pretty(&out).unwrap());
-        }
-        OutputFormat::Human => {
-            println!(
-                "urzua migrate schema --report --field {field}: {} of {} record(s) would newly fail:",
-                report.len(),
-                records.len()
-            );
-            for entry in &report {
-                println!(
-                    "  [{:?}] {} ({})",
-                    entry.state,
-                    entry.record.display(),
-                    entry.record_type
-                );
-            }
-            if report.is_empty() {
-                println!("  none -- every record already carries a real value for '{field}'.");
-            }
-        }
+    let out = serde_json::json!({
+        "field": field,
+        "records_examined": records.len(),
+        "would_fail": report,
+    });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+
+    eprintln!(
+        "urzua migrate schema --report --field {field}: {} of {} record(s) would newly fail:",
+        report.len(),
+        records.len()
+    );
+    for entry in &report {
+        eprintln!(
+            "  [{:?}] {} ({})",
+            entry.state,
+            entry.record.display(),
+            entry.record_type
+        );
+    }
+    if report.is_empty() {
+        eprintln!("  none -- every record already carries a real value for '{field}'.");
     }
 
     ExitCode::from(0)
@@ -824,7 +785,7 @@ fn load_records(
     (records, full_text)
 }
 
-fn report_could_not_run(message: &str, format: OutputFormat) -> ExitCode {
+fn report_could_not_run(message: &str) -> ExitCode {
     let report = CheckReport {
         status: ReportStatus::NotRun,
         files_examined: 0,
@@ -837,36 +798,36 @@ fn report_could_not_run(message: &str, format: OutputFormat) -> ExitCode {
         findings: vec![],
     };
     eprintln!("urzua check: could not run: {message}");
-    print_report(&report, format);
+    print_report(&report);
     ExitCode::from(2)
 }
 
-fn print_report(report: &CheckReport, format: OutputFormat) {
-    match format {
-        OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(report).unwrap());
-        }
-        OutputFormat::Human => {
-            println!(
-                "status: {:?}  files_examined: {}  blocking: {}",
-                report.status, report.files_examined, report.blocking
-            );
-            for exec in &report.rules_executed {
-                println!(
-                    "  rule {} examined {} record(s)",
-                    exec.rule, exec.records_examined
-                );
-            }
-            for finding in &report.findings {
-                println!(
-                    "  [{:?}] {}:{} {} -- {}",
-                    finding.severity,
-                    finding.file.display(),
-                    finding.line.map(|l| l.to_string()).unwrap_or_default(),
-                    finding.rule,
-                    finding.message
-                );
-            }
-        }
+/// ADR-0023: stdout is always the JSON report, unconditionally -- an agent
+/// piping stdout never has to know to ask for it. The human-readable
+/// rendering goes to stderr, always too, so a person running this directly
+/// in a terminal still sees both (they share the same terminal by default);
+/// only a consumer that captures stdout alone sees JSON only.
+fn print_report(report: &CheckReport) {
+    println!("{}", serde_json::to_string_pretty(report).unwrap());
+
+    eprintln!(
+        "status: {:?}  files_examined: {}  blocking: {}",
+        report.status, report.files_examined, report.blocking
+    );
+    for exec in &report.rules_executed {
+        eprintln!(
+            "  rule {} examined {} record(s)",
+            exec.rule, exec.records_examined
+        );
+    }
+    for finding in &report.findings {
+        eprintln!(
+            "  [{:?}] {}:{} {} -- {}",
+            finding.severity,
+            finding.file.display(),
+            finding.line.map(|l| l.to_string()).unwrap_or_default(),
+            finding.rule,
+            finding.message
+        );
     }
 }

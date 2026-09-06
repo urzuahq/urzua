@@ -1,11 +1,11 @@
 # 0007 — Every entry point emits JSON with a status field on stdout
 
-> Status: Accepted
+> Status: Superseded
 > Embodiment: Implemented
 > Date: 2026-09-04
 > Author: (project lead)
 > Deciders: (project lead)
-> Supersedes / Superseded-by: —
+> Supersedes / Superseded-by: ADR-0023
 > Derives-from: RFC-0003 (Accepted)
 
 ## Context

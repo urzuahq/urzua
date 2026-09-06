@@ -72,22 +72,31 @@ Real rules, running against this repository's own `docs/` in CI on every commit 
 
 That last pair is the part most linters don't have at all: a record can name what actually realizes it — a spec, a source file, a test — categorized by strength of evidence, and `check` computes whether the record's own claim still matches. Disagree, and it's a finding, not a stale comment nobody re-reads.
 
+**Stdout is always the JSON report, unconditionally (ADR-0023) — there's no `--format` flag to ask for it.** An agent piping stdout gets exactly one JSON object, every time, whether or not anyone remembered to opt in. The same run also writes a human-readable rendering to stderr, so a person running this directly in a terminal still sees both:
+
 ```
-$ urzua check docs/
-status: FindingsPresent  files_examined: 42  blocking: false
-  rule header.required-fields examined 42 record(s)
+$ urzua check docs/ 1>/dev/null   # stderr only, for a human reading a terminal
+status: FindingsPresent  files_examined: 44  blocking: false
+  rule header.required-fields examined 44 record(s)
   rule embodiment.consistency examined 6 record(s)
   [Warning] docs/adr/0016-...md: embodiment.locator-promotion-candidate -- locator
     'rust/crates/urzua-core/src/header.rs' is cited by 2 records -- consider promoting
     to a shared claim record
+
+$ urzua check docs/ 2>/dev/null   # stdout only, for a script or an agent
+{
+  "status": "findings-present",
+  "files_examined": 44,
+  ...
+}
 ```
 
 ## Repair, not just detect
 
-`urzua fix` closes the loop `check` opens: where a field's correct value is mechanically derivable — not authored, not judged, just computed — Urzua can write it back, gated hard.
+`urzua fix` closes the loop `check` opens: where a field's correct value is mechanically derivable — not authored, not judged, just computed — Urzua can write it back, gated hard. Same split: JSON on stdout, human rendering on stderr.
 
 ```
-$ urzua fix
+$ urzua fix 1>/dev/null
 status: repairs-available  records_examined: 6  repairs: 1
   [tier 1] docs/adr/0042-example.md: Embodiment 'Not started' -> 'Verified'
     (Realized-by: code:src/lib.rs, test:tests/it.rs)
