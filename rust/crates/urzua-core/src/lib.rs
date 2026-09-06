@@ -11,6 +11,7 @@
 
 pub mod config;
 pub mod field_state;
+pub mod fix;
 pub mod header;
 pub mod record;
 pub mod report;

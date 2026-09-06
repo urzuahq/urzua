@@ -1,7 +1,8 @@
 //! The `urzua` binary.
 //!
-//! Command surface per SPEC-0001. `check` is implemented (Phase A, SPEC-0002);
-//! everything else still bails with "not implemented yet."
+//! Command surface per SPEC-0001. `check`, `init` (adopt mode), `doctor`, and
+//! `fix` (detect mode) are implemented; `new`, `audit`, `migrate`, `export`,
+//! and `import` still bail with "not implemented yet."
 //!
 //! Implements: SPEC-0001, SPEC-0002, SPEC-0003
 
@@ -53,12 +54,13 @@ enum Command {
         format: OutputFormat,
     },
 
-    /// Cross-record reconciliation: supersession reciprocity, embodiment
-    /// back-pointers, dangling references.
+    /// Cross-record reconciliation: supersession reciprocity, dangling
+    /// references. Embodiment consistency lives in `check` and `fix`
+    /// instead -- it turned out to be per-record, not cross-record
+    /// (ADR-0018/0019).
     ///
-    /// Reports only. Never writes -- bulk cross-reference rewriting is a real
-    /// data-loss risk without one, and `--fix`
-    /// waits for a revision log to make repair recoverable.
+    /// Reports only. Never writes -- bulk cross-reference rewriting is a
+    /// real data-loss risk without one.
     Audit {
         #[arg(long, value_enum, default_value = "human")]
         format: OutputFormat,
@@ -95,6 +97,16 @@ enum Command {
     /// there a config, does it parse, is it wired into a real gate. An
     /// unrecognized config key is an error here, not a warning.
     Doctor,
+
+    /// Detect fields whose stated value disagrees with what the tool
+    /// computes (ADR-0015). Read-only -- apply mode (writing the computed
+    /// value back) is not built yet. Only Tier 1 (Embodiment) exists.
+    Fix {
+        #[arg(long, default_value_t = 1)]
+        tier: u8,
+        #[arg(long, value_enum, default_value = "human")]
+        format: OutputFormat,
+    },
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -120,6 +132,7 @@ fn main() -> ExitCode {
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => run_init(dry_run),
         Command::Doctor => run_doctor(),
+        Command::Fix { tier, format } => run_fix(cli.config, tier, format),
     }
 }
 
@@ -355,6 +368,92 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
 
     print_report(&report, format);
     ExitCode::from(report.exit_code() as u8)
+}
+
+/// Detect mode only (ADR-0015 §3): read-only, safe in CI. Apply mode
+/// (`--ids`, `--by`, `--force`) is not built yet -- it needs real file
+/// mutation, identity resolution, and a revision-log write-path, none of
+/// which this command touches.
+fn run_fix(config_path: Option<PathBuf>, tier: u8, format: OutputFormat) -> ExitCode {
+    if tier != 1 {
+        eprintln!("urzua fix: only tier 1 is implemented so far (ADR-0015 defines tiers 2 and 3, not yet built)");
+        return ExitCode::from(2);
+    }
+
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => return report_fix_could_not_run(&e, format),
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => return report_fix_could_not_run(&e, format),
+    };
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => return report_fix_could_not_run(&e.to_string(), format),
+    };
+
+    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
+
+    let status = if examined == 0 {
+        "not-run"
+    } else if repairs.is_empty() {
+        "ok"
+    } else {
+        "repairs-available"
+    };
+
+    match format {
+        OutputFormat::Json => {
+            let report = serde_json::json!({
+                "status": status,
+                "records_examined": examined,
+                "repairs": repairs,
+            });
+            println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        }
+        OutputFormat::Human => {
+            println!(
+                "status: {status}  records_examined: {examined}  repairs_found: {}",
+                repairs.len()
+            );
+            for r in &repairs {
+                println!(
+                    "  [tier {}] {}: {} '{}' -> '{}' ({})",
+                    r.tier,
+                    r.record.display(),
+                    r.field,
+                    r.current_value,
+                    r.computed_value,
+                    r.evidence
+                );
+            }
+        }
+    }
+
+    ExitCode::from(if examined == 0 { 2 } else { 0 })
+}
+
+fn report_fix_could_not_run(message: &str, format: OutputFormat) -> ExitCode {
+    eprintln!("urzua fix: could not run: {message}");
+    match format {
+        OutputFormat::Json => {
+            let report = serde_json::json!({
+                "status": "not-run",
+                "records_examined": 0,
+                "repairs": [],
+            });
+            println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        }
+        OutputFormat::Human => {
+            println!("status: not-run  records_examined: 0  repairs_found: 0");
+        }
+    }
+    ExitCode::from(2)
 }
 
 fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {

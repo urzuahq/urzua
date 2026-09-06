@@ -411,13 +411,13 @@ fn find_revision_log_entries(content: &str) -> Option<Vec<RevisionLogEntry>> {
 /// `test:` prefixes; an unrecognized prefix is dropped rather than reported,
 /// since this field's closure isn't this rule's concern.
 #[derive(Debug, Default, PartialEq, Eq)]
-struct RealizedBy {
-    spec: Vec<String>,
-    code: Vec<String>,
-    test: Vec<String>,
+pub(crate) struct RealizedBy {
+    pub(crate) spec: Vec<String>,
+    pub(crate) code: Vec<String>,
+    pub(crate) test: Vec<String>,
 }
 
-fn parse_realized_by(value: &str) -> RealizedBy {
+pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
     for segment in value.split(',') {
         let segment = segment.trim();
@@ -438,7 +438,7 @@ fn parse_realized_by(value: &str) -> RealizedBy {
 /// ADR-0018's tier computation: the highest tier with a non-empty category.
 /// `test` outranks `code` outranks `spec` -- a claim verified by a test is
 /// stronger evidence than a claim only pointed at by a spec.
-fn compute_embodiment(realized_by: &RealizedBy) -> &'static str {
+pub(crate) fn compute_embodiment(realized_by: &RealizedBy) -> &'static str {
     if !realized_by.test.is_empty() {
         "Verified"
     } else if !realized_by.code.is_empty() {
