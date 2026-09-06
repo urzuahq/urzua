@@ -43,6 +43,9 @@ jobs:
         run: cargo build --workspace --release --locked
       - name: cargo test
         run: cargo test --workspace --locked
+      - name: urzua check docs/ (SPEC-0002 Phase A exit criterion -- self-hosting)
+        working-directory: .
+        run: rust/target/release/urzua check docs/
 
   ci:
     name: ci

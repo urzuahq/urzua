@@ -312,12 +312,14 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
     let (exec3, findings3) = rules::field_quality(&records, &required_by_type);
     let (exec4, findings4) = rules::filename_title_consistency(&records, &full_text);
     let (exec5, findings5) = rules::supersession_reciprocity(&records);
+    let (exec6, findings6) = rules::revision_log_change_class(&records, &full_text);
 
     let mut findings = findings1;
     findings.extend(findings2);
     findings.extend(findings3);
     findings.extend(findings4);
     findings.extend(findings5);
+    findings.extend(findings6);
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
@@ -338,7 +340,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
     let report = CheckReport {
         status,
         files_examined: records.len(),
-        rules_executed: vec![exec1, exec2, exec3, exec4, exec5],
+        rules_executed: vec![exec1, exec2, exec3, exec4, exec5, exec6],
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),
             record_types: config.record_types.keys().cloned().collect(),

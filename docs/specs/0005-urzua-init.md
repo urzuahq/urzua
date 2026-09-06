@@ -164,4 +164,4 @@ migration without a reverse-reference scan is the documented data-loss shape.
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-08-20 | Initial spec. | — |
+> | 2026-08-20 | Initial spec. | **structural** |

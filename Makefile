@@ -29,7 +29,7 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint rust-build test ## Run exactly what CI runs, locally
+ci: fmt-check lint rust-build test records ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
 hooks-install: ## Install the pre-push hook (fmt + clippy, not the full suite)

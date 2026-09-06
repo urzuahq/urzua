@@ -143,4 +143,4 @@ false.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-08-20 | Config moves from `urzua.toml` at the repo root to `.urzua/config.toml`. The tool owns templates and derived state as well as config, and templates must sit outside the corpus they describe — a template is invalid as a record by construction, so a checker discovers it and reports errors on a correct file. The alternative, an ignore list, is the ad-hoc exclusion RFC-0011 and RFC-0013 both reject elsewhere. | **substantive** |
-> | 2026-08-20 | Split out of SPEC-0001's Configuration section and expanded. | — |
+> | 2026-08-20 | Split out of SPEC-0001's Configuration section and expanded. | **structural** |

@@ -255,4 +255,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-08-20 | Split out of SPEC-0001, which retains the cross-cutting rules. | — |
+> | 2026-08-20 | Split out of SPEC-0001, which retains the cross-cutting rules. | **structural** |

@@ -197,4 +197,4 @@ applied to the copy that never ran, which is exactly the false confidence this g
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-08-20 | Split out of SPEC-0001 §"Acceptance test". | — |
+> | 2026-08-20 | Split out of SPEC-0001 §"Acceptance test". | **structural** |
