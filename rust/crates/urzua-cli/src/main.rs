@@ -99,13 +99,27 @@ enum Command {
     Doctor,
 
     /// Detect fields whose stated value disagrees with what the tool
-    /// computes (ADR-0015). Read-only -- apply mode (writing the computed
-    /// value back) is not built yet. Only Tier 1 (Embodiment) exists.
+    /// computes (ADR-0015). Read-only by default. Only Tier 1 (Embodiment)
+    /// exists.
     Fix {
         #[arg(long, default_value_t = 1)]
         tier: u8,
         #[arg(long, value_enum, default_value = "human")]
         format: OutputFormat,
+        /// Write the computed values back. Requires --ids or --force, and
+        /// an identity (--by, or resolved from gh/git config). Every write
+        /// appends a structural revision-log entry (ADR-0014) -- a record
+        /// with no Revision log section is refused, never silently skipped.
+        #[arg(long)]
+        apply: bool,
+        #[arg(long, value_delimiter = ',')]
+        ids: Vec<String>,
+        #[arg(long)]
+        by: Option<String>,
+        /// Apply to every detected repair, bypassing --ids. Never the
+        /// default.
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -132,7 +146,14 @@ fn main() -> ExitCode {
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => run_init(dry_run),
         Command::Doctor => run_doctor(),
-        Command::Fix { tier, format } => run_fix(cli.config, tier, format),
+        Command::Fix {
+            tier,
+            format,
+            apply,
+            ids,
+            by,
+            force,
+        } => run_fix(cli.config, tier, format, apply, ids, by, force),
     }
 }
 
@@ -374,9 +395,22 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
 /// (`--ids`, `--by`, `--force`) is not built yet -- it needs real file
 /// mutation, identity resolution, and a revision-log write-path, none of
 /// which this command touches.
-fn run_fix(config_path: Option<PathBuf>, tier: u8, format: OutputFormat) -> ExitCode {
+#[allow(clippy::too_many_arguments)]
+fn run_fix(
+    config_path: Option<PathBuf>,
+    tier: u8,
+    format: OutputFormat,
+    apply: bool,
+    ids: Vec<String>,
+    by: Option<String>,
+    force: bool,
+) -> ExitCode {
     if tier != 1 {
         eprintln!("urzua fix: only tier 1 is implemented so far (ADR-0015 defines tiers 2 and 3, not yet built)");
+        return ExitCode::from(2);
+    }
+    if apply && ids.is_empty() && !force {
+        eprintln!("urzua fix --apply: pass --ids <record,...> or --force (never the default)");
         return ExitCode::from(2);
     }
 
@@ -399,8 +433,70 @@ fn run_fix(config_path: Option<PathBuf>, tier: u8, format: OutputFormat) -> Exit
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
     let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
 
+    if !apply {
+        print_fix_report(examined, &repairs, &[], format);
+        return ExitCode::from(if examined == 0 { 2 } else { 0 });
+    }
+
+    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("urzua fix --apply: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let _lock = match urzua_io::FixLock::acquire(&repo_root) {
+        Ok(lock) => lock,
+        Err(e) => {
+            eprintln!("urzua fix --apply: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let today = urzua_io::today();
+    let selected: Vec<_> = repairs
+        .into_iter()
+        .filter(|r| force || ids.contains(&r.record.display().to_string()))
+        .collect();
+
+    let mut applied = Vec::new();
+    let mut failed = Vec::new();
+    for repair in selected {
+        let full_path = repo_root.join(&repair.record);
+        // Re-read from disk right before writing (RFC-0008 §4's
+        // re-verify-before-write): apply_repair itself fails if the current
+        // value it was told to replace is no longer there, which is exactly
+        // the case a concurrent edit since detect ran would produce.
+        let fresh_content = match urzua_io::read_to_string(&full_path) {
+            Ok(c) => c,
+            Err(e) => {
+                failed.push((repair.record.clone(), format!("could not re-read: {e}")));
+                continue;
+            }
+        };
+        match urzua_core::fix::apply_repair(&fresh_content, &repair, &today, &identity) {
+            Ok(new_content) => match std::fs::write(&full_path, new_content) {
+                Ok(()) => applied.push(repair),
+                Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),
+            },
+            Err(e) => failed.push((repair.record.clone(), e)),
+        }
+    }
+
+    print_fix_report(examined, &applied, &failed, format);
+    ExitCode::from(if failed.is_empty() { 0 } else { 1 })
+}
+
+fn print_fix_report(
+    examined: usize,
+    repairs: &[urzua_core::fix::Repair],
+    failed: &[(PathBuf, String)],
+    format: OutputFormat,
+) {
     let status = if examined == 0 {
         "not-run"
+    } else if !failed.is_empty() {
+        "partial-failure"
     } else if repairs.is_empty() {
         "ok"
     } else {
@@ -413,15 +509,17 @@ fn run_fix(config_path: Option<PathBuf>, tier: u8, format: OutputFormat) -> Exit
                 "status": status,
                 "records_examined": examined,
                 "repairs": repairs,
+                "failed": failed.iter().map(|(p, e)| serde_json::json!({"record": p, "error": e})).collect::<Vec<_>>(),
             });
             println!("{}", serde_json::to_string_pretty(&report).unwrap());
         }
         OutputFormat::Human => {
             println!(
-                "status: {status}  records_examined: {examined}  repairs_found: {}",
-                repairs.len()
+                "status: {status}  records_examined: {examined}  repairs: {}  failed: {}",
+                repairs.len(),
+                failed.len()
             );
-            for r in &repairs {
+            for r in repairs {
                 println!(
                     "  [tier {}] {}: {} '{}' -> '{}' ({})",
                     r.tier,
@@ -432,10 +530,11 @@ fn run_fix(config_path: Option<PathBuf>, tier: u8, format: OutputFormat) -> Exit
                     r.evidence
                 );
             }
+            for (path, err) in failed {
+                println!("  [FAILED] {}: {err}", path.display());
+            }
         }
     }
-
-    ExitCode::from(if examined == 0 { 2 } else { 0 })
 }
 
 fn report_fix_could_not_run(message: &str, format: OutputFormat) -> ExitCode {

@@ -349,17 +349,19 @@ pub fn revision_log_change_class(
     )
 }
 
-struct RevisionLogEntry {
-    date: String,
-    change_class: String,
-    line: usize,
+pub(crate) struct RevisionLogEntry {
+    #[allow(dead_code)]
+    pub(crate) date: String,
+    #[allow(dead_code)]
+    pub(crate) change_class: String,
+    pub(crate) line: usize,
 }
 
 /// Finds a `**Revision log**` marker and parses the pipe-delimited table
 /// that follows it. `None` means no such section exists in this record at
 /// all -- distinct from `Some(vec![])`, an existing but empty table, though
 /// both currently produce no findings from this rule.
-fn find_revision_log_entries(content: &str) -> Option<Vec<RevisionLogEntry>> {
+pub(crate) fn find_revision_log_entries(content: &str) -> Option<Vec<RevisionLogEntry>> {
     let lines: Vec<&str> = content.lines().collect();
     let marker_idx = lines.iter().position(|l| l.contains("**Revision log**"))?;
 

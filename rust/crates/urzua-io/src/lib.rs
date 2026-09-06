@@ -83,6 +83,77 @@ pub fn today() -> String {
         .to_string()
 }
 
+/// RFC-0002 §2's identity tiering, reused by `urzua fix --apply` (ADR-0019):
+/// an explicit `--by` wins outright; else `gh api user`; else `git config
+/// user.name`. Every applied write needs a real identity, so this returns
+/// an error rather than a placeholder when none of the three resolve.
+pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<String, String> {
+    if let Some(by) = explicit {
+        return Ok(by.to_string());
+    }
+
+    if let Ok(output) = Command::new("gh")
+        .args(["api", "user", "--jq", ".login"])
+        .output()
+    {
+        if output.status.success() {
+            let login = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !login.is_empty() {
+                return Ok(login);
+            }
+        }
+    }
+
+    if let Ok(output) = Command::new("git")
+        .args(["config", "user.name"])
+        .current_dir(repo_root)
+        .output()
+    {
+        if output.status.success() {
+            let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !name.is_empty() {
+                return Ok(name);
+            }
+        }
+    }
+
+    Err("could not resolve an identity (gh api user, git config user.name both unavailable) -- pass --by explicitly".to_string())
+}
+
+/// A corpus-level lock for `urzua fix --apply` (RFC-0008 §4): apply is
+/// single-process, and a second concurrent apply must fail loud rather than
+/// interleave writes. `create_new` is atomic -- two processes racing to
+/// create the same file, only one succeeds.
+pub struct FixLock {
+    path: PathBuf,
+}
+
+impl FixLock {
+    pub fn acquire(repo_root: &Path) -> Result<Self, String> {
+        let dir = repo_root.join(".urzua/cache");
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+        let path = dir.join("fix.lock");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|_| {
+                format!(
+                    "{} already exists -- another `urzua fix --apply` may be running; remove it if that's not the case",
+                    path.display()
+                )
+            })?;
+        Ok(FixLock { path })
+    }
+}
+
+impl Drop for FixLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 fn run_git(dir: &Path, args: &[&str]) -> Result<String, DiscoveryError> {
     let args_str = args.join(" ");
     let output = Command::new("git")
