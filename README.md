@@ -137,8 +137,9 @@ Every existing header convention this project has actually encountered is a decl
 | `init` | Adopt mode only — proposes config from an existing corpus, never moves files |
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real — backfills a collision-free stable ID ([ULID](docs/adr/0021-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
+| `migrate schema --report` | Real — previews which records lack a real value for a proposed new required field, before it's ever added to config |
 | `doctor` | Real — reports on the tool's own configuration health, not record content |
-| `new`, `audit`, `migrate schema`, `export`, `import` | Not implemented yet — exit 2 with "not implemented yet" |
+| `new`, `audit`, `migrate schema --assist-waivers`/`--apply`, `export`, `import` | Not implemented yet — exit 2 with "not implemented yet" |
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs/rfc/) / [`docs/adr/`](docs/adr/) for what's designed but not yet built — including the fuller claim-graph model (AND/OR composites, cross-record-shared claims) this release's Embodiment tracking deliberately ships a narrower slice of first.
 

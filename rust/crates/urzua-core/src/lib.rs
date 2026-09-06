@@ -13,6 +13,7 @@ pub mod config;
 pub mod field_state;
 pub mod fix;
 pub mod header;
+pub mod migrate;
 pub mod record;
 pub mod report;
 pub mod rules;
@@ -52,7 +53,7 @@ pub enum Embodiment {
 /// Blank, placeholder, and pending are three distinct states, not one. Collapsing
 /// them is a common, repeated bug class in hand-written record linters —
 /// each rediscovered and re-fixed independently.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum FieldState {
     /// Field absent or empty.
     Blank,

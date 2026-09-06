@@ -1,9 +1,9 @@
 //! The `urzua` binary.
 //!
 //! Command surface per SPEC-0001. `check`, `init` (adopt mode), `doctor`,
-//! `fix` (detect and apply), and `migrate ids` are implemented; `new`,
-//! `audit`, `migrate schema`, `export`, and `import` still bail with "not
-//! implemented yet."
+//! `fix` (detect and apply), `migrate ids`, and `migrate schema --report`
+//! are implemented; `new`, `audit`, `migrate schema --assist-waivers`/
+//! `--apply`, `export`, and `import` still bail with "not implemented yet."
 //!
 //! Implements: SPEC-0001, SPEC-0002, SPEC-0003
 
@@ -136,11 +136,19 @@ enum MigrateTarget {
         apply: bool,
     },
 
-    /// Field-rollout assistant for a newly-required field. Not implemented
-    /// yet -- see docs/specs/0001-v0-cli.md.
+    /// Field-rollout assistant for a newly-required field. Only --report
+    /// exists so far: a read-only preview of which existing records would
+    /// newly fail, before the field is ever added to config.
+    /// --assist-waivers and --apply are not implemented yet.
     Schema {
+        /// Preview which records lack a real value for --field, without
+        /// requiring it in config first.
         #[arg(long)]
         report: bool,
+        #[arg(long)]
+        field: Option<String>,
+        #[arg(long, value_enum, default_value = "human")]
+        format: OutputFormat,
     },
 }
 
@@ -166,8 +174,19 @@ fn main() -> ExitCode {
             target: MigrateTarget::Ids { apply },
         } => run_migrate_ids(cli.config, apply),
         Command::Migrate {
+            target:
+                MigrateTarget::Schema {
+                    report: true,
+                    field: Some(field),
+                    format,
+                },
+        } => run_migrate_schema_report(cli.config, field, format),
+        Command::Migrate {
             target: MigrateTarget::Schema { .. },
-        } => not_implemented("migrate schema"),
+        } => {
+            eprintln!("urzua migrate schema: pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)");
+            ExitCode::from(2)
+        }
         Command::Export { .. } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => run_init(dry_run),
@@ -658,6 +677,82 @@ fn run_migrate_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         match std::fs::write(&full_path, new_content) {
             Ok(()) => println!("  [OK] {}: Stable-Id: {}", r.path.display(), id.as_str()),
             Err(e) => println!("  [FAILED] {}: {e}", r.path.display()),
+        }
+    }
+
+    ExitCode::from(0)
+}
+
+/// A preview of which existing records would newly fail if `field` were
+/// added to config's `required_fields` today. Read-only -- never writes,
+/// never touches config. `--assist-waivers` and `--apply` are not
+/// implemented (SPEC-0001): the former needs a human-authored `Reason` per
+/// waiver, the latter needs `urzua fix` to know a field is tool-writable,
+/// which almost none are.
+fn run_migrate_schema_report(
+    config_path: Option<PathBuf>,
+    field: String,
+    format: OutputFormat,
+) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => {
+            eprintln!("urzua migrate schema --report: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("urzua migrate schema --report: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("urzua migrate schema --report: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+    if records.is_empty() {
+        eprintln!("urzua migrate schema --report: no records discovered -- nothing to check");
+        return ExitCode::from(2);
+    }
+
+    let report = urzua_core::migrate::schema_report(&records, &field);
+
+    match format {
+        OutputFormat::Json => {
+            let out = serde_json::json!({
+                "field": field,
+                "records_examined": records.len(),
+                "would_fail": report,
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+        }
+        OutputFormat::Human => {
+            println!(
+                "urzua migrate schema --report --field {field}: {} of {} record(s) would newly fail:",
+                report.len(),
+                records.len()
+            );
+            for entry in &report {
+                println!(
+                    "  [{:?}] {} ({})",
+                    entry.state,
+                    entry.record.display(),
+                    entry.record_type
+                );
+            }
+            if report.is_empty() {
+                println!("  none -- every record already carries a real value for '{field}'.");
+            }
         }
     }
 
