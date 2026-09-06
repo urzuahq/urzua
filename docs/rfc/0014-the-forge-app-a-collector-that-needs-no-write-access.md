@@ -1,6 +1,6 @@
 # 0014 — The forge app: a collector and an actor that needs no write access to code
 
-> Status: Draft
+> Status: Accepted
 > Date: 2026-08-18
 > Author: (session author)
 > Supersedes / Superseded-by: —
