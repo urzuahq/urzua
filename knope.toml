@@ -1,0 +1,10 @@
+[package]
+# Anchored to the start of a line so it matches only `[workspace.package]`'s
+# own version -- an unanchored pattern here also matches `rust-version =
+# "1.87"` and the `version = "1"` inside `serde = { version = "1", ... }`,
+# silently corrupting dependency pins. Verified against a live dry run
+# before trusting it (ADR-0029).
+versioned_files = [
+    { path = "rust/Cargo.toml", regex = '(?m)^version = "(?<version>[^"]+)"$' },
+]
+changelog = "CHANGELOG.md"

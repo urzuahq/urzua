@@ -1,0 +1,48 @@
+name: prepare release
+
+# A deliberate, maintainer-triggered act -- never a trigger on merge (ADR-0029).
+# Bumps rust/Cargo.toml's version, compiles CHANGELOG.md from every .changeset/
+# fragment (plus Conventional Commits since the last tag), commits, tags, and
+# pushes. The push of a `v*` tag is what starts the existing tag-triggered
+# release.yml (cross-compiled binaries, GitHub Release) -- this workflow does
+# not build or publish anything itself.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The one job in this repo that pushes directly -- narrow and explicit,
+      # not the workflow-level default.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: install knope 0.23.0 (pinned, checksummed)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o knope.tgz "https://github.com/knope-dev/knope/releases/download/knope/v0.23.0/knope-x86_64-unknown-linux-musl.tgz"
+          echo "76a970a5e237344abc14be3de37ed50c021b659a9b66b3f54afc77e6d48ac501  knope.tgz" | sha256sum -c -
+          tar -xzf knope.tgz
+          sudo mv knope-x86_64-unknown-linux-musl/knope /usr/local/bin/knope
+          knope --version
+
+      - name: configure git identity for the release commit
+        run: |
+          git config user.name "urzua-release-bot"
+          git config user.email "urzua-release-bot@users.noreply.github.com"
+
+      - name: bump version, compile CHANGELOG.md, tag, and push (ADR-0029)
+        run: knope release --verbose

@@ -1,12 +1,11 @@
 # 0028 — Changelog lockstep, verified in CI; never auto-generated
 
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:.github/workflows/ci.yml
+> Status: Superseded
+> Embodiment: Implemented
 > Date: 2026-09-06
 > Author: (project lead)
 > Deciders: (project lead)
-> Supersedes / Superseded-by: —
+> Supersedes / Superseded-by: ADR-0029
 > Derives-from: —
 
 ## Context
@@ -50,6 +49,11 @@ field. Fails closed only on the one condition it exists to catch.
   (tracked as a known gap, not silently deferred) needed before the next version bump ships clean.
 - No dependency on a Node-based changelog tool — the check is a `bash` step in the existing CI job,
   consistent with this repo's Rust-only, Makefile-driven CI stance.
+- **Superseded by ADR-0029**: lockstep verification caught staleness but still left the changelog
+  entry itself hand-reconstructed at release time, from memory, after the motivating PR had already
+  merged. ADR-0029 moves the note-writing to when the PR is written (a per-PR changeset fragment)
+  and keeps the same Rust-only constraint this ADR named, via `knope` rather than a Node tool. The
+  `changelog` CI job this ADR describes no longer exists; ADR-0029's `changeset` job replaces it.
 
 ## References
 

@@ -4,7 +4,7 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
-## [0.1.0] — 2026-09-05
+## 0.1.0 (2026-09-05)
 
 First tagged release. `urzua check` and `urzua init` (adopt mode) are real; `new`, `audit`,
 `migrate`, `export`, and `import` still exit 2 with "not implemented yet."

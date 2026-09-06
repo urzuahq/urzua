@@ -32,6 +32,34 @@ assert it's caught. A rule without one is unverified, not trusted, per RFC-0011 
   breaks — see [`docs/specs/0004-the-corpus-acceptance-suite.md`](docs/specs/0004-the-corpus-acceptance-suite.md)
   for the documented bug classes this project already tests against.
 
+## Documenting a change
+
+If your PR is something a person installing `urzua` would care about — a new command, a behavior
+change, a bug fix — add a changeset: a markdown fragment in `.changeset/` describing it, written now
+while the change is fresh rather than reconstructed later at release time (ADR-0029).
+
+```markdown
+---
+default: minor
+---
+
+# Add `urzua new`
+
+Creates a record from the configured template with a fresh stable ID assigned. Never asks you to
+pick a number.
+```
+
+`default` is the package identifier (there's one package in this repo); the value is `major`,
+`minor`, or `patch`. Everything after the closing `---` is the changelog entry itself — written for
+the person installing the tool, not a restatement of the commit. Create one with `knope
+document-change` (interactive) or write the file by hand, named anything ending in `.md`. CI fails a
+PR with neither a changeset nor the `no-changeset` label (for changes with nothing to tell an
+installer — CI config, internal refactors, docs fixes).
+
+A maintainer cuts a release by running the `prepare release` GitHub Action manually: it consumes
+every fragment, bumps the version, compiles `CHANGELOG.md`, tags, and pushes — the existing
+tag-triggered release workflow takes it from there.
+
 ## Ground rules
 
 - **Every RFC follows [`docs/rfc/_template.md`](docs/rfc/_template.md) exactly** — banner block,

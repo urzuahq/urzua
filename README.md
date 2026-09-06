@@ -171,7 +171,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs
 
 ## Maintenance
 
-Released for use, actively maintained — this is a real tool being built in the open, not published only for reference. Issues and PRs are triaged. The schema and CLI contract may still change before `v1.0.0`; `CHANGELOG.md` calls out anything breaking.
+Released for use, actively maintained — this is a real tool being built in the open, not published only for reference. Issues and PRs are triaged. The schema and CLI contract may still change before `v1.0.0`; `CHANGELOG.md` calls out anything breaking. `CHANGELOG.md` itself is compiled from per-PR changesets (`.changeset/`, [ADR-0029](docs/adr/0029-changesets-via-knope-supersedes-lockstep-verification.md)) — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the format.
 
 ## Layout
 

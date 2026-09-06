@@ -47,9 +47,13 @@ jobs:
         working-directory: .
         run: rust/target/release/urzua check docs/
 
-  changelog:
-    name: changelog lockstep
-    if: github.event_name == 'pull_request'
+  changeset:
+    name: changeset required
+    # A `no-changeset` label is an explicit, visible opt-out (CI-only, docs-only,
+    # internal-refactor PRs) -- never a silent skip (ADR-0029).
+    if: >-
+      github.event_name == 'pull_request' &&
+      !contains(github.event.pull_request.labels.*.name, 'no-changeset')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -57,25 +61,20 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: verify a version bump carries a matching CHANGELOG.md entry (ADR-0028)
+      - name: verify this PR adds a .changeset fragment (ADR-0029)
         run: |
           set -euo pipefail
           git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1
-          old_version=$(git show "origin/${{ github.event.pull_request.base.ref }}:rust/Cargo.toml" | grep -m1 '^version = ' | sed -E 's/version = "(.*)"/\1/')
-          new_version=$(grep -m1 '^version = ' rust/Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          if [ "$old_version" = "$new_version" ]; then
-            echo "version unchanged ($new_version) -- no changelog entry required"
-            exit 0
-          fi
-          if ! grep -qF "## [$new_version]" CHANGELOG.md; then
-            echo "version bumped $old_version -> $new_version but CHANGELOG.md has no '## [$new_version]' entry"
+          added=$(git diff --name-only --diff-filter=A "origin/${{ github.event.pull_request.base.ref }}"...HEAD -- '.changeset/*.md' || true)
+          if [ -z "$added" ]; then
+            echo "no .changeset/*.md fragment added -- run 'knope document-change', or label this PR 'no-changeset' if there's nothing to tell an installer"
             exit 1
           fi
-          echo "CHANGELOG.md carries an entry for $new_version"
+          echo "found: $added"
 
   ci:
     name: ci
-    needs: [rust, changelog]
+    needs: [rust, changeset]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     if: always()
