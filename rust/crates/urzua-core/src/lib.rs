@@ -15,6 +15,7 @@ pub mod fix;
 pub mod graph;
 pub mod header;
 pub mod migrate;
+pub mod new_record;
 pub mod record;
 pub mod report;
 pub mod rules;

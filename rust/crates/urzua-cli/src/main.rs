@@ -1,8 +1,8 @@
 //! The `urzua` binary.
 //!
-//! Command surface per SPEC-0001. `check`, `explain`, `graph`, `init`
+//! Command surface per SPEC-0001. `check`, `explain`, `graph`, `new`, `init`
 //! (adopt mode), `doctor`, `fix` (detect and apply), `migrate ids`, and
-//! `migrate schema --report` are implemented; `new`, `audit`,
+//! `migrate schema --report` are implemented; `audit`,
 //! `migrate schema --assist-waivers`/`--apply`, `export`, and `import`
 //! still bail with "not implemented yet." Stdout is always JSON, on every
 //! implemented command -- no `--format` flag exists (ADR-0023).
@@ -165,7 +165,7 @@ fn main() -> ExitCode {
         Command::Check { paths } => run_check(cli.config, paths),
         Command::Explain { path } => run_explain(cli.config, path),
         Command::Graph => run_graph(cli.config),
-        Command::New { .. } => not_implemented("new"),
+        Command::New { record_type, title } => run_new(cli.config, record_type, title),
         Command::Audit => not_implemented("audit"),
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
@@ -503,6 +503,114 @@ fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
     let edges = urzua_core::graph::graph(&records);
 
     let out = serde_json::json!({ "edges": edges });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+
+    ExitCode::from(0)
+}
+
+/// Creates a record from the configured template with a stable ID assigned
+/// (ADR-0003). Never asks the author to pick a number -- scans the type's
+/// directory for the highest existing prefix and takes the next one.
+fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<String>) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => {
+            eprintln!("urzua new: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("urzua new: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let Some(type_config) = config.record_types.get(&record_type) else {
+        eprintln!(
+            "urzua new: unrecognized record type '{record_type}' -- see [record_types] in {}",
+            config_path.display()
+        );
+        return ExitCode::from(2);
+    };
+
+    let dir = repo_root.join(&type_config.dir);
+    let filenames: Vec<String> = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect(),
+        Err(e) => {
+            eprintln!("urzua new: could not read {}: {e}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+    let display_number = urzua_core::new_record::next_display_number(&filenames);
+
+    let title = title.unwrap_or_else(|| "Title".to_string());
+    let stable_id = urzua_id::StableId::generate();
+    let today = urzua_io::today();
+    let author = match urzua_io::resolve_identity(None, &repo_root) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("urzua new: could not resolve an identity: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let params = urzua_core::new_record::NewRecordParams {
+        display_number,
+        title: &title,
+        stable_id: stable_id.as_str(),
+        author: &author,
+        today: &today,
+    };
+
+    let template_path = repo_root
+        .join(".urzua/templates")
+        .join(format!("{record_type}.md"));
+    let content = match urzua_io::read_to_string(&template_path) {
+        Ok(template) => urzua_core::new_record::render_from_template(&template, &params),
+        Err(_) if type_config.header_shape == urzua_core::header::HeaderShape::YamlFrontmatter => {
+            urzua_core::new_record::render_synthetic_yaml(&params, &type_config.required_fields)
+        }
+        Err(e) => {
+            eprintln!(
+                "urzua new: no template at {} and no synthesizable shape declared: {e}",
+                template_path.display()
+            );
+            return ExitCode::from(2);
+        }
+    };
+
+    let filename = format!(
+        "{:04}-{}.md",
+        display_number,
+        urzua_core::new_record::slugify(&title)
+    );
+    let file_path = dir.join(&filename);
+    if file_path.exists() {
+        eprintln!(
+            "urzua new: {} already exists -- refusing to overwrite",
+            file_path.display()
+        );
+        return ExitCode::from(2);
+    }
+
+    if let Err(e) = std::fs::write(&file_path, content) {
+        eprintln!("urzua new: could not write {}: {e}", file_path.display());
+        return ExitCode::from(2);
+    }
+
+    let out = serde_json::json!({
+        "status": "ok",
+        "path": file_path.strip_prefix(&repo_root).unwrap_or(&file_path),
+        "display_number": display_number,
+        "stable_id": stable_id.as_str(),
+    });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
 
     ExitCode::from(0)
