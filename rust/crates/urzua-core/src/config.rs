@@ -39,8 +39,9 @@ impl<'de> Deserialize<'de> for HeaderShape {
         match s.as_str() {
             "blockquote" => Ok(HeaderShape::Blockquote),
             "bold-list" => Ok(HeaderShape::BoldList),
+            "yaml-frontmatter" => Ok(HeaderShape::YamlFrontmatter),
             other => Err(serde::de::Error::custom(format!(
-                "unrecognized header_shape '{other}' -- expected \"blockquote\" or \"bold-list\""
+                "unrecognized header_shape '{other}' -- expected \"blockquote\", \"bold-list\", or \"yaml-frontmatter\""
             ))),
         }
     }

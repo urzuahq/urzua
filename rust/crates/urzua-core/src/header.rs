@@ -79,6 +79,11 @@ pub enum HeaderShape {
     /// `- **Key:** Value`, anchored by a leading markdown list marker
     /// instead of a blockquote.
     BoldList,
+    /// `---`-delimited YAML at the top of the document (RFC-0016/ADR-0017),
+    /// deserialized structurally rather than recognized line by line. What
+    /// Urzua itself generates going forward; the other shapes remain what a
+    /// pre-existing, adopted corpus is read as.
+    YamlFrontmatter,
 }
 
 pub fn parse(content: &str) -> Header {
@@ -88,12 +93,17 @@ pub fn parse(content: &str) -> Header {
 /// Parse the header using an explicitly declared shape (RFC-0010: the shape
 /// is declared per profile, never sniffed).
 pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
+    if shape == HeaderShape::YamlFrontmatter {
+        return parse_yaml_frontmatter(content);
+    }
+
     let mut fields = Vec::new();
     let mut region: Option<(usize, usize)> = None;
 
     let line_body: fn(&str) -> Option<&str> = match shape {
         HeaderShape::Blockquote => blockquote_body,
         HeaderShape::BoldList => bold_list_body,
+        HeaderShape::YamlFrontmatter => unreachable!("handled above"),
     };
 
     for (idx, raw_line) in content.lines().enumerate() {
@@ -144,6 +154,108 @@ fn bold_list_body(line: &str) -> Option<&str> {
         .strip_prefix("- ")
         .or_else(|| trimmed.strip_prefix("* "))?;
     Some(rest)
+}
+
+/// Parse a `---`-delimited YAML frontmatter block (RFC-0016/ADR-0017).
+///
+/// Unlike the line-recognizer shapes above, this goes through a real YAML
+/// deserializer rather than a bespoke parser -- closure (only the declared
+/// keys, each once) and typing come from the deserializer, not from a
+/// hand-written theory of what counts as "the header." A document that
+/// doesn't open with `---`, whose frontmatter never closes, or whose content
+/// isn't a top-level mapping has `region: None` -- reportable, same contract
+/// every other shape honors, never a silently empty header.
+fn parse_yaml_frontmatter(content: &str) -> Header {
+    let mut lines = content.lines();
+    let Some(first) = lines.next() else {
+        return Header {
+            fields: Vec::new(),
+            region: None,
+        };
+    };
+    if first.trim_end() != "---" {
+        return Header {
+            fields: Vec::new(),
+            region: None,
+        };
+    }
+
+    let mut yaml_text = String::new();
+    let mut closing_line: Option<usize> = None;
+    for (idx, line) in lines.enumerate() {
+        let line_no = idx + 2; // +1 for 1-indexing, +1 for the opening `---`
+        if line.trim_end() == "---" {
+            closing_line = Some(line_no);
+            break;
+        }
+        yaml_text.push_str(line);
+        yaml_text.push('\n');
+    }
+
+    let Some(closing_line) = closing_line else {
+        return Header {
+            fields: Vec::new(),
+            region: None,
+        };
+    };
+
+    let Ok(yaml_serde::Value::Mapping(mapping)) =
+        yaml_serde::from_str::<yaml_serde::Value>(&yaml_text)
+    else {
+        return Header {
+            fields: Vec::new(),
+            region: None,
+        };
+    };
+
+    let fields = mapping
+        .iter()
+        .filter_map(|(key, value)| {
+            let key = key.as_str()?.to_string();
+            let line = find_key_line(&yaml_text, &key).unwrap_or(2);
+            Some(HeaderField {
+                key,
+                value: stringify_yaml_value(value),
+                line,
+            })
+        })
+        .collect();
+
+    Header {
+        fields,
+        region: Some((1, closing_line)),
+    }
+}
+
+/// Best-effort line lookup for a top-level YAML key, for diagnostics only --
+/// parsing correctness never depends on this succeeding. A flow-style
+/// mapping (`{a: 1, b: 2}` on one line) falls back to the block's first
+/// content line via the caller's default.
+fn find_key_line(yaml_text: &str, key: &str) -> Option<usize> {
+    yaml_text.lines().enumerate().find_map(|(idx, line)| {
+        let trimmed = line.trim_start();
+        (trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}: ")))
+            .then_some(idx + 2)
+    })
+}
+
+fn stringify_yaml_value(value: &yaml_serde::Value) -> String {
+    use yaml_serde::Value;
+    match value {
+        Value::Null => String::new(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => s.clone(),
+        Value::Sequence(items) => items
+            .iter()
+            .map(stringify_yaml_value)
+            .collect::<Vec<_>>()
+            .join(", "),
+        Value::Mapping(_) | Value::Tagged(_) => yaml_serde::to_string(value)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    }
 }
 
 /// Parse one blockquote line's body into zero or more fields: either a
@@ -258,5 +370,41 @@ mod tests {
     fn blockquote_shape_is_the_default_when_unspecified() {
         let doc = "# Title\n\n> Status: Draft\n";
         assert_eq!(parse(doc), parse_with_shape(doc, HeaderShape::Blockquote));
+    }
+
+    #[test]
+    fn parses_yaml_frontmatter() {
+        let doc = "---\nstatus: Accepted\ndate: 2026-09-05\nreviewers:\n  - alice\n  - bob\n---\n# Title\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.get("status"), Some("Accepted"));
+        assert_eq!(h.get("date"), Some("2026-09-05"));
+        assert_eq!(h.get("reviewers"), Some("alice, bob"));
+        assert_eq!(h.region, Some((1, 7)));
+    }
+
+    #[test]
+    fn yaml_frontmatter_that_never_closes_is_no_region_not_a_panic() {
+        // Observed failing before it's trusted: a document that opens `---`
+        // but never closes it must be reportable, not silently swallowed and
+        // not a crash on malformed structural input.
+        let doc = "---\nstatus: Accepted\n# no closing delimiter\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.region, None);
+        assert!(h.fields.is_empty());
+    }
+
+    #[test]
+    fn a_document_not_opening_with_frontmatter_has_no_yaml_region() {
+        let doc = "# Title\n\n> Status: Draft\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.region, None);
+    }
+
+    #[test]
+    fn invalid_yaml_inside_the_delimiters_is_no_region_not_a_panic() {
+        let doc = "---\nstatus: [unterminated\n---\n# Title\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.region, None);
+        assert!(h.fields.is_empty());
     }
 }

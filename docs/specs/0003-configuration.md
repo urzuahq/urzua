@@ -45,7 +45,7 @@ name = "adr"
 dir = "docs/adr"
 filename = "{number}-{slug}.md"
 statuses = ["Proposed", "Accepted", "Rejected", "Withdrawn", "Superseded", "Deprecated"]
-header_shape = "blockquote"  # or "bold-list" -- RFC-0010 §5: declared, never sniffed
+header_shape = "blockquote"  # or "bold-list" / "yaml-frontmatter" -- RFC-0010 §5, RFC-0016: declared, never sniffed
 
 [record_type.required_fields]
 always = ["Status", "Date", "Author", "Deciders"]
@@ -85,7 +85,9 @@ Two details carry weight:
   shape from content, for the same reason a rule can't be voted into existence by majority: a
   misconfigured shape must fail loud (`no header-shaped region found`) rather than silently matching
   the wrong lines. `header_shape` defaults to `"blockquote"` when omitted, so an existing config
-  needs no change.
+  needs no change. `"yaml-frontmatter"` (RFC-0016) is genuinely structured data, deserialized rather
+  than line-recognized, and is what a from-scratch record generates by default; the other shapes stay
+  what an adopted, pre-existing corpus is read as.
 
 ## Scope declaration
 

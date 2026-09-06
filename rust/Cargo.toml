@@ -23,6 +23,12 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
+# Pure-Rust (libyaml transpiled via c2rust, not a binding to it) -- verified
+# before choosing (ADR-0017): no C toolchain dependency, so it doesn't add
+# cross-compilation risk to the release matrix (ADR-0013). serde_yaml is
+# archived/deprecated; this is co-maintained by its original author plus the
+# YAML Organization.
+yaml_serde = "0.10"
 clap = { version = "4", features = ["derive"] }
 
 [profile.release]
