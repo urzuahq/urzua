@@ -1,11 +1,11 @@
 //! The `urzua` binary.
 //!
-//! Command surface per SPEC-0001. `check`, `explain`, `graph`, `new`, `init`
-//! (adopt mode), `doctor`, `fix` (detect and apply), `migrate ids`, and
-//! `migrate schema --report` are implemented; `audit`,
-//! `migrate schema --assist-waivers`/`--apply`, `export`, and `import`
-//! still bail with "not implemented yet." Stdout is always JSON, on every
-//! implemented command -- no `--format` flag exists (ADR-0023).
+//! Command surface per SPEC-0001. `check`, `explain`, `graph`, `new`, `audit`,
+//! `init` (adopt mode), `doctor`, `fix` (detect and apply), `migrate ids`, and
+//! `migrate schema --report` are implemented; `migrate schema
+//! --assist-waivers`/`--apply`, `export`, and `import` still bail with "not
+//! implemented yet." Stdout is always JSON, on every implemented command --
+//! no `--format` flag exists (ADR-0023).
 //!
 //! Implements: SPEC-0001, SPEC-0002, SPEC-0003
 
@@ -166,7 +166,7 @@ fn main() -> ExitCode {
         Command::Explain { path } => run_explain(cli.config, path),
         Command::Graph => run_graph(cli.config),
         Command::New { record_type, title } => run_new(cli.config, record_type, title),
-        Command::Audit => not_implemented("audit"),
+        Command::Audit => run_audit(cli.config),
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
         } => run_migrate_ids(cli.config, apply),
@@ -419,6 +419,65 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         status,
         files_examined: records.len(),
         rules_executed: vec![exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8],
+        scope: ScopeInfo {
+            source: format!("{:?}", discovered.source),
+            record_types: config.record_types.keys().cloned().collect(),
+        },
+        blocking,
+        findings,
+    };
+
+    print_report(&report);
+    ExitCode::from(report.exit_code() as u8)
+}
+
+/// Cross-record reconciliation: supersession reciprocity and dangling
+/// cross-references, reusing the same rule functions `check` calls rather
+/// than a second implementation (ADR-0030). Never writes -- a bulk
+/// cross-reference rewrite is a real data-loss risk without a review step
+/// this command doesn't have.
+fn run_audit(config_path: Option<PathBuf>) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => return report_could_not_run(&e),
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => return report_could_not_run(&e),
+    };
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => return report_could_not_run(&e.to_string()),
+    };
+
+    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+
+    let (exec1, findings1) = rules::pointer_resolution(&records);
+    let (exec2, findings2) = rules::supersession_reciprocity(&records);
+    let mut findings = findings1;
+    findings.extend(findings2);
+
+    let waivers = urzua_core::waiver::load_waivers(&records);
+    urzua_core::waiver::apply_waivers(&mut findings, &waivers, &urzua_io::today());
+
+    let active_findings = || findings.iter().filter(|f| f.waived.is_none());
+    let blocking = active_findings().any(|f| f.severity == urzua_core::report::Severity::Error);
+
+    let status = if records.is_empty() {
+        ReportStatus::NotRun
+    } else if active_findings().count() == 0 {
+        ReportStatus::Ok
+    } else {
+        ReportStatus::FindingsPresent
+    };
+
+    let report = CheckReport {
+        status,
+        files_examined: records.len(),
+        rules_executed: vec![exec1, exec2],
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),
             record_types: config.record_types.keys().cloned().collect(),
