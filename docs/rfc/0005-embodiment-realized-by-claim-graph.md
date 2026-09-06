@@ -1,6 +1,6 @@
 # 0005 — Embodiment as a schema-level concept; `realized_by` as a claim graph
 
-> Status: Draft
+> Status: Accepted
 > Date: 2026-07-30
 > Author: (session author)
 > Supersedes / Superseded-by: —
@@ -207,6 +207,16 @@ complexity any more than it should hardcode the set of record types.
 
 ## Open questions
 
+- **MVP scope, decided rather than left implicit.** §3's full claim graph (AND/OR composites,
+  weakest-link confidence, cycle detection) ships once a real multi-part-AND case is found needing
+  it — not before. The MVP that does ship: `realized_by` as categorized locator lists (`spec`/`code`/
+  `test`), Embodiment computed as the highest tier with a non-empty category (any `test` locator →
+  `Verified`; else any `code` locator → `Implemented`; else any `spec` locator → `Specified`; else
+  `Not started`); a leaf can be **promoted** into its own first-class `claim` record (ADR-0018) when
+  the same locator is cited by more than one record, so one staleness event covers every citing
+  record instead of each independently drifting; promotion is **engine-suggested** — `check` flags
+  the duplication as a finding, a human runs the actual promotion, never automatic. No AND semantics,
+  no cycle detection, no `NOT` operator in this MVP.
 - Should `Embodiment`'s back-pointer computation stay purely mechanical (grep-based), or is there
   a role for LLM-assisted "does the code really match the ADR's intent" checking, and if so, at
   what point in the pipeline (base computation vs. a separate confidence-scored second pass)?

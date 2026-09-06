@@ -313,6 +313,8 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
     let (exec4, findings4) = rules::filename_title_consistency(&records, &full_text);
     let (exec5, findings5) = rules::supersession_reciprocity(&records);
     let (exec6, findings6) = rules::revision_log_change_class(&records, &full_text);
+    let (exec7, findings7) = rules::embodiment_consistency(&records);
+    let (exec8, findings8) = rules::embodiment_locator_promotion_candidate(&records);
 
     let mut findings = findings1;
     findings.extend(findings2);
@@ -320,6 +322,8 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
     findings.extend(findings4);
     findings.extend(findings5);
     findings.extend(findings6);
+    findings.extend(findings7);
+    findings.extend(findings8);
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
@@ -340,7 +344,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>, format: OutputFo
     let report = CheckReport {
         status,
         files_examined: records.len(),
-        rules_executed: vec![exec1, exec2, exec3, exec4, exec5, exec6],
+        rules_executed: vec![exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8],
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),
             record_types: config.record_types.keys().cloned().collect(),

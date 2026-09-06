@@ -1,7 +1,8 @@
 # 0017 — YAML frontmatter for generated record headers
 
 > Status: Accepted
-> Embodiment: Not started
+> Embodiment: Verified
+> Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs
 > Date: 2026-09-05
 > Author: (project lead)
 > Deciders: (project lead)

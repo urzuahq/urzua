@@ -406,6 +406,159 @@ fn find_revision_log_entries(content: &str) -> Option<Vec<RevisionLogEntry>> {
     Some(entries)
 }
 
+/// A record's `Realized-by` field, categorized (ADR-0018's MVP scope --
+/// three flat lists, not RFC-0005's full claim graph). `spec:`/`code:`/
+/// `test:` prefixes; an unrecognized prefix is dropped rather than reported,
+/// since this field's closure isn't this rule's concern.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct RealizedBy {
+    spec: Vec<String>,
+    code: Vec<String>,
+    test: Vec<String>,
+}
+
+fn parse_realized_by(value: &str) -> RealizedBy {
+    let mut result = RealizedBy::default();
+    for segment in value.split(',') {
+        let segment = segment.trim();
+        let Some((prefix, locator)) = segment.split_once(':') else {
+            continue;
+        };
+        let locator = locator.trim().to_string();
+        match prefix.trim() {
+            "spec" => result.spec.push(locator),
+            "code" => result.code.push(locator),
+            "test" => result.test.push(locator),
+            _ => {}
+        }
+    }
+    result
+}
+
+/// ADR-0018's tier computation: the highest tier with a non-empty category.
+/// `test` outranks `code` outranks `spec` -- a claim verified by a test is
+/// stronger evidence than a claim only pointed at by a spec.
+fn compute_embodiment(realized_by: &RealizedBy) -> &'static str {
+    if !realized_by.test.is_empty() {
+        "Verified"
+    } else if !realized_by.code.is_empty() {
+        "Implemented"
+    } else if !realized_by.spec.is_empty() {
+        "Specified"
+    } else {
+        "Not started"
+    }
+}
+
+/// Rule (ADR-0018): a record's stated `Embodiment` must agree with what its
+/// own `Realized-by` locators compute to. Both fields have to be present --
+/// a record with no `Realized-by` at all has nothing for this rule to check
+/// yet, which is a real, expected `records_examined: 0` on a corpus that
+/// hasn't adopted the field, not a defect in the rule.
+pub fn embodiment_consistency(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(stated) = record.header.get("Embodiment") else {
+            continue;
+        };
+        let Some(realized_by_value) = record.header.get("Realized-by") else {
+            continue;
+        };
+        examined += 1;
+
+        let computed = compute_embodiment(&parse_realized_by(realized_by_value));
+        if stated.trim() != computed {
+            findings.push(Finding {
+                rule: "embodiment.consistency".to_string(),
+                severity: Severity::Warning,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "stated Embodiment '{}' disagrees with '{computed}', computed from Realized-by",
+                    stated.trim()
+                ),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "embodiment.consistency".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+/// Rule (ADR-0018): the same locator cited by more than one record's
+/// `Realized-by` is a promotion candidate -- each record would otherwise
+/// drift independently on what is really one piece of shared evidence (the
+/// ADR-0072/0073/0074 shape RFC-0005 names). Reports only; a human runs the
+/// actual promotion into a `claim` record, never this rule.
+pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut citers: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeSet<std::path::PathBuf>,
+    > = std::collections::BTreeMap::new();
+    for record in records {
+        let Some(realized_by_value) = record.header.get("Realized-by") else {
+            continue;
+        };
+        examined += 1;
+
+        let parsed = parse_realized_by(realized_by_value);
+        for locator in parsed
+            .spec
+            .iter()
+            .chain(parsed.code.iter())
+            .chain(parsed.test.iter())
+        {
+            // A BTreeSet, not a Vec: the same record citing one locator
+            // under both `code:` and `test:` is still one record, not two
+            // independent citers -- cross-record duplication is what needs
+            // promotion, not cross-category duplication within one record.
+            citers
+                .entry(locator.clone())
+                .or_default()
+                .insert(record.path.clone());
+        }
+    }
+
+    for (locator, paths) in citers {
+        if paths.len() < 2 {
+            continue;
+        }
+        let names: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+        let first_path = paths.iter().next().expect("checked len >= 2 above").clone();
+        findings.push(Finding {
+            rule: "embodiment.locator-promotion-candidate".to_string(),
+            severity: Severity::Warning,
+            file: first_path,
+            line: None,
+            waived: None,
+            message: format!(
+                "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
+                paths.len(),
+                names.join(", ")
+            ),
+        });
+    }
+
+    (
+        RuleExecution {
+            rule: "embodiment.locator-promotion-candidate".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
 /// Rule 5 (Phase 6): `Supersedes`/`Superseded-by` reciprocity. Checking only
 /// the forward claim leaves the reverse unguarded -- a record can claim to
 /// supersede something that doesn't reciprocally point back, sending a
@@ -644,6 +797,89 @@ mod tests {
 
         let (exec, findings) = revision_log_change_class(&[r], &full_text);
         assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn embodiment_disagreeing_with_realized_by_is_a_planted_violation_observed_failing() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
+        );
+        let (exec, findings) = embodiment_consistency(&[r]);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("Verified"));
+        assert!(findings[0].message.contains("Implemented"));
+    }
+
+    #[test]
+    fn embodiment_agreeing_with_realized_by_produces_no_finding() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+        );
+        let (_, findings) = embodiment_consistency(&[r]);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn a_test_locator_outranks_a_code_locator() {
+        let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
+        assert_eq!(compute_embodiment(&realized), "Verified");
+    }
+
+    #[test]
+    fn no_realized_by_field_is_not_examined() {
+        let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
+        let (exec, findings) = embodiment_consistency(&[r]);
+        assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_locator_cited_by_two_records_is_a_promotion_candidate_observed_failing() {
+        let a = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Realized-by: code:src/shared.rs\n",
+        );
+        let b = record(
+            "docs/adr/0002-y.md",
+            "adr",
+            "> Realized-by: code:src/shared.rs\n",
+        );
+        let (exec, findings) = embodiment_locator_promotion_candidate(&[a, b]);
+        assert_eq!(exec.records_examined, 2);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("src/shared.rs"));
+    }
+
+    #[test]
+    fn one_record_citing_the_same_locator_under_two_categories_is_not_a_promotion_candidate() {
+        // A single record's own code: and test: locators both naming the
+        // same file is one record, not two independent citers -- promotion
+        // exists for cross-record duplication, never cross-category
+        // duplication within a single record's own Realized-by.
+        let a = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Realized-by: code:src/shared.rs, test:src/shared.rs\n",
+        );
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a]);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn a_locator_cited_by_only_one_record_is_not_a_promotion_candidate() {
+        let a = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Realized-by: code:src/a.rs\n",
+        );
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a]);
         assert!(findings.is_empty());
     }
 
