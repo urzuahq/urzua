@@ -29,6 +29,9 @@ toml = "0.8"
 # archived/deprecated; this is co-maintained by its original author plus the
 # YAML Organization.
 yaml_serde = "0.10"
+# ADR-0021: pure Rust (only `rand` under its std feature), no C dependency,
+# verified compiling under the pinned toolchain before choosing.
+ulid = "3.0"
 clap = { version = "4", features = ["derive"] }
 
 [profile.release]

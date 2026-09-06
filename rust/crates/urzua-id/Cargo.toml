@@ -10,3 +10,4 @@ publish.workspace = true
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+ulid = { workspace = true }

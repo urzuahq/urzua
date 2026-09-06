@@ -6,11 +6,11 @@
 //! cross-references resolve against the stable ID, which is what makes
 //! renumbering safe.
 //!
-//! The exact encoding (ULID vs. UUIDv7 vs. a short typable prefix) is
-//! deliberately still open — ADR-0003 committed to the *separation*, not the
-//! encoding. Keep that choice behind [`StableId`] so it stays swappable.
+//! The encoding is ULID (ADR-0021) — time-ordered, lexicographically
+//! sortable, collision-free without coordination. Kept behind [`StableId`]
+//! so it stays swappable if that decision is ever revisited.
 //!
-//! Implements: ADR-0003
+//! Implements: ADR-0003, ADR-0021
 
 #![forbid(unsafe_code)]
 
@@ -26,6 +26,13 @@ pub struct StableId(String);
 pub struct DisplayNumber(pub u32);
 
 impl StableId {
+    /// A fresh, collision-free identifier. No coordination needed — this is
+    /// the whole point (ADR-0003): twenty concurrent branches each call this
+    /// and none of them collide.
+    pub fn generate() -> Self {
+        StableId(ulid::Ulid::generate().to_string())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -45,4 +52,30 @@ pub enum Error {
     /// whose value is being a trustworthy record — never auto-resolve.
     #[error("duplicate stable id {0} claimed by {1} and {2}")]
     Duplicate(String, String, String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_generated_ids_never_collide() {
+        let a = StableId::generate();
+        let b = StableId::generate();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn later_generated_ids_sort_lexicographically_after_earlier_ones() {
+        let a = StableId::generate();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let b = StableId::generate();
+        assert!(a.as_str() < b.as_str());
+    }
+
+    #[test]
+    fn display_number_pads_to_four_digits() {
+        assert_eq!(DisplayNumber(7).to_string(), "0007");
+        assert_eq!(DisplayNumber(1234).to_string(), "1234");
+    }
 }

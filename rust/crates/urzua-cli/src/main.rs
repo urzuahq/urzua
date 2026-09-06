@@ -1,8 +1,9 @@
 //! The `urzua` binary.
 //!
-//! Command surface per SPEC-0001. `check`, `init` (adopt mode), `doctor`, and
-//! `fix` (detect mode) are implemented; `new`, `audit`, `migrate`, `export`,
-//! and `import` still bail with "not implemented yet."
+//! Command surface per SPEC-0001. `check`, `init` (adopt mode), `doctor`,
+//! `fix` (detect and apply), and `migrate ids` are implemented; `new`,
+//! `audit`, `migrate schema`, `export`, and `import` still bail with "not
+//! implemented yet."
 //!
 //! Implements: SPEC-0001, SPEC-0002, SPEC-0003
 
@@ -66,11 +67,10 @@ enum Command {
         format: OutputFormat,
     },
 
-    /// Backfill stable IDs into an existing sequentially-numbered corpus,
-    /// retaining current numbers as display numbers. Dry-run by default.
+    /// Migrate the corpus itself: identifiers, or field-schema rollout.
     Migrate {
-        #[arg(long)]
-        apply: bool,
+        #[command(subcommand)]
+        target: MigrateTarget,
     },
 
     /// Emit records in another format. Warns rather than silently dropping fields.
@@ -123,6 +123,25 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum MigrateTarget {
+    /// Backfill stable IDs (ADR-0003/0021) into every record lacking one.
+    /// Retains the filename's current number as the display number
+    /// unchanged -- cross-references keep resolving by filename exactly as
+    /// they do today. Dry-run by default.
+    Ids {
+        #[arg(long)]
+        apply: bool,
+    },
+
+    /// Field-rollout assistant for a newly-required field. Not implemented
+    /// yet -- see docs/specs/0001-v0-cli.md.
+    Schema {
+        #[arg(long)]
+        report: bool,
+    },
+}
+
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum OutputFormat {
     Human,
@@ -141,7 +160,12 @@ fn main() -> ExitCode {
         Command::Check { paths, format } => run_check(cli.config, paths, format),
         Command::New { .. } => not_implemented("new"),
         Command::Audit { .. } => not_implemented("audit"),
-        Command::Migrate { .. } => not_implemented("migrate"),
+        Command::Migrate {
+            target: MigrateTarget::Ids { apply },
+        } => run_migrate_ids(cli.config, apply),
+        Command::Migrate {
+            target: MigrateTarget::Schema { .. },
+        } => not_implemented("migrate schema"),
         Command::Export { .. } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => run_init(dry_run),
@@ -553,6 +577,89 @@ fn report_fix_could_not_run(message: &str, format: OutputFormat) -> ExitCode {
         }
     }
     ExitCode::from(2)
+}
+
+/// Backfills a `Stable-Id` header field (ADR-0003/0021) into every record
+/// lacking one. Dry-run by default. Never touches the filename or any
+/// cross-reference -- the display number stays exactly what it already is.
+fn run_migrate_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => {
+            eprintln!("urzua migrate ids: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("urzua migrate ids: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("urzua migrate ids: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let (records, full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let missing: Vec<_> = records
+        .iter()
+        .filter(|r| r.header.get("Stable-Id").is_none())
+        .collect();
+
+    if missing.is_empty() {
+        println!("urzua migrate ids: every record already has a Stable-Id. Nothing to backfill.");
+        return ExitCode::from(0);
+    }
+
+    println!(
+        "urzua migrate ids: {} record(s) missing a Stable-Id:",
+        missing.len()
+    );
+    for r in &missing {
+        println!("  {}", r.path.display());
+    }
+
+    if !apply {
+        println!("\n--dry-run (default): pass --apply to write.");
+        return ExitCode::from(0);
+    }
+
+    println!();
+    for r in &missing {
+        let Some(region) = r.header.region else {
+            println!(
+                "  [SKIPPED] {}: no header-shaped region found",
+                r.path.display()
+            );
+            continue;
+        };
+        let Some(content) = full_text.get(&r.path) else {
+            continue;
+        };
+
+        let id = urzua_id::StableId::generate();
+        let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+        // region.0 is the 1-indexed first header line; inserting at this
+        // 0-indexed Vec position places the new field right after it.
+        lines.insert(region.0, format!("> Stable-Id: {}", id.as_str()));
+        let new_content = lines.join("\n") + "\n";
+
+        let full_path = repo_root.join(&r.path);
+        match std::fs::write(&full_path, new_content) {
+            Ok(()) => println!("  [OK] {}: Stable-Id: {}", r.path.display(), id.as_str()),
+            Err(e) => println!("  [FAILED] {}: {e}", r.path.display()),
+        }
+    }
+
+    ExitCode::from(0)
 }
 
 fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
