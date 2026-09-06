@@ -1,9 +1,11 @@
 //! The `urzua` binary.
 //!
-//! Command surface per SPEC-0001. `check`, `init` (adopt mode), `doctor`,
-//! `fix` (detect and apply), `migrate ids`, and `migrate schema --report`
-//! are implemented; `new`, `audit`, `migrate schema --assist-waivers`/
-//! `--apply`, `export`, and `import` still bail with "not implemented yet."
+//! Command surface per SPEC-0001. `check`, `explain`, `graph`, `init`
+//! (adopt mode), `doctor`, `fix` (detect and apply), `migrate ids`, and
+//! `migrate schema --report` are implemented; `new`, `audit`,
+//! `migrate schema --assist-waivers`/`--apply`, `export`, and `import`
+//! still bail with "not implemented yet." Stdout is always JSON, on every
+//! implemented command -- no `--format` flag exists (ADR-0023).
 //!
 //! Implements: SPEC-0001, SPEC-0002, SPEC-0003
 
@@ -52,6 +54,14 @@ enum Command {
     /// always the JSON report (ADR-0023) -- an agent piping it never has to
     /// know to ask.
     Check { paths: Vec<PathBuf> },
+
+    /// Which records govern `path` -- every record whose `Realized-by`
+    /// names it as evidence (ADR-0024).
+    Explain { path: String },
+
+    /// The full record-relationship graph: every `Implements`/
+    /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
+    Graph,
 
     /// Cross-record reconciliation: supersession reciprocity, dangling
     /// references. Embodiment consistency lives in `check` and `fix`
@@ -153,6 +163,8 @@ fn main() -> ExitCode {
 
     match cli.command {
         Command::Check { paths } => run_check(cli.config, paths),
+        Command::Explain { path } => run_explain(cli.config, path),
+        Command::Graph => run_graph(cli.config),
         Command::New { .. } => not_implemented("new"),
         Command::Audit => not_implemented("audit"),
         Command::Migrate {
@@ -417,6 +429,100 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
 
     print_report(&report);
     ExitCode::from(report.exit_code() as u8)
+}
+
+/// "Which decisions govern this file" (ADR-0024) -- every record whose
+/// `Realized-by` names `path` as evidence. Stdout is always JSON (ADR-0023).
+fn run_explain(config_path: Option<PathBuf>, path: String) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => {
+            eprintln!("urzua explain: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("urzua explain: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("urzua explain: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let governing = urzua_core::graph::explain(&records, &path);
+
+    let out = serde_json::json!({
+        "path": path,
+        "governing_records": governing,
+    });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+
+    eprintln!(
+        "urzua explain {path}: {} record(s) name this as evidence",
+        governing.len()
+    );
+    for g in &governing {
+        eprintln!("  [{}] {} ({})", g.via, g.record.display(), g.record_type);
+    }
+    if governing.is_empty() {
+        eprintln!("  none -- no record's Realized-by names this path.");
+    }
+
+    ExitCode::from(0)
+}
+
+/// The full record-relationship graph, as data (ADR-0024). Stdout is always
+/// JSON (ADR-0023).
+fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => {
+            eprintln!("urzua graph: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config = match load_config(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("urzua graph: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("urzua graph: could not run: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let edges = urzua_core::graph::graph(&records);
+
+    let out = serde_json::json!({ "edges": edges });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+
+    eprintln!("urzua graph: {} edge(s)", edges.len());
+    for e in &edges {
+        let marker = if e.dangling { " [DANGLING]" } else { "" };
+        eprintln!("  {} --{}--> {}{}", e.from, e.relation, e.to, marker);
+    }
+
+    ExitCode::from(0)
 }
 
 /// Detect mode only (ADR-0015 §3): read-only, safe in CI. Apply mode

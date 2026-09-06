@@ -12,6 +12,7 @@
 pub mod config;
 pub mod field_state;
 pub mod fix;
+pub mod graph;
 pub mod header;
 pub mod migrate;
 pub mod record;

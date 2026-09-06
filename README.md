@@ -142,7 +142,9 @@ Every existing header convention this project has actually encountered is a decl
 
 | Command | State |
 |---|---|
-| `check` | Real — full rule set above, JSON and human output |
+| `check` | Real — full rule set above, always JSON on stdout (ADR-0023) |
+| `explain <path>` | Real — every record whose `Realized-by` names this file as evidence (ADR-0024) |
+| `graph` | Real — the full `Implements`/`Derives-from`/`Supersedes` relationship graph, as data, dangling edges flagged (ADR-0024) |
 | `init` | Adopt mode only — proposes config from an existing corpus, never moves files |
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real — backfills a collision-free stable ID ([ULID](docs/adr/0021-ulid-as-the-stable-id-encoding.md)) into every record lacking one |

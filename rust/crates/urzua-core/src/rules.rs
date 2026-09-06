@@ -145,7 +145,7 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 /// directory whose configured type gives the prefix (e.g. `docs/rfc/0001-*`
 /// -> `RFC-0001`). Filename-derived, not header-derived, so a record can be
 /// referenced before its own header claims anything about itself.
-fn record_id(record: &Record) -> Option<String> {
+pub(crate) fn record_id(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
     let (number, _rest) = stem.split_once('-')?;
     if number.len() != 4 || !number.chars().all(|c| c.is_ascii_digit()) {
@@ -162,7 +162,7 @@ fn record_id(record: &Record) -> Option<String> {
 /// several, comma-separated, with trailing annotation in parentheses (e.g.
 /// `RFC-0001 (Draft)`). A claim is the reference that begins an entry;
 /// everything after it up to the next comma is annotation.
-fn extract_references(value: &str) -> Vec<String> {
+pub(crate) fn extract_references(value: &str) -> Vec<String> {
     value
         .split(',')
         .filter_map(|entry| {
