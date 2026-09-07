@@ -6,11 +6,22 @@
 /// The next unused display number, given the filenames already in a record
 /// type's directory. Never reuses a number even if one was deleted --
 /// cross-references elsewhere may still assume the old numbering held.
+///
+/// Reads both filename shapes (ADR-0036): legacy `NNNN-slug.md` (number is
+/// the first segment) and the current default `TYPE-NNNN-slug.md` (number
+/// is the second segment) -- a directory with a mix of old and new
+/// filenames still finds the true max across both, never colliding.
 pub fn next_display_number(filenames: &[String]) -> u32 {
     filenames
         .iter()
-        .filter_map(|name| name.split('-').next())
-        .filter_map(|prefix| prefix.parse::<u32>().ok())
+        .filter_map(|name| {
+            let mut parts = name.split('-');
+            let first = parts.next()?;
+            if let Ok(n) = first.parse::<u32>() {
+                return Some(n);
+            }
+            parts.next()?.parse::<u32>().ok()
+        })
         .max()
         .map_or(1, |highest| highest + 1)
 }
@@ -172,6 +183,18 @@ mod tests {
             "0009-ninth.md".to_string(),
         ];
         assert_eq!(next_display_number(&filenames), 17);
+    }
+
+    #[test]
+    fn next_display_number_finds_the_max_across_mixed_legacy_and_type_prefixed_filenames() {
+        // ADR-0036: a directory can hold both shapes at once (existing
+        // legacy files never get renamed); the true max must span both.
+        let filenames = vec![
+            "0001-first.md".to_string(),
+            "ADR-0036-newer.md".to_string(),
+            "0009-ninth.md".to_string(),
+        ];
+        assert_eq!(next_display_number(&filenames), 37);
     }
 
     #[test]

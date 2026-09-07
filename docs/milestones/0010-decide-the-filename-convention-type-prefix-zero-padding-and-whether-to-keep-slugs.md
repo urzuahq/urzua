@@ -1,10 +1,10 @@
 # 0010 — Decide the filename convention: type prefix, zero-padding, and whether to keep slugs
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1Y5JHCGH1AM59YY07F3YG9J
 > Phase: 0
 > Track: roadmap-tracking
-> Implements: —
+> Implements: ADR-0036
 
 ## What
 
@@ -22,3 +22,4 @@ Raised directly; explicitly not decided yet -- BUG-0002 already removed the actu
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Decided (ADR-0036): type prefix in the filename going forward, zero-padding and slugs both kept, legacy filenames never renamed and never stop working. Also caught and fixed a second independent instance of BUG-0002's defect class in filename_title_consistency's own helpers. | **substantive** |

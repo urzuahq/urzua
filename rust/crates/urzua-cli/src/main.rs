@@ -651,8 +651,14 @@ fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<Stri
         }
     };
 
+    // Type prefix explicit in the filename (ADR-0036) -- matches how a
+    // record is referenced in prose everywhere else (e.g. "Implements:
+    // ADR-0036"). Zero-padded: a plain `ls`/git-log/GitHub file listing
+    // sorts lexicographically, not numerically, and padding is what keeps
+    // that sort order matching creation order.
     let filename = format!(
-        "{:04}-{}.md",
+        "{}-{:04}-{}.md",
+        record_type.to_ascii_uppercase(),
         display_number,
         urzua_core::new_record::slugify(&title)
     );

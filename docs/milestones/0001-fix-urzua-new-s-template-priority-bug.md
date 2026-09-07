@@ -4,7 +4,7 @@
 > Stable-Id: 01M1Y5JCCP2D9ES98WDB9V5PPF
 > Phase: 0
 > Track: header-format
-> Implements: ADR-0027
+> Implements: ADR-0027, BUG-0003
 
 ## What
 
