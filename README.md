@@ -72,7 +72,7 @@ Real rules, running against this repository's own `docs/` in CI on every commit 
 
 That last pair is the part most linters don't have at all: a record can name what actually realizes it — a spec, a source file, a test — categorized by strength of evidence, and `check` computes whether the record's own claim still matches. Disagree, and it's a finding, not a stale comment nobody re-reads.
 
-**Stdout is the JSON report, unconditionally (ADR-23/26) — no `--format` flag, no second human-readable rendering anywhere.** There is one shape. An agent piping stdout, a script, and a person reading a terminal all see exactly the same thing:
+**JSON on stdout is agent-native, not a `--format json` add-on.** An agent parsing prose output for a decision has to guess where the real signal ends and formatting begins — a severity word inside a sentence, a count buried in a paragraph. Structured output removes the guessing: `status`, `findings`, `severity` are fields, not phrases to pattern-match. So there is exactly one output shape, unconditionally, with no `--format` flag and no separate human-readable rendering to fall out of sync with it (ADR-23/26) — an agent piping stdout, a script, and a person reading a terminal all parse the same bytes:
 
 ```
 $ urzua check docs/
