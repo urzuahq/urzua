@@ -17,7 +17,7 @@ Two valid shapes for the same fact, because Urzua reads whatever a corpus alread
 **An existing corpus, unchanged** — this is real, working `blockquote` shape:
 
 ```markdown
-# 0016 — A bold-list header shape, declared per profile
+# 16 — A bold-list header shape, declared per profile
 
 > Status: Accepted
 > Embodiment: Verified
@@ -36,7 +36,7 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: "code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs"
 ---
-# 0016 — A bold-list header shape, declared per profile
+# 16 — A bold-list header shape, declared per profile
 
 ## Context
 ...
@@ -78,16 +78,16 @@ That last pair is the part most linters don't have at all: a record can name wha
 $ urzua check docs/
 {
   "status": "findings-present",
-  "files_examined": 44,
+  "files_examined": 98,
   "rules_executed": [
-    { "rule": "header.required-fields", "records_examined": 44 },
-    { "rule": "embodiment.consistency", "records_examined": 6 }
+    { "rule": "header.required-fields", "records_examined": 98 },
+    { "rule": "embodiment.consistency", "records_examined": 17 }
   ],
   "findings": [
     {
       "rule": "embodiment.locator-promotion-candidate",
       "severity": "warning",
-      "file": "docs/adr/0016-...md",
+      "file": "docs/adr/ADR-16-...md",
       "message": "locator 'rust/crates/urzua-core/src/header.rs' is cited by 2 records -- consider promoting to a shared claim record"
     }
   ]
@@ -181,15 +181,19 @@ Released for use, actively maintained — this is a real tool being built in the
 Polyglot monorepo, organized by language at the root ([ADR-4](docs/adr/ADR-4-polyglot-monorepo-layout.md)):
 
 ```
-rust/           Cargo workspace — urzua-core (pure schema+validation), urzua-io
-                (git/filesystem, identity resolution), urzua-id (stable
-                identifiers), urzua-agdr (AgDR export format), urzua-cli
-                (the `urzua` binary)
-ts/             Reserved for agent-harness integrations. Empty until there's real content.
-platform/       Reserved for deployment targets. Empty until there's real content.
-docs/adr/       Decisions made about Urzua itself.
-docs/rfc/       Pre-decision proposals — the design record, read these first.
-docs/specs/     Build-level detail for what ships.
+rust/             Cargo workspace — urzua-core (pure schema+validation), urzua-io
+                  (git/filesystem, identity resolution), urzua-id (stable
+                  identifiers), urzua-agdr (AgDR export format), urzua-cli
+                  (the `urzua` binary)
+ts/               Reserved for agent-harness integrations. Empty until there's real content.
+platform/         Reserved for deployment targets. Empty until there's real content.
+docs/adr/         Decisions made about Urzua itself.
+docs/rfc/         Pre-decision proposals — the design record, read these first.
+docs/specs/       Build-level detail for what ships.
+docs/milestones/  This project's own backlog, tracked as records (ADR-34) --
+                  decided-but-unbuilt work, deferred work, and undecided RFCs.
+docs/bugs/        Defects found in Urzua itself, cross-linked to the milestone
+                  that fixes them and the regression test that proves it (ADR-35).
 ```
 
 Build with `make`, not `cargo` directly — `make build` / `make test` / `make ci` work without
