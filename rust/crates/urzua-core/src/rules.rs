@@ -136,6 +136,55 @@ fn layout_label(layout: HeaderLayout) -> &'static str {
     }
 }
 
+/// Rule (MILE-0081): every header field on a record belongs to its type's
+/// declared `required_fields` or `known_fields`. `header.required-fields`
+/// only catches a *missing* required field; nothing catches the opposite --
+/// a field present on some records of a type but not others (found live:
+/// SPEC-1 carries `Embodiment`/`Author`/`Derives-from` that SPEC-2 through
+/// SPEC-6 don't). Declared, not voted, same principle as `header_layout`: a
+/// type with no declared `known_fields` is skipped entirely, examined stays
+/// 0 for it -- required so an existing corpus's legitimate optional fields
+/// (`Stable-Id`, `Realized-by`, `Derives-from` on `adr`, none of which are
+/// *required*) don't all become false positives the moment this rule ships.
+pub fn header_field_set_consistency(
+    records: &[Record],
+    allowed_by_type: &HashMap<String, HashSet<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(allowed) = allowed_by_type.get(&record.record_type) else {
+            continue;
+        };
+        examined += 1;
+
+        for field in &record.header.fields {
+            if !allowed.contains(&field.key.to_ascii_lowercase()) {
+                findings.push(Finding {
+                    rule: "header.field-set-consistency".to_string(),
+                    severity: Severity::Warning,
+                    file: record.path.clone(),
+                    line: Some(field.line),
+                    waived: None,
+                    message: format!(
+                        "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
+                        field.key, record.record_type
+                    ),
+                });
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "header.field-set-consistency".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
 /// Rule 2: `Implements:`/`Derives-from:` resolves to a real record. The
 /// target's status is surfaced in the message, never judged -- whether a
 /// `Draft` target is acceptable is a policy decision (RFC-0012), not this
@@ -880,6 +929,56 @@ mod tests {
         let declared = HashMap::new();
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
+        assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn an_undeclared_field_is_a_finding() {
+        // The exact corpus defect this rule was chosen to catch: SPEC-1
+        // carries Embodiment/Author/Derives-from that SPEC-2 through SPEC-6
+        // don't -- modeled here on the smaller adr case for a focused test.
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Status: Accepted\n> Date: 2026-09-07\n> Sponsor: someone\n",
+        );
+        let mut allowed = HashMap::new();
+        allowed.insert(
+            "adr".to_string(),
+            HashSet::from(["status".to_string(), "date".to_string()]),
+        );
+
+        let (exec, findings) = header_field_set_consistency(&[r], &allowed);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("Sponsor"));
+    }
+
+    #[test]
+    fn a_known_field_produces_no_finding() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Status: Accepted\n> Realized-by: code:x.rs\n",
+        );
+        let mut allowed = HashMap::new();
+        allowed.insert(
+            "adr".to_string(),
+            HashSet::from(["status".to_string(), "realized-by".to_string()]),
+        );
+
+        let (exec, findings) = header_field_set_consistency(&[r], &allowed);
+        assert_eq!(exec.records_examined, 1);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_type_with_no_declared_known_fields_is_skipped_entirely() {
+        let r = record("docs/specs/0001-x.md", "spec", "> Version: 0.1\n");
+        let allowed = HashMap::new();
+
+        let (exec, findings) = header_field_set_consistency(&[r], &allowed);
         assert_eq!(exec.records_examined, 0);
         assert!(findings.is_empty());
     }

@@ -1,10 +1,10 @@
 # 81 — A field-set consistency rule: undeclared fields per type
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1Z2ZV7XGR7GSMNPWDACBX5J
 > Phase: 1
 > Track: schema-governance
-> Implements: —
+> Implements: ADR-39
 
 ## What
 
@@ -29,12 +29,13 @@ treatment rather than inferring a type's "normal" fields from whatever's already
 
 ## Blocked on
 
-MILE-74 -- deciding `spec`'s own canonical field set (does `Author` become required? is SPEC-1's
-`Embodiment`/`Derives-from` project-wide or SPEC-1-specific?) is a live instance of exactly what this
-rule would need a declared list for. Resolving MILE-74 first gives this rule a real, decided target
-for `spec` rather than a second guess.
+`—` for the rule itself, shipped below. `spec`'s own `known_fields` declaration stays blocked on
+MILE-74 (does `Author` become required? is SPEC-1's `Embodiment`/`Derives-from` project-wide or
+SPEC-1-specific?) -- the rule simply doesn't check `spec` yet, the same additive-skip shape as every
+undeclared type.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Fixed and shipped (ADR-39): a `known_fields` config field, additive to `required_fields`, checked by a new `header.field-set-consistency` rule. **Why:** majority-vote inference was rejected for the same reason ADR-38 rejected it for the layout axis -- it would ratify existing drift instead of catching it. Declared `known_fields` for `adr`/`rfc`/`milestone`/`bug`/`waiver`; `spec` deliberately left undeclared pending MILE-74. Verified against a planted violation in an isolated scratch corpus, not only unit tests. | **substantive** |

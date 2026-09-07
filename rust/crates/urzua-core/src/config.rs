@@ -46,6 +46,15 @@ pub struct RecordTypeConfig {
     /// migration for a corpus that hasn't declared it.
     #[serde(default)]
     pub header_layout: Option<HeaderLayout>,
+    /// The additional fields a type's records may carry beyond
+    /// `required_fields` (MILE-0081) -- e.g. `Embodiment`/`Realized-by` for
+    /// `adr`. Declared, not voted, same principle as `header_layout`: a
+    /// majority-rule inference would just ratify whatever's already in the
+    /// corpus. Omitted means this type's field set isn't checked at all --
+    /// additive, and deliberately left undeclared for `spec` until MILE-0074
+    /// decides its canonical fields, rather than guessed at here.
+    #[serde(default)]
+    pub known_fields: Option<Vec<String>>,
 }
 
 impl<'de> Deserialize<'de> for HeaderShape {

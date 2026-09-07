@@ -8,12 +8,18 @@ schema_version = 1
 dir = "docs/adr"
 required_fields = ["Status", "Date", "Author", "Deciders"]
 header_layout = "one-per-line"
+known_fields = ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
 
 [record_types.rfc]
 dir = "docs/rfc"
 required_fields = ["Status", "Date", "Author"]
 header_layout = "one-per-line"
+known_fields = ["Supersedes / Superseded-by", "Amends"]
 
+# spec deliberately has no known_fields yet -- MILE-0074 decides the
+# canonical field set (does Author become required? is SPEC-1's
+# Embodiment/Derives-from project-wide or SPEC-1-specific?) before this
+# rule gets a real target to check spec against (MILE-0081).
 [record_types.spec]
 dir = "docs/specs"
 required_fields = ["Status", "Date", "Version"]
@@ -24,12 +30,15 @@ dir = "docs/milestones"
 prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
 header_layout = "one-per-line"
+known_fields = ["Stable-Id", "Implements"]
 
 [record_types.bug]
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
 header_layout = "one-per-line"
+known_fields = ["Realized-by", "Stable-Id"]
 
 [record_types.waiver]
 dir = "docs/waiver"
 required_fields = ["Rule", "Scope", "Reason"]
+known_fields = ["Stable-Id", "Expires"]
