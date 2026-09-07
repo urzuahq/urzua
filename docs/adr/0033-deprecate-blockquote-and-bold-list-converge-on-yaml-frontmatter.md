@@ -47,13 +47,15 @@ Concretely:
 - **A new `check` rule, `header.deprecated-shape`**, warns (non-blocking) when a record type's
   configured shape isn't `yaml-frontmatter` — visible, not silent, without breaking anyone's CI on
   this decision alone.
-- **`urzua migrate header-shape`** (new command, not yet built) performs the actual conversion:
-  parse the existing shape's fields, re-emit as YAML frontmatter, byte-preserve everything below the
-  header. Dry-run by default, `--apply` to write — the same UX precedent `migrate ids` already
-  established for a header-region edit that must not touch body content.
-- **This repo's own `adr`/`rfc`/`spec` types migrate to `yaml-frontmatter`** using that tool, once
-  built — dogfooding the mechanism on 30+ real, already-accepted records is the actual proof it's
-  safe, not a synthetic fixture.
+- **This repo's own `adr`/`rfc`/`spec` types migrate to `yaml-frontmatter`** via a one-time,
+  unshipped conversion pass — not a new public `urzua` subcommand. Parsing support staying
+  permanently means no adopter is under any actual pressure to migrate anything today; the only real
+  forcing function right now is this repo dogfooding the shape it recommends. Building and
+  committing to a general, permanently-maintained `migrate header-shape` command on the strength of
+  that alone would be exactly the kind of speculative capability this project avoids elsewhere
+  (RFC-0005's claim graph, `fix` Tier 2/3, `migrate schema --apply` — all explicitly staged "once a
+  real case demands it, not before"). A general command is not ruled out permanently — it's
+  deferred until an actual external adopter asks for one, same as everything else on that list.
 - **Full removal of blockquote/bold-list parsing is an explicit non-decision here** — a future
   major-version step, decided separately, once real adoption data exists on how much the deprecated
   shapes are still actually in use.
@@ -65,8 +67,8 @@ answered here as deprecate-with-a-migration-path, not immediate removal.
 
 The deprecation itself (a warning rule, a changed `init` default) is cheap and reversible. The
 corpus migration is higher-stakes — 30+ real, accepted decision records, rewritten — which is exactly
-why byte-preservation of everything below the header is a hard requirement of the migration tool,
-verified before it's trusted on this repo's own real corpus, not assumed.
+why byte-preservation of everything below the header is a hard requirement of the one-time
+conversion pass, verified before it's trusted on this repo's own real corpus, not assumed.
 
 ## Consequences
 

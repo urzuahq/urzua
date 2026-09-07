@@ -123,9 +123,12 @@ and shape checks entirely — a record in a decisionless status is examined by n
   (not removed) in favor of `yaml-frontmatter`, on the strength of RFC-0005's claim-graph nesting
   requirement — a flat, one-line-per-field shape has no path to representing that structure. Parsing
   support for the deprecated shapes stays (evaluation-before-adoption still works unmodified); a
-  `migrate header-shape` tool and a non-blocking `header.deprecated-shape` check are the mechanism.
-- **This repo's own corpus migrates to `yaml-frontmatter`** using that tool, once built (ADR-0033) —
-  no longer a separate open question, folded into the same decision.
+  non-blocking `header.deprecated-shape` check is the mechanism. A general `migrate header-shape`
+  command was considered and deliberately *not* committed to — no adopter is under any actual
+  pressure to migrate anything while parsing support stays permanent, so building one now would be
+  speculative capability with no evidenced demand yet.
+- **This repo's own corpus migrates to `yaml-frontmatter`** via a one-time, unshipped conversion
+  pass (ADR-0033) — no longer a separate open question, folded into the same decision.
 - What other content shapes are worth building beyond `y-statement` (a table-row-minimum check was
   named as a plausible second) — no real case has demanded one yet, so none are designed here.
 - Should `doctor`'s new template/config check also catch the separately-found `header_shape`-vs-
