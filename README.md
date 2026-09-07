@@ -6,9 +6,11 @@
 
 **Your agent just wrote a record of a decision it made. Is it actually structured data, or is it prose that happens to have a `Status:` line at the top?**
 
-Agents and humans both write governance records now — ADRs, RFCs, specs, decision logs, anything with a lifecycle and a relationship to other records. Almost all of that ends up as free-form markdown with a header someone remembered to fill in. A field goes blank and nobody notices. A cross-reference points at a record that was deleted. A decision says `Implemented` and the code that was supposed to implement it doesn't exist. Nothing catches any of it, because nothing treats the record as **data** — just as a document a human might one day reread.
+Urzua is a machine-native engine for structured records — decision logs, specs, incident reviews, a project's own backlog, and any other record type with a lifecycle and a relationship to other records. It's built to be called by an agent, not read by a person: every command returns a `status` and a list of typed `findings`, so an agent acts on the result directly instead of interpreting a sentence first. `"status": "findings-present"` is a value to branch on; `findings[]` is a list to loop over, filter by `severity`, and act on individually — no parsing prose, no LLM call spent just to understand what the last tool said, no ambiguity about whether "3 issues" means stop or continue.
 
-**Urzua is a record engine, not a record format.** You declare what a record type looks like — its fields, its header shape, its required relationships — and Urzua validates, tracks, and repairs against that declaration. It doesn't assume you're writing ADRs specifically, and it doesn't force a rewrite of records you already have.
+That contract is also what makes Urzua a foundation rather than just a tool: because the interface is stable, typed, and the same shape every time, other tooling composes on top of it directly — a harness that chains `check` into `fix` into a PR comment, a CI gate that reads `status` and nothing else, an agent that treats Urzua as one deterministic step inside a longer plan — none of it needs to re-interpret what happened first.
+
+Underneath, it's a record engine, not a record format: you declare what a record type looks like — its fields, its header shape, its required relationships — and Urzua validates, tracks, and repairs against that declaration. It doesn't assume you're writing ADRs specifically, and it isn't limited to decisions at all. This repo proves it on itself: `milestone` and `bug` were added after the fact, as ordinary config, with zero changes to the engine — the same tool that validates this project's decisions also tracks its own backlog and defects.
 
 ## What a record looks like
 
@@ -46,12 +48,16 @@ Same schema underneath — `check`, `fix`, and every rule read either shape iden
 
 ## Why now
 
-Governance records used to be slow to produce and easy to keep consistent by hand — one architect, one meeting, one document. Neither is true anymore:
+Governance records used to be written and read exclusively by humans — one architect, one meeting, one document a person kept consistent by hand. The writer is now at least as often an agent, and the reader needs to be a program too:
 
 - **Records are machine-authored at machine speed**, and nothing validates them as data until a human notices something's wrong, usually much later.
 - **A record's relationships rot silently.** `Implements: RFC-1` still parses as valid text long after RFC-1 is deleted, renamed, or superseded.
 - **"Was this actually built" and "was this decided" get conflated.** A record can say `Accepted` and `Implemented` in the same header with nothing distinguishing a real decision from a stale claim about the code.
 - **Every team reinvents the same validator**, badly, once per repo, because there's no portable engine — just a format convention and whatever regex someone wrote against it last time.
+
+None of this is hypothetical. [GitClear's 2025 analysis of 211 million changed lines of code](https://www.gitclear.com/ai_assistant_code_quality_2025_research) across repos at Google, Microsoft, Meta, and other enterprises found refactored code fell from 25% of changed lines in 2021 to under 10% by 2024, while copy-pasted code rose from 8.3% to 12.3% — output is up, the discipline that used to accompany it is down. [Faros AI's 2026 telemetry study of 22,000 developers](https://www.faros.ai/research) reports "more bugs, accelerating incidents, longer review cycles, and a quality gap that is widening as adoption deepens." Developers feel it directly: in [Stack Overflow's 2025 survey of 49,000 developers](https://stackoverflow.co/company/press/archive/stack-overflow-2025-developer-survey/), 46% said they don't trust the accuracy of AI output — up from 31% the year before — and 45% named debugging AI-generated code their top frustration.
+
+The decision-record side of this is no better prepared, and practitioners are already describing the failure directly. One agent-tooling write-up: "the same decision gets restated in `CLAUDE.md`, `AGENTS.md`, a README, and a wiki page, and the four copies disagree within a few months" ([Kennedy, 2026](https://www.actual.ai/blog/agent-optimized-adrs)). A LinkedIn piece on agentic ADR tooling names the same gap from the review side — nothing "keeps the decision log connected," so teams accumulate "outdated ADRs, duplicated decisions, and uncertainty about the current architecture" ([Khan, 2025](https://www.linkedin.com/pulse/agentic-ai-living-architecture-enhancing-adrs-llms-decision-khan-5gpgc)). Specs fare no better: "an agent executes faster than any human reviewer can track, and it makes more decisions per hour, each one a potential divergence that no one approved" — a spec "only stops drifting when it is connected to the work instead of sitting beside it" ([Ong, 2026](https://canery.ai/articles/why-specs-drift)). Large orgs either invent their own convention — Google's [AIP process](https://google.aip.dev/1) numbers over 200 API decisions through a real Draft → Reviewing → Approved workflow — or let ADRs/RFCs go stale by hand, and neither is mechanically checked. A convention nobody enforces is exactly the thing that erodes fastest when the volume of decisions goes up, which is precisely what's happening now.
 
 Urzua is built to be the thing every hand-written record linter is quietly reinventing: one engine, a declared schema instead of an assumed one, and evidence-backed claims instead of prose someone promises is still true.
 
@@ -72,7 +78,7 @@ Real rules, running against this repository's own `docs/` in CI on every commit 
 
 That last pair is the part most linters don't have at all: a record can name what actually realizes it — a spec, a source file, a test — categorized by strength of evidence, and `check` computes whether the record's own claim still matches. Disagree, and it's a finding, not a stale comment nobody re-reads.
 
-**JSON on stdout is agent-native, not a `--format json` add-on.** An agent parsing prose output for a decision has to guess where the real signal ends and formatting begins — a severity word inside a sentence, a count buried in a paragraph. Structured output removes the guessing: `status`, `findings`, `severity` are fields, not phrases to pattern-match. So there is exactly one output shape, unconditionally, with no `--format` flag and no separate human-readable rendering to fall out of sync with it (ADR-23/26) — an agent piping stdout, a script, and a person reading a terminal all parse the same bytes:
+Every command's stdout is one JSON object, always, on every invocation (ADR-23/26) — an agent branches on `status`, loops over `findings`, and acts on each one by `severity`, without a translation step in between:
 
 ```
 $ urzua check docs/
