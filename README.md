@@ -150,6 +150,8 @@ header_shape = "yaml-frontmatter"
 
 Every existing header convention this project has actually encountered is a declared shape, not a guess: a blockquote (`> Key: Value`), a bold-labelled blockquote, a pipe-delimited single line, a bold markdown list with no blockquote at all, and YAML frontmatter. A misdeclared shape fails loud — `no header-shaped region found` — never a silent match on the wrong lines.
 
+This isn't hypothetical: this repo's own `.urzua/config.toml` declares `milestone` and `bug` alongside `adr`/`rfc`/`spec` — two record types added after the fact, with zero changes to `urzua-core`, to track this project's own backlog and defects using the same engine that validates its decisions.
+
 ## Status
 
 **v0.1.0, self-hosting.** Real and validated against this repository's own `docs/` on every commit:

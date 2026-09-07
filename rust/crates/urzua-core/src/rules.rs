@@ -87,10 +87,12 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 
     // Index every record by the identifiers a pointer could name: its
     // record-type-prefixed number (e.g. "RFC-0001") parsed from the filename.
+    // Keyed by numeric value (BUG-0002), not the raw string, so a reference's
+    // padding never has to match the filename's exactly.
     let mut index: HashMap<String, &Record> = HashMap::new();
     for record in records {
         if let Some(id) = record_id(record) {
-            index.insert(id, record);
+            index.insert(normalize_id(&id), record);
         }
     }
 
@@ -102,7 +104,7 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
             examined += 1;
 
             for reference in extract_references(value) {
-                match index.get(&reference) {
+                match index.get(&normalize_id(&reference)) {
                     Some(target) => {
                         let status = target.header.get("Status").unwrap_or("(no Status field)");
                         findings.push(Finding {
@@ -146,10 +148,16 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 /// directory whose configured type gives the prefix (e.g. `docs/rfc/0001-*`
 /// -> `RFC-0001`). Filename-derived, not header-derived, so a record can be
 /// referenced before its own header claims anything about itself.
+///
+/// BUG-0002: no fixed digit-count is required (any non-empty numeric prefix
+/// resolves) -- a hardcoded 4-digit check here would silently stop matching
+/// past 9999 records of one type. Matching itself is done by numeric value
+/// (`normalize_id`), not by this string, so `ADR-0034` and a hand-typed
+/// `ADR-34` reference resolve identically regardless of padding.
 pub(crate) fn record_id(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
     let (number, _rest) = stem.split_once('-')?;
-    if number.len() != 4 || !number.chars().all(|c| c.is_ascii_digit()) {
+    if number.is_empty() || !number.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
     Some(format!(
@@ -157,6 +165,21 @@ pub(crate) fn record_id(record: &Record) -> Option<String> {
         record.record_type.to_ascii_uppercase(),
         number
     ))
+}
+
+/// Numeric-value equality for an id/reference like `ADR-0034` or `ADR-34`
+/// (BUG-0002): strips the numeric part's leading zeros so a filename's
+/// padding and a hand-typed reference's padding never have to match
+/// exactly. Falls back to the original string unchanged if the numeric part
+/// doesn't parse (defensive only -- both callers already validated theirs).
+pub(crate) fn normalize_id(id: &str) -> String {
+    match id.split_once('-') {
+        Some((prefix, number)) => match number.parse::<u64>() {
+            Ok(n) => format!("{prefix}-{n}"),
+            Err(_) => id.to_string(),
+        },
+        None => id.to_string(),
+    }
 }
 
 /// Extract reference tokens like `RFC-0001` from a field value that may list
@@ -601,7 +624,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
     let mut index: HashMap<String, &Record> = HashMap::new();
     for record in records {
         if let Some(id) = record_id(record) {
-            index.insert(id, record);
+            index.insert(normalize_id(&id), record);
         }
     }
 
@@ -609,6 +632,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
         let Some(id) = record_id(record) else {
             continue;
         };
+        let normalized_id = normalize_id(&id);
         let Some(value) = record.header.get("Supersedes / Superseded-by") else {
             continue;
         };
@@ -618,7 +642,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
         examined += 1;
 
         for reference in extract_references(value) {
-            let Some(target) = index.get(&reference) else {
+            let Some(target) = index.get(&normalize_id(&reference)) else {
                 findings.push(Finding {
                     rule: "relation.supersession-reciprocity".to_string(),
                     severity: Severity::Error,
@@ -633,7 +657,10 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
                 .header
                 .get("Supersedes / Superseded-by")
                 .unwrap_or("");
-            if !target_value.contains(&id) {
+            let target_names_back = extract_references(target_value)
+                .iter()
+                .any(|r| normalize_id(r) == normalized_id);
+            if !target_names_back {
                 findings.push(Finding {
                     rule: "relation.supersession-reciprocity".to_string(),
                     severity: Severity::Error,
@@ -735,6 +762,36 @@ mod tests {
         let (_, findings) = pointer_resolution(&[source]);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn a_five_digit_filename_still_resolves_bug_0002_observed_failing() {
+        // Before the fix, record_id() rejected any numeric prefix that
+        // wasn't exactly 4 digits -- past 9999 records of one type,
+        // references would have silently stopped resolving.
+        let target = record("docs/rfc/10000-x.md", "rfc", "> Status: Draft\n");
+        let source = record("docs/specs/0001-x.md", "spec", "> Implements: RFC-10000\n");
+        let (_, findings) = pointer_resolution(&[target, source]);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn a_reference_resolves_regardless_of_zero_padding() {
+        // ADR-0034 (the filename's own padding) and a hand-typed ADR-34
+        // reference must resolve to the same record (BUG-0002).
+        let target = record("docs/adr/0034-x.md", "adr", "> Status: Accepted\n");
+        let source = record("docs/specs/0001-y.md", "spec", "> Implements: ADR-34\n");
+        let (_, findings) = pointer_resolution(&[target, source]);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn normalize_id_strips_leading_zeros_but_leaves_non_numeric_ids_alone() {
+        assert_eq!(normalize_id("ADR-0034"), "ADR-34");
+        assert_eq!(normalize_id("ADR-34"), "ADR-34");
+        assert_eq!(normalize_id("not-an-id-at-all"), "not-an-id-at-all");
     }
 
     #[test]

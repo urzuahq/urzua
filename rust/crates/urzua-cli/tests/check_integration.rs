@@ -190,6 +190,52 @@ fn doctor_reports_missing_config_as_exit_2() {
 }
 
 #[test]
+fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
+    // BUG-0001, observed failing before the fix: `check`'s path argument was
+    // used only to locate the repo root, never to filter which files were
+    // actually examined -- `check docs/adr/` and `check docs/` returned
+    // identical results. This plants two record types and asserts a
+    // narrower path excludes the other one.
+    let dir = fixture_repo("scope");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.toml"),
+        "schema_version = 1\n\n\
+         [record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n\n\
+         [record_types.rfc]\ndir = \"docs/rfc\"\nrequired_fields = []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/rfc/0001-y.md"),
+        "# 0001 — Y\n\n> Status: Draft\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let scoped = run_urzua(&dir, &["check", "docs/adr/"]);
+    let scoped_stdout = String::from_utf8_lossy(&scoped.stdout);
+    assert!(
+        scoped_stdout.contains("\"files_examined\": 1"),
+        "scoping to docs/adr/ must exclude docs/rfc/: {scoped_stdout}"
+    );
+
+    let whole = run_urzua(&dir, &["check", "docs/"]);
+    let whole_stdout = String::from_utf8_lossy(&whole.stdout);
+    assert!(
+        whole_stdout.contains("\"files_examined\": 2"),
+        "an unscoped check must still see both files: {whole_stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn audit_exits_0_on_reciprocated_supersession() {
     let dir = fixture_repo("audit-clean");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();

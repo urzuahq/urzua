@@ -374,7 +374,12 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Err(e) => return report_could_not_run(&e.to_string()),
     };
 
-    let (records, full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let scoped = match scope_to_requested_paths(&repo_root, &discovered.paths, &paths) {
+        Ok(p) => p,
+        Err(e) => return report_could_not_run(&e),
+    };
+
+    let (records, full_text) = load_records(&repo_root, &scoped, &config);
 
     let mut required_by_type = HashMap::new();
     for (name, cfg) in &config.record_types {
@@ -938,6 +943,44 @@ fn run_migrate_schema_report(config_path: Option<PathBuf>, field: String) -> Exi
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
 
     ExitCode::from(0)
+}
+
+/// Restrict discovered files to those under any of the requested paths,
+/// relative to `repo_root`. Empty `requested` means no restriction -- the
+/// existing "check everything" behavior when no path argument is given.
+///
+/// BUG-0001: `check`'s `paths` argument was previously used only to locate
+/// the repo root, never to filter which files were actually examined --
+/// `check docs/adr/` and `check docs/` returned identical results. Caught
+/// by hand while exercising a genuinely narrower path for the first time;
+/// no existing test used anything but `check docs/`, so nothing exercised
+/// the narrower case at all.
+fn scope_to_requested_paths(
+    repo_root: &std::path::Path,
+    discovered: &[PathBuf],
+    requested: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    if requested.is_empty() {
+        return Ok(discovered.to_vec());
+    }
+
+    let mut relative_scopes = Vec::new();
+    for p in requested {
+        let canonical = p
+            .canonicalize()
+            .map_err(|e| format!("could not resolve {}: {e}", p.display()))?;
+        let relative = canonical
+            .strip_prefix(repo_root)
+            .map_err(|_| format!("{} is outside the repository", p.display()))?
+            .to_path_buf();
+        relative_scopes.push(relative);
+    }
+
+    Ok(discovered
+        .iter()
+        .filter(|d| relative_scopes.iter().any(|s| d.starts_with(s)))
+        .cloned()
+        .collect())
 }
 
 fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {

@@ -57,6 +57,23 @@ actually uses, the underlying validator, backfill engine, and drift-detector are
 None specific to layering beyond what RFC-0001 and RFC-0005 (embodiment) already carry — the
 optional-pointer model above is stated as a design implication, not left open.
 
+**Added after ADR-0034 (the `milestone` type):** exercising the generic relationship mechanism with
+a fourth record type surfaced two real, narrow gaps neither this RFC nor anywhere else in the corpus
+addresses. Checked directly against two comparable governance-linter implementations before
+naming these — both hardcode exactly three types with a single fixed directional pointer, offering
+no prior art either way:
+
+- **No cycle prevention.** Nothing stops `A implements B` where `B implements A`, across any record
+  types, not just RFC/ADR/Spec. Cheap to check now (a straightforward graph-traversal rule over
+  `Implements`/`Derives-from`), expensive to retrofit once real corpora have accumulated cross-type
+  links that happen to be cyclic.
+- **No "allowed parent types" constraint.** This RFC's whole point is that a strict stage order
+  isn't forced — correct for RFC→ADR→Spec — but nothing states whether an org might reasonably want
+  a narrower, profile-declared constraint (e.g. "a `Spec` may `implement` an `ADR`, but an `ADR` may
+  not `implement` another `ADR`"). Undesigned; not assumed needed, just not yet ruled on.
+
+Neither is built — both are named here so they're a deliberate non-decision, not a silent gap.
+
 ## Non-goals
 
 Does not attempt to design the paging/notification mechanism, dashboard/UI, or storage technology
