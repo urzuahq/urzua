@@ -56,6 +56,10 @@ existing caller needs to change.
 - The heading-delimited shape remains an open item, tracked against `urzuahq/urzua#1`, needing its
   own `Header.region` redesign before it can be declared alongside these two.
 - SPEC-0003's configuration surface documents `header_shape` as part of the per-record-type schema.
+- **Narrowed by ADR-0033**: bold-list is deprecated in favor of `yaml-frontmatter` — its structural
+  ceiling is the same as blockquote's (a flat one-line-per-field model, no path to RFC-0005's nested
+  claim graph). Parsing support stays; nothing in this ADR's actual decision is reversed, only its
+  standing as a recommended shape going forward.
 
 ## References
 

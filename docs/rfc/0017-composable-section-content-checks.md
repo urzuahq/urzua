@@ -119,13 +119,13 @@ and shape checks entirely — a record in a decisionless status is examined by n
 
 ## Open questions
 
-- **Should the tool drop blockquote header-shape support entirely, requiring YAML frontmatter?**
-  Raised and explicitly *not* decided here — it would reverse a public commitment already made
-  (README: "it doesn't force a rewrite of records you already have"; ADR-0017's own rationale for
-  supporting multiple shapes). Left open, deliberately, rather than smoothed over.
-- **Does this repo's own corpus switch its own three types to `yaml-frontmatter`?** Separable from
-  the tool-capability question above — flipping our own config doesn't require removing anything
-  from the tool. Undecided, tracked here rather than assumed.
+- **Resolved by ADR-0033, after this RFC was drafted**: blockquote and bold-list are deprecated
+  (not removed) in favor of `yaml-frontmatter`, on the strength of RFC-0005's claim-graph nesting
+  requirement — a flat, one-line-per-field shape has no path to representing that structure. Parsing
+  support for the deprecated shapes stays (evaluation-before-adoption still works unmodified); a
+  `migrate header-shape` tool and a non-blocking `header.deprecated-shape` check are the mechanism.
+- **This repo's own corpus migrates to `yaml-frontmatter`** using that tool, once built (ADR-0033) —
+  no longer a separate open question, folded into the same decision.
 - What other content shapes are worth building beyond `y-statement` (a table-row-minimum check was
   named as a plausible second) — no real case has demanded one yet, so none are designed here.
 - Should `doctor`'s new template/config check also catch the separately-found `header_shape`-vs-
