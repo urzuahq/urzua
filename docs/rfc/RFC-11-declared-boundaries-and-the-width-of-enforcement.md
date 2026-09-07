@@ -2,7 +2,7 @@
 
 > Status: Accepted
 > Date: 2026-08-11
-> Author: (session author)
+> Author: @beauwilliams
 > Supersedes / Superseded-by: —
 
 > **Partial acceptance, 2026-09-04.** §§1–5 (boundaries as declared facts, severity,

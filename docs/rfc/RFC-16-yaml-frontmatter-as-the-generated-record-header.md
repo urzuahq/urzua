@@ -2,7 +2,7 @@
 
 > Status: Accepted
 > Date: 2026-09-05
-> Author: (session author)
+> Author: @beauwilliams
 > Supersedes / Superseded-by: —
 > Amends: RFC-10
 

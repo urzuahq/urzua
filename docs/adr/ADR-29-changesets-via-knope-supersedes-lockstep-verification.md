@@ -4,8 +4,8 @@
 > Embodiment: Verified
 > Realized-by: code:knope.toml, code:.github/workflows/ci.yml, code:.github/workflows/prepare-release.yml
 > Date: 2026-09-06
-> Author: (project lead)
-> Deciders: (project lead)
+> Author: @beauwilliams
+> Deciders: @beauwilliams
 > Supersedes / Superseded-by: ADR-28
 > Derives-from: —
 

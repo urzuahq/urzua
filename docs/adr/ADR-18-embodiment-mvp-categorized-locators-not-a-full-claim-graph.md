@@ -4,8 +4,8 @@
 > Embodiment: Verified
 > Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
 > Date: 2026-09-05
-> Author: (project lead)
-> Deciders: (project lead)
+> Author: @beauwilliams
+> Deciders: @beauwilliams
 > Supersedes / Superseded-by: —
 > Derives-from: RFC-5 (Accepted)
 

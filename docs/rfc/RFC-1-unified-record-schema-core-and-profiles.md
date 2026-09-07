@@ -2,7 +2,7 @@
 
 > Status: Accepted
 > Date: 2026-07-29
-> Author: (session author)
+> Author: @beauwilliams
 > Supersedes / Superseded-by: —
 
 > **Split, 2026-07-30.** This RFC originally also covered RFC→ADR→Spec layering, the

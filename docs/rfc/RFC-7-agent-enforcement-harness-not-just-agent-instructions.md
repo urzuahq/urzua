@@ -2,7 +2,7 @@
 
 > Status: Draft
 > Date: 2026-07-30
-> Author: (session author)
+> Author: @beauwilliams
 > Supersedes / Superseded-by: —
 
 ## Summary

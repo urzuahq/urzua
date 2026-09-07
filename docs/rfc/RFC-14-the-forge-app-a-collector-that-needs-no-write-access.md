@@ -2,7 +2,7 @@
 
 > Status: Accepted
 > Date: 2026-08-18
-> Author: (session author)
+> Author: @beauwilliams
 > Supersedes / Superseded-by: —
 
 ## Summary

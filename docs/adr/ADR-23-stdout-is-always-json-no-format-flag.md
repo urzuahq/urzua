@@ -4,8 +4,8 @@
 > Embodiment: Verified
 > Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 > Date: 2026-09-06
-> Author: (project lead)
-> Deciders: (project lead)
+> Author: @beauwilliams
+> Deciders: @beauwilliams
 > Supersedes / Superseded-by: ADR-7
 > Derives-from: RFC-3 (Accepted)
 

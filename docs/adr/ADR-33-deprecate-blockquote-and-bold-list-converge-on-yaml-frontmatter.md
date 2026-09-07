@@ -3,8 +3,8 @@
 > Status: Accepted
 > Embodiment: Not started
 > Date: 2026-09-07
-> Author: (project lead)
-> Deciders: (project lead)
+> Author: @beauwilliams
+> Deciders: @beauwilliams
 > Supersedes / Superseded-by: —
 > Derives-from: RFC-5 (Accepted), RFC-16 (Accepted), RFC-17 (Draft)
 

@@ -4,8 +4,8 @@
 > Embodiment: Verified
 > Realized-by: code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-io/src/lib.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/fix.rs
 > Date: 2026-09-05
-> Author: (project lead)
-> Deciders: (project lead)
+> Author: @beauwilliams
+> Deciders: @beauwilliams
 > Supersedes / Superseded-by: —
 > Derives-from: RFC-8 (Accepted), ADR-15 (Accepted), ADR-19 (Accepted)
 

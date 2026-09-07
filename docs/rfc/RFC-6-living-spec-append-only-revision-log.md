@@ -2,7 +2,7 @@
 
 > Status: Accepted
 > Date: 2026-07-30
-> Author: (session author)
+> Author: @beauwilliams
 > Supersedes / Superseded-by: —
 
 > **Split from RFC-1, 2026-07-30.** This was originally §4 of
