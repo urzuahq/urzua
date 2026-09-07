@@ -1,12 +1,10 @@
 # SPEC-1 — `urzua` v0 CLI
 
-> Version: 0.1
-> Status: Draft
-> Embodiment: Not started
-> Date: 2026-07-29
-> Author: (project lead)
-> Implements: ADR-1, ADR-2, ADR-3
-> Derives-from: RFC-1 (Accepted)
+> Version: 0.1 | Date: 2026-07-29 | Status: Draft
+> **Embodiment:** Not started
+> **Author:** (project lead)
+> **Implements:** ADR-1, ADR-2, ADR-3
+> **Derives-from:** RFC-1 (Accepted)
 
 ## Purpose
 
@@ -199,6 +197,7 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-06 | `urzua new` implemented (ADR-27): fills a checked-in template or, absent one, synthesizes YAML frontmatter from `required_fields`; refuses rather than guessing a shape when neither applies. | **substantive** |
 > | 2026-09-06 | `urzua audit` implemented (ADR-30): supersession reciprocity and dangling cross-references, reusing the same rule functions `check` calls rather than a second implementation. Read-only, as originally specified. | **substantive** |
 > | 2026-09-07 | `check`'s `embodiment.consistency` rule now detects drift (RFC-5 tier 1, ADR-32): a `Realized-by` locator changed, per git history, since the `Realized-by` line was last touched. No schema change. CI's `rust` job checkout needs `fetch-depth: 0` for this to work at all -- a shallow checkout makes the rule silently find nothing. | **substantive** |
+> | 2026-09-07 | Normalized the header to the single-line, bold-labelled blockquote style SPEC-2 through SPEC-6 already use (still `HeaderShape::Blockquote` per RFC-10 -- no field value or parsing behavior changed). **Why:** found live, reviewing SPEC-1 against the later specs -- MILE-75 tracks whether within-type sub-format drift like this deserves its own rule; this entry is the docs-only fix for this one instance while that's decided. | **structural** |
 > | 2026-09-07 | Added `milestone` (ADR-34/SPEC-6) and `bug` (ADR-35) record types -- zero `urzua-core` changes, same footprint as `waiver`. Fixed two real defects found using them: `check`'s `paths` argument silently examined the whole corpus regardless of what was requested (BUG-1), and record identifiers required an exact 4-digit filename prefix, bounding every type at 9999 records, with matching now done by numeric value rather than exact string (BUG-2). | **substantive** |
 > | 2026-09-07 | `urzua new` emits type-prefixed filenames (`ADR-36-slug.md`) going forward (ADR-36); legacy `NNNN-slug.md` filenames never get renamed and resolve identically forever. Caught and fixed a second, independent instance of BUG-2's defect class in `filename_title_consistency`'s own filename/H1 parsing. | **substantive** |
 

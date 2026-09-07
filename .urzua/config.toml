@@ -24,3 +24,7 @@ required_fields = ["Status", "Phase", "Track"]
 [record_types.bug]
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
+
+[record_types.waiver]
+dir = "docs/waiver"
+required_fields = ["Rule", "Scope", "Reason"]
