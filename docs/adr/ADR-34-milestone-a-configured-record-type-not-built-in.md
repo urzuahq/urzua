@@ -80,6 +80,16 @@ Fully additive: one config entry, one template, one new directory. No existing b
 - Milestone records with no `Implements` at all are valid and expected — several current backlog
   items (e.g. "decide whether X needs an RFC") don't have a decision to point at yet.
 
+## Amendment (2026-09-07): a configurable, per-type filename prefix
+
+`milestone`'s filename/ID prefix is shortened from `MILESTONE-N` to `MILE-N` (SPEC-6). This is not
+special-cased to `milestone`: `RecordTypeConfig` gains an optional `prefix` field, defaulting to
+the type name upper-cased when omitted, so every existing type's filenames are unaffected unless
+its config declares otherwise. The type name (`milestone`, used for the `urzua new milestone ...`
+argument and required-fields lookup) and the directory (`docs/milestones`) are both unchanged —
+this decouples the filename prefix the same way `dir` already decouples the directory, and is a
+per-record-type option, not a global one.
+
 ## References
 
 - ADR-11 — the `waiver`-as-configured-type precedent this decision follows exactly.

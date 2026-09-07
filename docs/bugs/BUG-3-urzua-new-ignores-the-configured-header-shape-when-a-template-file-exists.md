@@ -25,7 +25,7 @@ tested in combination, only independently.
 - ADR-27 -- the original template-vs-synthesis decision this defect lives inside.
 - ADR-33 -- where this was found live, and which explicitly named this as a required fix before
   this repo's own config could safely flip to yaml-frontmatter.
-- Milestone-0001 -- the planned work to fix it, cross-linked via this record's own filename
+- MILE-1 -- the planned work to fix it, cross-linked via this record's own filename
   reference and the milestone's `Implements` field.
 
 > **Revision log**

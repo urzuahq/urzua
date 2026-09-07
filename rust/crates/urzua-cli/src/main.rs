@@ -651,14 +651,19 @@ fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<Stri
         }
     };
 
-    // Type prefix explicit in the filename (ADR-0036) -- matches how a
-    // record is referenced in prose everywhere else (e.g. "Implements:
-    // ADR-0036"). Zero-padded: a plain `ls`/git-log/GitHub file listing
-    // sorts lexicographically, not numerically, and padding is what keeps
-    // that sort order matching creation order.
+    // Type prefix explicit in the filename (ADR-36) -- matches how a record
+    // is referenced in prose everywhere else (e.g. "Implements: ADR-36").
+    // Never zero-padded (ADR-36 amendment): padding doesn't solve
+    // lexicographic sort order permanently, only defers the break. The
+    // prefix is the type's configured `prefix` when it declares one (e.g.
+    // `MILE` for `milestone`), otherwise the type name itself, upper-cased.
+    let type_prefix = type_config
+        .prefix
+        .clone()
+        .unwrap_or_else(|| record_type.to_ascii_uppercase());
     let filename = format!(
         "{}-{}-{}.md",
-        record_type.to_ascii_uppercase(),
+        type_prefix,
         display_number,
         urzua_core::new_record::slugify(&title)
     );
@@ -1039,11 +1044,16 @@ fn load_records(
             let full_path = repo_root.join(rel_path);
             match urzua_io::read_to_string(&full_path) {
                 Ok(content) => {
-                    records.push(Record::parse_with_shape(
+                    let type_prefix = type_config
+                        .prefix
+                        .clone()
+                        .unwrap_or_else(|| type_name.to_ascii_uppercase());
+                    records.push(Record::parse_with_shape_and_prefix(
                         rel_path.clone(),
                         type_name.clone(),
                         &content,
                         type_config.header_shape,
+                        type_prefix,
                     ));
                     full_text.insert(rel_path.clone(), content);
                 }

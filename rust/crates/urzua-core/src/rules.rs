@@ -162,7 +162,7 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 /// regardless of padding.
 pub(crate) fn record_id(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
-    let type_prefix = record.record_type.to_ascii_uppercase();
+    let type_prefix = record.type_prefix.clone();
 
     if let Some(rest) = stem.strip_prefix(&format!("{type_prefix}-")) {
         let number = rest.split_once('-').map_or(rest, |(n, _)| n);
@@ -321,7 +321,7 @@ pub fn filename_title_consistency(
 /// non-empty numeric prefix, no fixed digit-count.
 fn filename_number(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
-    let type_prefix = record.record_type.to_ascii_uppercase();
+    let type_prefix = record.type_prefix.clone();
 
     if let Some(rest) = stem.strip_prefix(&format!("{type_prefix}-")) {
         let number = rest.split_once('-').map_or(rest, |(n, _)| n);
@@ -720,6 +720,16 @@ mod tests {
         Record::parse(PathBuf::from(path), record_type.to_string(), content)
     }
 
+    fn record_with_prefix(path: &str, record_type: &str, prefix: &str, content: &str) -> Record {
+        Record::parse_with_shape_and_prefix(
+            PathBuf::from(path),
+            record_type.to_string(),
+            content,
+            crate::header::HeaderShape::default(),
+            prefix.to_string(),
+        )
+    }
+
     #[test]
     fn missing_required_field_is_a_finding() {
         let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
@@ -835,6 +845,24 @@ mod tests {
         let (_, findings) = pointer_resolution(&[new_style, legacy_style, source]);
         assert_eq!(findings.len(), 2, "unexpected findings: {findings:?}");
         assert!(findings.iter().all(|f| f.severity == Severity::Warning));
+    }
+
+    #[test]
+    fn a_configured_type_prefix_resolves_independently_of_the_type_name() {
+        // A type's filename/ID prefix can be configured shorter than its own
+        // name (e.g. `milestone` type configured with `prefix = "MILE"`) --
+        // record_id must key off the configured prefix, not a derived
+        // upper-cased type name, so `Implements: MILE-1` resolves.
+        let milestone = record_with_prefix(
+            "docs/milestones/MILE-1-x.md",
+            "milestone",
+            "MILE",
+            "> Status: Planned\n",
+        );
+        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: MILE-1\n");
+        let (_, findings) = pointer_resolution(&[milestone, source]);
+        assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
+        assert!(findings[0].message.contains("resolves"));
     }
 
     #[test]

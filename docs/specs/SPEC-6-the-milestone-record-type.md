@@ -17,8 +17,15 @@ built for three types doesn't hold for a fourth, that's real evidence, not a hyp
 ```toml
 [record_types.milestone]
 dir = "docs/milestones"
+prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
 ```
+
+`prefix` (2026-09-07 addition) decouples the type's own name — used for the `urzua new milestone
+...` argument and required-fields lookup — from its filename/ID prefix, the same way `dir` already
+decouples the type name from its directory name. Omitted, it defaults to the type name upper-cased
+(`MILESTONE`); declared, `urzua new` emits `MILE-N-slug.md` and `check` recognizes that shape.
+Per-record-type, not global — any type can shorten its own prefix without affecting the others.
 
 | Field | Values | Notes |
 |---|---|---|
@@ -33,8 +40,8 @@ not a separate mechanism.
 
 ## Why no new fields for ordering or grouping
 
-A record's display number is identity, not priority (ADR-3) — `Milestone-0007` existing does not
-mean it happens after `Milestone-0006`, the same as every other record type. `Phase`/`Track` are
+A record's display number is identity, not priority (ADR-3) — `MILE-7` existing does not
+mean it happens after `MILE-6`, the same as every other record type. `Phase`/`Track` are
 plain tags rather than resolved relationship fields because they're categorization, not references
 to another record — nothing to check for resolution, no cycle risk, no new rule needed.
 
@@ -66,3 +73,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial spec. | **structural** |
+> | 2026-09-07 | Added `prefix = "MILE"`, shortening the filename/ID prefix from `MILESTONE-N` to `MILE-N`. The type name (`milestone`) and directory (`docs/milestones`) are unchanged. | **substantive** |

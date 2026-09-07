@@ -18,6 +18,7 @@ required_fields = ["Status", "Date", "Version"]
 
 [record_types.milestone]
 dir = "docs/milestones"
+prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
 
 [record_types.bug]

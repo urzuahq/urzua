@@ -28,6 +28,15 @@ pub struct RecordTypeConfig {
     /// config needs no change to keep its current behavior.
     #[serde(default)]
     pub header_shape: HeaderShape,
+    /// The filename/ID prefix `urzua new` emits and `check` recognizes for
+    /// this type (e.g. `MILE` for a `milestone` type, producing
+    /// `MILE-7-slug.md`). Omitted means the type name itself, upper-cased --
+    /// the long-standing default, so an existing config needs no change.
+    /// Decouples the type's own name (used for required-fields lookup, the
+    /// `urzua new <type>` argument) from its filename prefix, the same way
+    /// `dir` already decouples the type name from its directory name.
+    #[serde(default)]
+    pub prefix: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for HeaderShape {
