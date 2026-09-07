@@ -1,0 +1,24 @@
+# 0013 — Decide RFC-0009: agentic repair tier
+
+> Status: Blocked
+> Stable-Id: 01M1Y5JJZAAG3F4D703671BK2C
+> Phase: 1
+> Track: governance-process
+> Implements: RFC-0009
+
+## What
+
+An unreliable generator behind a mechanical verifier.
+
+## Why
+
+Explicitly deferred by the project lead: resolve Q2 first.
+
+## Blocked on
+
+RFC-0009's own Q2
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|

@@ -1,0 +1,24 @@
+# 0010 — Decide the filename convention: type prefix, zero-padding, and whether to keep slugs
+
+> Status: Planned
+> Stable-Id: 01M1Y5JHCGH1AM59YY07F3YG9J
+> Phase: 0
+> Track: roadmap-tracking
+> Implements: —
+
+## What
+
+Whether filenames should embed the type prefix (ADR-0030-slug.md) instead of relying on directory context, whether numbers should stay zero-padded, and whether a human-readable slug belongs in the filename at all versus just the H1.
+
+## Why
+
+Raised directly; explicitly not decided yet -- BUG-0002 already removed the actual defect (numbers already grow unbounded in both parsing and display), so this is a considered style question, not an urgent fix, and shouldn't be rushed into a corpus-wide rename.
+
+## Blocked on
+
+—
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
