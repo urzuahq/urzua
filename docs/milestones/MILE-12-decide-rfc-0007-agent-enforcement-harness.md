@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Stable-Id: 01M1Y5JJECJSQBGTZSAH8WHYRP
-> Phase: 1
+> Phase: 2
 > Track: governance-process
 > Implements: RFC-7
 

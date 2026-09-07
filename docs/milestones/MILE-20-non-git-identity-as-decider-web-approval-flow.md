@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Stable-Id: 01M1Y5JPPE0KSBN3CZKNJ8E9TF
-> Phase: 1
+> Phase: 3
 > Track: accountability-identity
 > Implements: —
 

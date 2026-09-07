@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Stable-Id: 01M1YN86A7Z8N7YP5F89Q5Q04K
-> Phase: 1
+> Phase: 0
 > Track: embodiment-model
 > Implements: RFC-5
 

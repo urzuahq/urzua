@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Stable-Id: 01M1YKX8WYPDEW5D4M1T1RHVB6
-> Phase: 0
+> Phase: 1
 > Track: release-process
 > Implements: ADR-29
 

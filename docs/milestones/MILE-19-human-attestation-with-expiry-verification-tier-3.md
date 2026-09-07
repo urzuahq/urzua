@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Stable-Id: 01M1Y5JP5GX3QXNQVKN2YGEY43
-> Phase: 1
+> Phase: 3
 > Track: accountability-identity
 > Implements: RFC-5
 
