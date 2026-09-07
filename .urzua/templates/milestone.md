@@ -1,6 +1,6 @@
 # NNNN — Title
 
-> Status: Planned | InProgress | Blocked | Done
+> Status: Planned | InProgress | Blocked | Done | WontDo
 > Phase: 0
 > Track: track-name
 > Implements: RFC-NNNN, ADR-NNNN (optional -- a milestone can exist before a decision does)

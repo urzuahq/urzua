@@ -90,6 +90,19 @@ argument and required-fields lookup) and the directory (`docs/milestones`) are b
 this decouples the filename prefix the same way `dir` already decouples the directory, and is a
 per-record-type option, not a global one.
 
+## Amendment (2026-09-07): a terminal status for work decided against
+
+`Status` gains a fifth value: `WontDo`, for a milestone deliberately deprioritized or decided
+against, distinct from `Blocked`'s "waiting on something specific" and from `Planned`, which
+implies the work is still intended. This mirrors `bug`'s existing `WontFix`. Found by directly
+testing the original four-value enum (`Planned | InProgress | Blocked | Done`) against a real case
+-- deciding not to do a specific Planned milestone -- and finding no value fit. No `urzua-core`
+change: nothing validates `Status` against an enum for any record type today, so this amendment
+updates the documented contract (this ADR, SPEC-7, `.urzua/templates/milestone.md`) without
+touching code. SPEC-6 (already `Accepted`, already executed) is left untouched -- the detail lives
+in a new spec, not a revision to one already shipped. `Blocked`, `Planned`, `InProgress`, and `Done`
+are otherwise unchanged.
+
 ## References
 
 - ADR-11 — the `waiver`-as-configured-type precedent this decision follows exactly.

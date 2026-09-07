@@ -1,19 +1,18 @@
 # 71 — Add a terminal status for deferred or abandoned milestones
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1YS1MJX3Z91EJ5MXZ1XEGQA
-> Phase: 1
+> Phase: 0
 > Track: schema-governance
-> Implements: ADR-34
+> Implements: ADR-34, SPEC-7
 
 ## What
 
 Extend milestone's `Status` enum (`Planned | InProgress | Blocked | Done`, ADR-34/SPEC-6) with a
 terminal state for a milestone that's deliberately deprioritized or decided against, distinct from
 `Blocked`'s "waiting on something specific." `bug` already has `WontFix`; `adr` already has
-`Rejected`/`Superseded`. Also worth deciding alongside it: whether any record type's `Status`
-should be validated against a closed set at all, since nothing in `urzua-core` currently checks
-`Status` against any enum for any type. Requires an ADR-34 amendment, not a silent schema change.
+`Rejected`/`Superseded`. Whether any record type's `Status` should be validated against a closed
+set at all is adjacent scope, not decided here (see MILE-55).
 
 ## Why
 
@@ -31,3 +30,4 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Fixed and shipped: `WontDo` added via ADR-34 amendment + SPEC-7, template updated. | **substantive** |
