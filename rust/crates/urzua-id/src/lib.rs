@@ -18,10 +18,13 @@
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StableId(String);
 
-/// Human-facing sequential number, e.g. `42` rendered as `0042`.
+/// Human-facing sequential number, e.g. `42` rendered as `42`.
 ///
 /// Presentation only. Assigned at merge time, may change, and nothing may
-/// depend on it.
+/// depend on it. Unpadded (ADR-0036): zero-padding to a fixed width doesn't
+/// actually solve lexicographic-sort ordering permanently -- it only defers
+/// the break to the point a type crosses that width, and breaks worse then
+/// (mixed-width filenames). Unpadded is at least consistent forever.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DisplayNumber(pub u32);
 
@@ -40,7 +43,7 @@ impl StableId {
 
 impl std::fmt::Display for DisplayNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:04}", self.0)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -74,8 +77,8 @@ mod tests {
     }
 
     #[test]
-    fn display_number_pads_to_four_digits() {
-        assert_eq!(DisplayNumber(7).to_string(), "0007");
+    fn display_number_is_never_zero_padded() {
+        assert_eq!(DisplayNumber(7).to_string(), "7");
         assert_eq!(DisplayNumber(1234).to_string(), "1234");
     }
 }

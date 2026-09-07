@@ -657,7 +657,7 @@ fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<Stri
     // sorts lexicographically, not numerically, and padding is what keeps
     // that sort order matching creation order.
     let filename = format!(
-        "{}-{:04}-{}.md",
+        "{}-{}-{}.md",
         record_type.to_ascii_uppercase(),
         display_number,
         urzua_core::new_record::slugify(&title)

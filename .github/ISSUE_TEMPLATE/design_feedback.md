@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 **Which document and section**
-e.g. `docs/rfc/0011-declared-boundaries-and-the-width-of-enforcement.md` §6
+e.g. `docs/rfc/RFC-11-declared-boundaries-and-the-width-of-enforcement.md` §6
 
 **The specific case**
 A concrete scenario where the proposal as written breaks, is ambiguous, or produces the wrong

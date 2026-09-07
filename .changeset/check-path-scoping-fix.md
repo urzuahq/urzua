@@ -10,5 +10,5 @@ default: patch
 change; results narrow correctly for the first time.
 
 Also fixed: record identifiers no longer require exactly 4 digits in the filename, and reference
-matching (`Implements`/`Derives-from`/`Supersedes`) now compares by numeric value, so `ADR-0034`
+matching (`Implements`/`Derives-from`/`Supersedes`) now compares by numeric value, so `ADR-34`
 and a hand-typed `ADR-34` resolve to the same record regardless of padding.

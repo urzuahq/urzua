@@ -61,7 +61,7 @@ pub struct NewRecordParams<'a> {
 /// Deciders, Embodiment) stays the template's own placeholder text for a
 /// human to pick, same as it always has been.
 pub fn render_from_template(template: &str, params: &NewRecordParams) -> String {
-    let number = format!("{:04}", params.display_number);
+    let number = format!("{}", params.display_number);
     let mut lines: Vec<String> = template.lines().map(|l| l.to_string()).collect();
 
     // Only the H1 names *this* record's number -- a template's own body can
@@ -118,10 +118,7 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
         out.push_str(&format!("{field}: \n"));
     }
     out.push_str("---\n");
-    out.push_str(&format!(
-        "# {:04} — {}\n",
-        params.display_number, params.title
-    ));
+    out.push_str(&format!("# {} — {}\n", params.display_number, params.title));
     out
 }
 
@@ -140,7 +137,7 @@ mod tests {
             today: "2026-09-06",
         };
         let result = render_from_template(template, &params);
-        assert!(result.contains("# 0042 — Use a real title"));
+        assert!(result.contains("# 42 — Use a real title"));
         assert!(result.contains("> Date: 2026-09-06"));
         assert!(result.contains("> Author: beau"));
         assert!(result.contains("> Stable-Id: 01ABC"));
@@ -157,7 +154,7 @@ mod tests {
             today: "2026-09-06",
         };
         let result = render_from_template(template, &params);
-        assert!(result.contains("# 0028 — X"));
+        assert!(result.contains("# 28 — X"));
         assert!(result.contains("> Derives-from: RFC-NNNN (optional)"));
     }
 
@@ -224,6 +221,6 @@ mod tests {
         assert!(result.starts_with("---\n"));
         assert!(result.contains("Status: \n"));
         assert!(result.contains("Severity: \n"));
-        assert!(result.contains("# 0001 — X"));
+        assert!(result.contains("# 1 — X"));
     }
 }

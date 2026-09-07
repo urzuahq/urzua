@@ -27,5 +27,5 @@ First tagged release. `urzua check` and `urzua init` (adopt mode) are real; `new
 ### Known limitations
 
 - `new`, `audit`, `migrate`, `export`, `import` are unimplemented stubs.
-- The full SPEC-0002 rule set (roles, required sections, declared scope, boundaries) is not yet
-  built — see `docs/specs/0002-urzua-check.md`.
+- The full SPEC-2 rule set (roles, required sections, declared scope, boundaries) is not yet
+  built — see `docs/specs/SPEC-2-urzua-check.md`.

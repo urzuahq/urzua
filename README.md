@@ -22,7 +22,7 @@ Two valid shapes for the same fact, because Urzua reads whatever a corpus alread
 > Status: Accepted
 > Embodiment: Verified
 > Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs
-> Derives-from: RFC-0010 (Accepted)
+> Derives-from: RFC-10 (Accepted)
 
 ## Context
 ...
@@ -42,14 +42,14 @@ Realized-by: "code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-
 ...
 ```
 
-Same schema underneath — `check`, `fix`, and every rule read either shape identically. The difference is only how the header is stored: line-recognized for a corpus that already exists, or `serde`-deserialized for one Urzua writes itself. See [`docs/rfc/0016-yaml-frontmatter-as-the-generated-record-header.md`](docs/rfc/0016-yaml-frontmatter-as-the-generated-record-header.md) for why both need to exist. `Realized-by`'s own value is still a flat `type:locator` string under either shape today — [`docs/rfc/0005-embodiment-realized-by-claim-graph.md`](docs/rfc/0005-embodiment-realized-by-claim-graph.md) designs the fuller graph-shaped version this release deliberately ships a narrower first slice of.
+Same schema underneath — `check`, `fix`, and every rule read either shape identically. The difference is only how the header is stored: line-recognized for a corpus that already exists, or `serde`-deserialized for one Urzua writes itself. See [`docs/rfc/RFC-16-yaml-frontmatter-as-the-generated-record-header.md`](docs/rfc/RFC-16-yaml-frontmatter-as-the-generated-record-header.md) for why both need to exist. `Realized-by`'s own value is still a flat `type:locator` string under either shape today — [`docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md`](docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md) designs the fuller graph-shaped version this release deliberately ships a narrower first slice of.
 
 ## Why now
 
 Governance records used to be slow to produce and easy to keep consistent by hand — one architect, one meeting, one document. Neither is true anymore:
 
 - **Records are machine-authored at machine speed**, and nothing validates them as data until a human notices something's wrong, usually much later.
-- **A record's relationships rot silently.** `Implements: RFC-0001` still parses as valid text long after RFC-0001 is deleted, renamed, or superseded.
+- **A record's relationships rot silently.** `Implements: RFC-1` still parses as valid text long after RFC-1 is deleted, renamed, or superseded.
 - **"Was this actually built" and "was this decided" get conflated.** A record can say `Accepted` and `Implemented` in the same header with nothing distinguishing a real decision from a stale claim about the code.
 - **Every team reinvents the same validator**, badly, once per repo, because there's no portable engine — just a format convention and whatever regex someone wrote against it last time.
 
@@ -67,12 +67,12 @@ Real rules, running against this repository's own `docs/` in CI on every commit 
 | `filename.title-consistency` | A renamed file whose title didn't get renamed with it (or vice versa) |
 | `relation.supersession-reciprocity` | A claims to supersede B, but B doesn't point back |
 | `revision-log.change-class-required` | A revision-log entry with no real `substantive`/`structural` classification |
-| `embodiment.consistency` | A record's stated `Embodiment` disagreeing with what its own cited evidence computes to — including drift: a locator that changed, per git history, since the `Realized-by` line was last touched ([ADR-0032](docs/adr/0032-drift-detection-via-git-blame-not-a-stored-hash.md)) |
+| `embodiment.consistency` | A record's stated `Embodiment` disagreeing with what its own cited evidence computes to — including drift: a locator that changed, per git history, since the `Realized-by` line was last touched ([ADR-32](docs/adr/ADR-32-drift-detection-via-git-blame-not-a-stored-hash.md)) |
 | `embodiment.locator-promotion-candidate` | The same piece of evidence cited by more than one record, drifting independently instead of being tracked once |
 
 That last pair is the part most linters don't have at all: a record can name what actually realizes it — a spec, a source file, a test — categorized by strength of evidence, and `check` computes whether the record's own claim still matches. Disagree, and it's a finding, not a stale comment nobody re-reads.
 
-**Stdout is the JSON report, unconditionally (ADR-0023/0026) — no `--format` flag, no second human-readable rendering anywhere.** There is one shape. An agent piping stdout, a script, and a person reading a terminal all see exactly the same thing:
+**Stdout is the JSON report, unconditionally (ADR-23/26) — no `--format` flag, no second human-readable rendering anywhere.** There is one shape. An agent piping stdout, a script, and a person reading a terminal all see exactly the same thing:
 
 ```
 $ urzua check docs/
@@ -105,7 +105,7 @@ $ urzua fix
   "records_examined": 6,
   "repairs": [
     {
-      "record": "docs/adr/0042-example.md",
+      "record": "docs/adr/ADR-42-example.md",
       "field": "Embodiment",
       "current_value": "Not started",
       "computed_value": "Verified",
@@ -115,7 +115,7 @@ $ urzua fix
   ]
 }
 
-$ urzua fix --apply --ids docs/adr/0042-example.md --by beau
+$ urzua fix --apply --ids docs/adr/ADR-42-example.md --by beau
 ```
 
 Every applied write: touches only the one field's line, byte-for-byte preserving the rest of the record; requires a resolved identity (`--by`, or `gh api user`, or `git config user.name`); appends a structural entry to the record's own revision log — and refuses outright, per-record, if that log doesn't exist rather than writing somewhere it can't be audited. Rationale, alternatives, and every hand-authored sentence stay permanently off-limits — this is a cache of a computation, never an editor.
@@ -158,27 +158,27 @@ This isn't hypothetical: this repo's own `.urzua/config.toml` declares `mileston
 
 | Command | State |
 |---|---|
-| `check` | Real — full rule set above, always JSON on stdout (ADR-0023) |
-| `explain <path>` | Real — every record whose `Realized-by` names this file as evidence (ADR-0024) |
-| `graph` | Real — the full `Implements`/`Derives-from`/`Supersedes` relationship graph, as data, dangling edges flagged (ADR-0024) |
+| `check` | Real — full rule set above, always JSON on stdout (ADR-23) |
+| `explain <path>` | Real — every record whose `Realized-by` names this file as evidence (ADR-24) |
+| `graph` | Real — the full `Implements`/`Derives-from`/`Supersedes` relationship graph, as data, dangling edges flagged (ADR-24) |
 | `init` | Adopt mode only — proposes config from an existing corpus, never moves files |
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
-| `migrate ids` | Real — backfills a collision-free stable ID ([ULID](docs/adr/0021-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
+| `migrate ids` | Real — backfills a collision-free stable ID ([ULID](docs/adr/ADR-21-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
 | `migrate schema --report` | Real — previews which records lack a real value for a proposed new required field, before it's ever added to config |
 | `doctor` | Real — reports on the tool's own configuration health, not record content |
-| `new <type> [title]` | Real — fills a checked-in template (or synthesizes YAML frontmatter if none exists) with a fresh stable ID, never asking for a number ([ADR-0027](docs/adr/0027-urzua-new-fills-the-template-in-not-the-decision.md)) |
-| `audit` | Real — supersession reciprocity and dangling cross-references, read-only ([ADR-0030](docs/adr/0030-urzua-audit-reuses-checks-rule-functions.md)) |
+| `new <type> [title]` | Real — fills a checked-in template (or synthesizes YAML frontmatter if none exists) with a fresh stable ID, never asking for a number ([ADR-27](docs/adr/ADR-27-urzua-new-fills-the-template-in-not-the-decision.md)) |
+| `audit` | Real — supersession reciprocity and dangling cross-references, read-only ([ADR-30](docs/adr/ADR-30-urzua-audit-reuses-checks-rule-functions.md)) |
 | `migrate schema --assist-waivers`/`--apply`, `export`, `import` | Not implemented yet — exit 2 with "not implemented yet" |
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs/rfc/) / [`docs/adr/`](docs/adr/) for what's designed but not yet built — including the fuller claim-graph model (AND/OR composites, cross-record-shared claims) this release's Embodiment tracking deliberately ships a narrower slice of first.
 
 ## Maintenance
 
-Released for use, actively maintained — this is a real tool being built in the open, not published only for reference. Issues and PRs are triaged. The schema and CLI contract may still change before `v1.0.0`; `CHANGELOG.md` calls out anything breaking. `CHANGELOG.md` itself is compiled from per-PR changesets (`.changeset/`, [ADR-0029](docs/adr/0029-changesets-via-knope-supersedes-lockstep-verification.md)) — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the format.
+Released for use, actively maintained — this is a real tool being built in the open, not published only for reference. Issues and PRs are triaged. The schema and CLI contract may still change before `v1.0.0`; `CHANGELOG.md` calls out anything breaking. `CHANGELOG.md` itself is compiled from per-PR changesets (`.changeset/`, [ADR-29](docs/adr/ADR-29-changesets-via-knope-supersedes-lockstep-verification.md)) — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the format.
 
 ## Layout
 
-Polyglot monorepo, organized by language at the root ([ADR-0004](docs/adr/0004-polyglot-monorepo-layout.md)):
+Polyglot monorepo, organized by language at the root ([ADR-4](docs/adr/ADR-4-polyglot-monorepo-layout.md)):
 
 ```
 rust/           Cargo workspace — urzua-core (pure schema+validation), urzua-io

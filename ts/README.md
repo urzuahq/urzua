@@ -1,6 +1,6 @@
 # `ts/` — TypeScript / Node
 
-Reserved per [ADR-0004](../docs/adr/0004-polyglot-monorepo-layout.md). Empty of code for now; this
+Reserved per [ADR-4](../docs/adr/ADR-4-polyglot-monorepo-layout.md). Empty of code for now; this
 README exists so the convention is discoverable rather than tribal.
 
 ## What belongs here
@@ -16,7 +16,7 @@ by preference:
 
 ## What does not belong here
 
-- The `urzua` CLI and its logic. That's Rust ([ADR-0001](../docs/adr/0001-rust-as-implementation-language.md)),
+- The `urzua` CLI and its logic. That's Rust ([ADR-1](../docs/adr/ADR-1-rust-as-implementation-language.md)),
   and it lives in [`rust/`](../rust).
 - Governance records. Those stay in [`docs/`](../docs) at the root — they govern the whole project,
   not one toolchain.
