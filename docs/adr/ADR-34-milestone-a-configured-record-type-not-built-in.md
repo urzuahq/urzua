@@ -98,10 +98,11 @@ implies the work is still intended. This mirrors `bug`'s existing `WontFix`. Fou
 testing the original four-value enum (`Planned | InProgress | Blocked | Done`) against a real case
 -- deciding not to do a specific Planned milestone -- and finding no value fit. No `urzua-core`
 change: nothing validates `Status` against an enum for any record type today, so this amendment
-updates the documented contract (this ADR, SPEC-7, `.urzua/templates/milestone.md`) without
-touching code. SPEC-6 (already `Accepted`, already executed) is left untouched -- the detail lives
-in a new spec, not a revision to one already shipped. `Blocked`, `Planned`, `InProgress`, and `Done`
-are otherwise unchanged.
+updates the documented contract (this ADR, SPEC-6 v0.2, `.urzua/templates/milestone.md`) without
+touching code. The detail lives in a version bump on SPEC-6 itself, not a new spec -- per ADR-14's
+amendment, an already-`Accepted` spec's number is permanent per subject; a substantive change to it
+is a revision, not a new number. `Blocked`, `Planned`, `InProgress`, and `Done` are otherwise
+unchanged.
 
 ## References
 

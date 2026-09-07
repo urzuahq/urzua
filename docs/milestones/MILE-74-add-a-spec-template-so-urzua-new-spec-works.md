@@ -12,7 +12,7 @@ Add `.urzua/templates/spec.md` (or declare `header_shape = "yaml-frontmatter"` o
 `.urzua/config.toml`) so `urzua new spec "..."` actually works. `adr`, `rfc`, `bug`, and `milestone`
 all have a template; `spec` has neither a template nor a synthesizable shape declared, so `urzua new
 spec` fails outright with exit 2, "no template ... and no synthesizable shape declared." Every one
-of this repo's 7 specs (SPEC-1 through SPEC-7) was hand-authored -- never created through the tool.
+of this repo's specs (SPEC-1 through SPEC-6) was hand-authored -- never created through the tool.
 
 ## Why
 

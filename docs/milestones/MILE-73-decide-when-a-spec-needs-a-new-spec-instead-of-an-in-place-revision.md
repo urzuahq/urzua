@@ -1,10 +1,10 @@
 # 73 — Decide when a spec needs a new spec instead of an in-place revision
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1YSGQ9F9WXDWB2VJEQ657K4
 > Phase: 1
 > Track: governance-process
-> Implements: RFC-6
+> Implements: RFC-6, ADR-14
 
 ## What
 
@@ -31,3 +31,4 @@ inconsistent precedent one spec at a time.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Resolved via an amendment to ADR-14 (not a new RFC): a spec's own number is permanent per subject, a substantive/structural change is a `Version` bump plus a revision-log entry on the same spec, and a new number is reserved only for a genuinely distinct subject. SPEC-7 (minted for this exact case, live) is retracted and folded into SPEC-6 v0.2 under this rule. **Why:** RFC-6 named this as an open question and deferred it; the live SPEC-7 case forced an actual answer rather than letting it accumulate as inconsistent precedent one spec at a time. | **substantive** |

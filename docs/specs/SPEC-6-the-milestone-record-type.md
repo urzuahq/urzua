@@ -1,6 +1,6 @@
 # SPEC-6 — The `milestone` record type
 
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
+> Version: 0.2 | Date: 2026-09-07 | Status: Accepted
 > **Implements:** ADR-34
 > **Parent:** SPEC-1 (v0 CLI).
 
@@ -29,10 +29,17 @@ Per-record-type, not global — any type can shorten its own prefix without affe
 
 | Field | Values | Notes |
 |---|---|---|
-| `Status` | `Planned` \| `InProgress` \| `Blocked` \| `Done` | The realization axis for a milestone — orthogonal to whatever `Embodiment` on the RFC/ADR it implements is doing. |
+| `Status` | `Planned` \| `InProgress` \| `Blocked` \| `Done` \| `WontDo` | The realization axis for a milestone — orthogonal to whatever `Embodiment` on the RFC/ADR it implements is doing. `WontDo` is terminal, for work deliberately deferred or decided against — distinct from `Blocked` (a specific, nameable blocker exists and the work is still intended) and from leaving a milestone `Planned` (which misrepresents a reversed decision as still-pending work). Precedent: `bug`'s `WontFix`, `adr`'s `Rejected`/`Superseded` — every other record type in this corpus already has a terminal "decided against" state; milestone didn't until this version. |
 | `Phase` | a plain tag (`0`, `1`, ...) | Sequential grouping. Not a resolved pointer — no cross-referencing, just a bucket. |
 | `Track` | a plain tag (`header-format`, `section-checks`, ...) | Parallel workstream. Also a plain tag, not a pointer. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). |
+
+`Status` is documented here but not mechanically validated: nothing in `urzua-core` checks a
+record's `Status` value against an enum for any record type today (RFC-9's field-presence rules
+check that a required field is non-empty, not that its value is one of a closed set). Moving to
+`WontDo` today is a config/template/documentation change only — declaring it here, and in
+`.urzua/templates/milestone.md`, is what makes it the documented contract until a future milestone
+adds real enum enforcement.
 
 History is the existing revision-log model (RFC-6), reused unmodified: a milestone's `Status`
 transitions are recorded as dated, classified revision-log entries on the milestone record itself,
@@ -74,3 +81,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > |---|---|---|
 > | 2026-09-07 | Initial spec. | **structural** |
 > | 2026-09-07 | Added `prefix = "MILE"`, shortening the filename/ID prefix from `MILESTONE-N` to `MILE-N`. The type name (`milestone`) and directory (`docs/milestones`) are unchanged. | **substantive** |
+> | 2026-09-07 | Added `WontDo` as a terminal `Status` value (ADR-34 amendment). **Why:** every other record type in this corpus (`bug`, `adr`) already has a terminal "decided against" state; `milestone` didn't, so deferring or abandoning a milestone had no honest representation — it either stayed `Planned` (misrepresenting a reversed decision as still-pending) or `Blocked` (implying a specific blocker that may not exist). Folded into this version rather than a new spec number, per ADR-14's amendment: a spec's number is permanent per subject, revisions are a version bump on the same spec. | **substantive** |

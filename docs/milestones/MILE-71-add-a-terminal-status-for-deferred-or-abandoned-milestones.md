@@ -4,7 +4,7 @@
 > Stable-Id: 01M1YS1MJX3Z91EJ5MXZ1XEGQA
 > Phase: 0
 > Track: schema-governance
-> Implements: ADR-34, SPEC-7
+> Implements: ADR-34, SPEC-6
 
 ## What
 
@@ -30,4 +30,4 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-09-07 | Fixed and shipped: `WontDo` added via ADR-34 amendment + SPEC-7, template updated. | **substantive** |
+> | 2026-09-07 | Fixed and shipped: `WontDo` added via ADR-34 amendment + SPEC-6 v0.2, template updated. **Why:** every other record type in this corpus already has a terminal "decided against" state (`bug`'s `WontFix`, `adr`'s `Rejected`/`Superseded`); milestone didn't, so a deferred or abandoned milestone had no honest representation. | **substantive** |
