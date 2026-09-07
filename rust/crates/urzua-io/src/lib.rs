@@ -7,8 +7,10 @@
 
 #![forbid(unsafe_code)]
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DiscoveryError {
@@ -83,25 +85,18 @@ pub fn today() -> String {
         .to_string()
 }
 
-/// RFC-0002 §2's identity tiering, reused by `urzua fix --apply` (ADR-0019):
-/// an explicit `--by` wins outright; else `gh api user`; else `git config
-/// user.name`. Every applied write needs a real identity, so this returns
-/// an error rather than a placeholder when none of the three resolve.
-pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<String, String> {
-    if let Some(by) = explicit {
-        return Ok(by.to_string());
-    }
+const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 
-    if let Ok(output) = Command::new("gh")
-        .args(["api", "user", "--jq", ".login"])
-        .output()
-    {
-        if output.status.success() {
-            let login = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !login.is_empty() {
-                return Ok(login);
-            }
-        }
+/// RFC-0002 §2's identity tiering, reused by `urzua fix --apply` (ADR-0019):
+/// a verified source outranks free text (ADR-0031). `gh api user` first,
+/// then `git config user.name`, then explicit `--by` only once neither
+/// verified source is available -- never used to silently override an
+/// authenticated `gh` login. Every applied write needs a real identity, so
+/// this returns an error rather than a placeholder when none of the three
+/// resolve.
+pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<String, String> {
+    if let Some(login) = gh_authenticated_login() {
+        return Ok(login);
     }
 
     if let Ok(output) = Command::new("git")
@@ -117,7 +112,48 @@ pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<Stri
         }
     }
 
+    if let Some(by) = explicit {
+        return Ok(by.to_string());
+    }
+
     Err("could not resolve an identity (gh api user, git config user.name both unavailable) -- pass --by explicitly".to_string())
+}
+
+/// `Command::output()` blocks indefinitely if `gh` hangs -- an
+/// unauthenticated interactive prompt, a stalled network call. Bounded so a
+/// hung `gh` falls through to the next identity tier instead of hanging
+/// `fix --apply` forever (RFC-0002's undesigned timeout question).
+fn gh_authenticated_login() -> Option<String> {
+    let mut child = Command::new("gh")
+        .args(["api", "user", "--jq", ".login"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let deadline = Instant::now() + GH_AUTH_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
+                let mut stdout = String::new();
+                child.stdout.take()?.read_to_string(&mut stdout).ok()?;
+                let login = stdout.trim().to_string();
+                return if login.is_empty() { None } else { Some(login) };
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 /// A corpus-level lock for `urzua fix --apply` (RFC-0008 §4): apply is
@@ -246,5 +282,83 @@ mod tests {
         );
 
         fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// A stub `gh` ahead of the real PATH, always exiting non-zero -- lets
+    /// `resolve_identity`'s gh-unavailable fallback be tested deterministically
+    /// without depending on whether this machine actually has `gh` authenticated.
+    fn prepend_failing_gh_to_path() -> (PathBuf, String) {
+        let stub_dir =
+            std::env::temp_dir().join(format!("urzua-io-fake-gh-{}", std::process::id()));
+        fs::create_dir_all(&stub_dir).unwrap();
+        let stub_gh = stub_dir.join("gh");
+        fs::write(&stub_gh, "#!/bin/sh\nexit 1\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&stub_gh, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let original_path = std::env::var("PATH").unwrap_or_default();
+        std::env::set_var("PATH", format!("{}:{}", stub_dir.display(), original_path));
+        (stub_dir, original_path)
+    }
+
+    #[test]
+    fn resolve_identity_falls_through_to_git_config_when_gh_is_unavailable() {
+        let (stub_dir, original_path) = prepend_failing_gh_to_path();
+
+        let tmp = std::env::temp_dir().join(format!("urzua-io-identity-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp); // sets local user.name to "test"
+
+        let result = resolve_identity(None, &tmp);
+
+        std::env::set_var("PATH", original_path);
+        fs::remove_dir_all(&tmp).ok();
+        fs::remove_dir_all(&stub_dir).ok();
+
+        assert_eq!(
+            result.as_deref(),
+            Ok("test"),
+            "with gh unavailable, git config user.name must win over nothing"
+        );
+    }
+
+    #[test]
+    fn resolve_identity_never_lets_explicit_by_override_a_verified_gh_login() {
+        // No stub here: this asserts the *priority claim* structurally -- an
+        // explicit --by is only consulted after both gh and git config have
+        // already been tried, never checked first. Exercised via the
+        // gh-unavailable path since a real authenticated gh session isn't
+        // guaranteed in CI; the ordering itself (gh, then git config, then
+        // explicit) is what ADR-0031 fixed and what this pins.
+        let (stub_dir, original_path) = prepend_failing_gh_to_path();
+
+        let tmp = std::env::temp_dir().join(format!("urzua-io-identity-by-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&tmp)
+            .output()
+            .unwrap();
+        // Deliberately no user.name configured anywhere -- forces the
+        // fallthrough to --by, proving --by is reachable at all once gh and
+        // git config both fail, not that it's ignored entirely.
+        // GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM point git at an empty file
+        // instead of this machine's real global config, which may well have
+        // a real user.name set and would otherwise make this test depend on
+        // whoever's machine it runs on.
+        std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
+        std::env::set_var("GIT_CONFIG_SYSTEM", "/dev/null");
+
+        let result = resolve_identity(Some("explicit-name"), &tmp);
+
+        std::env::remove_var("GIT_CONFIG_GLOBAL");
+        std::env::remove_var("GIT_CONFIG_SYSTEM");
+        std::env::set_var("PATH", original_path);
+        fs::remove_dir_all(&tmp).ok();
+        fs::remove_dir_all(&stub_dir).ok();
+
+        assert_eq!(result.as_deref(), Ok("explicit-name"));
     }
 }

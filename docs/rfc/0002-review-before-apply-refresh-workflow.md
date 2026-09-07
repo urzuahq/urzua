@@ -1,6 +1,6 @@
 # 0002 — The re-verification/refresh workflow: detect is read-only, apply requires review or an explicit bypass
 
-> Status: Draft
+> Status: Accepted
 > Date: 2026-07-30
 > Author: (session author)
 > Supersedes / Superseded-by: —
@@ -102,6 +102,16 @@ choosing to review right now" with "review happened" — a fast-fingered `y` is 
 stamp failure mode this RFC exists to prevent, just moved into a different UI. Separating detect's
 output as a standing artifact means a review can happen asynchronously, by someone other than
 whoever ran detect, using whatever tooling they prefer.
+
+## Accepted scope (ADR-0031)
+
+This RFC's detect/apply/force-bypass proposal and its re-verify-at-apply-time open question are
+satisfied by decisions made independently while this RFC sat in Draft: `urzua fix`/`fix --apply`
+(ADR-0019/0020) is the detect/apply split; RFC-0008 §4 is the re-verify answer. The identity-
+resolution priority order below is now enforced as originally proposed (verified source before
+free-text `--by`) — ADR-0031 fixed a real discrepancy where the shipped code had the opposite order.
+Content-hash drift detection (this RFC's original motivating scenario) is **not** built — it remains
+a real, open future `fix` tier, not retrofitted here.
 
 ## Open questions
 
