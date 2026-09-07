@@ -1,10 +1,10 @@
 # 75 — Header sub-format consistency within a record type
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1YWKN2HHC7DW4Y422DWJK1F
 > Phase: 1
 > Track: schema-governance
-> Implements: RFC-10, ADR-8
+> Implements: RFC-10, ADR-38
 
 ## What
 
@@ -36,3 +36,4 @@ implementation only checks required-field presence per a declared shape, not sub
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Fixed and shipped (ADR-38): a `header_layout` config field (`one-per-line` \| `pipe-delimited`), declared per type, checked by a new `header.layout-consistency` rule. **Why:** two cheaper alternatives (majority-vote inference, deriving from the type's checked-in template) were considered and rejected -- majority-vote ratifies existing drift instead of catching it, and template-derivation is silently inert for `spec`, which has no template yet (MILE-74) and is exactly the type that motivated this. Declaring it explicitly works regardless of template state. | **substantive** |

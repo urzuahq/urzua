@@ -7,23 +7,28 @@ schema_version = 1
 [record_types.adr]
 dir = "docs/adr"
 required_fields = ["Status", "Date", "Author", "Deciders"]
+header_layout = "one-per-line"
 
 [record_types.rfc]
 dir = "docs/rfc"
 required_fields = ["Status", "Date", "Author"]
+header_layout = "one-per-line"
 
 [record_types.spec]
 dir = "docs/specs"
 required_fields = ["Status", "Date", "Version"]
+header_layout = "pipe-delimited"
 
 [record_types.milestone]
 dir = "docs/milestones"
 prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
+header_layout = "one-per-line"
 
 [record_types.bug]
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
+header_layout = "one-per-line"
 
 [record_types.waiver]
 dir = "docs/waiver"

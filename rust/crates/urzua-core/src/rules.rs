@@ -4,6 +4,7 @@
 //! planted-violation test.
 
 use crate::field_state::classify;
+use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{Finding, RuleExecution, Severity};
 use crate::FieldState;
@@ -75,6 +76,64 @@ pub fn header_required_fields(
         },
         findings,
     )
+}
+
+/// Rule (MILE-0075): a record's header line layout matches its type's
+/// declared `header_layout`, when one is declared. `HeaderShape::Blockquote`
+/// deliberately tolerates one-per-line and pipe-delimited interchangeably for
+/// parsing (RFC-0010), which is correct for reading a corpus that hasn't
+/// picked one -- but it means drift within a type that HAS settled on one
+/// (found live: SPEC-2 through SPEC-6 all pipe-delimited, SPEC-1 alone
+/// one-per-line) previously went unflagged. Declared, not voted, same
+/// principle as Rule 1: a type with no declared `header_layout` is skipped
+/// entirely, examined stays 0 for it -- this is additive, never a forced
+/// migration.
+pub fn header_layout_consistency(
+    records: &[Record],
+    declared_by_type: &HashMap<String, HeaderLayout>,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(&declared) = declared_by_type.get(&record.record_type) else {
+            continue;
+        };
+        let Some(actual) = record.header.layout() else {
+            continue;
+        };
+        examined += 1;
+
+        if actual != declared {
+            let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
+            findings.push(Finding {
+                rule: "header.layout-consistency".to_string(),
+                severity: Severity::Warning,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "header layout '{actual_label}' disagrees with '{declared_label}', declared for record type '{}'",
+                    record.record_type
+                ),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "header.layout-consistency".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+fn layout_label(layout: HeaderLayout) -> &'static str {
+    match layout {
+        HeaderLayout::OnePerLine => "one-per-line",
+        HeaderLayout::PipeDelimited => "pipe-delimited",
+    }
 }
 
 /// Rule 2: `Implements:`/`Derives-from:` resolves to a real record. The
@@ -778,6 +837,51 @@ mod tests {
         let (_, findings) = header_required_fields(&[r], &required);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Version"));
+    }
+
+    #[test]
+    fn a_declared_pipe_delimited_type_flags_a_one_per_line_record() {
+        // The exact corpus defect this rule was chosen to catch: SPEC-0001
+        // rendered one-field-per-line while SPEC-0002 through SPEC-0006
+        // settled on pipe-delimited, and nothing said so.
+        let r = record(
+            "docs/specs/0001-x.md",
+            "spec",
+            "> Version: 0.1\n> Status: Draft\n",
+        );
+        let mut declared = HashMap::new();
+        declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
+
+        let (exec, findings) = header_layout_consistency(&[r], &declared);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("one-per-line"));
+        assert!(findings[0].message.contains("pipe-delimited"));
+    }
+
+    #[test]
+    fn a_matching_layout_produces_no_finding() {
+        let r = record(
+            "docs/specs/0002-x.md",
+            "spec",
+            "> Version: 0.1 | Status: Draft\n",
+        );
+        let mut declared = HashMap::new();
+        declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
+
+        let (exec, findings) = header_layout_consistency(&[r], &declared);
+        assert_eq!(exec.records_examined, 1);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_type_with_no_declared_layout_is_skipped_entirely() {
+        let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
+        let declared = HashMap::new();
+
+        let (exec, findings) = header_layout_consistency(&[r], &declared);
+        assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
     }
 
     #[test]

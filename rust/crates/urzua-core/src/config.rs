@@ -2,7 +2,7 @@
 //! directories, and required header fields. Phased -- this is the slice
 //! Phase A of `urzua check` needs, not the full spec.
 
-use crate::header::HeaderShape;
+use crate::header::{HeaderLayout, HeaderShape};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -37,6 +37,15 @@ pub struct RecordTypeConfig {
     /// `dir` already decouples the type name from its directory name.
     #[serde(default)]
     pub prefix: Option<String>,
+    /// The expected line layout (MILE-0075) within `Blockquote`'s own
+    /// tolerance for how fields are laid out -- one field per line, or
+    /// several pipe-delimited on one line. Declared, not voted, the same
+    /// principle Rule 1 already uses for required fields: a majority-rule
+    /// inference would silently ratify whatever drifted in. Omitted means
+    /// this axis isn't checked for the type -- additive, not a forced
+    /// migration for a corpus that hasn't declared it.
+    #[serde(default)]
+    pub header_layout: Option<HeaderLayout>,
 }
 
 impl<'de> Deserialize<'de> for HeaderShape {
@@ -51,6 +60,22 @@ impl<'de> Deserialize<'de> for HeaderShape {
             "yaml-frontmatter" => Ok(HeaderShape::YamlFrontmatter),
             other => Err(serde::de::Error::custom(format!(
                 "unrecognized header_shape '{other}' -- expected \"blockquote\", \"bold-list\", or \"yaml-frontmatter\""
+            ))),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for HeaderLayout {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "one-per-line" => Ok(HeaderLayout::OnePerLine),
+            "pipe-delimited" => Ok(HeaderLayout::PipeDelimited),
+            other => Err(serde::de::Error::custom(format!(
+                "unrecognized header_layout '{other}' -- expected \"one-per-line\" or \"pipe-delimited\""
             ))),
         }
     }

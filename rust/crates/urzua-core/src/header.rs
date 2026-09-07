@@ -46,6 +46,34 @@ impl Header {
         }
         dupes
     }
+
+    /// The header's line layout: `PipeDelimited` if any single line carries
+    /// more than one field, `OnePerLine` if every field has its own line.
+    /// `None` for a header with no fields to judge (an empty or missing
+    /// region) -- there's nothing to classify yet, not a third layout.
+    /// Bold-vs-plain labelling (the other axis RFC-0010 documents) isn't
+    /// tracked here; nothing has needed it yet (see MILE-0075).
+    pub fn layout(&self) -> Option<HeaderLayout> {
+        if self.fields.is_empty() {
+            return None;
+        }
+        let mut seen_lines = std::collections::HashSet::new();
+        for f in &self.fields {
+            if !seen_lines.insert(f.line) {
+                return Some(HeaderLayout::PipeDelimited);
+            }
+        }
+        Some(HeaderLayout::OnePerLine)
+    }
+}
+
+/// A header's line layout, independent of `HeaderShape`: only meaningful
+/// within `Blockquote` (RFC-0010's shapes 1 and 3), since `BoldList` and
+/// `YamlFrontmatter` don't have this ambiguity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderLayout {
+    OnePerLine,
+    PipeDelimited,
 }
 
 /// Parse the header out of a document's full text.

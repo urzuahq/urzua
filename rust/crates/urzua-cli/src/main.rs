@@ -382,8 +382,12 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let (records, full_text) = load_records(&repo_root, &scoped, &config);
 
     let mut required_by_type = HashMap::new();
+    let mut header_layout_by_type = HashMap::new();
     for (name, cfg) in &config.record_types {
         required_by_type.insert(name.clone(), cfg.required_fields.clone());
+        if let Some(layout) = cfg.header_layout {
+            header_layout_by_type.insert(name.clone(), layout);
+        }
     }
 
     let (exec1, findings1) = rules::header_required_fields(&records, &required_by_type);
@@ -395,6 +399,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let drifted = compute_drifted_records(&repo_root, &records);
     let (exec7, findings7) = rules::embodiment_consistency(&records, &drifted);
     let (exec8, findings8) = rules::embodiment_locator_promotion_candidate(&records);
+    let (exec9, findings9) = rules::header_layout_consistency(&records, &header_layout_by_type);
 
     let mut findings = findings1;
     findings.extend(findings2);
@@ -404,6 +409,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     findings.extend(findings6);
     findings.extend(findings7);
     findings.extend(findings8);
+    findings.extend(findings9);
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
@@ -424,7 +430,9 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let report = CheckReport {
         status,
         files_examined: records.len(),
-        rules_executed: vec![exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8],
+        rules_executed: vec![
+            exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8, exec9,
+        ],
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),
             record_types: config.record_types.keys().cloned().collect(),
