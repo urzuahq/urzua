@@ -1,6 +1,6 @@
 # 1 — Fix urzua new's template-priority bug
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1Y5JCCP2D9ES98WDB9V5PPF
 > Phase: 0
 > Track: header-format
@@ -22,3 +22,4 @@ Flipping any type's header_shape to yaml-frontmatter without this fix means urzu
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Fixed and shipped: header_shape wins unconditionally over a template's own shape (BUG-3). | **substantive** |

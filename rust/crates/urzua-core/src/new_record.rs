@@ -122,6 +122,16 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
     out
 }
 
+/// A template's body -- everything from its first `## ` section heading
+/// onward -- so a type declaring `yaml-frontmatter` (BUG-0003) still gets
+/// its template's scaffolding (`## What`, `## Why`, the revision log)
+/// spliced under synthesized frontmatter, instead of losing it entirely
+/// because the header shapes don't match.
+pub fn template_body(template: &str) -> Option<&str> {
+    let idx = template.find("\n## ")?;
+    Some(&template[idx + 1..])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +232,19 @@ mod tests {
         assert!(result.contains("Status: \n"));
         assert!(result.contains("Severity: \n"));
         assert!(result.contains("# 1 — X"));
+    }
+
+    #[test]
+    fn template_body_starts_at_the_first_section_heading() {
+        let template = "# NNNN — Title\n\n> Status: Planned\n> Phase: 0\n\n## What\n\nDeliver X.\n\n## Why\n\nBecause Y.\n";
+        let body = template_body(template).unwrap();
+        assert!(body.starts_with("## What"));
+        assert!(body.contains("## Why"));
+        assert!(!body.contains("Status: Planned"));
+    }
+
+    #[test]
+    fn template_body_is_none_without_a_section_heading() {
+        assert_eq!(template_body("# NNNN — Title\n\n> Status: Planned\n"), None);
     }
 }

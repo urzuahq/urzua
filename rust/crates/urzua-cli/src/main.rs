@@ -634,20 +634,35 @@ fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<Stri
         today: &today,
     };
 
+    // BUG-3: the configured header_shape wins unconditionally -- a template
+    // file's own (possibly stale, possibly blockquote) header shape is never
+    // allowed to override what the config actually declares. A yaml-
+    // frontmatter type still gets a template's body scaffolding (`## What`,
+    // the revision log) when one exists; it just doesn't get the template's
+    // header.
     let template_path = repo_root
         .join(".urzua/templates")
         .join(format!("{record_type}.md"));
-    let content = match urzua_io::read_to_string(&template_path) {
-        Ok(template) => urzua_core::new_record::render_from_template(&template, &params),
-        Err(_) if type_config.header_shape == urzua_core::header::HeaderShape::YamlFrontmatter => {
-            urzua_core::new_record::render_synthetic_yaml(&params, &type_config.required_fields)
+    let content = if type_config.header_shape == urzua_core::header::HeaderShape::YamlFrontmatter {
+        let mut out =
+            urzua_core::new_record::render_synthetic_yaml(&params, &type_config.required_fields);
+        if let Ok(template) = urzua_io::read_to_string(&template_path) {
+            if let Some(body) = urzua_core::new_record::template_body(&template) {
+                out.push('\n');
+                out.push_str(body);
+            }
         }
-        Err(e) => {
-            eprintln!(
-                "urzua new: no template at {} and no synthesizable shape declared: {e}",
-                template_path.display()
-            );
-            return ExitCode::from(2);
+        out
+    } else {
+        match urzua_io::read_to_string(&template_path) {
+            Ok(template) => urzua_core::new_record::render_from_template(&template, &params),
+            Err(e) => {
+                eprintln!(
+                    "urzua new: no template at {} and no synthesizable shape declared: {e}",
+                    template_path.display()
+                );
+                return ExitCode::from(2);
+            }
         }
     };
 
