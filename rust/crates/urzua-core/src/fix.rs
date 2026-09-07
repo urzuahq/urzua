@@ -46,7 +46,11 @@ pub fn detect_repairs(records: &[Record]) -> (usize, Vec<Repair>) {
         };
         examined += 1;
 
-        let computed = compute_embodiment(&parse_realized_by(realized_by_value));
+        // Drift (ADR-0032) is deliberately not checked here: it needs the
+        // same git-history plumbing `check` gets from its caller, and
+        // `fix`-writability of `Drift detected` is named, separate
+        // follow-up work, not assumed by this tier.
+        let computed = compute_embodiment(&parse_realized_by(realized_by_value), false);
         let stated = stated.trim();
         if stated != computed {
             repairs.push(Repair {

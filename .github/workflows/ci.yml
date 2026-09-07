@@ -28,6 +28,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # embodiment.consistency's drift check (ADR-0032) reads git blame/log
+          # history on locators -- a shallow checkout makes it silently unable
+          # to detect anything, not an error, so this is load-bearing.
+          fetch-depth: 0
       - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
         run: |
           rustup show

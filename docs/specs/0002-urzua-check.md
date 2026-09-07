@@ -162,6 +162,18 @@ records to invent content or its linters to be switched off.
   finding that names both readings — miscitation, or a scope never widened to match practice.
 - **Boundaries** (RFC-0011 §1): identifiers inside a `published` boundary are violations;
   realization markers inside one are not evidence.
+- **Embodiment consistency and drift** (RFC-0005 tier 1, ADR-0018/ADR-0032): a stated `Embodiment`
+  must agree with the tier its `Realized-by` locators compute to (`test:` outranks `code:` outranks
+  `spec:`); a locator that changed, per git history, after the `Realized-by` line was last touched
+  overrides the expected value to `Drift detected` unconditionally, regardless of tier. Requires
+  full git history — a shallow checkout makes this rule silently unable to detect anything.
+- **Embodiment locator promotion** (ADR-0018): the same locator cited by more than one record's
+  `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted.
+
+Everything above this Embodiment pair is this spec's original Phase B design language, not yet
+reconciled with the actual shipped rule ids (`header.required-fields`, `pointer.resolution`,
+`field.quality`, `filename.title-consistency`, `revision-log.change-class-required`) — a real,
+pre-existing gap this revision doesn't attempt to close, named rather than compounded.
 
 Severity per rule comes from config (SPEC-0003), not from the rule's own opinion. `status` reports
 what was found; whether that fails the build is the caller's choice and lives in `blocking`.
@@ -256,3 +268,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-08-20 | Split out of SPEC-0001, which retains the cross-cutting rules. | **structural** |
+> | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-0018/ADR-0032) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |

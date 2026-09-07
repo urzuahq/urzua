@@ -190,6 +190,73 @@ impl Drop for FixLock {
     }
 }
 
+/// The commit that last touched a specific 1-indexed line (RFC-0005 tier 1),
+/// via `git blame`. Scoped to the line, not the whole file, so an unrelated
+/// edit elsewhere in a record can't silently reset its own staleness clock
+/// (ADR-0032). `Ok(None)` for anything blame can't resolve -- no history,
+/// an untracked file -- never an error a caller has to specially handle.
+pub fn commit_for_line(
+    repo_root: &Path,
+    path: &Path,
+    line: usize,
+) -> Result<Option<String>, String> {
+    let output = Command::new("git")
+        .args([
+            "blame",
+            "-L",
+            &format!("{line},{line}"),
+            "--porcelain",
+            "--",
+        ])
+        .arg(path)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().next())
+        .map(|s| s.to_string()))
+}
+
+/// The commit that last touched a whole file -- used for locator paths,
+/// which (unlike a header field) aren't a single line (ADR-0032).
+pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<String>, String> {
+    let output = Command::new("git")
+        .args(["log", "-1", "--format=%H", "--"])
+        .arg(path)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git log on {}: {e}", path.display()))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(if sha.is_empty() { None } else { Some(sha) })
+}
+
+/// True if `ancestor` came strictly before `descendant` in history.
+/// `false` (never an error) whenever history can't establish an order --
+/// missing commits, unrelated history -- an ambiguous shape reads as "no
+/// drift," never a false positive (ADR-0032).
+pub fn commit_strictly_before(repo_root: &Path, ancestor: &str, descendant: &str) -> bool {
+    if ancestor == descendant {
+        return false;
+    }
+    Command::new("git")
+        .args(["merge-base", "--is-ancestor", ancestor, descendant])
+        .current_dir(repo_root)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 fn run_git(dir: &Path, args: &[&str]) -> Result<String, DiscoveryError> {
     let args_str = args.join(" ");
     let output = Command::new("git")
@@ -360,5 +427,105 @@ mod tests {
         fs::remove_dir_all(&stub_dir).ok();
 
         assert_eq!(result.as_deref(), Ok("explicit-name"));
+    }
+
+    fn commit_all(dir: &Path, message: &str) -> String {
+        Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-q", "-m", message])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8(
+            Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(dir)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .to_string()
+    }
+
+    #[test]
+    fn commit_strictly_before_is_true_only_in_the_real_commit_order() {
+        let tmp = std::env::temp_dir().join(format!("urzua-io-order-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+
+        fs::write(tmp.join("a.txt"), "1").unwrap();
+        let first = commit_all(&tmp, "first");
+        fs::write(tmp.join("a.txt"), "2").unwrap();
+        let second = commit_all(&tmp, "second");
+
+        assert!(
+            commit_strictly_before(&tmp, &first, &second),
+            "first really did happen before second"
+        );
+        assert!(
+            !commit_strictly_before(&tmp, &second, &first),
+            "second did not happen before first"
+        );
+        assert!(
+            !commit_strictly_before(&tmp, &first, &first),
+            "a commit is never strictly before itself"
+        );
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn last_commit_for_path_tracks_the_most_recent_touch() {
+        let tmp = std::env::temp_dir().join(format!("urzua-io-lastcommit-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+
+        fs::write(tmp.join("a.txt"), "1").unwrap();
+        fs::write(tmp.join("b.txt"), "1").unwrap();
+        let first = commit_all(&tmp, "add both");
+        fs::write(tmp.join("a.txt"), "2").unwrap();
+        let second = commit_all(&tmp, "touch a only");
+
+        assert_eq!(
+            last_commit_for_path(&tmp, &tmp.join("a.txt")).unwrap(),
+            Some(second)
+        );
+        assert_eq!(
+            last_commit_for_path(&tmp, &tmp.join("b.txt")).unwrap(),
+            Some(first)
+        );
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn commit_for_line_is_scoped_to_the_line_not_the_whole_file() {
+        let tmp = std::env::temp_dir().join(format!("urzua-io-blame-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+
+        fs::write(tmp.join("doc.md"), "line one\nline two\n").unwrap();
+        let first = commit_all(&tmp, "add both lines");
+        fs::write(tmp.join("doc.md"), "line one\nline two CHANGED\n").unwrap();
+        let second = commit_all(&tmp, "change line two only");
+
+        assert_eq!(
+            commit_for_line(&tmp, &tmp.join("doc.md"), 1).unwrap(),
+            Some(first),
+            "line 1 was never touched by the second commit"
+        );
+        assert_eq!(
+            commit_for_line(&tmp, &tmp.join("doc.md"), 2).unwrap(),
+            Some(second),
+            "line 2 was changed by the second commit"
+        );
+
+        fs::remove_dir_all(&tmp).ok();
     }
 }

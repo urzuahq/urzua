@@ -387,7 +387,8 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let (exec4, findings4) = rules::filename_title_consistency(&records, &full_text);
     let (exec5, findings5) = rules::supersession_reciprocity(&records);
     let (exec6, findings6) = rules::revision_log_change_class(&records, &full_text);
-    let (exec7, findings7) = rules::embodiment_consistency(&records);
+    let drifted = compute_drifted_records(&repo_root, &records);
+    let (exec7, findings7) = rules::embodiment_consistency(&records, &drifted);
     let (exec8, findings8) = rules::embodiment_locator_promotion_candidate(&records);
 
     let mut findings = findings1;
@@ -1002,6 +1003,50 @@ fn load_records(
         }
     }
     (records, full_text)
+}
+
+/// Which records have at least one `Realized-by` locator that changed, per
+/// git history, since the `Realized-by` line was last touched (ADR-0032).
+/// The one piece of I/O `embodiment_consistency` needs but can't do itself
+/// -- computed here and handed in as plain data, same shape as `full_text`.
+fn compute_drifted_records(
+    repo_root: &std::path::Path,
+    records: &[Record],
+) -> std::collections::HashSet<PathBuf> {
+    let mut drifted = std::collections::HashSet::new();
+
+    for record in records {
+        let Some(realized_by_value) = record.header.get("Realized-by") else {
+            continue;
+        };
+        let Some(field) = record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.eq_ignore_ascii_case("Realized-by"))
+        else {
+            continue;
+        };
+        let Ok(Some(reference_commit)) =
+            urzua_io::commit_for_line(repo_root, &record.path, field.line)
+        else {
+            continue;
+        };
+
+        for locator in rules::realized_by_locator_paths(realized_by_value) {
+            let locator_path = PathBuf::from(&locator);
+            let Ok(Some(locator_commit)) = urzua_io::last_commit_for_path(repo_root, &locator_path)
+            else {
+                continue;
+            };
+            if urzua_io::commit_strictly_before(repo_root, &reference_commit, &locator_commit) {
+                drifted.insert(record.path.clone());
+                break;
+            }
+        }
+    }
+
+    drifted
 }
 
 fn report_could_not_run(message: &str) -> ExitCode {

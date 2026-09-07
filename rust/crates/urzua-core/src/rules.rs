@@ -7,7 +7,8 @@ use crate::field_state::classify;
 use crate::record::Record;
 use crate::report::{Finding, RuleExecution, Severity};
 use crate::FieldState;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 /// Rule 1: header format consistency within a record type, per a
 /// config-declared required-field list. A majority-rule inference would
@@ -437,11 +438,29 @@ pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     result
 }
 
+/// Every locator path across all three categories, flattened -- what a
+/// caller needs to walk each one's git history for drift detection
+/// (ADR-0032). Order isn't meaningful; only membership is.
+pub fn realized_by_locator_paths(value: &str) -> Vec<String> {
+    let parsed = parse_realized_by(value);
+    parsed
+        .spec
+        .into_iter()
+        .chain(parsed.code)
+        .chain(parsed.test)
+        .collect()
+}
+
 /// ADR-0018's tier computation: the highest tier with a non-empty category.
 /// `test` outranks `code` outranks `spec` -- a claim verified by a test is
-/// stronger evidence than a claim only pointed at by a spec.
-pub(crate) fn compute_embodiment(realized_by: &RealizedBy) -> &'static str {
-    if !realized_by.test.is_empty() {
+/// stronger evidence than a claim only pointed at by a spec. `drifted`
+/// (ADR-0032) overrides every tier unconditionally -- `DriftDetected` is an
+/// alarm state reachable from any other state, per the schema's own
+/// description, not just another tier to rank against the others.
+pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'static str {
+    if drifted {
+        "Drift detected"
+    } else if !realized_by.test.is_empty() {
         "Verified"
     } else if !realized_by.code.is_empty() {
         "Implemented"
@@ -452,12 +471,19 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy) -> &'static str {
     }
 }
 
-/// Rule (ADR-0018): a record's stated `Embodiment` must agree with what its
-/// own `Realized-by` locators compute to. Both fields have to be present --
+/// Rule (ADR-0018/ADR-0032): a record's stated `Embodiment` must agree with
+/// what its own `Realized-by` locators compute to, including drift -- a
+/// locator that changed, per git history, since the `Realized-by` line was
+/// last touched. Both `Embodiment` and `Realized-by` have to be present --
 /// a record with no `Realized-by` at all has nothing for this rule to check
 /// yet, which is a real, expected `records_examined: 0` on a corpus that
-/// hasn't adopted the field, not a defect in the rule.
-pub fn embodiment_consistency(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+/// hasn't adopted the field, not a defect in the rule. `drifted` is
+/// precomputed by the caller (git history is I/O, this function isn't --
+/// same shape as `full_text` elsewhere in this module).
+pub fn embodiment_consistency(
+    records: &[Record],
+    drifted: &HashSet<PathBuf>,
+) -> (RuleExecution, Vec<Finding>) {
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -470,7 +496,10 @@ pub fn embodiment_consistency(records: &[Record]) -> (RuleExecution, Vec<Finding
         };
         examined += 1;
 
-        let computed = compute_embodiment(&parse_realized_by(realized_by_value));
+        let computed = compute_embodiment(
+            &parse_realized_by(realized_by_value),
+            drifted.contains(&record.path),
+        );
         if stated.trim() != computed {
             findings.push(Finding {
                 rule: "embodiment.consistency".to_string(),
@@ -809,7 +838,7 @@ mod tests {
             "adr",
             "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
         );
-        let (exec, findings) = embodiment_consistency(&[r]);
+        let (exec, findings) = embodiment_consistency(&[r], &HashSet::new());
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Verified"));
@@ -823,22 +852,52 @@ mod tests {
             "adr",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (_, findings) = embodiment_consistency(&[r]);
+        let (_, findings) = embodiment_consistency(&[r], &HashSet::new());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
     #[test]
     fn a_test_locator_outranks_a_code_locator() {
         let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
-        assert_eq!(compute_embodiment(&realized), "Verified");
+        assert_eq!(compute_embodiment(&realized, false), "Verified");
+    }
+
+    #[test]
+    fn a_drifted_record_computes_to_drift_detected_regardless_of_tier() {
+        let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
+        assert_eq!(compute_embodiment(&realized, true), "Drift detected");
+    }
+
+    #[test]
+    fn a_record_marked_drifted_produces_a_finding_even_when_verified_matches_its_tier() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs, test:tests/it.rs\n",
+        );
+        let mut drifted = HashSet::new();
+        drifted.insert(r.path.clone());
+        let (_, findings) = embodiment_consistency(&[r], &drifted);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("Drift detected"));
     }
 
     #[test]
     fn no_realized_by_field_is_not_examined() {
         let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
-        let (exec, findings) = embodiment_consistency(&[r]);
+        let (exec, findings) = embodiment_consistency(&[r], &HashSet::new());
         assert_eq!(exec.records_examined, 0);
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn realized_by_locator_paths_flattens_all_three_categories() {
+        let paths =
+            realized_by_locator_paths("spec:docs/rfc/0001-x.md, code:src/lib.rs, test:tests/it.rs");
+        assert_eq!(
+            paths,
+            vec!["docs/rfc/0001-x.md", "src/lib.rs", "tests/it.rs"]
+        );
     }
 
     #[test]

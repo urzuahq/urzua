@@ -67,7 +67,7 @@ Real rules, running against this repository's own `docs/` in CI on every commit 
 | `filename.title-consistency` | A renamed file whose title didn't get renamed with it (or vice versa) |
 | `relation.supersession-reciprocity` | A claims to supersede B, but B doesn't point back |
 | `revision-log.change-class-required` | A revision-log entry with no real `substantive`/`structural` classification |
-| `embodiment.consistency` | A record's stated `Embodiment` disagreeing with what its own cited evidence computes to |
+| `embodiment.consistency` | A record's stated `Embodiment` disagreeing with what its own cited evidence computes to — including drift: a locator that changed, per git history, since the `Realized-by` line was last touched ([ADR-0032](docs/adr/0032-drift-detection-via-git-blame-not-a-stored-hash.md)) |
 | `embodiment.locator-promotion-candidate` | The same piece of evidence cited by more than one record, drifting independently instead of being tracked once |
 
 That last pair is the part most linters don't have at all: a record can name what actually realizes it — a spec, a source file, a test — categorized by strength of evidence, and `check` computes whether the record's own claim still matches. Disagree, and it's a finding, not a stale comment nobody re-reads.
