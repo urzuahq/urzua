@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-08
 Status: Accepted
 Author: '@beauwilliams'
@@ -23,7 +23,7 @@ schema-spec treatment `milestone`/`bug`/`waiver` already had (ADR-41).
 dir = "docs/rfc"
 required_fields = ["Status", "Date", "Author"]
 header_shape = "yaml-frontmatter"
-known_fields = ["Supersedes / Superseded-by", "Amends"]
+known_fields = ["Stable-Id", "Supersedes / Superseded-by", "Amends"]
 spec = "SPEC-17"
 ```
 
@@ -32,6 +32,7 @@ spec = "SPEC-17"
 | `Status` | `Draft` \| `Discussion` \| `Accepted` \| `Rejected` \| `Superseded` | An RFC's own lifecycle is independent of whether an ADR has decided it yet — `Accepted`/`Rejected` here means the *proposal itself* reached that state, not that a governing ADR necessarily exists (`pointer.resolution` surfaces a Draft-target's status when an ADR derives from it, per RFC-12, but never judges it). |
 | `Date` | `YYYY-MM-DD` | When proposed. |
 | `Author` | a real identity | Resolved automatically by `urzua new`, same as `adr`. |
+| `Stable-Id` | a ULID, optional | Assigned unconditionally by `urzua new rfc` (ADR-21: every type gets one); backfilled by `migrate ids` for records predating it. |
 | `Supersedes / Superseded-by` | comma-separated or `—`, optional | Same reciprocity model as `adr`. |
 | `Amends` | comma-separated, optional | An RFC narrowing or correcting an earlier one without fully superseding it — distinct from `Supersedes`, which replaces outright. |
 
@@ -61,3 +62,4 @@ ADR's own `Deciders` field records.
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-08 | Added `Derives-from: RFC-1 (Accepted)`. **Why:** `rfc` is a founding type decided by RFC-1, not by any single ADR (unlike `milestone`/`bug`/`waiver`, each pointing at the ADR that decided them) -- this spec cited RFC-1 in prose and References but never backlinked it in the header, the same pointer every other type declares. | **substantive** |
 > | 2026-09-08 | Corrected: replaced `Derives-from: RFC-1` with `Implements: ADR-10`. **Why:** the previous entry's premise was wrong -- `ADR-10` is exactly the single decision record `milestone`/`bug`/`waiver`'s own specs each point at (`Implements: ADR-N`), just missed when this spec was first written; `rfc` is not an exception to that pattern after all. RFC-1 stays cited in References as the proposal ADR-10 decided. | **substantive** |
+> | 2026-09-08 | Added `Stable-Id` to `known_fields`. **Why:** found live creating the first `rfc` records via `urzua new rfc` (RFC-18/19/20) -- `render_synthetic_yaml` assigns every type a `Stable-Id` unconditionally (ADR-21), but no prior `rfc` had ever been created through the tool, so this gap sat unexercised until now. | **substantive** |
