@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-04
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-11 (Accepted)
+---
 # 9 — A policy is enforced at the width it declares; scope's own shape stays open
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-04
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-11 (Accepted)
 
 ## Context
 

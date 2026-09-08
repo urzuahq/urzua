@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-07-30
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 5 — Embodiment as a schema-level concept; `realized_by` as a claim graph
-
-> Status: Accepted
-> Date: 2026-07-30
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 > **Split from RFC-1, 2026-07-30.** This was originally §3, §3a, and §3b of
 > `0001-unified-schema-and-layering.md` — the largest and most-corrected part of that RFC (two of

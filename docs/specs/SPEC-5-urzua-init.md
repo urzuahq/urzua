@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-08-20
+Status: Draft
+Implements: RFC-1
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-5 — `urzua init`
-
-> Version: 0.1 | Date: 2026-08-20 | Status: Draft
-> **Implements:** RFC-1
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

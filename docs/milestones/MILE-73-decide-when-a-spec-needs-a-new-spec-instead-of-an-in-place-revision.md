@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YSGQ9F9WXDWB2VJEQ657K4
+Phase: '1'
+Track: governance-process
+Implements: RFC-6, ADR-14
+Blocked-on: —
+---
 # 73 — Decide when a spec needs a new spec instead of an in-place revision
-
-> Status: Done
-> Stable-Id: 01M1YSGQ9F9WXDWB2VJEQ657K4
-> Phase: 1
-> Track: governance-process
-> Implements: RFC-6, ADR-14
-> Blocked-on: —
 
 ## What
 

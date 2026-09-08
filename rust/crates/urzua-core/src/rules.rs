@@ -3,6 +3,7 @@
 //! told you nothing about itself. Plus the Phase 6 rules, each with its own
 //! planted-violation test.
 
+use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
@@ -179,6 +180,94 @@ pub fn header_field_set_consistency(
     (
         RuleExecution {
             rule: "header.field-set-consistency".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+/// Rule (MILE-0077 follow-up, ADR-0043): unlike every other rule, this one
+/// examines `Config` directly rather than `&[Record]` -- it's an inventory
+/// of the *schema* itself, not a per-record check. "Does this type need a
+/// spec" stays editorial (ADR-0041 rejected a mechanical formula for that);
+/// this only makes visible which configured types currently have no `spec`
+/// pointer declared at all, the same "declared, not voted" shape as
+/// `header_layout`/`known_fields`. A type with none declared is a real,
+/// permanently valid state under ADR-0041 -- this is a signal to review,
+/// never a mandate to write one.
+pub fn type_no_declared_spec(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut type_names: Vec<&String> = config.record_types.keys().collect();
+    type_names.sort();
+
+    for type_name in type_names {
+        let type_config = &config.record_types[type_name];
+        examined += 1;
+        if type_config.spec.is_none() {
+            findings.push(Finding {
+                rule: "type.no-declared-spec".to_string(),
+                severity: Severity::Warning,
+                file: config_path.to_path_buf(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
+                ),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "type.no-declared-spec".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+/// ADR-0033: `blockquote`/`bold-list` are deprecated, `yaml-frontmatter` is
+/// the one shape this project actively grows. Same config-level shape as
+/// `type_no_declared_spec` -- a schema inventory check, not a per-record
+/// one. Parsing support for the deprecated shapes stays (an external
+/// adopter's un-migrated corpus, or a first-time evaluator's existing docs,
+/// per ADR-0033's own stated reason for deprecating rather than removing);
+/// this rule only surfaces which configured types still declare one.
+pub fn header_deprecated_shape(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut type_names: Vec<&String> = config.record_types.keys().collect();
+    type_names.sort();
+
+    for type_name in type_names {
+        let type_config = &config.record_types[type_name];
+        examined += 1;
+        if type_config.header_shape != crate::header::HeaderShape::YamlFrontmatter {
+            findings.push(Finding {
+                rule: "header.deprecated-shape".to_string(),
+                severity: Severity::Warning,
+                file: config_path.to_path_buf(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "record type '{type_name}' declares a deprecated header shape -- migrate to `header_shape = \"yaml-frontmatter\"` (ADR-33)"
+                ),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "header.deprecated-shape".to_string(),
             records_examined: examined,
         },
         findings,
@@ -1058,6 +1147,104 @@ mod tests {
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
         assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
+    }
+
+    fn type_config(spec: Option<&str>) -> crate::config::RecordTypeConfig {
+        crate::config::RecordTypeConfig {
+            dir: "docs/x".to_string(),
+            required_fields: Vec::new(),
+            header_shape: crate::header::HeaderShape::default(),
+            prefix: None,
+            header_layout: None,
+            known_fields: None,
+            spec: spec.map(|s| s.to_string()),
+        }
+    }
+
+    fn type_config_with_shape(
+        shape: crate::header::HeaderShape,
+    ) -> crate::config::RecordTypeConfig {
+        crate::config::RecordTypeConfig {
+            dir: "docs/x".to_string(),
+            required_fields: Vec::new(),
+            header_shape: shape,
+            prefix: None,
+            header_layout: None,
+            known_fields: None,
+            spec: None,
+        }
+    }
+
+    #[test]
+    fn a_type_with_no_declared_spec_is_a_finding_observed_failing() {
+        // The exact live case this rule was built to catch: before this
+        // session declared any `spec` pointer, every configured type
+        // (including milestone/bug/waiver, which already had SPEC-6/9/10)
+        // had none wired into config at all.
+        let mut record_types = HashMap::new();
+        record_types.insert("milestone".to_string(), type_config(None));
+        let config = Config {
+            schema_version: 1,
+            record_types,
+        };
+
+        let (exec, findings) =
+            type_no_declared_spec(&config, std::path::Path::new(".urzua/config.toml"));
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("milestone"));
+    }
+
+    #[test]
+    fn a_declared_spec_pointer_produces_no_finding() {
+        let mut record_types = HashMap::new();
+        record_types.insert("milestone".to_string(), type_config(Some("SPEC-6")));
+        let config = Config {
+            schema_version: 1,
+            record_types,
+        };
+
+        let (exec, findings) =
+            type_no_declared_spec(&config, std::path::Path::new(".urzua/config.toml"));
+        assert_eq!(exec.records_examined, 1);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_type_still_declaring_blockquote_is_a_finding() {
+        let mut record_types = HashMap::new();
+        record_types.insert(
+            "adr".to_string(),
+            type_config_with_shape(crate::header::HeaderShape::Blockquote),
+        );
+        let config = Config {
+            schema_version: 1,
+            record_types,
+        };
+
+        let (exec, findings) =
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.toml"));
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("adr"));
+    }
+
+    #[test]
+    fn a_type_declaring_yaml_frontmatter_produces_no_finding() {
+        let mut record_types = HashMap::new();
+        record_types.insert(
+            "adr".to_string(),
+            type_config_with_shape(crate::header::HeaderShape::YamlFrontmatter),
+        );
+        let config = Config {
+            schema_version: 1,
+            record_types,
+        };
+
+        let (exec, findings) =
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.toml"));
+        assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
 

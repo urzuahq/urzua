@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YN86SKP6EHFKENA3VCVKFY
+Phase: '1'
+Track: governance-process
+Implements: RFC-6
+Blocked-on: —
+---
 # 50 — Decide whether Drift detected doubles as the new-ADR-needed trigger
-
-> Status: Planned
-> Stable-Id: 01M1YN86SKP6EHFKENA3VCVKFY
-> Phase: 1
-> Track: governance-process
-> Implements: RFC-6
-> Blocked-on: —
 
 ## What
 

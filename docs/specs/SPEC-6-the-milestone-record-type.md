@@ -1,8 +1,11 @@
+---
+Version: '0.4'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-34
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-6 — The `milestone` record type
-
-> Version: 0.3 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-34
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 
@@ -19,6 +22,8 @@ built for three types doesn't hold for a fourth, that's real evidence, not a hyp
 dir = "docs/milestones"
 prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
+header_shape = "yaml-frontmatter"
+spec = "SPEC-6"
 ```
 
 `prefix` (2026-09-07 addition) decouples the type's own name — used for the `urzua new milestone
@@ -85,3 +90,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-07 | Added `prefix = "MILE"`, shortening the filename/ID prefix from `MILESTONE-N` to `MILE-N`. The type name (`milestone`) and directory (`docs/milestones`) are unchanged. | **substantive** |
 > | 2026-09-07 | Added `WontDo` as a terminal `Status` value (ADR-34 amendment). **Why:** every other record type in this corpus (`bug`, `adr`) already has a terminal "decided against" state; `milestone` didn't, so deferring or abandoning a milestone had no honest representation — it either stayed `Planned` (misrepresenting a reversed decision as still-pending) or `Blocked` (implying a specific blocker that may not exist). Folded into this version rather than a new spec number, per ADR-14's amendment: a spec's number is permanent per subject, revisions are a version bump on the same spec. | **substantive** |
 > | 2026-09-07 | Moved `Blocked-on` from a body section (`## Blocked on`) into the header, alongside `Implements` (ADR-42). **Why:** found live that `Blocked-on` was the one field-shaped exception across the entire schema left unchecked as prose -- MILE-2/3 both cited an already-fixed bug by description with nothing catching it going stale. All 84 existing milestone files migrated, verified by a before/after content-equality check. | **substantive** |
+> | 2026-09-08 | Header shape changed from `blockquote` to `yaml-frontmatter`, `header_layout` removed (ADR-33/38 amendments); `spec = "SPEC-6"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). **Why:** ADR-33's migration scope widened to all six configured types the same day; `header_layout` has nothing left to distinguish once no type declares `Blockquote`. | **substantive** |

@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-08-11
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 11 — Declared boundaries: a policy is enforced at the width it declares, by every tool that touches it
-
-> Status: Accepted
-> Date: 2026-08-11
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 > **Partial acceptance, 2026-09-04.** §§1–5 (boundaries as declared facts, severity,
 > violation-vs-evidence separation, mechanical width comparison, planted-violation tests for

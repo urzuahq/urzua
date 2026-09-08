@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JHXAF8G3CZTGB6D63WF3
+Phase: '1'
+Track: governance-process
+Implements: RFC-4
+Blocked-on: —
+---
 # 11 — Decide RFC-4: layering, cycle prevention, and allowed-parent-types
-
-> Status: Planned
-> Stable-Id: 01M1Y5JHXAF8G3CZTGB6D63WF3
-> Phase: 1
-> Track: governance-process
-> Implements: RFC-4
-> Blocked-on: —
 
 ## What
 

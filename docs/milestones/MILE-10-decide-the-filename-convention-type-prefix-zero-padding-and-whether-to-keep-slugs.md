@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Y5JHCGH1AM59YY07F3YG9J
+Phase: '0'
+Track: roadmap-tracking
+Implements: ADR-36
+Blocked-on: —
+---
 # 10 — Decide the filename convention: type prefix, zero-padding, and whether to keep slugs
-
-> Status: Done
-> Stable-Id: 01M1Y5JHCGH1AM59YY07F3YG9J
-> Phase: 0
-> Track: roadmap-tracking
-> Implements: ADR-36
-> Blocked-on: —
 
 ## What
 

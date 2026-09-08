@@ -1,9 +1,10 @@
+---
+Status: Draft
+Date: 2026-08-07
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 9 — The agentic repair tier: an unreliable generator behind a mechanical verifier
-
-> Status: Draft
-> Date: 2026-08-07
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Summary
 

@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JXTAAYXW2H2QPM728ZAA
+Phase: '1'
+Track: corpus-corrections
+Implements: RFC-1, RFC-5, RFC-8, RFC-11
+Blocked-on: —
+---
 # 33 — Fold research corrections into existing RFCs
-
-> Status: Planned
-> Stable-Id: 01M1Y5JXTAAYXW2H2QPM728ZAA
-> Phase: 1
-> Track: corpus-corrections
-> Implements: RFC-1, RFC-5, RFC-8, RFC-11
-> Blocked-on: —
 
 ## What
 

@@ -1,11 +1,12 @@
+---
+Status: Blocked
+Stable-Id: 01M1Y5JR9JPNCX4YYJ8SM18V5H
+Phase: '1'
+Track: interop
+Implements: ADR-33
+Blocked-on: a real external adopter asking for it
+---
 # 23 — A general migrate header-shape command
-
-> Status: Blocked
-> Stable-Id: 01M1Y5JR9JPNCX4YYJ8SM18V5H
-> Phase: 1
-> Track: interop
-> Implements: ADR-33
-> Blocked-on: a real external adopter asking for it
 
 ## What
 

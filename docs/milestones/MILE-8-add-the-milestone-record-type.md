@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Y5JGA8FSBE13XZS36KJR6K
+Phase: '0'
+Track: roadmap-tracking
+Implements: ADR-34
+Blocked-on: —
+---
 # 8 — Add the milestone record type
-
-> Status: Done
-> Stable-Id: 01M1Y5JGA8FSBE13XZS36KJR6K
-> Phase: 0
-> Track: roadmap-tracking
-> Implements: ADR-34
-> Blocked-on: —
 
 ## What
 

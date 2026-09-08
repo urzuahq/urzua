@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-04
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: SPEC-3
+---
 # 12 — `.urzua/config.toml` carries a `schema_version` from day one
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-04
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: SPEC-3
 
 ## Context
 

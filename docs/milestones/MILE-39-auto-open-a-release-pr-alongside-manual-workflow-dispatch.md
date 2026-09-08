@@ -1,11 +1,12 @@
+---
+Status: Blocked
+Stable-Id: 01M1YKX8C584N9ESVE5181FJJE
+Phase: '1'
+Track: release-process
+Implements: ADR-29
+Blocked-on: MILE-38 (staleness detection for code comments citing an amended record) -- deliberately sequenced first so that amending ADR-29 here, and updating `prepare-release.yml`'s own `(ADR-29)` citation to match, becomes the first real test of whether MILE-38's detector fires on genuine content rather than a synthetic fixture.
+---
 # 39 — Auto-open a release PR alongside manual workflow_dispatch
-
-> Status: Blocked
-> Stable-Id: 01M1YKX8C584N9ESVE5181FJJE
-> Phase: 1
-> Track: release-process
-> Implements: ADR-29
-> Blocked-on: MILE-38 (staleness detection for code comments citing an amended record) -- deliberately sequenced first so that amending ADR-29 here, and updating `prepare-release.yml`'s own `(ADR-29)` citation to match, becomes the first real test of whether MILE-38's detector fires on genuine content rather than a synthetic fixture.
 
 ## What
 

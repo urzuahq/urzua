@@ -1,10 +1,11 @@
+---
+Status: Planned
+Phase: '1'
+Track: schema-governance
+Implements: ADR-23
+Blocked-on: —
+---
 # 82 — One shared emit_json helper instead of seven inline copies
-
-> Status: Planned
-> Phase: 1
-> Track: schema-governance
-> Implements: ADR-23
-> Blocked-on: —
 
 ## What
 

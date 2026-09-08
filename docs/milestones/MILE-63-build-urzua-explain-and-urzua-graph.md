@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNND3FMY2F2A0N3K0FVT3H
+Phase: '0'
+Track: governance-process
+Implements: ADR-24
+Blocked-on: —
+---
 # 63 — Build urzua explain and urzua graph
-
-> Status: Done
-> Stable-Id: 01M1YNND3FMY2F2A0N3K0FVT3H
-> Phase: 0
-> Track: governance-process
-> Implements: ADR-24
-> Blocked-on: —
 
 ## What
 

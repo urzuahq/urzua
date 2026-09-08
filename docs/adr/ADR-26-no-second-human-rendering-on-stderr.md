@@ -1,13 +1,14 @@
+---
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/main.rs
+Date: 2026-09-06
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-3 (Accepted), ADR-23 (Accepted)
+---
 # 26 — No second human-format rendering on stderr
-
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-cli/src/main.rs
-> Date: 2026-09-06
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-3 (Accepted), ADR-23 (Accepted)
 
 ## Context
 

@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YJGWJP6SWNNWQ0Z6AX7YQ9
+Phase: '1'
+Track: roadmap-tracking
+Blocked-on: —
+---
 # 37 — Extend urzua check to validate README's own links
-
-> Status: Planned
-> Stable-Id: 01M1YJGWJP6SWNNWQ0Z6AX7YQ9
-> Phase: 1
-> Track: roadmap-tracking
-> Blocked-on: —
 
 ## What
 

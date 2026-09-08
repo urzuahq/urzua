@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNDMH0SEJNPEV3Y9ZP1QK
+Phase: '0'
+Track: embodiment-model
+Implements: ADR-32
+Blocked-on: —
+---
 # 64 — Add Embodiment drift detection via git history
-
-> Status: Done
-> Stable-Id: 01M1YNNDMH0SEJNPEV3Y9ZP1QK
-> Phase: 0
-> Track: embodiment-model
-> Implements: ADR-32
-> Blocked-on: —
 
 ## What
 

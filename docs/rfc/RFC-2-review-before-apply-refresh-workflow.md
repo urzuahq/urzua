@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-07-30
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 2 — The re-verification/refresh workflow: detect is read-only, apply requires review or an explicit bypass
-
-> Status: Accepted
-> Date: 2026-07-30
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Summary
 

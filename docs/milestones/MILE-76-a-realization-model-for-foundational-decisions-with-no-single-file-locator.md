@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YWKNRK10NQZRKPGW7GT0ZH
+Phase: '1'
+Track: schema-governance
+Implements: ADR-18
+Blocked-on: —
+---
 # 76 — A realization model for foundational decisions with no single-file locator
-
-> Status: Planned
-> Stable-Id: 01M1YWKNRK10NQZRKPGW7GT0ZH
-> Phase: 1
-> Track: schema-governance
-> Implements: ADR-18
-> Blocked-on: —
 
 ## What
 

@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN88CCNH4KVBE7PKGY30CJ
+Phase: '4'
+Track: scale-and-analytics
+Blocked-on: —
+---
 # 53 — Decide whether a hosted service can reconstruct corpus history retroactively
-
-> Status: Planned
-> Stable-Id: 01M1YN88CCNH4KVBE7PKGY30CJ
-> Phase: 4
-> Track: scale-and-analytics
-> Blocked-on: —
 
 ## What
 

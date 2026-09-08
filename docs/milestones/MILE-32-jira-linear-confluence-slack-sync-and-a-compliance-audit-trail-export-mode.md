@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JX9C69PVW0QPDH8SY5PM
+Phase: '4'
+Track: integrations
+Implements: —
+Blocked-on: —
+---
 # 32 — Jira/Linear/Confluence/Slack sync and a compliance/audit-trail export mode
-
-> Status: Planned
-> Stable-Id: 01M1Y5JX9C69PVW0QPDH8SY5PM
-> Phase: 4
-> Track: integrations
-> Implements: —
-> Blocked-on: —
 
 ## What
 

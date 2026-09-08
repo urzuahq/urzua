@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JE63FXMT7PV7QJQN7BXV
+Phase: '0'
+Track: section-checks
+Implements: RFC-17
+Blocked-on: —
+---
 # 4 — Build the closed section-parser and required_sections config schema
-
-> Status: Planned
-> Stable-Id: 01M1Y5JE63FXMT7PV7QJQN7BXV
-> Phase: 0
-> Track: section-checks
-> Implements: RFC-17
-> Blocked-on: —
 
 ## What
 

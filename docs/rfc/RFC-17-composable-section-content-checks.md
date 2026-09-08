@@ -1,9 +1,10 @@
+---
+Status: Draft
+Date: 2026-09-07
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 17 — Composable section-content checks: a closed section-parser, config-declared shapes, and a Y-statement checker
-
-> Status: Draft
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Summary
 

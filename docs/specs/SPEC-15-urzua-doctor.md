@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-09-07
+Status: Accepted
+Implements: —
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-15 — `urzua doctor`
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** —
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

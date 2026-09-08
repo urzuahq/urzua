@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN858DBHWE5XJ2JFEVY1F6
+Phase: '2'
+Track: escalation
+Blocked-on: —
+---
 # 47 — Decide Urzua's MCP position
-
-> Status: Planned
-> Stable-Id: 01M1YN858DBHWE5XJ2JFEVY1F6
-> Phase: 2
-> Track: escalation
-> Blocked-on: —
 
 ## What
 

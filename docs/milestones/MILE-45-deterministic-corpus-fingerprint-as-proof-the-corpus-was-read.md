@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN846AP7AYBX4D0XGNSYR3
+Phase: '1'
+Track: schema-governance
+Blocked-on: —
+---
 # 45 — Deterministic corpus fingerprint as proof the corpus was read
-
-> Status: Planned
-> Stable-Id: 01M1YN846AP7AYBX4D0XGNSYR3
-> Phase: 1
-> Track: schema-governance
-> Blocked-on: —
 
 ## What
 

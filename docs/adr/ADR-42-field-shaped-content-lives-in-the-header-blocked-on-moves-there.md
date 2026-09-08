@@ -1,14 +1,15 @@
+---
+Status: Accepted
+Stable-Id: 01M1ZAERYDAF7ANT3GPFAH2HFW
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, code:.urzua/templates/milestone.md, code:.urzua/config.toml, code:scripts/generate-dashboard.py, test:rust/crates/urzua-core/src/rules.rs
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: ADR-40 (Accepted)
+---
 # 42 — Field-shaped content lives in the header; Blocked-on moves there
-
-> Status: Accepted
-> Stable-Id: 01M1ZAERYDAF7ANT3GPFAH2HFW
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, code:.urzua/templates/milestone.md, code:.urzua/config.toml, code:scripts/generate-dashboard.py, test:rust/crates/urzua-core/src/rules.rs
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: ADR-40 (Accepted)
 
 ## Context
 

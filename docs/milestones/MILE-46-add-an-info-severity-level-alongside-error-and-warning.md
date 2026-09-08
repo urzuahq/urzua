@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN84QAGGE2RJG9DFN0MB59
+Phase: '1'
+Track: schema-governance
+Blocked-on: —
+---
 # 46 — Add an info severity level alongside error and warning
-
-> Status: Planned
-> Stable-Id: 01M1YN84QAGGE2RJG9DFN0MB59
-> Phase: 1
-> Track: schema-governance
-> Blocked-on: —
 
 ## What
 

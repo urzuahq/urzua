@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JP5GX3QXNQVKN2YGEY43
+Phase: '3'
+Track: accountability-identity
+Implements: RFC-5
+Blocked-on: —
+---
 # 19 — Human attestation with expiry (verification tier 3)
-
-> Status: Planned
-> Stable-Id: 01M1Y5JP5GX3QXNQVKN2YGEY43
-> Phase: 3
-> Track: accountability-identity
-> Implements: RFC-5
-> Blocked-on: —
 
 ## What
 

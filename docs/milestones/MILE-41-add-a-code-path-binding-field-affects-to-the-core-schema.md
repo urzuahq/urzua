@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YN81YFRMVT2EWYM4PCKP5X
+Phase: '1'
+Track: schema-governance
+Implements: RFC-1
+Blocked-on: —
+---
 # 41 — Add a code-path binding field (affects) to the core schema
-
-> Status: Planned
-> Stable-Id: 01M1YN81YFRMVT2EWYM4PCKP5X
-> Phase: 1
-> Track: schema-governance
-> Implements: RFC-1
-> Blocked-on: —
 
 ## What
 

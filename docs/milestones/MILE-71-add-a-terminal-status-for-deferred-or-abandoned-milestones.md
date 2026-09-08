@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YS1MJX3Z91EJ5MXZ1XEGQA
+Phase: '0'
+Track: schema-governance
+Implements: ADR-34, SPEC-6
+Blocked-on: —
+---
 # 71 — Add a terminal status for deferred or abandoned milestones
-
-> Status: Done
-> Stable-Id: 01M1YS1MJX3Z91EJ5MXZ1XEGQA
-> Phase: 0
-> Track: schema-governance
-> Implements: ADR-34, SPEC-6
-> Blocked-on: —
 
 ## What
 

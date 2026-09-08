@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JN3DVH6232BWZW9DA4AJ
+Phase: '2'
+Track: embodiment-model
+Implements: ADR-15
+Blocked-on: —
+---
 # 17 — Build fix Tier 2/3
-
-> Status: Planned
-> Stable-Id: 01M1Y5JN3DVH6232BWZW9DA4AJ
-> Phase: 2
-> Track: embodiment-model
-> Implements: ADR-15
-> Blocked-on: —
 
 ## What
 

@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Specified
+Date: 2026-09-04
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-1 (Accepted)
+---
 # 10 — A unified record schema: core fields plus declared profiles
-
-> Status: Accepted
-> Embodiment: Specified
-> Date: 2026-09-04
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-1 (Accepted)
 
 ## Context
 

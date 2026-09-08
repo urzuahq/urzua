@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Z8QDN72FCDTD839NSCEYBC
+Phase: '1'
+Track: schema-governance
+Implements: ADR-42
+Blocked-on: —
+---
 # 83 — A staleness drift rule for Blocked-on and similar prose pointers
-
-> Status: Done
-> Stable-Id: 01M1Z8QDN72FCDTD839NSCEYBC
-> Phase: 1
-> Track: schema-governance
-> Implements: ADR-42
-> Blocked-on: —
 
 ## What
 

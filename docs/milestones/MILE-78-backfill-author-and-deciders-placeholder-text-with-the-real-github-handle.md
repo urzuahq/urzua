@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Z1EP2A91E5255WDRGQPYGD
+Phase: '0'
+Track: accountability-identity
+Implements: —
+Blocked-on: —
+---
 # 78 — Backfill Author and Deciders placeholder text with the real GitHub handle
-
-> Status: Done
-> Stable-Id: 01M1Z1EP2A91E5255WDRGQPYGD
-> Phase: 0
-> Track: accountability-identity
-> Implements: —
-> Blocked-on: —
 
 ## What
 

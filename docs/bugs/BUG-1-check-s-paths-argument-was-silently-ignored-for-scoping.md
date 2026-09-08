@@ -1,10 +1,11 @@
+---
+Status: Fixed
+Stable-Id: 01M1Y4J5XTVNAA89BBJYT4VX95
+Found-in: manual testing while building the `milestone` record type -- ran `check docs/milestones/` expecting a narrow result and got the whole 55-file corpus back, identical to `check docs/`
+Regression-test: check_scopes_to_the_requested_path_not_the_whole_corpus (rust/crates/urzua-cli/tests/check_integration.rs)
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+---
 # 1 — check's paths argument was silently ignored for scoping
-
-> Status: Fixed
-> Stable-Id: 01M1Y4J5XTVNAA89BBJYT4VX95
-> Found-in: manual testing while building the `milestone` record type -- ran `check docs/milestones/` expecting a narrow result and got the whole 55-file corpus back, identical to `check docs/`
-> Regression-test: check_scopes_to_the_requested_path_not_the_whole_corpus (rust/crates/urzua-cli/tests/check_integration.rs)
-> Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 
 ## What was wrong
 

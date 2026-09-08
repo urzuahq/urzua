@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-07-29
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 1 — A unified record schema: core fields plus declared profiles
-
-> Status: Accepted
-> Date: 2026-07-29
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 > **Split, 2026-07-30.** This RFC originally also covered RFC→ADR→Spec layering, the
 > Embodiment/`realized_by` claim-graph model, and the living-spec revision-log problem — four

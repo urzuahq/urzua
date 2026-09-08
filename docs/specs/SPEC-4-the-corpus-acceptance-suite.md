@@ -1,7 +1,10 @@
+---
+Version: '0.1'
+Date: 2026-08-20
+Status: Draft
+Parent: SPEC-1 (v0 CLI), which lists the bug classes this suite must reproduce.
+---
 # SPEC-4 — The corpus acceptance suite
-
-> Version: 0.1 | Date: 2026-08-20 | Status: Draft
-> **Parent:** SPEC-1 (v0 CLI), which lists the bug classes this suite must reproduce.
 
 ## Purpose
 

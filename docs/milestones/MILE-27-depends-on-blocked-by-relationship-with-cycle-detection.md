@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JTH1RN024BFKVMV0Q6XF
+Phase: '1'
+Track: review-workflow
+Implements: —
+Blocked-on: a real case where Phase/Track tags aren't enough to express sequencing
+---
 # 27 — Depends-on/Blocked-by relationship with cycle detection
-
-> Status: Planned
-> Stable-Id: 01M1Y5JTH1RN024BFKVMV0Q6XF
-> Phase: 1
-> Track: review-workflow
-> Implements: —
-> Blocked-on: a real case where Phase/Track tags aren't enough to express sequencing
 
 ## What
 

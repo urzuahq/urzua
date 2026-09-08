@@ -1,14 +1,15 @@
+---
+Status: Accepted
+Stable-Id: 01M1YTZ48KK60554GSFTN46E5F
+Embodiment: Verified
+Realized-by: code:scripts/generate-dashboard.py
+Date: 2026-09-07
+Author: beauwilliams
+Deciders: beauwilliams
+Supersedes / Superseded-by: —
+Derives-from: —
+---
 # 37 — A generated static dashboard for internal development, not a hosted app
-
-> Status: Accepted
-> Stable-Id: 01M1YTZ48KK60554GSFTN46E5F
-> Embodiment: Verified
-> Realized-by: code:scripts/generate-dashboard.py
-> Date: 2026-09-07
-> Author: beauwilliams
-> Deciders: beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: —
 
 ## Context
 

@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YKX7MDS9A2HF5GSEZ5FTWK
+Phase: '1'
+Track: embodiment-model
+Blocked-on: —
+---
 # 38 — Detect staleness when a code comment's cited record is amended
-
-> Status: Planned
-> Stable-Id: 01M1YKX7MDS9A2HF5GSEZ5FTWK
-> Phase: 1
-> Track: embodiment-model
-> Blocked-on: —
 
 ## What
 

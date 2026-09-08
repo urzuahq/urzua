@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNG9RQEZYDDHBQDN5AJDW
+Phase: '0'
+Track: governance-process
+Implements: ADR-23
+Blocked-on: —
+---
 # 69 — Stdout is always JSON; remove the --format flag
-
-> Status: Done
-> Stable-Id: 01M1YNNG9RQEZYDDHBQDN5AJDW
-> Phase: 0
-> Track: governance-process
-> Implements: ADR-23
-> Blocked-on: —
 
 ## What
 

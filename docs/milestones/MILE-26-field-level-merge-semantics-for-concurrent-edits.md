@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JT01RV9FEM7BWSX2VX2G
+Phase: '3'
+Track: review-workflow
+Implements: —
+Blocked-on: —
+---
 # 26 — Field-level merge semantics for concurrent edits
-
-> Status: Planned
-> Stable-Id: 01M1Y5JT01RV9FEM7BWSX2VX2G
-> Phase: 3
-> Track: review-workflow
-> Implements: —
-> Blocked-on: —
 
 ## What
 

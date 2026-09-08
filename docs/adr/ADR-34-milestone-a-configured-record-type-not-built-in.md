@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-1 (Accepted), RFC-4 (Draft)
+---
 # 34 — `milestone`: a configured record type, not a built-in one
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-1 (Accepted), RFC-4 (Draft)
 
 ## Context
 

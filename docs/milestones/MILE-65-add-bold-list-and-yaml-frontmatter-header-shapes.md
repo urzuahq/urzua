@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNE70GCPJRXKCKCFTJ8Q9
+Phase: '0'
+Track: header-format
+Implements: ADR-16, ADR-17
+Blocked-on: —
+---
 # 65 — Add bold-list and yaml-frontmatter header shapes
-
-> Status: Done
-> Stable-Id: 01M1YNNE70GCPJRXKCKCFTJ8Q9
-> Phase: 0
-> Track: header-format
-> Implements: ADR-16, ADR-17
-> Blocked-on: —
 
 ## What
 

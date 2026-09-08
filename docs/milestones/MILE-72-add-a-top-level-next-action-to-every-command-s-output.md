@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YS1N3TFEQC307R6JQV66NZ
+Phase: '1'
+Track: schema-governance
+Implements: ADR-23
+Blocked-on: —
+---
 # 72 — Add a top-level next_action to every command's output
-
-> Status: Planned
-> Stable-Id: 01M1YS1N3TFEQC307R6JQV66NZ
-> Phase: 1
-> Track: schema-governance
-> Implements: ADR-23
-> Blocked-on: —
 
 ## What
 

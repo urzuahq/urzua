@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JNM6KSG8K1XBT7YMV9FB
+Phase: '1'
+Track: accountability-identity
+Implements: —
+Blocked-on: —
+---
 # 18 — Real identity binding for roles
-
-> Status: Planned
-> Stable-Id: 01M1Y5JNM6KSG8K1XBT7YMV9FB
-> Phase: 1
-> Track: accountability-identity
-> Implements: —
-> Blocked-on: —
 
 ## What
 

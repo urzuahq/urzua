@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-5 (Accepted), RFC-16 (Accepted), RFC-17 (Draft)
+---
 # 33 — Deprecate blockquote and bold-list; converge on YAML frontmatter
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-5 (Accepted), RFC-16 (Accepted), RFC-17 (Draft)
 
 ## Context
 
@@ -82,6 +83,28 @@ conversion pass, verified before it's trusted on this repo's own real corpus, no
 - RFC-5's claim graph remains unbuilt — this ADR removes the *structural* obstacle (flat header
   shapes) to eventually building it, it does not schedule building it.
 
+## Amendment (2026-09-08): migration scope widens to all six configured types
+
+The original Decision scoped this repo's own conversion to `adr`/`rfc`/`spec` only, explicitly
+excluding `milestone`/`bug`/`waiver` on the grounds that no adopter was under pressure to migrate
+those. That reasoning held while the migration mechanism was still hypothetical. It no longer does:
+building and verifying a real, byte-preserving conversion tool against this repo's own corpus (MILE-3)
+is the same amount of work regardless of how many of the six configured types it's pointed at, and
+maintaining two header shapes side by side in the same corpus indefinitely — three types converged,
+three still `Blockquote` — has no justification of its own once the tool exists and is trusted.
+
+**Scope widens to all six configured types**: `adr`, `rfc`, `spec`, `milestone`, `bug`, `waiver`.
+Every consequence the original Decision named for `adr`/`rfc`/`spec` applies identically to the other
+three: `header_layout` is removed for all of them (ADR-38's own amendment, same date), and
+`milestone`/`bug`/`waiver`'s own schema specs (`SPEC-6`/`SPEC-9`/`SPEC-10`) each gain a revision-log
+entry documenting the shape change, the same treatment the three newly-backfilled type specs
+(`SPEC-16`/`SPEC-17`/`SPEC-18`) receive from the start.
+
+Nothing else about the original Decision changes: parsing support for `blockquote`/`bold-list` stays
+(still needed to read an external adopter's un-migrated corpus, and for `check` to run against a
+first-time evaluator's existing docs); full removal of that parsing support remains its own,
+separately-decided future step, now tracked as MILE-85 rather than left as prose only.
+
 ## References
 
 - RFC-5 — the claim-graph destination this ADR's evidence rests on.
@@ -91,3 +114,7 @@ conversion pass, verified before it's trusted on this repo's own real corpus, no
   narrows that to the recommended option.
 - RFC-17 — the section-content-checks RFC whose open question this ADR resolves.
 - ADR-16 — the bold-list decision this ADR deprecates without rewriting.
+- ADR-38 — amended the same day, removing `header_layout` once this amendment's widened scope
+  empties that ADR's own declared axis.
+- MILE-85 — the deferred full-removal decision this amendment names explicitly rather than leaving
+  as unstructured prose.

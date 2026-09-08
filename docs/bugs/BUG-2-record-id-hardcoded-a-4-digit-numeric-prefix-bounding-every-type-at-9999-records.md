@@ -1,10 +1,11 @@
+---
+Status: Fixed
+Stable-Id: 01M1Y4SP0QDPAW46065XBT3T0M
+Found-in: raised directly -- questioning why filenames are zero-padded to a fixed width at all, since a fixed width bounds the total count a type can ever hold
+Regression-test: a_five_digit_filename_still_resolves_bug_0002_observed_failing, a_reference_resolves_regardless_of_zero_padding (rust/crates/urzua-core/src/rules.rs)
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
+---
 # 2 — record_id hardcoded a 4-digit numeric prefix, bounding every type at 9999 records
-
-> Status: Fixed
-> Stable-Id: 01M1Y4SP0QDPAW46065XBT3T0M
-> Found-in: raised directly -- questioning why filenames are zero-padded to a fixed width at all, since a fixed width bounds the total count a type can ever hold
-> Regression-test: a_five_digit_filename_still_resolves_bug_0002_observed_failing, a_reference_resolves_regardless_of_zero_padding (rust/crates/urzua-core/src/rules.rs)
-> Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
 
 ## What was wrong
 

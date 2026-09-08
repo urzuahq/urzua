@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-05
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: SPEC-1
+---
 # 13 — Release and distribution: GitHub binaries, cargo-release, gated on CI
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-05
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: SPEC-1
 
 ## Context
 

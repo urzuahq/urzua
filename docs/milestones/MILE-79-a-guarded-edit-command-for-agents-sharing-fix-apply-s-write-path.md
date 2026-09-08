@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Z2D54784252A0PQMKM8XV6
+Phase: '2'
+Track: write-path
+Implements: ADR-14, ADR-20
+Blocked-on: —
+---
 # 79 — A guarded edit command for agents, sharing fix apply's write path
-
-> Status: Planned
-> Stable-Id: 01M1Z2D54784252A0PQMKM8XV6
-> Phase: 2
-> Track: write-path
-> Implements: ADR-14, ADR-20
-> Blocked-on: —
 
 ## What
 

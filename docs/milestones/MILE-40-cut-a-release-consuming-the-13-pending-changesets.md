@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YKX8WYPDEW5D4M1T1RHVB6
+Phase: '1'
+Track: release-process
+Implements: ADR-29
+Blocked-on: —
+---
 # 40 — Cut a release consuming the pending changesets
-
-> Status: Planned
-> Stable-Id: 01M1YKX8WYPDEW5D4M1T1RHVB6
-> Phase: 1
-> Track: release-process
-> Implements: ADR-29
-> Blocked-on: —
 
 ## What
 

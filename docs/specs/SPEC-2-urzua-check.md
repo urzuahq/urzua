@@ -1,8 +1,11 @@
+---
+Version: '0.4'
+Date: 2026-08-20
+Status: Draft
+Implements: RFC-1, RFC-3, RFC-10, RFC-11
+Parent: SPEC-1 (v0 CLI). Cross-cutting rules — no-silent-no-op, the permanent
+---
 # SPEC-2 — `urzua check`
-
-> Version: 0.3 | Date: 2026-08-20 | Status: Draft
-> **Implements:** RFC-1, RFC-3, RFC-10, RFC-11
-> **Parent:** SPEC-1 (v0 CLI). Cross-cutting rules — no-silent-no-op, the permanent
 > content-scope ceiling, the three-corpus acceptance bar — are stated there and are not restated
 > here except where this command narrows them.
 
@@ -75,12 +78,14 @@ the acceptance corpora.
 findings rather than a green light — a validator whose first output is `ok` has told you nothing
 about itself.
 
-1. **Header format consistency within a record type.** This corpus of 22 records carries three
-   header formats: RFC and ADR use one key per blockquote line; SPEC-1 uses that shape while
-   SPEC-2 through SPEC-4 use a pipe-delimited single line plus bold keys and a wrapped
-   continuation. The third format arrived in this repository's own corpus after header closure was
-   specified — which is the failure mode RFC-10 describes, arriving in the corpus of the tool
-   meant to prevent it.
+1. **Header format consistency within a record type.** At the time Phase A was scoped, this
+   corpus's 22 records carried three header formats: RFC and ADR used one key per blockquote line;
+   SPEC-1 used that shape while SPEC-2 through SPEC-4 used a pipe-delimited single line plus bold
+   keys and a wrapped continuation. The third format had arrived in this repository's own corpus
+   after header closure was specified — which is the failure mode RFC-10 describes, arriving in the
+   corpus of the tool meant to prevent it. (Since converged onto `yaml-frontmatter` corpus-wide,
+   ADR-33/ADR-42 — this historical drift no longer describes the corpus's current state, only what
+   motivated choosing this as one of the two Phase A seed rules.)
 2. **`Implements:` / `Derives-from:` resolves, and the target's status is reported.** Six pointers
    in `docs/specs/` currently name RFCs that are all `Draft`. That is RFC-12's
    decision-before-implementation gate with live subjects. Phase A only needs the pointer to
@@ -282,3 +287,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-18/ADR-32) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |
 > | 2026-09-07 | Rewrote §Rules as a complete, accurate list of all ten actually-shipped rule ids (adding `header.layout-consistency`/ADR-38 and `header.field-set-consistency`/ADR-39, neither previously mentioned at all), separated from the design language that's still unbuilt. Corrected §Out of scope's claim that cross-record reconciliation is `audit`-exclusive -- `check` has run `relation.supersession-reciprocity` directly since ADR-30, and the actual data-loss risk this spec was guarding against was a bulk *rewrite*, never a read-only reciprocity check. **Why:** per ADR-14's amendment adopted earlier the same day, a spec's body must stay a complete, replayable specification of its subject at every revision, not accumulate "not yet reconciled" notes as a substitute for actually updating it -- leaving this stale on the very day that policy was adopted would have been an immediate, visible contradiction. | **substantive** |
 > | 2026-09-07 | Added `blocked-on.stale` as an 11th rule (ADR-42); `pointer.resolution`'s row updated to include `Parent`/`Blocked-on`, which it had already gained (ADR-40) without this table being updated. **Why:** the same "spec must stay complete" policy applies to every rule addition, not just the ones made on the day the policy was adopted -- letting this table go one rule stale again immediately would have repeated the exact drift this spec was just corrected for. | **substantive** |
+> | 2026-09-08 | Reworded the header-format-consistency seed rule's rationale (§"The two seed rules") from a present-tense claim about the corpus's current state to historical framing. **Why:** ADR-33/ADR-42's corpus-wide `yaml-frontmatter` migration made the original wording -- "this corpus of 22 records carries three header formats" -- false the moment it landed; caught by adversarial review before the migration shipped, rather than left as another stale-prose instance for a future pass to find. | **substantive** |

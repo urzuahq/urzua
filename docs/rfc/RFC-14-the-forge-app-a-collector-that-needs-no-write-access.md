@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-08-18
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 14 — The forge app: a collector and an actor that needs no write access to code
-
-> Status: Accepted
-> Date: 2026-08-18
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Summary
 

@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JYB0J2X7P0AVRJKWJAJV
+Phase: '1'
+Track: schema-governance
+Implements: RFC-6
+Blocked-on: —
+---
 # 34 — Profile schema versioning and generalized cross-record validation
-
-> Status: Planned
-> Stable-Id: 01M1Y5JYB0J2X7P0AVRJKWJAJV
-> Phase: 1
-> Track: schema-governance
-> Implements: RFC-6
-> Blocked-on: —
 
 ## What
 

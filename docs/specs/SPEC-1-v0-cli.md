@@ -1,10 +1,13 @@
+---
+Version: '0.1'
+Date: 2026-07-29
+Status: Draft
+Embodiment: Not started
+Author: '@beauwilliams'
+Implements: ADR-1, ADR-2, ADR-3
+Derives-from: RFC-1 (Accepted)
+---
 # SPEC-1 — `urzua` v0 CLI
-
-> Version: 0.1 | Date: 2026-07-29 | Status: Draft
-> **Embodiment:** Not started
-> **Author:** @beauwilliams
-> **Implements:** ADR-1, ADR-2, ADR-3
-> **Derives-from:** RFC-1 (Accepted)
 
 ## Purpose
 

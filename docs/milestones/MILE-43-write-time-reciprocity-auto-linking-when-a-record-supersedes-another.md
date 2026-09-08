@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN835FM8NATNCKA34F6FED
+Phase: '1'
+Track: governance-process
+Blocked-on: —
+---
 # 43 — Write-time reciprocity auto-linking when a record supersedes another
-
-> Status: Planned
-> Stable-Id: 01M1YN835FM8NATNCKA34F6FED
-> Phase: 1
-> Track: governance-process
-> Blocked-on: —
 
 ## What
 
