@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-27
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-12 — `urzua new`
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-27
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

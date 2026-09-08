@@ -1,10 +1,11 @@
+---
+Status: Fixed
+Stable-Id: 01M1Y7W55XWYY7DJF2GF8PZX9T
+Found-in: found live while writing ADR-33 -- flipped adr's header_shape to yaml-frontmatter and ran `urzua new adr`, expecting YAML frontmatter output, and got blockquote content back unchanged
+Regression-test: rust/crates/urzua-cli/tests/new_integration.rs::new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present -- observed failing against the pre-fix code (blockquote leaked through) before confirming it passes post-fix
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
+---
 # 3 — urzua new ignores the configured header_shape when a template file exists
-
-> Status: Fixed
-> Stable-Id: 01M1Y7W55XWYY7DJF2GF8PZX9T
-> Found-in: found live while writing ADR-33 -- flipped adr's header_shape to yaml-frontmatter and ran `urzua new adr`, expecting YAML frontmatter output, and got blockquote content back unchanged
-> Regression-test: rust/crates/urzua-cli/tests/new_integration.rs::new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present -- observed failing against the pre-fix code (blockquote leaked through) before confirming it passes post-fix
-> Realized-by: code:rust/crates/urzua-cli/src/main.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
 
 ## What was wrong
 

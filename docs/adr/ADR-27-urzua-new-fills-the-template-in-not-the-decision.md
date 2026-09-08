@@ -1,13 +1,14 @@
+---
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/new_record.rs
+Date: 2026-09-06
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: ADR-3 (Accepted), ADR-21 (Accepted)
+---
 # 27 — `urzua new` fills in the template, not the decision
-
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/new_record.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/new_record.rs
-> Date: 2026-09-06
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: ADR-3 (Accepted), ADR-21 (Accepted)
 
 ## Context
 

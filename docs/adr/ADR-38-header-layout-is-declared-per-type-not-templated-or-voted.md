@@ -1,14 +1,15 @@
+---
+Status: Accepted
+Stable-Id: 01M1Z17D93V6R1JMM21ETKZKV8
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/header.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-10 (Accepted)
+---
 # 38 — Header layout is declared per type, not templated or voted
-
-> Status: Accepted
-> Stable-Id: 01M1Z17D93V6R1JMM21ETKZKV8
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/header.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-10 (Accepted)
 
 ## Context
 
@@ -75,6 +76,23 @@ one-line config revert, not a schema migration.
   `header_layout` — not enforced by this rule, since a template isn't itself a `Record` this rule
   examines, but worth a human eye whenever the template changes.
 
+## Amendment (2026-09-08): header_layout removed once every type is yaml-frontmatter
+
+This ADR's own Decision text stated `.urzua/config.toml` declares `header_layout` for `adr`/`rfc`/
+`bug`/`milestone` (`one-per-line`) and `spec` (`pipe-delimited`) — accurate when written, and now
+stale: ADR-33's amendment (the same date) widens the `yaml-frontmatter` migration to all six
+configured types, and `header_layout`'s whole premise (distinguishing sub-formats *within*
+`HeaderShape::Blockquote`) has nothing left to distinguish once no type declares `Blockquote` at
+all. `header_layout` is removed from every type's config entry as part of that migration, and
+`header.layout-consistency` returns to examining zero records for every type — not because the rule
+broke, but because its declared-per-type axis is empty by construction, the same "additive, skip
+when undeclared" behavior this ADR's own Decision already specified from the start.
+
+The rule and the `HeaderLayout` enum stay in the codebase, unused rather than deleted: a future
+type declaring `Blockquote` again (an external adopter's own config, not this repo's) would still
+benefit from it, and removing working, tested code with no cost to keeping it is not this decision's
+call to make.
+
 ## References
 
 - RFC-10 — the closed-header model and the three tolerated sub-formats this decision narrows for
@@ -83,4 +101,6 @@ one-line config revert, not a schema migration.
   deferring bold-vs-plain labelling.
 - ADR-27 — the template-is-truth precedent considered and not used here, since it can't cover a
   type without a template yet.
+- ADR-33 — the amendment widening `yaml-frontmatter` migration to all six types, which is what
+  empties this ADR's own declared axis.
 - MILE-75 — the milestone this ADR resolves.

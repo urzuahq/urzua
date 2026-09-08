@@ -1,10 +1,11 @@
+---
+Status: Accepted
+Date: 2026-09-05
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+Amends: RFC-10
+---
 # 16 — YAML frontmatter as the header shape for generated records
-
-> Status: Accepted
-> Date: 2026-09-05
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
-> Amends: RFC-10
 
 ## Summary
 

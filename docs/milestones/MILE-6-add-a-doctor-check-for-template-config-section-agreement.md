@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JF83Z09VVDSV35G4BS2W
+Phase: '0'
+Track: section-checks
+Implements: RFC-17
+Blocked-on: 'Milestone: Build the closed section-parser and required_sections config schema'
+---
 # 6 — Add a doctor check for template/config section agreement
-
-> Status: Planned
-> Stable-Id: 01M1Y5JF83Z09VVDSV35G4BS2W
-> Phase: 0
-> Track: section-checks
-> Implements: RFC-17
-> Blocked-on: Milestone: Build the closed section-parser and required_sections config schema
 
 ## What
 

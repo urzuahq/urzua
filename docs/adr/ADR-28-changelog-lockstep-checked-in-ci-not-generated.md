@@ -1,12 +1,13 @@
+---
+Status: Superseded
+Embodiment: Implemented
+Date: 2026-09-06
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: ADR-29
+Derives-from: —
+---
 # 28 — Changelog lockstep, verified in CI; never auto-generated
-
-> Status: Superseded
-> Embodiment: Implemented
-> Date: 2026-09-06
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: ADR-29
-> Derives-from: —
 
 ## Context
 

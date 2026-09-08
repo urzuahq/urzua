@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JWMX52SZ76Y8B1XCTSQM
+Phase: '3'
+Track: backfill
+Implements: —
+Blocked-on: —
+---
 # 31 — Backfill decision history from git/PR history
-
-> Status: Planned
-> Stable-Id: 01M1Y5JWMX52SZ76Y8B1XCTSQM
-> Phase: 3
-> Track: backfill
-> Implements: —
-> Blocked-on: —
 
 ## What
 

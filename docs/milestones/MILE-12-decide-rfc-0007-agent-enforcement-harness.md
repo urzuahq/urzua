@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JJECJSQBGTZSAH8WHYRP
+Phase: '2'
+Track: governance-process
+Implements: RFC-7
+Blocked-on: —
+---
 # 12 — Decide RFC-7: agent enforcement harness
-
-> Status: Planned
-> Stable-Id: 01M1Y5JJECJSQBGTZSAH8WHYRP
-> Phase: 2
-> Track: governance-process
-> Implements: RFC-7
-> Blocked-on: —
 
 ## What
 

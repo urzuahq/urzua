@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-30
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-11 — `urzua audit`
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-30
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

@@ -1,8 +1,11 @@
+---
+Version: '0.2'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-35
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-9 — The `bug` record type
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-35
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 
@@ -26,8 +29,9 @@ accident.
 [record_types.bug]
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
-header_layout = "one-per-line"
+header_shape = "yaml-frontmatter"
 known_fields = ["Realized-by", "Stable-Id"]
+spec = "SPEC-9"
 ```
 
 | Field | Values | Notes |
@@ -59,3 +63,4 @@ something broke, or it doesn't exist yet.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial spec. **Why:** `bug` (ADR-35) was documented only as an ADR while `milestone`, the same shape of decision (a configured record type), got a matching spec (SPEC-6) — MILE-77 named this inconsistency and this spec resolves it for `bug`. | **structural** |
+> | 2026-09-08 | Header shape changed from `blockquote` to `yaml-frontmatter`, `header_layout` removed (ADR-33/38 amendments); `spec = "SPEC-9"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). | **substantive** |

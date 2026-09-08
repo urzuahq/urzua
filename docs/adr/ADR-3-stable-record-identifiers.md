@@ -1,11 +1,12 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-07-29
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 3 — Stable record identifiers, separate from display numbers
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-07-29
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Context
 

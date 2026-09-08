@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JSEZP2V2MSTE3AX8762W
+Phase: '1'
+Track: review-workflow
+Implements: —
+Blocked-on: —
+---
 # 25 — ARB-style review queue with dissent preserved as first-class
-
-> Status: Planned
-> Stable-Id: 01M1Y5JSEZP2V2MSTE3AX8762W
-> Phase: 1
-> Track: review-workflow
-> Implements: —
-> Blocked-on: —
 
 ## What
 

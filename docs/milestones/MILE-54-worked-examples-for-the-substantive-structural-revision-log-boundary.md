@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YN88XE8TM1YVHK24PR5WWM
+Phase: '1'
+Track: governance-process
+Implements: RFC-6
+Blocked-on: —
+---
 # 54 — Worked examples for the substantive/structural revision-log boundary
-
-> Status: Planned
-> Stable-Id: 01M1YN88XE8TM1YVHK24PR5WWM
-> Phase: 1
-> Track: governance-process
-> Implements: RFC-6
-> Blocked-on: —
 
 ## What
 

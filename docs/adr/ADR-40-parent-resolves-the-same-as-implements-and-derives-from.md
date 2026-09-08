@@ -1,14 +1,15 @@
+---
+Status: Accepted
+Stable-Id: 01M1Z6WV7FRDW9DP8D07GBQMFF
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-12 (Accepted)
+---
 # 40 — Parent resolves the same as Implements and Derives-from
-
-> Status: Accepted
-> Stable-Id: 01M1Z6WV7FRDW9DP8D07GBQMFF
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-12 (Accepted)
 
 ## Context
 

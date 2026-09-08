@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Z2ZV7XGR7GSMNPWDACBX5J
+Phase: '1'
+Track: schema-governance
+Implements: ADR-39
+Blocked-on: —
+---
 # 81 — A field-set consistency rule: undeclared fields per type
-
-> Status: Done
-> Stable-Id: 01M1Z2ZV7XGR7GSMNPWDACBX5J
-> Phase: 1
-> Track: schema-governance
-> Implements: ADR-39
-> Blocked-on: —
 
 ## What
 

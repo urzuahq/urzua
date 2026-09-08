@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Y5JCCP2D9ES98WDB9V5PPF
+Phase: '0'
+Track: header-format
+Implements: ADR-27, BUG-3
+Blocked-on: —
+---
 # 1 — Fix urzua new's template-priority bug
-
-> Status: Done
-> Stable-Id: 01M1Y5JCCP2D9ES98WDB9V5PPF
-> Phase: 0
-> Track: header-format
-> Implements: ADR-27, BUG-3
-> Blocked-on: —
 
 ## What
 

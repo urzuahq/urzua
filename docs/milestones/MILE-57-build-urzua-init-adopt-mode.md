@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNN9K5B2V3D7MSGD9HWNG1
+Phase: '0'
+Track: roadmap-tracking
+Implements: SPEC-5
+Blocked-on: —
+---
 # 57 — Build urzua init adopt mode
-
-> Status: Done
-> Stable-Id: 01M1YNN9K5B2V3D7MSGD9HWNG1
-> Phase: 0
-> Track: roadmap-tracking
-> Implements: SPEC-5
-> Blocked-on: —
 
 ## What
 

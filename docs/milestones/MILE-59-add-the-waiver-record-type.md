@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNAYPRGKFY23FMFWCQ907
+Phase: '0'
+Track: accountability-identity
+Implements: ADR-11
+Blocked-on: —
+---
 # 59 — Add the waiver record type
-
-> Status: Done
-> Stable-Id: 01M1YNNAYPRGKFY23FMFWCQ907
-> Phase: 0
-> Track: accountability-identity
-> Implements: ADR-11
-> Blocked-on: —
 
 ## What
 

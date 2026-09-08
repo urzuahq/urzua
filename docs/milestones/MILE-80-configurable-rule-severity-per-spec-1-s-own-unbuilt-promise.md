@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Z2T44DHPRE5C4DVENWXY58
+Phase: '1'
+Track: schema-governance
+Implements: —
+Blocked-on: —
+---
 # 80 — Configurable rule severity, per SPEC-1's own unbuilt promise
-
-> Status: Planned
-> Stable-Id: 01M1Z2T44DHPRE5C4DVENWXY58
-> Phase: 1
-> Track: schema-governance
-> Implements: —
-> Blocked-on: —
 
 ## What
 

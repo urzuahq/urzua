@@ -1,13 +1,14 @@
+---
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/graph.rs
+Date: 2026-09-06
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-1 (Accepted), ADR-18 (Accepted)
+---
 # 24 — `urzua explain` and `urzua graph`: the relationship graph as queryable data
-
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/graph.rs
-> Date: 2026-09-06
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-1 (Accepted), ADR-18 (Accepted)
 
 ## Context
 

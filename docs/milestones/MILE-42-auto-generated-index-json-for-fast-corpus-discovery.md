@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN82MMNP7V6P4WB6FK7XKB
+Phase: '1'
+Track: discoverability
+Blocked-on: —
+---
 # 42 — Auto-generated INDEX.json for fast corpus discovery
-
-> Status: Planned
-> Stable-Id: 01M1YN82MMNP7V6P4WB6FK7XKB
-> Phase: 1
-> Track: discoverability
-> Blocked-on: —
 
 ## What
 

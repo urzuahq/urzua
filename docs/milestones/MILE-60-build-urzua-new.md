@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNBHC3AAT0QEJXEZR3W2F
+Phase: '0'
+Track: header-format
+Implements: ADR-27
+Blocked-on: —
+---
 # 60 — Build urzua new
-
-> Status: Done
-> Stable-Id: 01M1YNNBHC3AAT0QEJXEZR3W2F
-> Phase: 0
-> Track: header-format
-> Implements: ADR-27
-> Blocked-on: —
 
 ## What
 

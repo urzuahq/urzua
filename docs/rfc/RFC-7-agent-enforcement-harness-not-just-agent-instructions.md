@@ -1,9 +1,10 @@
+---
+Status: Draft
+Date: 2026-07-30
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 7 — Agent enforcement harness: an audit trail independent of the editing agent's own compliance
-
-> Status: Draft
-> Date: 2026-07-30
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Summary
 

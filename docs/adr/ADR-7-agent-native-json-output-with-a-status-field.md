@@ -1,12 +1,13 @@
+---
+Status: Superseded
+Embodiment: Implemented
+Date: 2026-09-04
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: ADR-23
+Derives-from: RFC-3 (Accepted)
+---
 # 7 — Every entry point emits JSON with a status field on stdout
-
-> Status: Superseded
-> Embodiment: Implemented
-> Date: 2026-09-04
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: ADR-23
-> Derives-from: RFC-3 (Accepted)
 
 ## Context
 

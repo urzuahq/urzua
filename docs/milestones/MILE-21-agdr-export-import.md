@@ -1,11 +1,12 @@
+---
+Status: Blocked
+Stable-Id: 01M1Y5JQ7E7PXJZ2N7QSX0BVTS
+Phase: '1'
+Track: interop
+Implements: ADR-2
+Blocked-on: real adopter demand for AgDR round-tripping
+---
 # 21 — AgDR export/import
-
-> Status: Blocked
-> Stable-Id: 01M1Y5JQ7E7PXJZ2N7QSX0BVTS
-> Phase: 1
-> Track: interop
-> Implements: ADR-2
-> Blocked-on: real adopter demand for AgDR round-tripping
 
 ## What
 

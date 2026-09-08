@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNN8V8XTS6CSCEEBAEWR9A
+Phase: '0'
+Track: section-checks
+Implements: ADR-7, ADR-8, ADR-9, ADR-14
+Blocked-on: —
+---
 # 56 — Build urzua check Phase A: header, pointer, field, filename, supersession rules
-
-> Status: Done
-> Stable-Id: 01M1YNN8V8XTS6CSCEEBAEWR9A
-> Phase: 0
-> Track: section-checks
-> Implements: ADR-7, ADR-8, ADR-9, ADR-14
-> Blocked-on: —
 
 ## What
 

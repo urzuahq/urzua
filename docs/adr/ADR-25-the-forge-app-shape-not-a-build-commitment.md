@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-06
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-14 (Accepted)
+---
 # 25 — The forge app: shape decided, build explicitly not next
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-06
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-14 (Accepted)
 
 ## Context
 

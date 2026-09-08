@@ -349,7 +349,13 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
 }
 
 #[test]
-fn init_then_check_round_trips_on_a_fresh_corpus() {
+fn init_then_check_flags_a_pre_existing_blockquote_record() {
+    // ADR-33: adopt mode proposes `header_shape = "yaml-frontmatter"`
+    // regardless of what shape the existing corpus happens to use -- so a
+    // record already written in the deprecated `blockquote` shape (as this
+    // one is) no longer parses cleanly against the freshly-adopted config,
+    // and `check` correctly reports the mismatch rather than silently
+    // reading it as though no header requirement applied.
     let dir = fixture_repo("bootstrap");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
@@ -368,7 +374,12 @@ fn init_then_check_round_trips_on_a_fresh_corpus() {
     assert!(dir.join(".urzua/config.toml").exists());
 
     let check_output = run_urzua(&dir, &["check", "docs/"]);
-    assert_eq!(check_output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&check_output.stdout);
+    assert_eq!(check_output.status.code(), Some(1), "stdout: {stdout}");
+    assert!(
+        stdout.contains("no header-shaped region found"),
+        "stdout: {stdout}"
+    );
 
     // Idempotence: a second init must refuse, not clobber.
     let second_init = run_urzua(&dir, &["init"]);

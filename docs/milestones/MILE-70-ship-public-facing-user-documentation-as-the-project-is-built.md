@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YR7GH547SCN3Z4Q9Z9WCVH
+Phase: '1'
+Track: user-docs
+Blocked-on: —
+---
 # 70 — Ship public-facing user documentation as the project is built
-
-> Status: Planned
-> Stable-Id: 01M1YR7GH547SCN3Z4Q9Z9WCVH
-> Phase: 1
-> Track: user-docs
-> Blocked-on: —
 
 ## What
 

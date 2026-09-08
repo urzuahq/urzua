@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN87VGAYN7092E3W0P4S9D
+Phase: '3'
+Track: backfill
+Blocked-on: —
+---
 # 52 — Design concurrency safety for the backfill/verification engine
-
-> Status: Planned
-> Stable-Id: 01M1YN87VGAYN7092E3W0P4S9D
-> Phase: 3
-> Track: backfill
-> Blocked-on: —
 
 ## What
 

@@ -1,10 +1,11 @@
+---
+Status: Fixed
+Stable-Id: 01M1ZF57J080NMEH2FZ6W6E044
+Found-in: planning MILE-79 (a guarded edit command), reasoning through why the ADR-38 incident (Author silently reverted to a placeholder, undetected until a much later corpus-wide check) wasn't caught by field.quality despite field.quality running on every check
+Regression-test: retired_project_placeholder_conventions_are_placeholder_not_present, field_quality_flags_a_retired_placeholder_as_an_error (rust/crates/urzua-core/src/field_state.rs, rust/crates/urzua-core/src/rules.rs)
+Realized-by: code:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/rules.rs
+---
 # 5 — field_state's placeholder tokens missed this project's own retired conventions
-
-> Status: Fixed
-> Stable-Id: 01M1ZF57J080NMEH2FZ6W6E044
-> Found-in: planning MILE-79 (a guarded edit command), reasoning through why the ADR-38 incident (Author silently reverted to a placeholder, undetected until a much later corpus-wide check) wasn't caught by field.quality despite field.quality running on every check
-> Regression-test: retired_project_placeholder_conventions_are_placeholder_not_present, field_quality_flags_a_retired_placeholder_as_an_error (rust/crates/urzua-core/src/field_state.rs, rust/crates/urzua-core/src/rules.rs)
-> Realized-by: code:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/rules.rs
 
 ## What was wrong
 

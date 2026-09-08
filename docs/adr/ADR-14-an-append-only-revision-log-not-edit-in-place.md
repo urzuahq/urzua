@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-05
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-6 (Accepted)
+---
 # 14 — An append-only revision log, not edit-in-place
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-05
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-6 (Accepted)
 
 ## Context
 

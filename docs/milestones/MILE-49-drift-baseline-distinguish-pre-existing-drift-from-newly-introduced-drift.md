@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YN86A7Z8N7YP5F89Q5Q04K
+Phase: '0'
+Track: embodiment-model
+Implements: RFC-5
+Blocked-on: —
+---
 # 49 — Drift baseline: distinguish pre-existing drift from newly-introduced drift
-
-> Status: Planned
-> Stable-Id: 01M1YN86A7Z8N7YP5F89Q5Q04K
-> Phase: 0
-> Track: embodiment-model
-> Implements: RFC-5
-> Blocked-on: —
 
 ## What
 

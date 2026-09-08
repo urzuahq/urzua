@@ -7,14 +7,16 @@ schema_version = 1
 [record_types.adr]
 dir = "docs/adr"
 required_fields = ["Status", "Date", "Author", "Deciders"]
-header_layout = "one-per-line"
+header_shape = "yaml-frontmatter"
 known_fields = ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
+spec = "SPEC-16"
 
 [record_types.rfc]
 dir = "docs/rfc"
 required_fields = ["Status", "Date", "Author"]
-header_layout = "one-per-line"
+header_shape = "yaml-frontmatter"
 known_fields = ["Supersedes / Superseded-by", "Amends"]
+spec = "SPEC-17"
 
 # spec deliberately has no known_fields yet -- MILE-0074 decides the
 # canonical field set (does Author become required? is SPEC-1's
@@ -23,22 +25,27 @@ known_fields = ["Supersedes / Superseded-by", "Amends"]
 [record_types.spec]
 dir = "docs/specs"
 required_fields = ["Status", "Date", "Version"]
-header_layout = "pipe-delimited"
+header_shape = "yaml-frontmatter"
+spec = "SPEC-18"
 
 [record_types.milestone]
 dir = "docs/milestones"
 prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
-header_layout = "one-per-line"
+header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Implements", "Blocked-on"]
+spec = "SPEC-6"
 
 [record_types.bug]
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
-header_layout = "one-per-line"
+header_shape = "yaml-frontmatter"
 known_fields = ["Realized-by", "Stable-Id"]
+spec = "SPEC-9"
 
 [record_types.waiver]
 dir = "docs/waiver"
 required_fields = ["Rule", "Scope", "Reason"]
+header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Expires"]
+spec = "SPEC-10"

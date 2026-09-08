@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JMJMDDAP1WWSK37BTW5T
+Phase: '1'
+Track: embodiment-model
+Implements: RFC-5
+Blocked-on: —
+---
 # 16 — Build RFC-5's full claim graph
-
-> Status: Planned
-> Stable-Id: 01M1Y5JMJMDDAP1WWSK37BTW5T
-> Phase: 1
-> Track: embodiment-model
-> Implements: RFC-5
-> Blocked-on: —
 
 ## What
 

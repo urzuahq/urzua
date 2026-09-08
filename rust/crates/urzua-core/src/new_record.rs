@@ -106,16 +106,46 @@ pub fn render_from_template(template: &str, params: &NewRecordParams) -> String 
 /// Render from scratch with no template: YAML frontmatter (ADR-0017's
 /// default for a record with no pre-existing convention to adopt), listing
 /// every configured required field as a field a human still has to fill in.
+///
+/// `Stable-Id` is always assigned (ADR-21: every type gets one, declared or
+/// not). `Date`/`Author` are only filled with their real value when the
+/// type's own `required_fields` actually names them -- unconditionally
+/// adding them regardless of what a type declares would put a field on the
+/// record its own `known_fields`/`required_fields` never listed, tripping
+/// `header.field-set-consistency` for every record `urzua new` creates
+/// (found live: `milestone`/`bug` require neither field, so the first
+/// yaml-frontmatter `milestone` created this way carried both unannounced).
+///
+/// Builds a real `yaml_serde::Mapping` and serializes it (BUG-0006) instead
+/// of hand-formatting strings -- `Stable-Id`/`Date`/`Author` are real values
+/// that can contain YAML-special characters (a colon, a leading `-`), and a
+/// value that merely *looks* numeric (a version string like `"0.2"`) must
+/// stay a string on reparse, not silently become a YAML number. The real
+/// serializer's plain-scalar analysis quotes a value exactly when leaving it
+/// bare would change what it parses back as -- verified by round-trip tests,
+/// not assumed.
 pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String]) -> String {
-    let mut out = String::from("---\n");
-    out.push_str(&format!("Stable-Id: {}\n", params.stable_id));
-    out.push_str(&format!("Date: {}\n", params.today));
-    out.push_str(&format!("Author: {}\n", params.author));
+    use yaml_serde::Value;
+
+    let mut mapping = yaml_serde::Mapping::new();
+    mapping.insert(
+        Value::String("Stable-Id".to_string()),
+        Value::String(params.stable_id.to_string()),
+    );
     for field in required_fields {
-        if field == "Date" || field == "Author" {
-            continue;
-        }
-        out.push_str(&format!("{field}: \n"));
+        let value = match field.as_str() {
+            "Date" => Value::String(params.today.to_string()),
+            "Author" => Value::String(params.author.to_string()),
+            _ => Value::Null,
+        };
+        mapping.insert(Value::String(field.clone()), value);
+    }
+
+    let yaml_body = yaml_serde::to_string(&Value::Mapping(mapping)).unwrap_or_default();
+    let mut out = String::from("---\n");
+    out.push_str(yaml_body.trim_start_matches("---\n"));
+    if !out.ends_with('\n') {
+        out.push('\n');
     }
     out.push_str("---\n");
     out.push_str(&format!("# {} — {}\n", params.display_number, params.title));
@@ -229,9 +259,53 @@ mod tests {
         let required = vec!["Status".to_string(), "Severity".to_string()];
         let result = render_synthetic_yaml(&params, &required);
         assert!(result.starts_with("---\n"));
-        assert!(result.contains("Status: \n"));
-        assert!(result.contains("Severity: \n"));
+        // A real YAML serializer renders an unset field as the `null` scalar,
+        // not a bare trailing colon -- both are valid YAML for "unset," but
+        // only the former is what `yaml_serde::to_string` actually emits.
+        assert!(result.contains("Status: null\n"));
+        assert!(result.contains("Severity: null\n"));
         assert!(result.contains("# 1 — X"));
+    }
+
+    #[test]
+    fn render_synthetic_yaml_escapes_a_value_with_an_embedded_colon() {
+        // Real values `render_synthetic_yaml` writes are `Stable-Id`/`Date`/
+        // `Author` -- `Author` is the one that's genuinely free text (e.g. a
+        // "Last, First: Team" convention), the same shape of value as the
+        // live MILE-4 `Blocked-on` case (`header::parse_key_value` only
+        // splits on the first colon, so a colon-bearing value already
+        // exists in this corpus). Verified through the real parser, not a
+        // hand-edited string, so this proves the escaping `render_synthetic_
+        // yaml` itself performs, not `yaml_serde`'s parser in isolation.
+        let params = NewRecordParams {
+            display_number: 4,
+            title: "X",
+            stable_id: "01ABC",
+            author: "Doe, J: Platform",
+            today: "2026-09-06",
+        };
+        let result = render_synthetic_yaml(&params, &["Author".to_string()]);
+        let header =
+            crate::header::parse_with_shape(&result, crate::header::HeaderShape::YamlFrontmatter);
+        assert_eq!(header.get("Author"), Some("Doe, J: Platform"));
+    }
+
+    #[test]
+    fn render_synthetic_yaml_round_trips_a_numeric_looking_string() {
+        // A value that merely *looks* numeric must stay a string on
+        // reparse, not silently become a YAML number -- checked through the
+        // real parser `check`/`urzua new` themselves use.
+        let params = NewRecordParams {
+            display_number: 1,
+            title: "X",
+            stable_id: "01ABC",
+            author: "0.2",
+            today: "2026-09-06",
+        };
+        let result = render_synthetic_yaml(&params, &["Author".to_string()]);
+        let header =
+            crate::header::parse_with_shape(&result, crate::header::HeaderShape::YamlFrontmatter);
+        assert_eq!(header.get("Author"), Some("0.2"));
     }
 
     #[test]

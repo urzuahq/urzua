@@ -1,13 +1,14 @@
+---
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/migrate.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/migrate.rs
+Date: 2026-09-06
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-8 (Accepted), ADR-11 (Accepted)
+---
 # 22 — `urzua migrate schema`: report mode only
-
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/migrate.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/migrate.rs
-> Date: 2026-09-06
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-8 (Accepted), ADR-11 (Accepted)
 
 ## Context
 

@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNEQPK3PG0PZPG3K08QFG
+Phase: '0'
+Track: accountability-identity
+Implements: ADR-31
+Blocked-on: —
+---
 # 66 — Trust a verified gh login over --by for identity resolution
-
-> Status: Done
-> Stable-Id: 01M1YNNEQPK3PG0PZPG3K08QFG
-> Phase: 0
-> Track: accountability-identity
-> Implements: ADR-31
-> Blocked-on: —
 
 ## What
 

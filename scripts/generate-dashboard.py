@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 
 def repo_root() -> Path:
     here = Path(__file__).resolve().parent
@@ -50,7 +52,21 @@ def extract_body(content: str) -> str:
     return "\n".join(lines[idx:]).strip()
 
 
+def _yaml_frontmatter(content: str):
+    if not content.startswith("---\n"):
+        return None
+    end = content.find("\n---\n", 4)
+    if end == -1:
+        return None
+    parsed = yaml.safe_load(content[4:end])
+    return parsed if isinstance(parsed, dict) else None
+
+
 def field(content: str, name: str, default: str = "—") -> str:
+    frontmatter = _yaml_frontmatter(content)
+    if frontmatter is not None:
+        value = frontmatter.get(name)
+        return default if value is None else str(value).strip()
     m = re.search(rf"^> {name}: (.+)$", content, re.M)
     return m.group(1).strip() if m else default
 
@@ -167,17 +183,13 @@ def parse_specs(root: Path):
         content = Path(f).read_text()
         num = re.search(r"SPEC-(\d+)-", f).group(1)
         title = re.search(r"^# SPEC-\d+ — (.+)$", content, re.M).group(1)
-        m = re.search(r"^> Version: (.+?) \| Date: (.+?) \| Status: (.+)$", content, re.M)
-        version, _date, status = (m.group(1), m.group(2), m.group(3)) if m else ("—", "—", "—")
-        lines = content.split("\n")
-        body = "\n".join(lines[5:]).strip()
         records.append(
             {
                 "num": num,
                 "title": title,
-                "status": status,
-                "version": version,
-                "body": body,
+                "status": field(content, "Status"),
+                "version": field(content, "Version"),
+                "body": extract_body(content),
                 "file": str(Path(f).relative_to(root)),
             }
         )

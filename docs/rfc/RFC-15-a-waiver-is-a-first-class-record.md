@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-09-04
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 15 — A waiver is a first-class record, not an ignore list
-
-> Status: Accepted
-> Date: 2026-09-04
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 > **Decided at proposal time, 2026-09-04.** See [ADR-11](../adr/ADR-11-a-waiver-is-a-first-class-record.md).
 

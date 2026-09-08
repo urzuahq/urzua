@@ -1,9 +1,10 @@
+---
+Status: Draft
+Date: 2026-07-30
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 4 — RFC → ADR → Spec layering: the common path, not the only path
-
-> Status: Draft
-> Date: 2026-07-30
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 > **Split from RFC-1, 2026-07-30.** This was originally §2 of
 > `0001-unified-schema-and-layering.md`. RFC-1 had grown to cover four separable decisions

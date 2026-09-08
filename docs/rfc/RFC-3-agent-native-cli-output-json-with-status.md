@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-07-30
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 3 — Agent-native CLI output: every entry point emits JSON with a status field on stdout
-
-> Status: Accepted
-> Date: 2026-07-30
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Summary
 

@@ -1,12 +1,13 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-05
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-8 (Accepted)
+---
 # 15 — Tool-authored record maintenance: derived fields are a cache the tool owns
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-05
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-8 (Accepted)
 
 ## Context
 

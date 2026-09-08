@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JM1JV2Z4AAV93DKFYS1P
+Phase: '1'
+Track: embodiment-model
+Implements: ADR-32
+Blocked-on: —
+---
 # 15 — fix writes Drift detected automatically
-
-> Status: Planned
-> Stable-Id: 01M1Y5JM1JV2Z4AAV93DKFYS1P
-> Phase: 1
-> Track: embodiment-model
-> Implements: ADR-32
-> Blocked-on: —
 
 ## What
 

@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Y9H4N2TZ88D8CTWZP6G5RG
+Phase: '0'
+Track: roadmap-tracking
+Implements: —
+Blocked-on: —
+---
 # 36 — Write AGENTS.md capturing this session's practices
-
-> Status: Done
-> Stable-Id: 01M1Y9H4N2TZ88D8CTWZP6G5RG
-> Phase: 0
-> Track: roadmap-tracking
-> Implements: —
-> Blocked-on: —
 
 ## What
 

@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN87AP04NCFMXY4WBJK4EK
+Phase: '0'
+Track: corpus-corrections
+Blocked-on: —
+---
 # 51 — Validate one config against a second real corpus with zero escape hatch
-
-> Status: Planned
-> Stable-Id: 01M1YN87AP04NCFMXY4WBJK4EK
-> Phase: 0
-> Track: corpus-corrections
-> Blocked-on: —
 
 ## What
 

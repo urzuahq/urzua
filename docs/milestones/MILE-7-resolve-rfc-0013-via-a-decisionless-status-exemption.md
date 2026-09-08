@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JFS4DE9EE9HFVD4H4QHP
+Phase: '0'
+Track: section-checks
+Implements: RFC-13
+Blocked-on: 'Milestone: Build the y-statement content shape'
+---
 # 7 — Resolve RFC-13 via a decisionless-status exemption
-
-> Status: Planned
-> Stable-Id: 01M1Y5JFS4DE9EE9HFVD4H4QHP
-> Phase: 0
-> Track: section-checks
-> Implements: RFC-13
-> Blocked-on: Milestone: Build the y-statement content shape
 
 ## What
 

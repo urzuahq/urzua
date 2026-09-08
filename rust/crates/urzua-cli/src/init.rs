@@ -83,6 +83,11 @@ pub fn render_config_toml(proposed: &[ProposedRecordType]) -> String {
         out.push_str(&format!("\n[record_types.{}]\n", rt.name));
         out.push_str(&format!("dir = \"{}\"\n", rt.dir));
         out.push_str("required_fields = []\n");
+        // ADR-33: recommend the destination shape for any newly-adopted
+        // type going forward, regardless of what shape the existing corpus
+        // happens to use -- adopt mode proposes where to grow, not a
+        // preservation of however the corpus already looks.
+        out.push_str("header_shape = \"yaml-frontmatter\"\n");
     }
     out
 }

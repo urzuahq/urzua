@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNFS3073SZAAP376CD603
+Phase: '0'
+Track: schema-governance
+Implements: ADR-22
+Blocked-on: —
+---
 # 68 — Build urzua migrate schema --report
-
-> Status: Done
-> Stable-Id: 01M1YNNFS3073SZAAP376CD603
-> Phase: 0
-> Track: schema-governance
-> Implements: ADR-22
-> Blocked-on: —
 
 ## What
 

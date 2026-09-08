@@ -55,6 +55,16 @@ pub struct RecordTypeConfig {
     /// decides its canonical fields, rather than guessed at here.
     #[serde(default)]
     pub known_fields: Option<Vec<String>>,
+    /// Which spec (if any) documents this type's schema as a coherent
+    /// feature area (MILE-0077/ADR-0041 -- "does this type need a spec"
+    /// stays editorial, never inferred). Declared, not voted, same
+    /// principle as `header_layout`/`known_fields`: omitted means no spec
+    /// currently covers this type, which `type.no-declared-spec` (MILE-0077
+    /// follow-up) surfaces as an inventory signal, not a mandate -- a type
+    /// can permanently have none declared if that's the right editorial
+    /// call.
+    #[serde(default)]
+    pub spec: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for HeaderShape {
@@ -125,6 +135,26 @@ required_fields = ["Status", "Date"]
         let adr = config.record_types.get("adr").unwrap();
         assert_eq!(adr.dir, "docs/adr");
         assert_eq!(adr.required_fields, vec!["Status", "Date"]);
+    }
+
+    #[test]
+    fn spec_pointer_is_optional_and_parses_when_present() {
+        let toml = r#"
+schema_version = 1
+
+[record_types.milestone]
+dir = "docs/milestones"
+spec = "SPEC-6"
+
+[record_types.bug]
+dir = "docs/bugs"
+"#;
+        let config = parse(toml).unwrap();
+        assert_eq!(
+            config.record_types.get("milestone").unwrap().spec,
+            Some("SPEC-6".to_string())
+        );
+        assert_eq!(config.record_types.get("bug").unwrap().spec, None);
     }
 
     #[test]

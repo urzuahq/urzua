@@ -1,8 +1,11 @@
+---
+Version: '0.2'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-11
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-10 — The `waiver` record type
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-11
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 
@@ -18,7 +21,9 @@ invisible, only non-blocking.
 [record_types.waiver]
 dir = "docs/waiver"
 required_fields = ["Rule", "Scope", "Reason"]
+header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Expires"]
+spec = "SPEC-10"
 ```
 
 | Field | Values | Notes |
@@ -68,3 +73,4 @@ computed from non-waived findings only.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial spec. **Why:** `waiver` (ADR-11) was documented only as an ADR while `milestone`, the same shape of decision (a configured record type), got a matching spec (SPEC-6) — MILE-77 named this inconsistency and this spec resolves it for `waiver`. | **structural** |
+> | 2026-09-08 | Header shape declared as `yaml-frontmatter` (ADR-33/42 amendment) -- `waiver` never declared `header_layout` (no records exist yet to have settled on a sub-format), so nothing to remove here, unlike the other five types. `spec = "SPEC-10"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). | **substantive** |

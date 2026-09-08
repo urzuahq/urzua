@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JVK0Z71FE3H8BG58VM39
+Phase: '2'
+Track: escalation
+Implements: —
+Blocked-on: —
+---
 # 29 — A read-only MCP server
-
-> Status: Planned
-> Stable-Id: 01M1Y5JVK0Z71FE3H8BG58VM39
-> Phase: 2
-> Track: escalation
-> Implements: —
-> Blocked-on: —
 
 ## What
 

@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNC28J6KNP3D6PC6H7SCY
+Phase: '0'
+Track: embodiment-model
+Implements: ADR-15, ADR-19, ADR-20
+Blocked-on: —
+---
 # 61 — Build urzua fix detect and apply modes
-
-> Status: Done
-> Stable-Id: 01M1YNNC28J6KNP3D6PC6H7SCY
-> Phase: 0
-> Track: embodiment-model
-> Implements: ADR-15, ADR-19, ADR-20
-> Blocked-on: —
 
 ## What
 

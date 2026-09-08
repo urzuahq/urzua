@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1Y5JGVDEQ3FGKG31KW7DPX1
+Phase: '0'
+Track: roadmap-tracking
+Implements: ADR-35
+Blocked-on: —
+---
 # 9 — Add the bug record type
-
-> Status: Done
-> Stable-Id: 01M1Y5JGVDEQ3FGKG31KW7DPX1
-> Phase: 0
-> Track: roadmap-tracking
-> Implements: ADR-35
-> Blocked-on: —
 
 ## What
 

@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JYW47SYHYNYVFXDEFE12
+Phase: '1'
+Track: schema-governance
+Implements: RFC-1
+Blocked-on: —
+---
 # 35 — Explore a pre-RFC discovery-gate stage and a narrative-only record profile
-
-> Status: Planned
-> Stable-Id: 01M1Y5JYW47SYHYNYVFXDEFE12
-> Phase: 1
-> Track: schema-governance
-> Implements: RFC-1
-> Blocked-on: —
 
 ## What
 

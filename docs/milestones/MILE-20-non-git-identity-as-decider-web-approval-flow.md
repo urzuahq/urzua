@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JPPE0KSBN3CZKNJ8E9TF
+Phase: '3'
+Track: accountability-identity
+Implements: —
+Blocked-on: —
+---
 # 20 — Non-git identity as Decider / web approval flow
-
-> Status: Planned
-> Stable-Id: 01M1Y5JPPE0KSBN3CZKNJ8E9TF
-> Phase: 3
-> Track: accountability-identity
-> Implements: —
-> Blocked-on: —
 
 ## What
 

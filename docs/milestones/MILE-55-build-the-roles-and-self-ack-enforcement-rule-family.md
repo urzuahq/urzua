@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN89CZE1PPE925SH2EZ7Q8
+Phase: '0'
+Track: accountability-identity
+Blocked-on: —
+---
 # 55 — Build the roles and self-ack enforcement rule family
-
-> Status: Planned
-> Stable-Id: 01M1YN89CZE1PPE925SH2EZ7Q8
-> Phase: 0
-> Track: accountability-identity
-> Blocked-on: —
 
 ## What
 

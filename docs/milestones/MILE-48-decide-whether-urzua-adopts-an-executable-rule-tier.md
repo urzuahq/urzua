@@ -1,10 +1,11 @@
+---
+Status: Planned
+Stable-Id: 01M1YN85S6E9J8SEM91Y7QDNS5
+Phase: '1'
+Track: governance-process
+Blocked-on: —
+---
 # 48 — Decide whether Urzua adopts an executable-rule tier
-
-> Status: Planned
-> Stable-Id: 01M1YN85S6E9J8SEM91Y7QDNS5
-> Phase: 1
-> Track: governance-process
-> Blocked-on: —
 
 ## What
 

@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-15, ADR-18, ADR-19, ADR-20
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-8 — `urzua fix`
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-15, ADR-18, ADR-19, ADR-20
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

@@ -1,8 +1,11 @@
+---
+Version: '0.2'
+Date: 2026-08-20
+Status: Draft
+Implements: RFC-1, RFC-11
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-3 — Configuration: `.urzua/config.toml`
-
-> Version: 0.2 | Date: 2026-08-20 | Status: Draft
-> **Implements:** RFC-1, RFC-11
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

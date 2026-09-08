@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YN83N5WHAE63XN53HTDGHR
+Phase: '1'
+Track: schema-governance
+Implements: RFC-8
+Blocked-on: —
+---
 # 44 — Implement suggested_action on every finding
-
-> Status: Planned
-> Stable-Id: 01M1YN83N5WHAE63XN53HTDGHR
-> Phase: 1
-> Track: schema-governance
-> Implements: RFC-8
-> Blocked-on: —
 
 ## What
 

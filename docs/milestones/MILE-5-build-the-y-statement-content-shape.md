@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JEPZRBT40QA2DEXT2CM2
+Phase: '0'
+Track: section-checks
+Implements: RFC-17
+Blocked-on: 'Milestone: Build the closed section-parser and required_sections config schema'
+---
 # 5 — Build the y-statement content shape
-
-> Status: Planned
-> Stable-Id: 01M1Y5JEPZRBT40QA2DEXT2CM2
-> Phase: 0
-> Track: section-checks
-> Implements: RFC-17
-> Blocked-on: Milestone: Build the closed section-parser and required_sections config schema
 
 ## What
 

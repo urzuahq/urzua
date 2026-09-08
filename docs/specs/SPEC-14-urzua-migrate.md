@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-21, ADR-22
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-14 — `urzua migrate`
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-21, ADR-22
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

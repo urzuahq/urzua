@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Z8QEBSJRX510JWVK0155MP
+Phase: '2'
+Track: embodiment-model
+Implements: —
+Blocked-on: —
+---
 # 84 — Line and commit-anchored locators, plus a richer evidence-query surface
-
-> Status: Planned
-> Stable-Id: 01M1Z8QEBSJRX510JWVK0155MP
-> Phase: 2
-> Track: embodiment-model
-> Implements: —
-> Blocked-on: —
 
 ## What
 

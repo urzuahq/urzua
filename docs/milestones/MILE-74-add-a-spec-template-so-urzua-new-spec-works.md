@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1YSM7BNRXXTYMV4TF93EAG4
+Phase: '0'
+Track: roadmap-tracking
+Implements: SPEC-1
+Blocked-on: —
+---
 # 74 — Add a spec template so urzua new spec works
-
-> Status: Planned
-> Stable-Id: 01M1YSM7BNRXXTYMV4TF93EAG4
-> Phase: 0
-> Track: roadmap-tracking
-> Implements: SPEC-1
-> Blocked-on: —
 
 ## What
 

@@ -1,13 +1,14 @@
+---
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: ADR-34 (Accepted)
+---
 # 35 — `bug`: a configured record type requiring a named regression test
-
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: ADR-34 (Accepted)
 
 ## Context
 

@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YX4KG8PJNP7J1NRGCYPA2E
+Phase: '1'
+Track: governance-process
+Implements: ADR-41
+Blocked-on: —
+---
 # 77 — Decide what warrants a spec versus an ADR being sufficient
-
-> Status: Done
-> Stable-Id: 01M1YX4KG8PJNP7J1NRGCYPA2E
-> Phase: 1
-> Track: governance-process
-> Implements: ADR-41
-> Blocked-on: —
 
 ## What
 

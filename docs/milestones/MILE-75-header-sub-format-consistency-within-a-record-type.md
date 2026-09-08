@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YWKN2HHC7DW4Y422DWJK1F
+Phase: '1'
+Track: schema-governance
+Implements: RFC-10, ADR-38
+Blocked-on: —
+---
 # 75 — Header sub-format consistency within a record type
-
-> Status: Done
-> Stable-Id: 01M1YWKN2HHC7DW4Y422DWJK1F
-> Phase: 1
-> Track: schema-governance
-> Implements: RFC-10, ADR-38
-> Blocked-on: —
 
 ## What
 

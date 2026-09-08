@@ -1,9 +1,10 @@
+---
+Status: Accepted
+Date: 2026-07-30
+Author: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 6 — The living-spec problem: an append-only revision log, not edit-in-place
-
-> Status: Accepted
-> Date: 2026-07-30
-> Author: @beauwilliams
-> Supersedes / Superseded-by: —
 
 > **Split from RFC-1, 2026-07-30.** This was originally §4 of
 > `0001-unified-schema-and-layering.md`. Split so it's independently acceptable/rejectable from

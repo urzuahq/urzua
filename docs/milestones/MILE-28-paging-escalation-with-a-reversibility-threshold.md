@@ -1,11 +1,12 @@
+---
+Status: Planned
+Stable-Id: 01M1Y5JV2770NVZ2FJE3WCX02H
+Phase: '3'
+Track: escalation
+Implements: —
+Blocked-on: —
+---
 # 28 — Paging/escalation with a reversibility threshold
-
-> Status: Planned
-> Stable-Id: 01M1Y5JV2770NVZ2FJE3WCX02H
-> Phase: 3
-> Track: escalation
-> Implements: —
-> Blocked-on: —
 
 ## What
 

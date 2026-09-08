@@ -1,8 +1,11 @@
+---
+Version: '0.1'
+Date: 2026-09-07
+Status: Accepted
+Implements: ADR-24
+Parent: SPEC-1 (v0 CLI).
+---
 # SPEC-13 — `urzua explain` and `urzua graph`
-
-> Version: 0.1 | Date: 2026-09-07 | Status: Accepted
-> **Implements:** ADR-24
-> **Parent:** SPEC-1 (v0 CLI).
 
 ## Purpose
 

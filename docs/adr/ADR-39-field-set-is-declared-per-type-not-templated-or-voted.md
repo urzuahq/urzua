@@ -1,14 +1,15 @@
+---
+Status: Accepted
+Stable-Id: 01M1Z3HTHA9VHQX8WCXXX9TQBA
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/rules.rs
+Date: 2026-09-07
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+Derives-from: RFC-10 (Accepted)
+---
 # 39 — Field set is declared per type not templated or voted
-
-> Status: Accepted
-> Stable-Id: 01M1Z3HTHA9VHQX8WCXXX9TQBA
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/rules.rs
-> Date: 2026-09-07
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
-> Derives-from: RFC-10 (Accepted)
 
 ## Context
 

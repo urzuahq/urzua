@@ -1,11 +1,12 @@
+---
+Status: Done
+Stable-Id: 01M1YNNCJQKWVEVQWPQ3ZCHJMV
+Phase: '0'
+Track: governance-process
+Implements: ADR-30
+Blocked-on: —
+---
 # 62 — Build urzua audit
-
-> Status: Done
-> Stable-Id: 01M1YNNCJQKWVEVQWPQ3ZCHJMV
-> Phase: 0
-> Track: governance-process
-> Implements: ADR-30
-> Blocked-on: —
 
 ## What
 

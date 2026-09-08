@@ -1,11 +1,12 @@
+---
+Status: Accepted
+Embodiment: Not started
+Date: 2026-09-04
+Author: '@beauwilliams'
+Deciders: '@beauwilliams'
+Supersedes / Superseded-by: —
+---
 # 6 — Shell out to `git`, rather than link `libgit2`
-
-> Status: Accepted
-> Embodiment: Not started
-> Date: 2026-09-04
-> Author: @beauwilliams
-> Deciders: @beauwilliams
-> Supersedes / Superseded-by: —
 
 ## Context
 
