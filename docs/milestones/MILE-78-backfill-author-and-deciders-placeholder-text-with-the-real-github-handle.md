@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: accountability-identity
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -26,10 +27,6 @@ to the first RFC. A real decision record's `Author`/`Deciders` accountability is
 requiring the field (RFC-1) -- an anonymized placeholder in every single one defeats that as
 thoroughly as an unfilled blank would, just less visibly, since `field.quality` doesn't flag
 placeholder-shaped prose that happens to already be non-empty.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

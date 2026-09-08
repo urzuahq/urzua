@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: embodiment-model
 > Implements: RFC-5
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ AND/OR composite claims, weakest-link confidence, cycle detection, promoted shar
 ## Why
 
 Staged intentionally: ships once a real multi-part-AND case is found needing it, not before.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

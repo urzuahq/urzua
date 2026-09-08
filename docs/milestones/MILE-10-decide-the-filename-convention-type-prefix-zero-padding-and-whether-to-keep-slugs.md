@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: roadmap-tracking
 > Implements: ADR-36
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Whether filenames should embed the type prefix (ADR-30-slug.md) instead of relyi
 ## Why
 
 Raised directly; explicitly not decided yet -- BUG-2 already removed the actual defect (numbers already grow unbounded in both parsing and display), so this is a considered style question, not an urgent fix, and shouldn't be rushed into a corpus-wide rename.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

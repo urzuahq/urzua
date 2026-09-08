@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: governance-process
 > Implements: RFC-12
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Refuse the merge, not the edit.
 ## Why
 
 Still Draft; genuinely undecided.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

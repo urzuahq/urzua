@@ -5,6 +5,7 @@
 > Phase: 2
 > Track: write-path
 > Implements: ADR-14, ADR-15, ADR-19
+> Blocked-on: —
 
 ## What
 
@@ -28,10 +29,6 @@ the old placeholder text, undetected until a much later corpus-wide check. ADR-1
 two missing pieces `fix --apply` needs -- field-level mutation and a revision-log write-path -- and
 this is the same gap. Building it once, shared, avoids the alternative of `fix --apply` and `edit`
 each growing their own ad hoc mutation code that drifts from each other.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

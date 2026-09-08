@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: embodiment-model
 > Implements: ADR-32
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 A back-pointer that's merely present proves someone typed a string once, not that the code still matches. Drift detection is what makes `Realized-by` a claim that can go stale and get caught, not a write-once assertion nobody re-checks.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

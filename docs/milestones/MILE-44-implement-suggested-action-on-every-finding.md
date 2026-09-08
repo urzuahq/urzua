@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: RFC-8
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Add `suggested_action` to the `Finding` struct and populate it for at least the 
 ## Why
 
 SPEC-2's own contract and RFC-8 both already describe `suggestedAction` as part of the JSON shape -- checked directly against `report.rs`'s real `Finding` struct, it isn't there. Decided, never built; a finding today says what's wrong but never what to do about it.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

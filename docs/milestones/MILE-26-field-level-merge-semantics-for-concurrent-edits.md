@@ -5,6 +5,7 @@
 > Phase: 3
 > Track: review-workflow
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Prevent two agents from clobbering different fields of the same record, rather t
 ## Why
 
 Named in research as the #1 core mechanism gap; no RFC yet.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

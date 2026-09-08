@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YJGWJP6SWNNWQ0Z6AX7YQ9
 > Phase: 1
 > Track: roadmap-tracking
+> Blocked-on: —
 
 ## What
 
@@ -20,10 +21,6 @@ file `urzua` doesn't treat as a record at all, so a rename here goes uncaught ex
 record's own dangling pointer used to before this project built a check for it. Found live while
 reviewing README for staleness after the ADR-36 filename-convention rename and the `MILE` prefix
 change, both of which already required a manual sweep of README's own citations.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: schema-governance
 > Implements: ADR-34, SPEC-6
+> Blocked-on: —
 
 ## What
 
@@ -21,10 +22,6 @@ after all." No documented value fits: `Blocked` implies a nameable blocker, `Pla
 misrepresents a reversed decision as still intended, and there's no `Superseded`-style pointer to a
 replacement either. This is new capability for the state machine, not broken behavior -- nothing
 crashes or emits wrong output today, the enum is just incomplete for a real case.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

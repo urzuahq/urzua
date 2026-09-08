@@ -1,6 +1,6 @@
 # SPEC-6 — The `milestone` record type
 
-> Version: 0.2 | Date: 2026-09-07 | Status: Accepted
+> Version: 0.3 | Date: 2026-09-07 | Status: Accepted
 > **Implements:** ADR-34
 > **Parent:** SPEC-1 (v0 CLI).
 
@@ -33,6 +33,7 @@ Per-record-type, not global — any type can shorten its own prefix without affe
 | `Phase` | a plain tag (`0`, `1`, ...) | Sequential grouping. Not a resolved pointer — no cross-referencing, just a bucket. |
 | `Track` | a plain tag (`header-format`, `section-checks`, ...) | Parallel workstream. Also a plain tag, not a pointer. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). |
+| `Blocked-on` | free text, optionally citing a record ID; optional | What has to be true before this milestone can move. Free text with no reference token stays legal ("a decision not yet made"); a real ID (`BUG-3`) is checked by `pointer.resolution` for resolution and by `blocked-on.stale` (ADR-42) for whether the target has since reached a terminal status. Was a body section (`## Blocked on`) before this version — moved into the header (ADR-42) since it's the one field-shaped exception in the schema that hadn't been. |
 
 `Status` is documented here but not mechanically validated: nothing in `urzua-core` checks a
 record's `Status` value against an enum for any record type today (RFC-9's field-presence rules
@@ -54,10 +55,11 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 
 ## What's deliberately not built
 
-- **`Depends-on`/`Blocked-by`** — a real sequencing relationship (this milestone can't start until
-  that one finishes) would need a new checked field and eventually cycle detection. Not built until
-  a real case demands it (ADR-34) — `Phase`/`Track` tags are sufficient for the backlog as it
-  exists today.
+- **`Depends-on`/`Blocked-by`** — a real, bidirectional sequencing relationship (this milestone
+  can't start until that one finishes) with reciprocity checking and eventual cycle detection. Not
+  built until a real case demands it (ADR-34) — `Phase`/`Track` tags are sufficient for the backlog
+  as it exists today. Distinct from `Blocked-on` (above): that field is one-way, optional, and only
+  checked for resolution/staleness, never for reciprocity or cycles.
 - **A generated roadmap view** — an aggregate report over all milestones, grouped by `Phase` then
   `Track`. Deliberately not a hand-maintained second document (the same drift risk RFC-17 already
   solved for template/config agreement) — build once there are enough milestones that
@@ -82,3 +84,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-07 | Initial spec. | **structural** |
 > | 2026-09-07 | Added `prefix = "MILE"`, shortening the filename/ID prefix from `MILESTONE-N` to `MILE-N`. The type name (`milestone`) and directory (`docs/milestones`) are unchanged. | **substantive** |
 > | 2026-09-07 | Added `WontDo` as a terminal `Status` value (ADR-34 amendment). **Why:** every other record type in this corpus (`bug`, `adr`) already has a terminal "decided against" state; `milestone` didn't, so deferring or abandoning a milestone had no honest representation — it either stayed `Planned` (misrepresenting a reversed decision as still-pending) or `Blocked` (implying a specific blocker that may not exist). Folded into this version rather than a new spec number, per ADR-14's amendment: a spec's number is permanent per subject, revisions are a version bump on the same spec. | **substantive** |
+> | 2026-09-07 | Moved `Blocked-on` from a body section (`## Blocked on`) into the header, alongside `Implements` (ADR-42). **Why:** found live that `Blocked-on` was the one field-shaped exception across the entire schema left unchecked as prose -- MILE-2/3 both cited an already-fixed bug by description with nothing catching it going stale. All 84 existing milestone files migrated, verified by a before/after content-equality check. | **substantive** |

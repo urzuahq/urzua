@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: RFC-1
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A short, ~1-hour gate deciding whether an idea deserves real design time before 
 ## Why
 
 Feeds RFC-1's still-open Product/PRD question; a real gap neither surveyed prior-art model answers today.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

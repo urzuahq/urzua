@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YN858DBHWE5XJ2JFEVY1F6
 > Phase: 2
 > Track: escalation
+> Blocked-on: —
 
 ## What
 
@@ -12,10 +13,6 @@ Write an RFC deciding Urzua's MCP position: whether to ship an MCP server at all
 ## Why
 
 MILE-29 already names "a read-only MCP server" as a build target, but no RFC or ADR backs that stance -- unlike every other build-track milestone, its own `Implements` field is empty. The position (why read-only, why this specific data) needs deciding before the build, not assumed by the milestone's own title.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

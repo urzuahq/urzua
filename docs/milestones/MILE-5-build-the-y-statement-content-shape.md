@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: section-checks
 > Implements: RFC-17
+> Blocked-on: Milestone: Build the closed section-parser and required_sections config schema
 
 ## What
 
@@ -13,10 +14,6 @@ Extract a Decision section's TL;DR block and check it contains the five Y-statem
 ## Why
 
 The first real content shape, proving the section-parser design; validated against two independent real implementations that converged on the same extraction/matching approach.
-
-## Blocked on
-
-Milestone: Build the closed section-parser and required_sections config schema
 
 > **Revision log**
 >

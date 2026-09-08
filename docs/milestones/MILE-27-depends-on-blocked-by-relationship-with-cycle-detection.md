@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: review-workflow
 > Implements: —
+> Blocked-on: a real case where Phase/Track tags aren't enough to express sequencing
 
 ## What
 
@@ -13,10 +14,6 @@ A genuine sequencing relationship beyond Phase/Track tags, checked for resolutio
 ## Why
 
 Named explicitly in ADR-34/SPEC-6 as deferred until a real case needs it -- Phase/Track tags are sufficient for the backlog as it exists today.
-
-## Blocked on
-
-a real case where Phase/Track tags aren't enough to express sequencing
 
 > **Revision log**
 >

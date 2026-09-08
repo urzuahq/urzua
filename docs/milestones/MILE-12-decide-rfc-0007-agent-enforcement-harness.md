@@ -5,6 +5,7 @@
 > Phase: 2
 > Track: governance-process
 > Implements: RFC-7
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ An audit trail independent of the editing agent's own compliance.
 ## Why
 
 Still Draft; genuinely undecided.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

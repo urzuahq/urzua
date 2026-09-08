@@ -5,6 +5,7 @@
 > Phase: 4
 > Track: scale-and-analytics
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Event-collection-based drift-trend analytics, a cross-repo decision graph, org-l
 ## Why
 
 Named in roadmap research as the long-term differentiator and the emptiest part of the competitive landscape; zero RFC coverage yet.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

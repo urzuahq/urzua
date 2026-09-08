@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: section-checks
 > Implements: RFC-17
+> Blocked-on: Milestone: Build the closed section-parser and required_sections config schema
 
 ## What
 
@@ -13,10 +14,6 @@ doctor verifies each type's template contains a heading for every section its co
 ## Why
 
 Nothing today checks that a template and its config haven't drifted apart -- the same class of silent gap the header_shape/template bug already demonstrated once.
-
-## Blocked on
-
-Milestone: Build the closed section-parser and required_sections config schema
 
 > **Revision log**
 >

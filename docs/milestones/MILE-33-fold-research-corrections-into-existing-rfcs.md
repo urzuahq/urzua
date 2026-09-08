@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: corpus-corrections
 > Implements: RFC-1, RFC-5, RFC-8, RFC-11
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Several specific, evidenced corrections not yet routed: RFC-8's repair-vs-lowere
 ## Why
 
 Each is a real, evidenced finding from research with no home in the public corpus yet -- routing them is cheaper now than after more schema work builds on the unpatched versions.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

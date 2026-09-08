@@ -504,6 +504,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let (exec8, findings8) = rules::embodiment_locator_promotion_candidate(&records);
     let (exec9, findings9) = rules::header_layout_consistency(&records, &header_layout_by_type);
     let (exec10, findings10) = rules::header_field_set_consistency(&records, &known_fields_by_type);
+    let (exec11, findings11) = rules::blocked_on_stale(&records);
 
     let mut findings = findings1;
     findings.extend(findings2);
@@ -515,6 +516,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     findings.extend(findings8);
     findings.extend(findings9);
     findings.extend(findings10);
+    findings.extend(findings11);
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
@@ -536,7 +538,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         status,
         files_examined: records.len(),
         rules_executed: vec![
-            exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8, exec9, exec10,
+            exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8, exec9, exec10, exec11,
         ],
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),

@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YNNAAMTDJMEHET3W5XK1QE
 > Phase: 0
 > Track: roadmap-tracking
+> Blocked-on: —
 
 ## What
 
@@ -12,10 +13,6 @@
 ## Why
 
 A checker that's correct but never invoked is indistinguishable from no checker at all -- doctor answers "is this actually running," a different question than "did this find anything."
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

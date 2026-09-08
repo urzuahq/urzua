@@ -5,6 +5,7 @@
 > Phase: 2
 > Track: embodiment-model
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -33,10 +34,6 @@ Raised live: a locator that's just a bare file path can't express "this specific
 specific commit" — which matters most exactly where an inline code comment can't be placed. Right
 now, finding all the evidence for a record means grep-ing `Realized-by` across the corpus by hand
 and manually opening each file; `explain` only does the first half.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

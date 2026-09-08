@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: roadmap-tracking
 > Implements: SPEC-1
+> Blocked-on: —
 
 ## What
 
@@ -30,10 +31,6 @@ Found live, immediately, trying to scaffold SPEC-7 with `urzua new spec` and hit
 error. This is a real gap in bootstrapping the tool with itself: `milestone` and `bug` were both
 built specifically to be dogfooded this way, but `spec` -- one of the three original record types
 this project is built around -- can't be created through `urzua new` at all.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

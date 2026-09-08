@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: roadmap-tracking
 > Implements: ADR-34
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A configured record type (Status/Phase/Track/Implements) tracking this project's
 ## Why
 
 The backlog was accumulating in conversation history and an unstructured document with nowhere durable or checkable to live.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

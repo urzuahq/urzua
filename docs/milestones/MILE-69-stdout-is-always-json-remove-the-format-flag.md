@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: governance-process
 > Implements: ADR-23
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Removed `--format`: `check`, `fix`, `explain`, `graph`, and `migrate schema --re
 ## Why
 
 Two output shapes mean two things that can silently drift apart, and an agent piping stdout, a script, and a person reading a terminal should all see exactly the same thing -- one shape is a stronger guarantee than a flag that happens to default correctly.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

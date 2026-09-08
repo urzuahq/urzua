@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: governance-process
 > Implements: ADR-24
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 The record graph existed in the schema from the start but nothing surfaced it as queryable data -- `explain` answers "which decisions govern this file," the highest-frequency read an agent or reviewer actually has.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: section-checks
 > Implements: ADR-7, ADR-8, ADR-9, ADR-14
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ The initial `check` rule set: `header.required-fields`, `pointer.resolution`, `f
 ## Why
 
 SPEC-2's own Phase A: a validator whose first run is green has told you nothing about itself, so both seed rules were chosen because they fire on this corpus's real, pre-existing defects.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

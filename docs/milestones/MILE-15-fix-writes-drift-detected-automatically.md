@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: embodiment-model
 > Implements: ADR-32
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Wire the drift-detection HashSet already computed for check into fix::detect_rep
 ## Why
 
 ADR-32 explicitly named this as separate follow-up work, not implied by drift detection landing in check alone.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

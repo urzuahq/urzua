@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: governance-process
 > Implements: RFC-6, ADR-14
+> Blocked-on: —
 
 ## What
 
@@ -22,10 +23,6 @@ because RFC-6 doesn't say which is correct once a spec has executed. That call w
 one case, without a real decision behind it -- the next time this comes up, nothing says whether to
 follow the same precedent or do something else. Worth deciding properly rather than accumulating
 inconsistent precedent one spec at a time.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

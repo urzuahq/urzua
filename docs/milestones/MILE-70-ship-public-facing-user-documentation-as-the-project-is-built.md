@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YR7GH547SCN3Z4Q9Z9WCVH
 > Phase: 1
 > Track: user-docs
+> Blocked-on: —
 
 ## What
 
@@ -23,10 +24,6 @@ opposite failure: `CHANGELOG.md` currently misdescribes what commands are real b
 was deferred past the point anyone had the context fresh (MILE-40). Positioned right after Phase 0
 bootstrap specifically so it doesn't repeat that failure at a larger scale once more of the roadmap
 ships.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

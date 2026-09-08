@@ -185,12 +185,15 @@ pub fn header_field_set_consistency(
     )
 }
 
-/// Rule 2: `Implements:`/`Derives-from:`/`Parent:` resolves to a real record.
-/// The target's status is surfaced in the message, never judged -- whether a
-/// `Draft` target is acceptable is a policy decision (RFC-0012), not this
-/// checker's call. `Parent` was added after every spec's own `Parent: SPEC-N`
-/// pointer was found, live, to be completely unchecked -- the field existed
-/// only in prose, resolved by nobody, since it wasn't in this list.
+/// Rule 2: `Implements:`/`Derives-from:`/`Parent:`/`Blocked-on:` resolves to a
+/// real record when it names one. The target's status is surfaced in the
+/// message, never judged -- whether a `Draft` target is acceptable is a
+/// policy decision (RFC-0012), not this checker's call. `Parent` was added
+/// after every spec's own `Parent: SPEC-N` pointer was found, live, to be
+/// completely unchecked. `Blocked-on` moved here from a free-text milestone
+/// body section (MILE-0083): free text with no reference token still passes
+/// through untouched (`extract_references` finds nothing to check), so a
+/// blocker that isn't a record yet stays legal.
 pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     let mut findings = Vec::new();
     let mut examined = 0;
@@ -207,7 +210,7 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     }
 
     for record in records {
-        for field_name in ["Implements", "Derives-from", "Parent"] {
+        for field_name in ["Implements", "Derives-from", "Parent", "Blocked-on"] {
             let Some(value) = record.header.get(field_name) else {
                 continue;
             };
@@ -252,6 +255,79 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
         },
         findings,
     )
+}
+
+/// Rule (MILE-0083): a `Blocked-on` pointer whose target has reached a
+/// terminal status is a staleness signal, distinct from `pointer_resolution`'s
+/// generic "resolves; target Status = X" noise -- a blocker that has actually
+/// cleared deserves its own actionable finding, not one more line among many
+/// routine ones. Terminal-status sets are a small, hardcoded MVP per type
+/// (ADR-18's own "ship the MVP, extend once a real case demands more"
+/// precedent), not a config surface -- nothing has asked for one yet. A
+/// dangling `Blocked-on` reference is deliberately not this rule's job; that's
+/// `pointer_resolution`'s error case, reused rather than duplicated here.
+pub fn blocked_on_stale(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut index: HashMap<String, &Record> = HashMap::new();
+    for record in records {
+        if let Some(id) = record_id(record) {
+            index.insert(normalize_id(&id), record);
+        }
+    }
+
+    for record in records {
+        let Some(value) = record.header.get("Blocked-on") else {
+            continue;
+        };
+        let references = extract_references(value);
+        if references.is_empty() {
+            continue;
+        }
+        examined += 1;
+
+        for reference in references {
+            let Some(target) = index.get(&normalize_id(&reference)) else {
+                continue; // pointer_resolution already reports a dangling reference
+            };
+            let Some(status) = target.header.get("Status") else {
+                continue;
+            };
+            if is_terminal_status(&target.record_type, status) {
+                findings.push(Finding {
+                    rule: "blocked-on.stale".to_string(),
+                    severity: Severity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "blocked on {reference}, which has reached a terminal status ({status}) -- re-examine whether this record's Status/Blocked-on should update"
+                    ),
+                });
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "blocked-on.stale".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
+fn is_terminal_status(record_type: &str, status: &str) -> bool {
+    let status = status.trim();
+    let terminal: &[&str] = match record_type {
+        "bug" => &["Fixed", "WontFix"],
+        "adr" | "rfc" => &["Accepted", "Rejected", "Superseded"],
+        "spec" => &["Accepted"],
+        "milestone" => &["Done", "WontDo"],
+        _ => &[],
+    };
+    terminal.contains(&status)
 }
 
 /// A record's own identifier, derived from its filename. Two accepted
@@ -1029,6 +1105,65 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));
+    }
+
+    #[test]
+    fn a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding() {
+        // The exact live case this rule was built for: MILE-2/3's Blocked-on
+        // named BUG-3, which had already shipped (Status: Fixed) with nothing
+        // catching it, since Blocked-on used to be unchecked free-text prose.
+        let bug = record("docs/bugs/0003-x.md", "bug", "> Status: Fixed\n");
+        let milestone = record(
+            "docs/milestones/MILE-2-x.md",
+            "milestone",
+            "> Status: Planned\n> Blocked-on: BUG-3\n",
+        );
+        let (exec, findings) = blocked_on_stale(&[bug, milestone]);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("BUG-3"));
+        assert!(findings[0].message.contains("Fixed"));
+        assert_eq!(findings[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale() {
+        let bug = record("docs/bugs/0004-x.md", "bug", "> Status: Open\n");
+        let milestone = record(
+            "docs/milestones/MILE-9-x.md",
+            "milestone",
+            "> Status: Planned\n> Blocked-on: BUG-4\n",
+        );
+        let (exec, findings) = blocked_on_stale(&[bug, milestone]);
+        assert_eq!(exec.records_examined, 1);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn blocked_on_free_text_with_no_reference_is_skipped() {
+        let milestone = record(
+            "docs/milestones/MILE-5-x.md",
+            "milestone",
+            "> Status: Planned\n> Blocked-on: a decision that hasn't been made\n",
+        );
+        let (exec, findings) = blocked_on_stale(&[milestone]);
+        assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_dangling_blocked_on_reference_is_not_this_rule_s_job() {
+        let milestone = record(
+            "docs/milestones/MILE-6-x.md",
+            "milestone",
+            "> Status: Planned\n> Blocked-on: BUG-9999\n",
+        );
+        let (exec, findings) = blocked_on_stale(&[milestone]);
+        assert_eq!(exec.records_examined, 1);
+        assert!(
+            findings.is_empty(),
+            "a dangling reference is pointer_resolution's error case, not this rule's"
+        );
     }
 
     #[test]

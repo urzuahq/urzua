@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: ADR-23
+> Blocked-on: —
 
 ## What
 
@@ -24,10 +25,6 @@ happened. Nothing yet removes the smaller but real step of deciding what to do a
 still has to reason from a findings list to a plan. A single recommended next command is the same
 category of value `suggested_action` already provides per-finding, applied once to the whole
 response instead of forcing the caller to synthesize one from several.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

@@ -1,10 +1,11 @@
 # 83 — A staleness drift rule for Blocked-on and similar prose pointers
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1Z8QDN72FCDTD839NSCEYBC
 > Phase: 1
 > Track: schema-governance
-> Implements: —
+> Implements: ADR-42
+> Blocked-on: —
 
 ## What
 
@@ -25,11 +26,8 @@ been `Blocked on: BUG-3`, a drift rule could have flagged it the moment BUG-3's 
 milestone whose stated blocker silently resolved and nobody noticed defeats the purpose of tracking
 the blocker at all.
 
-## Blocked on
-
-`—`
-
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Fixed and shipped (ADR-42): `Blocked-on` moved from a body section into `milestone`'s header (all 84 files migrated); `pointer.resolution` gained `Blocked-on` for dangling-reference checking; a new `blocked_on_stale` rule flags a resolved `Blocked-on` reference whose target reached a terminal status. **Why:** design review found `Blocked on` was the one field-shaped exception across the entire schema still living as unchecked prose, not just this one field's problem in isolation -- moving it into the header was more consistent than building a second, body-text-specific checking path. Verified against the real, live MILE-2/3 case: the rule was confirmed firing before the actual fix was applied, not only against synthetic fixtures. | **substantive** |

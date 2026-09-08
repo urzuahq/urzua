@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: ADR-39
+> Blocked-on: —
 
 ## What
 
@@ -26,13 +27,9 @@ neither `header.required-fields` (only flags a *missing* required field) nor
 design work already rejected majority-vote inference for the layout axis for good reason (ratifies
 whatever's already drifted in); the same reasoning applies here, so this needs the same declared-set
 treatment rather than inferring a type's "normal" fields from whatever's already in the corpus.
-
-## Blocked on
-
-`—` for the rule itself, shipped below. `spec`'s own `known_fields` declaration stays blocked on
-MILE-74 (does `Author` become required? is SPEC-1's `Embodiment`/`Derives-from` project-wide or
-SPEC-1-specific?) -- the rule simply doesn't check `spec` yet, the same additive-skip shape as every
-undeclared type.
+`spec`'s own `known_fields` declaration stays blocked on MILE-74 (does `Author` become required? is
+SPEC-1's `Embodiment`/`Derives-from` project-wide or SPEC-1-specific?) -- the rule simply doesn't
+check `spec` yet, the same additive-skip shape as every undeclared type.
 
 > **Revision log**
 >

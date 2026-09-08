@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: embodiment-model
 > Implements: ADR-15, ADR-19, ADR-20
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 `check` can tell you a field is wrong; nothing closed the loop by writing the mechanically-correct value back. Apply mode is gated hard (explicit ids or --force, a resolved identity, an auditable revision-log entry) because a bulk unreviewed write is exactly the failure mode a governance tool can't afford.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

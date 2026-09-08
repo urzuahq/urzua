@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: roadmap-tracking
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -17,10 +18,6 @@ rewrite an Accepted decision, and don't build speculative capability.
 A lot of hard-won practice from this project's own history lived only in conversation transcripts,
 with no durable, discoverable home a fresh agent session would actually read. Named directly as
 something worth writing rather than letting it keep living nowhere.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

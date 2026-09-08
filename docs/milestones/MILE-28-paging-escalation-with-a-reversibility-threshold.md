@@ -5,6 +5,7 @@
 > Phase: 3
 > Track: escalation
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Route a record entering a state (Proposed, Blocked, Drift detected) to its owner
 ## Why
 
 Named as the pitch's urgency driver; RFC-1 and RFC-5 both explicitly list the paging mechanism itself as a non-goal.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

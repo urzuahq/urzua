@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: header-format
 > Implements: ADR-16, ADR-17
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Two more `header_shape` values beyond the default `blockquote`: `bold-list` (a b
 ## Why
 
 Forcing every adopted corpus to rewrite its header convention to match Urzua's own default would violate the adopt-without-a-rewrite principle `init` exists to serve -- these are the two other real shapes this project actually encountered.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

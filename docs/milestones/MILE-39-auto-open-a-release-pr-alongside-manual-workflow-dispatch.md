@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: release-process
 > Implements: ADR-29
+> Blocked-on: MILE-38 (staleness detection for code comments citing an amended record) -- deliberately sequenced first so that amending ADR-29 here, and updating `prepare-release.yml`'s own `(ADR-29)` citation to match, becomes the first real test of whether MILE-38's detector fires on genuine content rather than a synthetic fixture.
 
 ## What
 
@@ -22,13 +23,6 @@ an unattended action on every merge to main") -- opening a PR is not itself cutt
 13 changesets have accumulated since v0.1.0 with no release cut (MILE-40) -- partly because cutting
 one requires a maintainer to remember `workflow_dispatch` exists and go trigger it by hand. A PR
 that opens itself is a standing, visible reminder instead of a step nobody's watching for.
-
-## Blocked on
-
-MILE-38 (staleness detection for code comments citing an amended record) -- deliberately sequenced
-first so that amending ADR-29 here, and updating `prepare-release.yml`'s own `(ADR-29)` citation to
-match, becomes the first real test of whether MILE-38's detector fires on genuine content rather
-than a synthetic fixture.
 
 > **Revision log**
 >

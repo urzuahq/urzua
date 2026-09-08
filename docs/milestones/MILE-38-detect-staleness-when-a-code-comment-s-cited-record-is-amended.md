@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YKX7MDS9A2HF5GSEZ5FTWK
 > Phase: 1
 > Track: embodiment-model
+> Blocked-on: —
 
 ## What
 
@@ -23,10 +24,6 @@ citation: amending ADR-29 to add an auto-opened release PR (MILE-39) will leave 
 carrying an assumption from before the amendment, with nothing to catch it. Building this first
 means MILE-39's own ADR-29 amendment becomes the first real dogfood test of whether the detector
 actually fires on real content, rather than a synthetic fixture.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

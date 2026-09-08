@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: embodiment-model
 > Implements: RFC-5
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Distinguish pre-existing drift (present before Urzua was ever run against a corp
 ## Why
 
 `embodiment.consistency` currently reports every drifted record identically regardless of when the drift happened. A corpus adopting Urzua for the first time (MILE-51) could show substantial pre-existing drift that would make `check` unusable as a merge gate on day one unless the two are distinguishable.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

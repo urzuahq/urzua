@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: RFC-6
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Version the profile schema itself (not just individual records), and generalize 
 ## Why
 
 RFC-6 versions records; nothing versions the schema those records are validated against -- an explicitly open question in research with no answer yet.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: governance-process
 > Implements: ADR-30
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 A bulk cross-reference rewrite is a real data-loss risk without a review step, so `audit` reports what's wrong across records without ever attempting to fix it itself.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

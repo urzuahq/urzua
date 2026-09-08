@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: interop
 > Implements: ADR-2
+> Blocked-on: real adopter demand for AgDR round-tripping
 
 ## What
 
@@ -13,10 +14,6 @@ urzua export --format=agdr / urzua import round-tripping with the AgDR open stan
 ## Why
 
 Decided (own the schema, be AgDR-compatible on export), correctly left unbuilt -- zero external demand for round-tripping so far.
-
-## Blocked on
-
-real adopter demand for AgDR round-tripping
 
 > **Revision log**
 >

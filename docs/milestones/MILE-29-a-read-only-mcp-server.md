@@ -5,6 +5,7 @@
 > Phase: 2
 > Track: escalation
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Expose rejected/superseded decisions to agents over MCP.
 ## Why
 
 No RFC or ADR mentions MCP at all yet; flagged in roadmap research as needing a decision.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

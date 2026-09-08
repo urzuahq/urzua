@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YN87AP04NCFMXY4WBJK4EK
 > Phase: 0
 > Track: corpus-corrections
+> Blocked-on: —
 
 ## What
 
@@ -12,10 +13,6 @@ Run `urzua init` + `check` against a second real, independently-authored corpus,
 ## Why
 
 This repo's own corpus is the only one `check` has ever run against. "One config, not a fork per repo" is a real, falsifiable claim about the schema, and it's never actually been tested against a corpus this project didn't author -- the cheapest, most informative validation available before building anything else on top of the current schema.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

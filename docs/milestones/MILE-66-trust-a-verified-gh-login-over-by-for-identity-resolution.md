@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: accountability-identity
 > Implements: ADR-31
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Identity resolution for `fix --apply` and `new` now checks a verified `gh api us
 ## Why
 
 An unverified, typed name overriding a verified login is exactly backwards for a field whose entire purpose is accountability -- the strongest available identity signal should always win over the weakest.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

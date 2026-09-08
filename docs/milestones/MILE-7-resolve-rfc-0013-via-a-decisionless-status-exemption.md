@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: section-checks
 > Implements: RFC-13
+> Blocked-on: Milestone: Build the y-statement content shape
 
 ## What
 
@@ -13,10 +14,6 @@ A configured set of statuses (e.g. Withdrawn) exempt from required_sections and 
 ## Why
 
 A tombstone record for a vacated number never made a real decision -- requiring a Y-statement from it forces it to invent content that lies to satisfy the checker.
-
-## Blocked on
-
-Milestone: Build the y-statement content shape
 
 > **Revision log**
 >

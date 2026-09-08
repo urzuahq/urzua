@@ -5,6 +5,7 @@
 > Phase: 2
 > Track: governance-process
 > Implements: RFC-9
+> Blocked-on: RFC-9's own Q2
 
 ## What
 
@@ -13,10 +14,6 @@ An unreliable generator behind a mechanical verifier.
 ## Why
 
 Explicitly deferred by the project lead: resolve Q2 first.
-
-## Blocked on
-
-RFC-9's own Q2
 
 > **Revision log**
 >

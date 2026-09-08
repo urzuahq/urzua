@@ -4,6 +4,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: ADR-23
+> Blocked-on: —
 
 ## What
 
@@ -21,10 +22,6 @@ actually call. Fixing `doctor` in isolation would have made it an eighth copy ra
 the underlying gap. Scoped out of BUG-4 itself (kept that fix narrow, per SPEC-9's own retrospective
 scope) and tracked here instead, since it's a real, separate piece of generic tooling work, not part
 of what was actually broken in `doctor`.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

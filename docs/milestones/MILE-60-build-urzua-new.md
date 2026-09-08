@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: header-format
 > Implements: ADR-27
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 Every other command validates or reports on records that already exist; nothing created one. A tool whose whole point is a well-formed record shouldn't leave record creation to a human copy-pasting the last one.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

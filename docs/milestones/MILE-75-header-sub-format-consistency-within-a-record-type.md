@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: RFC-10, ADR-38
+> Blocked-on: —
 
 ## What
 
@@ -27,10 +28,6 @@ from breaking field extraction — a reasonable goal — but as a side effect it
 can't tell a maintainer "these look inconsistent," which is a legitimate part of what "header
 format consistency" (rules.rs's own doc comment for Rule 1) implies to a reader even though the
 implementation only checks required-field presence per a declared shape, not sub-format uniformity.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

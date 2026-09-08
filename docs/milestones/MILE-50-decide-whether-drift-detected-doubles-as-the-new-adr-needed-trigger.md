@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: governance-process
 > Implements: RFC-6
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Decide whether a record's `Drift detected` state can double as the trigger for "
 ## Why
 
 RFC-6's revision log handles "the plan details changed, the decision still holds"; a new ADR handles "the decision itself must change." Nothing currently names what separates those two cases operationally -- this is arguably the hardest boundary in the whole record model, and it's currently unaddressed by any record.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

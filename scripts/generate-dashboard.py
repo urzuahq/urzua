@@ -82,7 +82,7 @@ def parse_milestones(root: Path):
                 "implements": field(content, "Implements"),
                 "what": section(content, "What"),
                 "why": section(content, "Why"),
-                "blocked": section(content, "Blocked on"),
+                "blocked": field(content, "Blocked-on"),
                 "file": str(Path(f).relative_to(root)),
             }
         )

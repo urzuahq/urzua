@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: schema-governance
 > Implements: ADR-22
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 Adding a required field to a live corpus is a real risk of silently breaking every record that doesn't have it yet -- this answers "what would break" before the config change that would cause it.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: interop
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A one-way, non-destructive import path from the MADR/Nygard ADR convention.
 ## Why
 
 The real, most common adoption shape in the wild for ADR-only corpora; not yet scoped.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

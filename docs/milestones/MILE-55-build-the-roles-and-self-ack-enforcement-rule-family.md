@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YN89CZE1PPE925SH2EZ7Q8
 > Phase: 0
 > Track: accountability-identity
+> Blocked-on: —
 
 ## What
 
@@ -12,10 +13,6 @@ Build the roles + self-ack rule family SPEC-2 already specifies: a Reviewer/Deci
 ## Why
 
 SPEC-1, SPEC-2, and SPEC-3 all already reference self-ack/role semantics as part of the design, but no rule in `rules.rs` implements it and no milestone tracks building it -- specified, never routed to actual work.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

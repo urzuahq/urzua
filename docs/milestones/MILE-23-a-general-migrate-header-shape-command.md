@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: interop
 > Implements: ADR-33
+> Blocked-on: a real external adopter asking for it
 
 ## What
 
@@ -13,10 +14,6 @@ A shipped, public urzua migrate header-shape subcommand converting blockquote/bo
 ## Why
 
 Explicitly rejected as premature in the corrected ADR-33 -- no adopter is under real pressure to migrate while parsing support stays permanent.
-
-## Blocked on
-
-a real external adopter asking for it
 
 > **Revision log**
 >

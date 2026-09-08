@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: roadmap-tracking
 > Implements: SPEC-5
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@
 ## Why
 
 The tool has to be adoptable without a rewrite for "one engine instead of a fork per repo" to mean anything -- adopt mode is the only path that doesn't ask an existing corpus to change shape first.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

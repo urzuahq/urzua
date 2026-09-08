@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: header-format
 > Implements: ADR-27, BUG-3
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ urzua new picks blockquote vs. YAML frontmatter by whether a template file exist
 ## Why
 
 Flipping any type's header_shape to yaml-frontmatter without this fix means urzua new keeps emitting blockquote content that check can't parse under the declared shape -- silently broken output.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

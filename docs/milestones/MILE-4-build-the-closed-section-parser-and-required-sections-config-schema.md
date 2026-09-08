@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: section-checks
 > Implements: RFC-17
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A shared, closed function locating every ## section's body, mirroring header.rs'
 ## Why
 
 check validates header fields today but nothing validates what's inside a required section's prose -- SPEC-2 names this rule category and it has never been built.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: governance-process
 > Implements: ADR-41
+> Blocked-on: —
 
 ## What
 
@@ -23,10 +24,6 @@ are the same shape of decision (a configured record type) and got no matching sp
 `check`/config/`init` have specs (SPEC-2/3/5) while `new`/`fix`/`audit`/`migrate`/`explain`/`graph`
 are real, multi-part command surfaces documented only in ADRs. Backfilling without first naming the
 rule would just add more inconsistent precedent on top of the inconsistent precedent already there.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

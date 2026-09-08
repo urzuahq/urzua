@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: header-format
 > Implements: ADR-33
+> Blocked-on: —
 
 ## What
 
@@ -14,11 +15,8 @@ A non-blocking check-rule warning when a record type's configured shape isn't ya
 
 ADR-33 decided the deprecation; this is the mechanism that actually makes it visible and steers new adoptions, without breaking anyone still on blockquote/bold-list.
 
-## Blocked on
-
-Milestone: Fix urzua new's template-priority bug
-
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Cleared `Blocked-on` (was `BUG-3`, `Status: Fixed` for a while, caught by `blocked-on.stale` -- MILE-83 -- immediately after `Blocked-on` moved from prose into a checked header field). **Why:** the blocker had silently resolved and nobody had revisited this milestone since; found live during backlog triage, confirmed by the new rule firing on this exact case before this fix. | **substantive** |

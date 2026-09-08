@@ -30,7 +30,7 @@ dir = "docs/milestones"
 prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
 header_layout = "one-per-line"
-known_fields = ["Stable-Id", "Implements"]
+known_fields = ["Stable-Id", "Implements", "Blocked-on"]
 
 [record_types.bug]
 dir = "docs/bugs"

@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: RFC-1
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Add an `affects` field to the core schema so a decision record can declare which
 ## Why
 
 Every relationship the schema has today points backward: a record cites its evidence (`Realized-by`), or another record (`Implements`/`Derives-from`). Nothing lets a decision declare what it touches going forward, so there's no way to flag "this decision's affected path just changed, has anyone re-checked it still holds" -- exactly the kind of drift `embodiment.consistency` already catches for evidence, but for the decision's own stated scope of effect.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

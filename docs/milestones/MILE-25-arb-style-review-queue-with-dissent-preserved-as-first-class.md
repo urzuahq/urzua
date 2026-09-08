@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: review-workflow
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A tiered/SLA'd review queue projection over records, with objections preserved r
 ## Why
 
 Flagged as a strong steal-candidate pattern; no RFC covers a review-queue projection or an objections model today.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

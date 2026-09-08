@@ -5,6 +5,7 @@
 > Phase: 3
 > Track: accountability-identity
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Let a non-technical Decider (a manager, a compliance officer) approve via someth
 ## Why
 
 Today every Decider is implicitly assumed to be someone who can author a commit; that's not true for every real organization.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

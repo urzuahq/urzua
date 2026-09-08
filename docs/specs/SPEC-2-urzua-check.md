@@ -1,6 +1,6 @@
 # SPEC-2 — `urzua check`
 
-> Version: 0.2 | Date: 2026-08-20 | Status: Draft
+> Version: 0.3 | Date: 2026-08-20 | Status: Draft
 > **Implements:** RFC-1, RFC-3, RFC-10, RFC-11
 > **Parent:** SPEC-1 (v0 CLI). Cross-cutting rules — no-silent-no-op, the permanent
 > content-scope ceiling, the three-corpus acceptance bar — are stated there and are not restated
@@ -153,12 +153,13 @@ language below, which stays only for what genuinely isn't built yet.
 | `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
 | `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). |
 | `field.quality` | **Field presence with real semantics**: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. |
-| `pointer.resolution` | `Implements:`/`Derives-from:` resolves to a real record; the target's status is surfaced, never judged (RFC-12 stays the policy owner of whether a `Draft` target is acceptable). |
+| `pointer.resolution` | `Implements:`/`Derives-from:`/`Parent:`/`Blocked-on:` resolves to a real record when it names one; the target's status is surfaced, never judged (RFC-12 stays the policy owner of whether a `Draft` target is acceptable). |
 | `filename.title-consistency` | Filename ↔ H1 title ↔ display number ↔ stable ID agree (ADR-3). |
 | `revision-log.change-class-required` | Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. |
 | `relation.supersession-reciprocity` | If A supersedes B, B points back; status-aware (a claim only binds once the claiming record is itself terminal-accepted). Shared with `audit` (ADR-30) — `check` runs it too, not only `audit`; see Out of scope below. |
 | `embodiment.consistency` | A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (`test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to `Drift detected` unconditionally (RFC-5 tier 1, ADR-18/ADR-32). Requires full git history — a shallow checkout makes this rule silently unable to detect anything. |
 | `embodiment.locator-promotion-candidate` | The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18). |
+| `blocked-on.stale` | A milestone's `Blocked-on` pointer resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) -- a signal to re-examine, distinct from `pointer.resolution`'s routine "resolves; target Status = X" surfacing (ADR-42). |
 
 ### Not yet built
 
@@ -280,3 +281,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-08-20 | Split out of SPEC-1, which retains the cross-cutting rules. | **structural** |
 > | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-18/ADR-32) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |
 > | 2026-09-07 | Rewrote §Rules as a complete, accurate list of all ten actually-shipped rule ids (adding `header.layout-consistency`/ADR-38 and `header.field-set-consistency`/ADR-39, neither previously mentioned at all), separated from the design language that's still unbuilt. Corrected §Out of scope's claim that cross-record reconciliation is `audit`-exclusive -- `check` has run `relation.supersession-reciprocity` directly since ADR-30, and the actual data-loss risk this spec was guarding against was a bulk *rewrite*, never a read-only reciprocity check. **Why:** per ADR-14's amendment adopted earlier the same day, a spec's body must stay a complete, replayable specification of its subject at every revision, not accumulate "not yet reconciled" notes as a substitute for actually updating it -- leaving this stale on the very day that policy was adopted would have been an immediate, visible contradiction. | **substantive** |
+> | 2026-09-07 | Added `blocked-on.stale` as an 11th rule (ADR-42); `pointer.resolution`'s row updated to include `Parent`/`Blocked-on`, which it had already gained (ADR-40) without this table being updated. **Why:** the same "spec must stay complete" policy applies to every rule addition, not just the ones made on the day the policy was adopted -- letting this table go one rule stale again immediately would have repeated the exact drift this spec was just corrected for. | **substantive** |

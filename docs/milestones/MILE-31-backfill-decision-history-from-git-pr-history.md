@@ -5,6 +5,7 @@
 > Phase: 3
 > Track: backfill
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Reconstruct decision history from commits/PRs with confidence scoring and a draf
 ## Why
 
 Named in research as the single biggest adoption unlock, and explicitly out of scope for RFC-1 as written.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

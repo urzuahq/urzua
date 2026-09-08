@@ -5,6 +5,7 @@
 > Phase: 0
 > Track: roadmap-tracking
 > Implements: ADR-35
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A configured record type requiring a named regression test, distinct from milest
 ## Why
 
 A milestone's schema doesn't fit a retrospective defect well -- the one real governance gain (a required, checkable pointer to the proving test) needed its own type.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 4
 > Track: integrations
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ Two-way sync so a decision can originate from or update an external ticket, and 
 ## Why
 
 Named in roadmap research; neither has any RFC coverage today.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

@@ -5,6 +5,7 @@
 > Phase: 3
 > Track: accountability-identity
 > Implements: RFC-5
+> Blocked-on: —
 
 ## What
 
@@ -13,10 +14,6 @@ A decider periodically re-affirms a decision that can't be checked mechanically,
 ## Why
 
 RFC-5 §2's tier 5 names this for infra_manual/process locators; the mechanism, cadence, and workflow are undesigned.
-
-## Blocked on
-
-—
 
 > **Revision log**
 >

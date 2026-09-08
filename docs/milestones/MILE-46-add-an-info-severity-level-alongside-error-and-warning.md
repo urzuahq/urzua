@@ -4,6 +4,7 @@
 > Stable-Id: 01M1YN84QAGGE2RJG9DFN0MB59
 > Phase: 1
 > Track: schema-governance
+> Blocked-on: —
 
 ## What
 
@@ -17,10 +18,6 @@ This owns *which severity levels exist* in `Severity` itself; MILE-80 owns *maki
 configurable per repo* (SPEC-1's own unbuilt "which checks are errors vs. warnings" promise) --
 related, found independently, kept separate since one is a schema/enum question and the other is a
 config-surface question. Resolve which comes first when either is picked up.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

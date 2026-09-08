@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: —
+> Blocked-on: —
 
 ## What
 
@@ -25,10 +26,6 @@ repo to downgrade or upgrade a given rule's default -- exactly the gap SPEC-1 na
 configuration surface and never built. Worth resolving the findings-severity-vs-log-verbosity
 distinction explicitly before building either, rather than conflating "how bad is this finding"
 with "how much should the tool print" into one enum.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >

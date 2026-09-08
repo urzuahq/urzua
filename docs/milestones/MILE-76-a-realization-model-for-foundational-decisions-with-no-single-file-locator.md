@@ -5,6 +5,7 @@
 > Phase: 1
 > Track: schema-governance
 > Implements: ADR-18
+> Blocked-on: —
 
 ## What
 
@@ -31,10 +32,6 @@ obviously realized today (ADR-1's Rust workspace, ADR-3's stable IDs, ADR-11's w
 doesn't close the underlying gap: the next foundational decision will drift the same way, silently,
 unless the model itself gains a way to represent this class of realization or explicitly declares it
 out of mechanical scope.
-
-## Blocked on
-
-`—`
 
 > **Revision log**
 >
