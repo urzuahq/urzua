@@ -44,3 +44,4 @@ phrased less mechanically). Whether this is buildable at all — and if so, as a
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial milestone. **Why:** found live, twice this session (SPEC-16/17 and RFC-18), that a load-bearing citation living only in `## References` prose has no mechanism to flag it as a candidate for a real structured pointer instead. | **structural** |
+> | 2026-09-08 | Considered and rejected a new generic `References` header field as the fix (RFC-21) -- both motivating cases turned out to be fixable with *existing* fields (`Implements: ADR-10` on SPEC-16/17; `Implements: RFC-18` added to MILE-6 itself), confirmed live in `urzua graph`. Restores this milestone's original scope: detection, pointing at an existing field, not new schema. Also surfaced `BUG-7` (pointer fields tolerating trailing prose), a real but separate defect. | **substantive** |
