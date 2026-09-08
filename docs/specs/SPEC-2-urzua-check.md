@@ -1,6 +1,6 @@
 # SPEC-2 — `urzua check`
 
-> Version: 0.1 | Date: 2026-08-20 | Status: Draft
+> Version: 0.2 | Date: 2026-08-20 | Status: Draft
 > **Implements:** RFC-1, RFC-3, RFC-10, RFC-11
 > **Parent:** SPEC-1 (v0 CLI). Cross-cutting rules — no-silent-no-op, the permanent
 > content-scope ceiling, the three-corpus acceptance bar — are stated there and are not restated
@@ -142,41 +142,49 @@ legitimately hold a number without stating a decision — a tombstone (RFC-13) �
 presupposes a decision is not wrong, it is *scoped*. A corpus that cannot express that forces its
 records to invent content or its linters to be switched off.
 
-### The rule set
+### Shipped, by actual rule id
 
-- **Field presence with real semantics.** `blank`, `placeholder` and `pending` are three distinct
-  states, not one — a commonly rediscovered gap in hand-written record linters, and the single
-  most-repeated bug class. An absent field must not be silently readable as any of the three.
+Ten rules run today. This list is the complete, current set — not a delta on top of the aspirational
+language below, which stays only for what genuinely isn't built yet.
+
+| Rule id | What it checks |
+|---|---|
+| `header.required-fields` | Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here. |
+| `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
+| `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). |
+| `field.quality` | **Field presence with real semantics**: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. |
+| `pointer.resolution` | `Implements:`/`Derives-from:` resolves to a real record; the target's status is surfaced, never judged (RFC-12 stays the policy owner of whether a `Draft` target is acceptable). |
+| `filename.title-consistency` | Filename ↔ H1 title ↔ display number ↔ stable ID agree (ADR-3). |
+| `revision-log.change-class-required` | Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. |
+| `relation.supersession-reciprocity` | If A supersedes B, B points back; status-aware (a claim only binds once the claiming record is itself terminal-accepted). Shared with `audit` (ADR-30) — `check` runs it too, not only `audit`; see Out of scope below. |
+| `embodiment.consistency` | A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (`test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to `Drift detected` unconditionally (RFC-5 tier 1, ADR-18/ADR-32). Requires full git history — a shallow checkout makes this rule silently unable to detect anything. |
+| `embodiment.locator-promotion-candidate` | The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18). |
+
+### Not yet built
+
+Design language from this spec's original Phase B scope, with no shipped rule behind it yet:
+
 - **Status enum validation, tolerant of trailing free-text annotation**, and validated against
   corpus *prose*, not only instantiated values: a value that no record currently holds may already
-  be committed to by another document, and is real a release before anything is set to it.
+  be committed to by another document, and is real a release before anything is set to it. Nothing
+  validates `Status` against an enum for any record type today (found live via MILE-71's red-team of
+  the milestone `Status` field).
 - **Role rules** — Author / Reviewers / Deciders per type and status, with self-acknowledgement
   detection: an author is not their own reviewer of record.
-- **Filename ↔ title ↔ display number ↔ stable ID consistency** (ADR-3).
-- **Required sections** per profile, including `change_class` on revision entries.
-- **Header structure** (RFC-10): the header is closed. Anchored by signature key, bounded by the
-  first section heading, closed key set with an `x-` escape hatch, exactly one entry per key, and
-  multi-line continuations preserved.
-- **Declared scope** (RFC-11 §6): a record's scope resolves against tracked paths. A scope
-  matching nothing is *unverified*, not clean. A record cited from outside its declared scope is a
-  finding that names both readings — miscitation, or a scope never widened to match practice.
-- **Boundaries** (RFC-11 §1): identifiers inside a `published` boundary are violations;
-  realization markers inside one are not evidence.
-- **Embodiment consistency and drift** (RFC-5 tier 1, ADR-18/ADR-32): a stated `Embodiment`
-  must agree with the tier its `Realized-by` locators compute to (`test:` outranks `code:` outranks
-  `spec:`); a locator that changed, per git history, after the `Realized-by` line was last touched
-  overrides the expected value to `Drift detected` unconditionally, regardless of tier. Requires
-  full git history — a shallow checkout makes this rule silently unable to detect anything.
-- **Embodiment locator promotion** (ADR-18): the same locator cited by more than one record's
-  `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted.
+- **Required sections** per profile, generalized beyond `change_class` on revision entries (the one
+  instance that's actually built).
+- **Header closure's `x-` escape hatch** (RFC-10): a declared-and-justified extra key, distinct from
+  `header.field-set-consistency`'s per-type `known_fields` list. Not implemented — today an unlisted
+  field is either invisible (no `known_fields` declared for the type) or a finding (declared), with
+  no third "explicitly excused" state.
+- **Declared scope** (RFC-11 §6) and **boundaries** (RFC-11 §1) — neither is built; RFC-11's own
+  open questions (nested-scope inheritance, glob-vs-subject width) are still unresolved.
 
-Everything above this Embodiment pair is this spec's original Phase B design language, not yet
-reconciled with the actual shipped rule ids (`header.required-fields`, `pointer.resolution`,
-`field.quality`, `filename.title-consistency`, `revision-log.change-class-required`) — a real,
-pre-existing gap this revision doesn't attempt to close, named rather than compounded.
-
-Severity per rule comes from config (SPEC-3), not from the rule's own opinion. `status` reports
-what was found; whether that fails the build is the caller's choice and lives in `blocking`.
+Severity per rule comes from config (SPEC-3) in principle; in practice severity is still hardcoded
+per rule at the source (`Error`/`Warning` only, no `Info`), not yet read from any config field —
+tracked as MILE-80, which also names the still-open question of a richer severity taxonomy versus a
+separate log-verbosity axis. `status` reports what was found; whether that fails the build is the
+caller's choice and lives in `blocking`.
 
 ## Output contract
 
@@ -249,8 +257,10 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 ## Out of scope
 
 - `--fix` in any form. See RFC-8; needs the revision log first.
-- Cross-record reconciliation — that is `audit`, and its write path is where the data-loss incident
-  happened.
+- **Writing.** `audit` shares `relation.supersession-reciprocity` with `check` (ADR-30) and adds
+  dangling-reference reporting on top, but both commands are read-only. The data-loss incident this
+  spec originally cited was about a bulk cross-reference *rewrite*, not about reading reciprocity —
+  `check` running the same read-only rule `audit` does was never actually the risk.
 - Judging whether a section's *content* covers the scope it claims. SPEC-1 records this as a
   permanent ceiling on mechanical checking, not a maturity gap. `check` is never sold as replacing a
   human reader.
@@ -269,3 +279,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > |---|---|---|
 > | 2026-08-20 | Split out of SPEC-1, which retains the cross-cutting rules. | **structural** |
 > | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-18/ADR-32) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |
+> | 2026-09-07 | Rewrote §Rules as a complete, accurate list of all ten actually-shipped rule ids (adding `header.layout-consistency`/ADR-38 and `header.field-set-consistency`/ADR-39, neither previously mentioned at all), separated from the design language that's still unbuilt. Corrected §Out of scope's claim that cross-record reconciliation is `audit`-exclusive -- `check` has run `relation.supersession-reciprocity` directly since ADR-30, and the actual data-loss risk this spec was guarding against was a bulk *rewrite*, never a read-only reciprocity check. **Why:** per ADR-14's amendment adopted earlier the same day, a spec's body must stay a complete, replayable specification of its subject at every revision, not accumulate "not yet reconciled" notes as a substitute for actually updating it -- leaving this stale on the very day that policy was adopted would have been an immediate, visible contradiction. | **substantive** |
