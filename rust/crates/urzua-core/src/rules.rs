@@ -1301,12 +1301,26 @@ mod tests {
 
     #[test]
     fn field_quality_passes_a_real_value() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Author: (project lead)\n");
+        let r = record("docs/adr/0001-x.md", "adr", "> Author: @someone\n");
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 
         let (_, findings) = field_quality(&[r], &required);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn field_quality_flags_a_retired_placeholder_as_an_error() {
+        // BUG-5: (project lead) used to be this project's own placeholder
+        // convention and classified as Present -- field.quality never had a
+        // chance to catch a regression back to it (the ADR-38 incident).
+        let r = record("docs/adr/0001-x.md", "adr", "> Author: (project lead)\n");
+        let mut required = HashMap::new();
+        required.insert("adr".to_string(), vec!["Author".to_string()]);
+
+        let (_, findings) = field_quality(&[r], &required);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Error);
     }
 
     #[test]

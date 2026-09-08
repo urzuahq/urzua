@@ -9,8 +9,20 @@ use crate::FieldState;
 /// Literal, unedited template text -- copied verbatim from
 /// `.urzua/templates/adr.md` and `.urzua/templates/rfc.md`. Exact match only
 /// (case-insensitive): a real value that happens to contain "name" as a
-/// substring must not be flagged.
-const PLACEHOLDER_TOKENS: &[&str] = &["name", "name(s)", "yyyy-mm-dd", "tbd", "todo"];
+/// substring must not be flagged. `(project lead)`/`(session author)` are
+/// this project's own retired placeholder convention (BUG-5) -- used before
+/// MILE-78's identity backfill, and the reason a hand-edit reverting
+/// `Author` back to one of them (the ADR-38 incident) classified as
+/// `Present`, indistinguishable from a real name, rather than `Placeholder`.
+const PLACEHOLDER_TOKENS: &[&str] = &[
+    "name",
+    "name(s)",
+    "yyyy-mm-dd",
+    "tbd",
+    "todo",
+    "(project lead)",
+    "(session author)",
+];
 
 /// Classify a header field's value. `None` (the field is absent entirely) is
 /// [`FieldState::Blank`], same as an empty string -- absence and emptiness
@@ -86,7 +98,18 @@ mod tests {
     fn a_real_value_that_contains_a_placeholder_substring_is_not_flagged() {
         // "name" is a placeholder token; a real author value that merely
         // contains the substring must not match it.
-        assert_eq!(classify(Some("(project lead)")), FieldState::Present);
         assert_eq!(classify(Some("username123")), FieldState::Present);
+    }
+
+    #[test]
+    fn retired_project_placeholder_conventions_are_placeholder_not_present() {
+        // BUG-5, observed failing before the fix: this exact value classified
+        // as Present, indistinguishable from a real name -- which is why a
+        // hand-edit reverting Author back to it (the ADR-38 incident) was
+        // never caught by field.quality, despite field.quality running on
+        // every check.
+        assert_eq!(classify(Some("(project lead)")), FieldState::Placeholder);
+        assert_eq!(classify(Some("(session author)")), FieldState::Placeholder);
+        assert_eq!(classify(Some("(Project Lead)")), FieldState::Placeholder);
     }
 }
