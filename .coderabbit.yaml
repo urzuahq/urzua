@@ -1,0 +1,16 @@
+# CodeRabbit configuration for this repo. Reference:
+# https://docs.coderabbit.ai/reference/configuration
+#
+# Reviews are manual-only (`@coderabbitai review` on a PR, or `coderabbit
+# review --agent` locally) -- automatic review on every push was hitting this
+# repo's hourly plan limit mid-PR (observed on PR #3), leaving later commits
+# unreviewed rather than queued.
+reviews:
+  auto_review:
+    enabled: false
+  tools:
+    # Most of this repo's own diff volume is markdown (docs/adr, docs/rfc,
+    # docs/specs, docs/milestones, docs/bugs) rather than code -- explicit
+    # since CodeRabbit's docs don't state markdownlint's default state.
+    markdownlint:
+      enabled: true
