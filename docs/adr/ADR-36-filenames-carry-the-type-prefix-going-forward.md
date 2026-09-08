@@ -6,7 +6,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-3 (Accepted), ADR-34 (Accepted)
+Derives-from: ADR-3, ADR-34
 ---
 # 36 — Filenames carry the type prefix going forward; legacy names stay valid forever
 

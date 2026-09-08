@@ -6,7 +6,7 @@ Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-3 (Accepted), ADR-21 (Accepted)
+Derives-from: ADR-3, ADR-21
 ---
 # 27 — `urzua new` fills in the template, not the decision
 

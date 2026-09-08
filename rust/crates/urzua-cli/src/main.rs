@@ -507,6 +507,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let (exec11, findings11) = rules::blocked_on_stale(&records);
     let (exec12, findings12) = rules::type_no_declared_spec(&config, &config_path);
     let (exec13, findings13) = rules::header_deprecated_shape(&config, &config_path);
+    let (exec14, findings14) = rules::header_pointer_field_clean(&records);
 
     let mut findings = findings1;
     findings.extend(findings2);
@@ -521,6 +522,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     findings.extend(findings11);
     findings.extend(findings12);
     findings.extend(findings13);
+    findings.extend(findings14);
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
@@ -543,7 +545,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         files_examined: records.len(),
         rules_executed: vec![
             exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8, exec9, exec10, exec11, exec12,
-            exec13,
+            exec13, exec14,
         ],
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),

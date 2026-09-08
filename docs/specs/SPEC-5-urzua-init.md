@@ -4,7 +4,7 @@ Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
 Implements: RFC-1
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-5 — `urzua init`
 

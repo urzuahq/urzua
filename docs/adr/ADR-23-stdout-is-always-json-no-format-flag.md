@@ -6,7 +6,7 @@ Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: ADR-7
-Derives-from: RFC-3 (Accepted)
+Derives-from: RFC-3
 ---
 # 23 — Stdout is always JSON; no `--format` flag
 

@@ -5,7 +5,7 @@ Date: 2026-09-04
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-10 (Accepted)
+Derives-from: RFC-10
 ---
 # 8 — The record header is a closed structure, validated as a whole
 

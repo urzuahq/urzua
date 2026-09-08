@@ -346,6 +346,76 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     )
 }
 
+/// The fields a record is expected to hold as a *clean* comma-separated
+/// reference list -- nothing else. `Blocked-on` is deliberately excluded: it
+/// legitimately mixes free text with an optional embedded reference
+/// (SPEC-0006 -- "a milestone can exist before a decision does"), the same
+/// tolerance `extract_references` already provides it and must keep.
+const CLEAN_POINTER_FIELDS: &[&str] = &["Implements", "Derives-from", "Parent"];
+
+/// BUG-0007: a pointer field's value silently tolerating trailing prose after
+/// the reference token (`extract_references` only reads the leading token,
+/// discarding the rest) turned out to be a corpus-wide habit, not two
+/// isolated mistakes -- `Derives-from: RFC-1 (Accepted)`'s status annotation
+/// alone appears in 33 files. That annotation is redundant with
+/// `pointer.resolution`'s own live status report and a staleness risk
+/// (nothing re-verifies it once written), and `Parent`'s freeform prose in
+/// `SPEC-2`/`SPEC-4` is worse -- neither was ever a deliberate schema
+/// decision, `extract_references` just never rejected it.
+///
+/// This rule is a check on the raw field value, independent of
+/// `pointer_resolution`: a field is clean only if every comma-separated
+/// entry, once trimmed, is *exactly* a reference token (or the `—` no-value
+/// placeholder) -- nothing before or after it.
+pub fn header_pointer_field_clean(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        for field_name in CLEAN_POINTER_FIELDS {
+            let Some(value) = record.header.get(field_name) else {
+                continue;
+            };
+            examined += 1;
+
+            for entry in value.split(',') {
+                let entry = entry.trim();
+                if entry == "—" || entry.is_empty() {
+                    continue;
+                }
+                let is_clean_reference = entry
+                    .split_once('-')
+                    .map(|(prefix, num)| {
+                        prefix.chars().all(|c| c.is_ascii_uppercase())
+                            && !num.is_empty()
+                            && num.chars().all(|c| c.is_ascii_digit())
+                    })
+                    .unwrap_or(false);
+                if !is_clean_reference {
+                    findings.push(Finding {
+                        rule: "header.pointer-field-clean".to_string(),
+                        severity: Severity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "{field_name} entry {entry:?} isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status"
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: "header.pointer-field-clean".to_string(),
+            records_examined: examined,
+        },
+        findings,
+    )
+}
+
 /// Rule (MILE-0083): a `Blocked-on` pointer whose target has reached a
 /// terminal status is a staleness signal, distinct from `pointer_resolution`'s
 /// generic "resolves; target Status = X" noise -- a blocker that has actually
@@ -1292,6 +1362,71 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));
+    }
+
+    #[test]
+    fn a_derives_from_status_annotation_is_flagged_observed_failing() {
+        // The exact live pattern found across 33 files: a hand-typed status
+        // snapshot baked into the field value itself, redundant with
+        // pointer.resolution's own live report and never re-verified.
+        let r = record(
+            "docs/adr/0038-x.md",
+            "adr",
+            "> Status: Accepted\n> Derives-from: RFC-1 (Accepted)\n",
+        );
+        let (exec, findings) = header_pointer_field_clean(&[r]);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("RFC-1 (Accepted)"));
+        assert_eq!(findings[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn a_parent_field_with_freeform_trailing_prose_is_flagged() {
+        let r = record(
+            "docs/specs/0002-x.md",
+            "spec",
+            "> Status: Draft\n> Parent: SPEC-1 (v0 CLI). Cross-cutting rules stated there.\n",
+        );
+        let (_, findings) = header_pointer_field_clean(&[r]);
+        assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn a_clean_bare_reference_is_not_flagged() {
+        let r = record(
+            "docs/adr/0010-x.md",
+            "adr",
+            "> Status: Accepted\n> Derives-from: RFC-1\n> Parent: —\n",
+        );
+        let (exec, findings) = header_pointer_field_clean(&[r]);
+        assert_eq!(exec.records_examined, 2);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn multiple_clean_references_are_not_flagged() {
+        let r = record(
+            "docs/adr/0008-x.md",
+            "adr",
+            "> Status: Accepted\n> Derives-from: RFC-8, ADR-15, ADR-19\n",
+        );
+        let (_, findings) = header_pointer_field_clean(&[r]);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn blocked_on_is_excluded_even_with_trailing_prose() {
+        // Blocked-on deliberately mixes free text with an optional embedded
+        // reference (SPEC-6) -- must never be flagged by this rule.
+        let r = record(
+            "docs/milestones/MILE-38-x.md",
+            "milestone",
+            "> Status: Planned\n> Blocked-on: MILE-38 (staleness detection) -- sequenced first.\n",
+        );
+        let (exec, findings) = header_pointer_field_clean(&[r]);
+        assert_eq!(exec.records_examined, 0);
+        assert!(findings.is_empty());
     }
 
     #[test]

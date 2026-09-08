@@ -5,7 +5,7 @@ Date: 2026-09-04
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-11 (Accepted)
+Derives-from: RFC-11
 ---
 # 9 — A policy is enforced at the width it declares; scope's own shape stays open
 

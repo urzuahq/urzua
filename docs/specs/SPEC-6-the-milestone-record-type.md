@@ -4,7 +4,7 @@ Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
 Implements: ADR-34
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-6 — The `milestone` record type
 

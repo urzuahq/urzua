@@ -4,7 +4,7 @@ Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-8 — `urzua fix`
 

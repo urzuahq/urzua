@@ -6,7 +6,7 @@ Date: 2026-09-05
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-5 (Accepted)
+Derives-from: RFC-5
 ---
 # 18 — Embodiment MVP: categorized locator lists, not a full claim graph
 

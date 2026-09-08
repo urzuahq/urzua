@@ -6,7 +6,7 @@ Date: 2026-09-05
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-16 (Accepted)
+Derives-from: RFC-16
 ---
 # 17 — YAML frontmatter for generated record headers
 

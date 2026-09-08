@@ -5,7 +5,7 @@ Date: 2026-09-04
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-1 (Accepted)
+Derives-from: RFC-1
 ---
 # 10 — A unified record schema: core fields plus declared profiles
 

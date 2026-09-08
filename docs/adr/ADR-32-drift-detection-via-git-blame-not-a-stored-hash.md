@@ -6,7 +6,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-5 (Accepted)
+Derives-from: RFC-5
 ---
 # 32 — Drift detection via git history on the `Realized-by` line, not a stored hash
 

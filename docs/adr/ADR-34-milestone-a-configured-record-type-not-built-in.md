@@ -5,7 +5,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-1 (Accepted), RFC-4 (Draft)
+Derives-from: RFC-1, RFC-4
 ---
 # 34 — `milestone`: a configured record type, not a built-in one
 

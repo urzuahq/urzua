@@ -6,7 +6,7 @@ Date: 2026-09-05
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-3 (Accepted)
+Derives-from: ADR-3
 ---
 # 21 — ULID as the stable-ID encoding
 

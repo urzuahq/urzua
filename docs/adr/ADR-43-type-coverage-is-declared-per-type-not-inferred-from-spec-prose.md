@@ -7,7 +7,7 @@ Date: 2026-09-08
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-41 (Accepted)
+Derives-from: ADR-41
 ---
 # 43 — Type coverage is declared per type not inferred from spec prose
 

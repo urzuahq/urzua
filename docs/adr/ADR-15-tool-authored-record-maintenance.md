@@ -5,7 +5,7 @@ Date: 2026-09-05
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-8 (Accepted)
+Derives-from: RFC-8
 ---
 # 15 — Tool-authored record maintenance: derived fields are a cache the tool owns
 

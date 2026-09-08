@@ -7,7 +7,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-12 (Accepted)
+Derives-from: RFC-12
 ---
 # 40 — Parent resolves the same as Implements and Derives-from
 

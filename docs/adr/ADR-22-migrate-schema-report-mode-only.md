@@ -6,7 +6,7 @@ Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-8 (Accepted), ADR-11 (Accepted)
+Derives-from: RFC-8, ADR-11
 ---
 # 22 — `urzua migrate schema`: report mode only
 

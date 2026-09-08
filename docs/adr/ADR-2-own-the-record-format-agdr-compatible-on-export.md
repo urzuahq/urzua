@@ -5,7 +5,7 @@ Date: 2026-07-29
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-1 (Accepted)
+Derives-from: RFC-1
 ---
 # 2 — Own the record format; be AgDR-compatible on export
 

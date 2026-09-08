@@ -7,7 +7,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-40 (Accepted)
+Derives-from: ADR-40
 ---
 # 42 — Field-shaped content lives in the header; Blocked-on moves there
 

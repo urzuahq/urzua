@@ -4,7 +4,7 @@ Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
 Implements: RFC-1, RFC-11
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-3 — Configuration: `.urzua/config.toml`
 
