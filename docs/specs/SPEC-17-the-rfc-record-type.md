@@ -1,10 +1,10 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-08
 Status: Accepted
 Author: '@beauwilliams'
 Parent: SPEC-1 (v0 CLI).
-Derives-from: RFC-1 (Accepted)
+Implements: ADR-10
 ---
 # SPEC-17 — The `rfc` record type
 
@@ -45,7 +45,9 @@ ADR's own `Deciders` field records.
 
 ## References
 
-- RFC-1 — the unified core-plus-profile schema `rfc` is an instance of.
+- ADR-10 — the decision this spec details: `adr`/`rfc`/`spec` as config-declared profiles of one
+  unified core schema, not types the tool's source code hardcodes.
+- RFC-1 — the proposal ADR-10 decided; the unified core-plus-profile schema `rfc` is an instance of.
 - RFC-10 — the closed-header model.
 - ADR-33/42 — the `yaml-frontmatter` migration this spec's `header_shape` reflects.
 - ADR-41 — the spec-organization principle this backfill follows.
@@ -58,3 +60,4 @@ ADR's own `Deciders` field records.
 > | 2026-09-08 | Initial spec. **Why:** `rfc` — one of the three founding record types — never got a schema spec; found live via `type.no-declared-spec`'s own inventory check (ADR-43), alongside the same gap for `adr`/`spec`. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-08 | Added `Derives-from: RFC-1 (Accepted)`. **Why:** `rfc` is a founding type decided by RFC-1, not by any single ADR (unlike `milestone`/`bug`/`waiver`, each pointing at the ADR that decided them) -- this spec cited RFC-1 in prose and References but never backlinked it in the header, the same pointer every other type declares. | **substantive** |
+> | 2026-09-08 | Corrected: replaced `Derives-from: RFC-1` with `Implements: ADR-10`. **Why:** the previous entry's premise was wrong -- `ADR-10` is exactly the single decision record `milestone`/`bug`/`waiver`'s own specs each point at (`Implements: ADR-N`), just missed when this spec was first written; `rfc` is not an exception to that pattern after all. RFC-1 stays cited in References as the proposal ADR-10 decided. | **substantive** |
