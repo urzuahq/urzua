@@ -282,6 +282,30 @@ fn run_init(dry_run: bool) -> ExitCode {
 /// correctly invoked is a different question with a different failure mode
 /// (SPEC-0001's own open question). An unrecognized config key is an error
 /// here, not a warning: the alternative is a typo silently disabling a rule.
+#[derive(serde::Serialize)]
+struct DoctorCheck {
+    check: String,
+    status: DoctorStatus,
+    message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum DoctorStatus {
+    Ok,
+    Warn,
+    Error,
+}
+
+#[derive(serde::Serialize)]
+struct DoctorReport {
+    status: DoctorStatus,
+    checks: Vec<DoctorCheck>,
+}
+
+/// Emits one report, JSON, unconditionally (ADR-23) -- BUG-4 was `doctor`
+/// printing `[OK]`/`[WARN]`/`[ERROR]` lines instead, the one command that
+/// hadn't caught up with every other command's output contract.
 fn run_doctor() -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
@@ -291,45 +315,95 @@ fn run_doctor() -> ExitCode {
         }
     };
 
-    let mut problems = Vec::new();
+    let mut checks = Vec::new();
     let config_path = repo_root.join(".urzua/config.toml");
 
     if !config_path.exists() {
+        checks.push(DoctorCheck {
+            check: "config-exists".to_string(),
+            status: DoctorStatus::Error,
+            message: format!(
+                "{} does not exist -- run `urzua init` to adopt this corpus",
+                config_path.display()
+            ),
+        });
         println!(
-            "[MISSING] {} does not exist -- run `urzua init` to adopt this corpus.",
-            config_path.display()
+            "{}",
+            serde_json::to_string_pretty(&DoctorReport {
+                status: DoctorStatus::Error,
+                checks,
+            })
+            .unwrap()
         );
         return ExitCode::from(2);
     }
-    println!("[OK] {} exists", config_path.display());
+    checks.push(DoctorCheck {
+        check: "config-exists".to_string(),
+        status: DoctorStatus::Ok,
+        message: format!("{} exists", config_path.display()),
+    });
 
     let config = match load_config(&config_path) {
         Ok(c) => {
-            println!("[OK] config parses (no unrecognized keys)");
+            checks.push(DoctorCheck {
+                check: "config-parses".to_string(),
+                status: DoctorStatus::Ok,
+                message: "config parses (no unrecognized keys)".to_string(),
+            });
             c
         }
         Err(e) => {
-            println!("[ERROR] config does not parse: {e}");
+            checks.push(DoctorCheck {
+                check: "config-parses".to_string(),
+                status: DoctorStatus::Error,
+                message: format!("config does not parse: {e}"),
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&DoctorReport {
+                    status: DoctorStatus::Error,
+                    checks,
+                })
+                .unwrap()
+            );
             return ExitCode::from(1);
         }
     };
 
     if config.record_types.is_empty() {
-        problems.push("no record_types declared -- check will never examine anything".to_string());
+        checks.push(DoctorCheck {
+            check: "record-types-declared".to_string(),
+            status: DoctorStatus::Error,
+            message: "no record_types declared -- check will never examine anything".to_string(),
+        });
     }
 
     for (name, cfg) in &config.record_types {
         let dir_path = repo_root.join(&cfg.dir);
         if dir_path.is_dir() {
-            println!("[OK] record type '{name}' -> {} exists", cfg.dir);
+            checks.push(DoctorCheck {
+                check: "record-type-dir".to_string(),
+                status: DoctorStatus::Ok,
+                message: format!("record type '{name}' -> {} exists", cfg.dir),
+            });
         } else {
-            problems.push(format!(
-                "record type '{name}' declares dir '{}', which does not exist",
-                cfg.dir
-            ));
+            checks.push(DoctorCheck {
+                check: "record-type-dir".to_string(),
+                status: DoctorStatus::Error,
+                message: format!(
+                    "record type '{name}' declares dir '{}', which does not exist",
+                    cfg.dir
+                ),
+            });
         }
         if cfg.required_fields.is_empty() {
-            println!("[WARN] record type '{name}' has no required_fields -- field-quality/header rules will never fire for it");
+            checks.push(DoctorCheck {
+                check: "record-type-required-fields".to_string(),
+                status: DoctorStatus::Warn,
+                message: format!(
+                    "record type '{name}' has no required_fields -- field-quality/header rules will never fire for it"
+                ),
+            });
         }
     }
 
@@ -338,22 +412,41 @@ fn run_doctor() -> ExitCode {
         .map(|content| content.contains("urzua check") || content.contains("make records"))
         .unwrap_or(false);
     if ci_wired {
-        println!("[OK] CI workflow invokes `urzua check` or `make records`");
+        checks.push(DoctorCheck {
+            check: "ci-wired".to_string(),
+            status: DoctorStatus::Ok,
+            message: "CI workflow invokes `urzua check` or `make records`".to_string(),
+        });
     } else {
-        println!(
-            "[WARN] {} does not invoke `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
-            ci_path.display()
-        );
+        checks.push(DoctorCheck {
+            check: "ci-wired".to_string(),
+            status: DoctorStatus::Warn,
+            message: format!(
+                "{} does not invoke `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
+                ci_path.display()
+            ),
+        });
     }
 
-    for problem in &problems {
-        println!("[ERROR] {problem}");
-    }
-
-    if problems.is_empty() {
-        ExitCode::from(0)
+    let has_error = checks.iter().any(|c| c.status == DoctorStatus::Error);
+    let has_warn = checks.iter().any(|c| c.status == DoctorStatus::Warn);
+    let status = if has_error {
+        DoctorStatus::Error
+    } else if has_warn {
+        DoctorStatus::Warn
     } else {
+        DoctorStatus::Ok
+    };
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&DoctorReport { status, checks }).unwrap()
+    );
+
+    if has_error {
         ExitCode::from(1)
+    } else {
+        ExitCode::from(0)
     }
 }
 

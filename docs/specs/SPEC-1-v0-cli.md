@@ -26,14 +26,25 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | Spec | Covers | Status |
 > |---|---|---|
 > | **SPEC-2** | `urzua check` — discovery, rules, output contract | **the Phase 0 deliverable** |
-> | **SPEC-3** | `.urzua/config.toml` and `urzua doctor` | needed by SPEC-2 |
+> | **SPEC-3** | `.urzua/config.toml` | needed by SPEC-2 |
 > | **SPEC-4** | the corpus acceptance suite | needed by SPEC-2 criterion 3 |
 > | **SPEC-5** | `urzua init` — type selection, `.urzua/` layout, the adopt path | the bootstrap surface |
+> | **SPEC-6** | the `milestone` record type | Accepted |
+> | **SPEC-8** | `urzua fix` — eligibility test, detect/apply | Accepted |
+> | **SPEC-9** | the `bug` record type | Accepted |
+> | **SPEC-10** | the `waiver` record type | Accepted |
+> | **SPEC-11** | `urzua audit` | Accepted |
+> | **SPEC-12** | `urzua new` | Accepted |
+> | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
+> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` | Accepted |
+> | **SPEC-15** | `urzua doctor` | Accepted |
 >
 > Its number and identity are unchanged deliberately. Roughly thirty-five records, comments and
 > source files cite `SPEC-1` for the rules above; renumbering or repurposing it would be the
 > reverse-reference blast radius this spec's own acceptance suite records as a bug class. Identity
-> is stable, and the split is additive — RFC-11 §6, applied to this document.
+> is stable, and the split is additive — RFC-11 §6, applied to this document. `SPEC-7` is vacated
+> (retracted into SPEC-6 v0.2, ADR-14) and deliberately not reused for any of the above, per RFC-13's
+> principle that a vacated number is a record, not a gap to silently fill.
 
 **Explicitly out of scope for v0:** escalation/paging (blocked on an open question — building
 the escalation model before knowing what teams actually do is guessing at the hardest part),
@@ -65,14 +76,8 @@ Absent from this spec's original command surface — the gap surfaced when the b
 it.
 
 ### `urzua new <type> [title]`
-**Specified in full by ADR-27.** Creates a record from the configured template with a stable ID
-assigned (ADR-3). Never asks the author to pick a number — scans the type's directory for the
-highest existing prefix and takes the next one. Fills in the H1's number and title, `Date`, `Author`
-(resolved the same way `fix --apply` resolves an identity), and inserts a fresh `Stable-Id`; every
-other header field (`Status`, `Deciders`, `Embodiment`'s starting value) stays the template's own
-enumerated placeholder text for a human to pick. A record type with no template and no
-`yaml-frontmatter` declaration refuses rather than guessing a shape. Stdout is the JSON report
-(ADR-23): `path`, `display_number`, `stable_id`.
+**Specified in full by SPEC-12.** Creates a record from the configured template with a stable ID
+assigned, never asking the author to pick a number.
 
 ### `urzua check [paths...]`
 **Specified in full by SPEC-2.** The validator. Exit non-zero on error; stdout is always the JSON
@@ -97,43 +102,19 @@ silently examining an empty set — a zero-error report that isn't evidence the 
 failure mode this tool exists to eliminate, and shipping it would be self-refuting.
 
 ### `urzua explain <path>` / `urzua graph`
-Read-only relationship queries over data `check` already parses (ADR-24). `explain` lists every
-record whose `Realized-by` names `path` as evidence — "which decisions govern this file." `graph`
-dumps every `Implements`/`Derives-from`/`Supersedes`/`Superseded-by` edge across the corpus, each
-flagged `dangling` if it doesn't resolve. Neither needs a new schema field or config change.
+**Specified in full by SPEC-13.** Read-only relationship queries over data `check` already parses.
 
 ### `urzua audit`
-Cross-record reconciliation, separate from per-record validation:
-
-- **Supersession reciprocity** — if A supersedes B, B must point back. Status-aware: a claim only
-  binds once the claiming record is itself in a terminal-accepted state.
-- **Dangling cross-references.**
-
-**The reciprocity checker must never write.** A bulk cross-reference rewrite is a real data-loss
-risk without one. `audit` reports and exits.
+**Specified in full by SPEC-11.** Cross-record reconciliation, separate from per-record validation:
+supersession reciprocity and dangling cross-references. Never writes.
 
 ### `urzua fix`
-Detect mode only for now (ADR-19): reports fields whose stated value disagrees with what the tool
-computes from evidence already in the record. The one computation implemented is Embodiment
-(ADR-18) — `Realized-by`'s categorized locators (`spec`/`code`/`test`) compute a tier, compared
-against the stated `Embodiment` value. `check`'s `embodiment.consistency` rule surfaces the same
-disagreement as a finding; `fix` is the structured, repair-shaped view of it (`record`, `field`,
-`currentValue`, `computedValue`, `tier`, `evidence`), matching RFC-8 §3's detect-mode contract.
-Read-only. Apply mode (writing the computed value back) needs a revision-log write-path and identity
-resolution that don't exist yet (ADR-19).
+**Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
+computes from evidence already in the record; apply mode writes the computed value back, gated hard.
 
-### `urzua migrate ids`
-Backfills a `Stable-Id` field (ADR-3/21, ULID) into every record lacking one, retaining current
-numbers as display numbers unchanged — cross-references keep resolving by filename-derived number
-exactly as they do today; nothing about pointer resolution changes. Dry-run by default.
-
-### `urzua migrate schema`
-A field-rollout assistant when a newly-required field would otherwise fail every pre-existing
-record. `--report --field <Name>` is real (ADR-22): read-only, lists every record lacking a real
-value for `Name`, without touching config or any record. A waiver-generation assist (a human still
-writes the actual `Reason`) and an apply mode that delegates to `urzua fix` for whichever fields
-happen to be tool-writable (rare — most newly-required fields need human authorship) are not
-implemented yet.
+### `urzua migrate ids` / `urzua migrate schema`
+**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, and previews
+what a newly-required field would break before it's added to config.
 
 ### `urzua export --format=agdr` / `urzua import`
 AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields.
@@ -200,6 +181,7 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-07 | Normalized the header to the single-line, bold-labelled blockquote style SPEC-2 through SPEC-6 already use (still `HeaderShape::Blockquote` per RFC-10 -- no field value or parsing behavior changed). **Why:** found live, reviewing SPEC-1 against the later specs -- MILE-75 tracks whether within-type sub-format drift like this deserves its own rule; this entry is the docs-only fix for this one instance while that's decided. | **structural** |
 > | 2026-09-07 | Added `milestone` (ADR-34/SPEC-6) and `bug` (ADR-35) record types -- zero `urzua-core` changes, same footprint as `waiver`. Fixed two real defects found using them: `check`'s `paths` argument silently examined the whole corpus regardless of what was requested (BUG-1), and record identifiers required an exact 4-digit filename prefix, bounding every type at 9999 records, with matching now done by numeric value rather than exact string (BUG-2). | **substantive** |
 > | 2026-09-07 | `urzua new` emits type-prefixed filenames (`ADR-36-slug.md`) going forward (ADR-36); legacy `NNNN-slug.md` filenames never get renamed and resolve identically forever. Caught and fixed a second, independent instance of BUG-2's defect class in `filename_title_consistency`'s own filename/H1 parsing. | **substantive** |
+> | 2026-09-07 | Extended the child-spec table with SPEC-6, 8-15; shrank `new`/`fix`/`audit`/`explain`/`graph`/`migrate`'s inline `## Commands` prose down to one-line pointers, matching how `init`/`check` already point to SPEC-5/SPEC-2 instead of duplicating their design. **Why:** those commands got their own specs (MILE-77) and the inline prose had become a second, independently-drifting description of the same design -- no rule said which one won if they ever disagreed. `SPEC-3` entry corrected to no longer claim `doctor` (split out to SPEC-15). | **structural** |
 
 ## Acceptance test: the three-corpus suite
 

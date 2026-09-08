@@ -1,10 +1,10 @@
 # 77 — Decide what warrants a spec versus an ADR being sufficient
 
-> Status: Planned
+> Status: Done
 > Stable-Id: 01M1YX4KG8PJNP7J1NRGCYPA2E
 > Phase: 1
 > Track: governance-process
-> Implements: —
+> Implements: ADR-41
 
 ## What
 
@@ -32,3 +32,4 @@ rule would just add more inconsistent precedent on top of the inconsistent prece
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-07 | Resolved by editorial judgment, not a mechanical formula. A first attempt at a mechanical trigger ("a second ADR amendment promotes the subject to a spec") was drafted and explicitly rejected -- a spec groups a coherent *feature area* together (the same call that produced SPEC-6 for `milestone`, and SPEC-3 already bundling `doctor` before this session), not a count of anything. Applied directly: wrote SPEC-8 (`fix`), SPEC-9 (`bug`), SPEC-10 (`waiver`), SPEC-11 (`audit`), SPEC-12 (`new`), SPEC-13 (`explain`/`graph`, bundled as one feature area), SPEC-14 (`migrate ids`/`migrate schema`, bundled), and split `doctor` out of SPEC-3 into its own SPEC-15 (a real, standalone feature area that had been folded into configuration's spec by default, not by a deliberate call). **Why:** these areas were genuinely coherent, buildable functional units documented only as ADRs, the same gap `milestone`'s SPEC-6 had already closed for itself; `doctor` needed the opposite move, since it had been bundled into the wrong spec rather than left with none. | **substantive** |

@@ -190,6 +190,47 @@ fn doctor_reports_missing_config_as_exit_2() {
 }
 
 #[test]
+fn doctor_emits_json_not_plain_text_lines() {
+    // BUG-4, observed failing before the fix: `doctor` printed `[OK]`/
+    // `[WARN]`/`[ERROR]` lines, the one command that hadn't caught up with
+    // ADR-23's "stdout is always JSON" contract every other command follows.
+    let dir = fixture_repo("doctor-json");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.toml"),
+        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["doctor"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("[OK]") && !stdout.contains("[WARN]") && !stdout.contains("[ERROR]"),
+        "doctor must not emit bracketed plain-text lines: {stdout}"
+    );
+
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("doctor stdout is not JSON: {e}\n{stdout}"));
+    // "warn", not "ok" -- this fixture has no .github/workflows/ci.yml, so
+    // the ci-wired check correctly reports a warning; exit code stays 0
+    // since a warning never blocks (only an error does).
+    assert_eq!(parsed["status"], "warn");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "a warning must not block: {stdout}"
+    );
+    assert!(
+        parsed["checks"].as_array().unwrap().len() >= 3,
+        "expected config-exists, config-parses, and at least one record-type-dir check: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
     // BUG-0001, observed failing before the fix: `check`'s path argument was
     // used only to locate the repo root, never to filter which files were

@@ -1,6 +1,6 @@
 # SPEC-3 — Configuration: `.urzua/config.toml`
 
-> Version: 0.1 | Date: 2026-08-20 | Status: Draft
+> Version: 0.2 | Date: 2026-08-20 | Status: Draft
 > **Implements:** RFC-1, RFC-11
 > **Parent:** SPEC-1 (v0 CLI).
 
@@ -99,22 +99,18 @@ see and correct; a default applied silently at read time is a fact nobody review
 
 ## `urzua doctor`
 
-Separate command, deliberately. `check` validates records; whether `check` *itself* is correctly
-wired to CI or a hook is a different question with a different failure mode. One source
-implementation's checker ran clean for weeks — not because the corpus was clean but because nothing
-invoked it.
-
-`doctor` reports: which config resolved and from where, which record types matched real directories,
-which rules are off, whether the binary is invoked from CI, a hook, or ad hoc, and any config key
-the binary does not recognize. **An unrecognized key is an error, not a warning** — the alternative
-is a typo that silently disables a rule.
+**Specified in full by SPEC-15.** Reports on the tool's own configuration and invocation health —
+a real, standalone feature area with its own output shape and bug history, not a detail of how
+config is structured.
 
 ## Success criteria
 
 1. Both target codebases run green under one binary with no code change and no escape hatch.
 2. Their two configs are diffable against each other, and the diff is a readable statement of how
    the corpora genuinely differ.
-3. Every rule in SPEC-2 is reachable from config, and `doctor` lists the ones that are off.
+3. Every rule in SPEC-2 is reachable from config, and `doctor` (SPEC-15) lists the ones that are
+   off — not yet true today, since no per-rule enable/disable or severity config exists yet
+   (MILE-80).
 4. If (1) fails, the failure is recorded as a schema finding with the specific rule that could not
    be expressed — not patched around with a code path for one repo.
 
@@ -144,3 +140,4 @@ false.
 > |---|---|---|
 > | 2026-08-20 | Config moves from `urzua.toml` at the repo root to `.urzua/config.toml`. The tool owns templates and derived state as well as config, and templates must sit outside the corpus they describe — a template is invalid as a record by construction, so a checker discovers it and reports errors on a correct file. The alternative, an ignore list, is the ad-hoc exclusion RFC-11 and RFC-13 both reject elsewhere. | **substantive** |
 > | 2026-08-20 | Split out of SPEC-1's Configuration section and expanded. | **structural** |
+> | 2026-09-07 | `urzua doctor` split out into its own spec (SPEC-15). **Why:** doctor is a real, standalone feature area with its own output shape and its own bug history (BUG-4, found the same day), not merely a detail of how config is structured — folding it into SPEC-3 by default rather than by a deliberate call was exactly the kind of inconsistency MILE-77's review named. Success criterion 3 corrected to note "which rules are off" isn't actually true yet (MILE-80). | **structural** |

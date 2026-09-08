@@ -185,10 +185,12 @@ pub fn header_field_set_consistency(
     )
 }
 
-/// Rule 2: `Implements:`/`Derives-from:` resolves to a real record. The
-/// target's status is surfaced in the message, never judged -- whether a
+/// Rule 2: `Implements:`/`Derives-from:`/`Parent:` resolves to a real record.
+/// The target's status is surfaced in the message, never judged -- whether a
 /// `Draft` target is acceptable is a policy decision (RFC-0012), not this
-/// checker's call.
+/// checker's call. `Parent` was added after every spec's own `Parent: SPEC-N`
+/// pointer was found, live, to be completely unchecked -- the field existed
+/// only in prose, resolved by nobody, since it wasn't in this list.
 pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     let mut findings = Vec::new();
     let mut examined = 0;
@@ -205,7 +207,7 @@ pub fn pointer_resolution(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     }
 
     for record in records {
-        for field_name in ["Implements", "Derives-from"] {
+        for field_name in ["Implements", "Derives-from", "Parent"] {
             let Some(value) = record.header.get(field_name) else {
                 continue;
             };
@@ -1001,6 +1003,32 @@ mod tests {
         let (_, findings) = pointer_resolution(&[source]);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn a_parent_pointer_resolves_the_same_as_implements() {
+        // Every spec's `Parent: SPEC-N` pointer was completely unchecked
+        // before Parent was added to this rule's scanned fields -- a typo'd
+        // or dangling Parent would never have been caught.
+        let parent = record("docs/specs/0001-v0-cli.md", "spec", "> Status: Draft\n");
+        let child = record(
+            "docs/specs/0002-urzua-check.md",
+            "spec",
+            "> Parent: SPEC-1 (v0 CLI). Extra trailing prose that isn't a reference.\n",
+        );
+        let (_, findings) = pointer_resolution(&[parent, child]);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+        assert!(findings[0].message.contains("Parent: SPEC-1 resolves"));
+    }
+
+    #[test]
+    fn a_dangling_parent_pointer_is_an_error() {
+        let child = record("docs/specs/0002-x.md", "spec", "> Parent: SPEC-9999\n");
+        let (_, findings) = pointer_resolution(&[child]);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Error);
+        assert!(findings[0].message.contains("Parent: SPEC-9999"));
     }
 
     #[test]
