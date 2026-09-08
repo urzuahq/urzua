@@ -1,7 +1,8 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-09-08
 Status: Accepted
+Author: '@beauwilliams'
 Parent: SPEC-1 (v0 CLI).
 ---
 # SPEC-18 — The `spec` record type
@@ -68,3 +69,4 @@ consistency` correctly stays silent for `spec` in the meantime (ADR-39's own add
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial spec. **Why:** `spec` — one of the three founding record types, and the type this very document is an instance of — never got a schema spec; found live via `type.no-declared-spec`'s own inventory check (ADR-43), alongside the same gap for `adr`/`rfc`. | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

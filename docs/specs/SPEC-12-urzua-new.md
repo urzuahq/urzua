@@ -1,7 +1,8 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-09-07
 Status: Accepted
+Author: '@beauwilliams'
 Implements: ADR-27
 Parent: SPEC-1 (v0 CLI).
 ---
@@ -77,3 +78,4 @@ take content and parameters, returning a string.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial spec. **Why:** MILE-77 found `new` documented only as an ADR while comparable-complexity command areas (`check`, `init`) had specs. | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

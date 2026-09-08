@@ -18,14 +18,15 @@ header_shape = "yaml-frontmatter"
 known_fields = ["Supersedes / Superseded-by", "Amends"]
 spec = "SPEC-17"
 
-# spec deliberately has no known_fields yet -- MILE-0074 decides the
-# canonical field set (does Author become required? is SPEC-1's
-# Embodiment/Derives-from project-wide or SPEC-1-specific?) before this
-# rule gets a real target to check spec against (MILE-0081).
+# MILE-0074: Author required (same accountability argument as adr/rfc,
+# MILE-0078), Embodiment/Derives-from a project-wide optional convention
+# (not SPEC-1-specific baggage). Implements/Parent are the two pointer
+# fields every spec already carries.
 [record_types.spec]
 dir = "docs/specs"
-required_fields = ["Status", "Date", "Version"]
+required_fields = ["Status", "Date", "Version", "Author"]
 header_shape = "yaml-frontmatter"
+known_fields = ["Embodiment", "Derives-from", "Implements", "Parent"]
 spec = "SPEC-18"
 
 [record_types.milestone]

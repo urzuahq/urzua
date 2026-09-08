@@ -1,5 +1,5 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M1YSM7BNRXXTYMV4TF93EAG4
 Phase: '0'
 Track: roadmap-tracking
@@ -37,3 +37,4 @@ this project is built around -- can't be created through `urzua new` at all.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-08 | `Status: Done`. The mechanical failure was already resolved as a side effect of ADR-33's yaml-frontmatter migration (`spec`'s `header_shape` got declared, so `urzua new spec` stopped erroring). The real remaining scope -- the canonical field set -- decided: `Author` required (MILE-78's accountability argument, backfilled onto all 16 pre-existing specs lacking it); `Embodiment`/`Derives-from` a project-wide optional convention, not `SPEC-1`-specific baggage; `Implements`/`Parent` declared in `known_fields` since every spec already carries them. `.urzua/templates/spec.md` built so `urzua new spec` produces real section scaffolding, not a bare skeleton. | **substantive** |

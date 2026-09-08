@@ -1,7 +1,8 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-08-20
 Status: Draft
+Author: '@beauwilliams'
 Parent: SPEC-1 (v0 CLI), which lists the bug classes this suite must reproduce.
 ---
 # SPEC-4 — The corpus acceptance suite
@@ -201,3 +202,4 @@ applied to the copy that never ran, which is exactly the false confidence this g
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-08-20 | Split out of SPEC-1 §"Acceptance test". | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

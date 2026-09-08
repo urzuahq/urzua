@@ -1,7 +1,8 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-08-20
 Status: Draft
+Author: '@beauwilliams'
 Implements: RFC-1
 Parent: SPEC-1 (v0 CLI).
 ---
@@ -168,3 +169,4 @@ migration without a reverse-reference scan is the documented data-loss shape.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-08-20 | Initial spec. | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

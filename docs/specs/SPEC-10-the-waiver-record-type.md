@@ -1,7 +1,8 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-09-07
 Status: Accepted
+Author: '@beauwilliams'
 Implements: ADR-11
 Parent: SPEC-1 (v0 CLI).
 ---
@@ -74,3 +75,4 @@ computed from non-waived findings only.
 > |---|---|---|
 > | 2026-09-07 | Initial spec. **Why:** `waiver` (ADR-11) was documented only as an ADR while `milestone`, the same shape of decision (a configured record type), got a matching spec (SPEC-6) — MILE-77 named this inconsistency and this spec resolves it for `waiver`. | **structural** |
 > | 2026-09-08 | Header shape declared as `yaml-frontmatter` (ADR-33/42 amendment) -- `waiver` never declared `header_layout` (no records exist yet to have settled on a sub-format), so nothing to remove here, unlike the other five types. `spec = "SPEC-10"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). | **substantive** |
+> | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

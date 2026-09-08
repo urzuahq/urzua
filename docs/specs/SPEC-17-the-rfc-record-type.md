@@ -1,8 +1,10 @@
 ---
-Version: '0.1'
+Version: '0.3'
 Date: 2026-09-08
 Status: Accepted
+Author: '@beauwilliams'
 Parent: SPEC-1 (v0 CLI).
+Derives-from: RFC-1 (Accepted)
 ---
 # SPEC-17 — The `rfc` record type
 
@@ -54,3 +56,5 @@ ADR's own `Deciders` field records.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial spec. **Why:** `rfc` — one of the three founding record types — never got a schema spec; found live via `type.no-declared-spec`'s own inventory check (ADR-43), alongside the same gap for `adr`/`spec`. | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
+> | 2026-09-08 | Added `Derives-from: RFC-1 (Accepted)`. **Why:** `rfc` is a founding type decided by RFC-1, not by any single ADR (unlike `milestone`/`bug`/`waiver`, each pointing at the ADR that decided them) -- this spec cited RFC-1 in prose and References but never backlinked it in the header, the same pointer every other type declares. | **substantive** |

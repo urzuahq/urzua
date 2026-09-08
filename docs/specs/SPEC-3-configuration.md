@@ -1,7 +1,8 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-08-20
 Status: Draft
+Author: '@beauwilliams'
 Implements: RFC-1, RFC-11
 Parent: SPEC-1 (v0 CLI).
 ---
@@ -144,3 +145,4 @@ false.
 > | 2026-08-20 | Config moves from `urzua.toml` at the repo root to `.urzua/config.toml`. The tool owns templates and derived state as well as config, and templates must sit outside the corpus they describe — a template is invalid as a record by construction, so a checker discovers it and reports errors on a correct file. The alternative, an ignore list, is the ad-hoc exclusion RFC-11 and RFC-13 both reject elsewhere. | **substantive** |
 > | 2026-08-20 | Split out of SPEC-1's Configuration section and expanded. | **structural** |
 > | 2026-09-07 | `urzua doctor` split out into its own spec (SPEC-15). **Why:** doctor is a real, standalone feature area with its own output shape and its own bug history (BUG-4, found the same day), not merely a detail of how config is structured — folding it into SPEC-3 by default rather than by a deliberate call was exactly the kind of inconsistency MILE-77's review named. Success criterion 3 corrected to note "which rules are off" isn't actually true yet (MILE-80). | **structural** |
+> | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

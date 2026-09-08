@@ -1,7 +1,8 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-09-07
 Status: Accepted
+Author: '@beauwilliams'
 Implements: —
 Parent: SPEC-1 (v0 CLI).
 ---
@@ -78,3 +79,4 @@ than compounded:
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial spec, split out of SPEC-3. **Why:** doctor is a real, standalone feature area (its own output shape, its own bug history) that had been folded into configuration's spec by default rather than by a deliberate call; MILE-77's review named it as deserving its own spec. Written the same day BUG-4 (plain-text output) was found and fixed, so the shipped shape reflects the fix, not the pre-fix behavior. | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |

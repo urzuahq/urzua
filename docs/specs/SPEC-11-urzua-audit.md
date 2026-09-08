@@ -1,7 +1,8 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-09-07
 Status: Accepted
+Author: '@beauwilliams'
 Implements: ADR-30
 Parent: SPEC-1 (v0 CLI).
 ---
@@ -64,3 +65,4 @@ function today, since both take `&[Record]` and neither cares where its caller r
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial spec, giving `audit` its own complete build document rather than leaving it as an ADR describing only the *how*, with the *what* living separately in SPEC-1. **Why:** MILE-77 found this and `new`/`explain`/`graph`/`migrate` documented only as ADRs while comparable-complexity areas (`check`, `init`) had specs. | **structural** |
+> | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
