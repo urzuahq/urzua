@@ -166,21 +166,35 @@ This repo's own `.urzua/config.toml` declares `milestone` and `bug` alongside `a
 
 Fields aren't just data — some of them are pointers to other records, and which fields mean that, and which direction they point, is a config-time choice, not something Urzua hardcodes any more than it hardcodes "an ADR."
 
-This repo's own corpus links three record types into a chain: a proposal becomes a decision becomes a buildable reference, and each one points backward at the thing it came from, never forward at what came later (the later record usually doesn't exist yet when the earlier one is written).
+A single record can point backward at more than one other record — `Implements`/`Derives-from` are comma-separated, so this is a graph, not a chain. This repo's own [`SPEC-8`](docs/specs/SPEC-8-urzua-fix.md) implements four ADRs at once (`Implements: ADR-15, ADR-18, ADR-19, ADR-20`, bundling four related decisions into one buildable reference), and nothing stops a spec from pointing straight at an RFC and skipping the ADR stage entirely, if that's how a given decision actually happened.
+
+The simplest real path in this corpus still illustrates the shape clearly, so it's worth walking end to end:
 
 ```
 RFC-1 (proposal)  <--Derives-from--  ADR-10 (decision)  <--Implements--  SPEC-16 (buildable spec)
 ```
 
-Concretely: [`RFC-1`](docs/rfc/RFC-1-unified-record-schema-core-and-profiles.md) proposed a unified core-plus-profile schema. [`ADR-10`](docs/adr/ADR-10-unified-record-schema-core-and-profiles.md) decided it, and its header carries `Derives-from: RFC-1` — "I'm deciding the thing that RFC proposed." [`SPEC-16`](docs/specs/SPEC-16-the-adr-record-type.md) is the buildable detail of what ADR-10 decided, and carries `Implements: ADR-10` — "I'm the built-out reference for what that ADR decided." `urzua check` resolves every one of these pointers against the real corpus (`pointer.resolution`): a typo'd or dangling reference is a finding, not a silent broken link.
+Concretely: [`RFC-1`](docs/rfc/RFC-1-unified-record-schema-core-and-profiles.md) proposed a unified core-plus-profile schema. [`ADR-10`](docs/adr/ADR-10-unified-record-schema-core-and-profiles.md) decided it, and its header carries `Derives-from: RFC-1` — "I'm deciding the thing that RFC proposed." [`SPEC-16`](docs/specs/SPEC-16-the-adr-record-type.md) is the buildable detail of what ADR-10 decided, and carries `Implements: ADR-10` — "I'm the built-out reference for what that ADR decided." Each points backward at the thing it came from, never forward at what came later, since the later record usually doesn't exist yet when the earlier one is written.
 
-None of `Implements`, `Derives-from`, or the chain's shape is special-cased in `urzua-core` — they're plain field names an org declares in `known_fields` per type, resolved generically by one rule that doesn't know or care what "RFC" or "ADR" means. A different org could:
+`urzua check` resolves every one of these pointers against the real corpus (`pointer.resolution`): a typo'd or dangling reference is a finding, not a silent broken link. `urzua graph` dumps the whole thing as edges — every `Implements`/`Derives-from`/`Supersedes`/`Parent` reference across every record, each tagged `dangling: bool` — so the graph shape (who points at whom, and how many times) is a query, not something you infer by reading every file:
+
+```
+$ urzua graph
+{"edges": [
+  {"from": "SPEC-8",  "relation": "Implements",  "to": "ADR-15", "dangling": false},
+  {"from": "SPEC-8",  "relation": "Implements",  "to": "ADR-18", "dangling": false},
+  {"from": "SPEC-16", "relation": "Implements",  "to": "ADR-10", "dangling": false},
+  {"from": "ADR-10",  "relation": "Derives-from", "to": "RFC-1", "dangling": false}
+]}
+```
+
+None of `Implements`, `Derives-from`, or the graph's shape is special-cased in `urzua-core` — they're plain field names an org declares in `known_fields` per type, resolved generically by one rule that doesn't know or care what "RFC" or "ADR" means. A different org could:
 
 - Skip the RFC stage entirely and decide directly (this repo's own `milestone`/`bug` types do exactly that — `ADR-34`/`ADR-35` with no RFC upstream of either).
 - Point an `incident-review` type at a `runbook` type instead of an ADR at an RFC — same mechanism, different vocabulary.
-- Add a field like `Feeds-into` that points *forward* instead of back, if that org's workflow genuinely needs to know downstream consumers from the source record — nothing in the engine assumes lineage only flows one direction, only that whatever direction you declare gets checked for resolution.
+- Add a field like `Feeds-into` that points *forward* instead of back, if that org's workflow genuinely needs to know downstream consumers from the source record — nothing in the engine assumes lineage only flows one direction, or one-to-one, only that whatever edges you declare get checked for resolution.
 
-The chain above is one configuration this repo happens to use to govern itself, documented here because it's concrete — not a schema Urzua expects every adopter to reproduce.
+The chain above is one path through this repo's own graph, documented here because it's concrete — not a schema Urzua expects every adopter to reproduce.
 
 ## Status
 
