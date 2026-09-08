@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M21FK8QA0D6QJQWHKBND90WB
-Status: Draft
+Status: Accepted
 Date: 2026-09-08
 Author: '@beauwilliams'
 Implements: BUG-8
