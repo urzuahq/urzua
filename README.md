@@ -3,6 +3,7 @@
 [![ci](https://github.com/urzuahq/urzua/actions/workflows/ci.yml/badge.svg)](https://github.com/urzuahq/urzua/actions/workflows/ci.yml)
 [![release](https://github.com/urzuahq/urzua/actions/workflows/release.yml/badge.svg)](https://github.com/urzuahq/urzua/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/urzuahq/urzua?utm_source=oss&utm_medium=github&utm_campaign=urzuahq%2Furzua&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
 **Your agent just wrote a record of a decision it made. Is it structured data, or prose that happens to have a `Status:` line at the top?**
 
