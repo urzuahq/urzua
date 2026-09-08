@@ -31,8 +31,11 @@ allowing it.
 
 ## References
 
-- RFC-21 -- the structured `References` field proposal whose design discussion surfaced this; the
-  new field is being built to disallow this pattern from the start rather than inherit it.
+- RFC-21 -- the structured `References` field proposal whose design discussion surfaced this,
+  since rejected (both of its own motivating cases turned out to be fixable with existing fields
+  like `Implements`, not a new one). Whatever fix this bug gets should tighten `extract_references`
+  itself, or the existing `Parent`/`Implements`/`Derives-from` fields directly -- not wait on a new
+  field that isn't being built.
 - `SPEC-2`/`SPEC-4` -- the two live instances of the pattern this bug describes.
 
 > **Revision log**

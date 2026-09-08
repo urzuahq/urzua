@@ -35,8 +35,9 @@ one, which makes it a weak place to anchor any mechanical check.
 Both of this RFC's own motivating cases turned out not to need a new field at all, once traced
 through carefully rather than assumed:
 
-- **`SPEC-16`/`SPEC-17` citing `RFC-1`** was fixed by adding `Implements: ADR-10` — an *existing*
-  field, correctly identified once someone looked for the right one.
+- **`SPEC-16`/`SPEC-17` citing `RFC-1`** in prose was fixed by adding `Implements: ADR-10` to their
+  own headers — an *existing* field, pointing at `ADR-10` (the decision record for `RFC-1`), not at
+  `RFC-1` itself; `pointer.resolution`/`urzua graph` produce an `ADR-10` edge, correctly.
 - **`RFC-18` citing `MILE-6`** was fixed by adding `RFC-18` to `MILE-6`'s *existing* `Implements`
   field. Checked live in `urzua graph` after: `MILE-6 --Implements--> RFC-17` and
   `MILE-6 --Implements--> RFC-18` both appear, `dangling: false` — the relationship is fully
@@ -117,5 +118,5 @@ field" scope rather than this RFC's "build a new field" one.
   RFC is a response to.
 - MILE-44 — configurable suggested actions on findings, the natural home for nudging an author
   toward this field, not decided here.
-- MILE-86 — names the same underlying gap this RFC proposes to close structurally rather than by
-  detection; superseded by this RFC's approach rather than pursued in parallel.
+- MILE-86 — names the same underlying gap; this RFC's structural approach is rejected in favor of
+  MILE-86's original detection-based one (see "Why rejected" above).

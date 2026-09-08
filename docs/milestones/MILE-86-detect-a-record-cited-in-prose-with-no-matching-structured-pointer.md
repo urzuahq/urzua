@@ -22,6 +22,13 @@ fields would either require inventing many more field types or collapse distinct
 something into one generic bucket. The gap is narrower: when a citation *is* actually a checkable
 relationship, prose currently offers no signal that it should have been a header field instead.
 
+**Matching must check both endpoints, not just the citing record.** The real case below (`RFC-18`
+citing `MILE-6`) resolved on `MILE-6`'s own `Implements` field, not on anything added to `RFC-18` —
+a detector that only inspected the record doing the citing would have kept flagging this as unfixed
+even after it was. Any real implementation needs to check whether *either* record in a cited pair
+already carries a structured pointer resolving to the other, in whatever field is valid for that
+record's type, before treating the citation as unaddressed.
+
 ## Why
 
 Found live, twice in the same session: `SPEC-16`/`SPEC-17` cited RFC-1 in their own `## References`
