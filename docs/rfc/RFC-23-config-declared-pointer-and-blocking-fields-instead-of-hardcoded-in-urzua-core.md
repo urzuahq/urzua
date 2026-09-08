@@ -39,39 +39,43 @@ would then have no way to know whether to enforce cleanliness (kind 1) or tolera
 
 ## Proposal
 
-Two new per-type config concepts, declared the same way `known_fields` already is:
+Two new per-type config concepts, declared the same way `known_fields` already is -- no global
+list; each type declares its own, independently:
 
 ```toml
 [record_types.rfc]
 # ...existing fields...
 pointer_fields = ["Implements", "Derives-from", "Amends"]
-blocking_fields = ["Blocked-on"]
+narrative_fields = ["Blocked-on"]
 ```
 
 - **`pointer_fields`**: resolved by `pointer_resolution` (existence-checked, `urzua graph` edges
   labeled by field name), and enforced clean by `header.pointer-field-clean` -- any comma-separated
   entry that isn't exactly a reference token is a finding, no exceptions.
-- **`blocking_fields`**: resolved by `pointer_resolution` too, but *not* subject to the
+- **`narrative_fields`**: resolved by `pointer_resolution` too, but *not* subject to the
   clean-field check, and separately checked by `blocked_on_stale` for target terminal-status.
   `extract_references`'s existing lenient, leading-token extraction is exactly right for this kind
-  and stays unchanged.
+  and stays unchanged. Named for the mechanism (tolerates narrative text alongside an optional
+  embedded reference), not today's one use case -- `blocking_fields` was considered and rejected as
+  a name, since it would misdescribe a future narrative-tolerant field that isn't about blocking at
+  all (e.g. a hypothetical `Motivated-by`).
 
-`Parent`/`Implements`/`Derives-from` become the *default* `pointer_fields` when a type declares
-none (backward-compatible with every type in this repo's own corpus today); `Blocked-on` likewise
-defaults into `blocking_fields`. An adopting org overrides either list per type, the same additive,
-non-breaking shape `header_layout`/`known_fields` already established.
+**No default, no backward-compatibility fallback.** A type that declares neither list has zero
+fields of either kind checked -- `examined` stays `0` for it, the same "declared, not inferred"
+shape `header_layout`/`known_fields` already use when undeclared. Deliberately not treating today's
+hardcoded list as an implicit default: this tool has no real external adopters yet to preserve
+behavior for, and carrying forward a compatibility shim nobody needs would just be unaudited cruft
+from day one. Every one of this repo's own six types will need an explicit declaration once this
+ships -- a real, visible migration, not a hidden default silently doing the same job.
+
+**`urzua graph` gains a `kind` field on every edge**, distinguishing which list produced it:
+
+```json
+{"from": "MILE-6", "relation": "Implements", "to": "RFC-18", "kind": "pointer", "dangling": false}
+```
 
 ## Open questions
 
-- **Does this apply per-type or globally?** Milestones might reasonably want a `Feeds-into` field
-  that adr/rfc never use -- per-type declaration (as sketched above) seems right, but adds one more
-  config surface per type; worth weighing against a single global list if no real case demands
-  per-type variance yet.
-- **Backward compatibility precisely**: does an *undeclared* `pointer_fields`/`blocking_fields` on
-  an existing type silently default to today's hardcoded behavior, or does `doctor` need a check
-  flagging "no pointer fields declared" the way `type.no-declared-spec` does for missing specs?
-- **Does `urzua graph`'s output format need to change** to distinguish a `pointer_fields` edge from
-  a `blocking_fields` edge, or is the field-name label (already present on every edge) sufficient?
 - **README correction scope** -- once this lands, is the `Feeds-into` example in the lineage section
   finally true as written, or does it still need adjusting for some other reason found along the way?
 - **This RFC's own header is a live instance of the gap it names.** `Implements: BUG-8` above
@@ -80,16 +84,18 @@ non-breaking shape `header_layout`/`known_fields` already established.
   firing rather than quietly silenced by adding `Implements` to `rfc`'s `known_fields`, since
   whether `rfc` *should* declare it is exactly the kind of small, real decision this RFC's own
   proposal would make legible instead of ad hoc. Left open, not decided here.
+- **Are there other backward-compatibility shims already in `urzua-core`** that exist only for
+  imagined future adopters rather than any real one? Raised live alongside this RFC's own
+  no-defaults decision; scoped as a separate audit, not answered here.
 
 ## Non-goals
 
-- **Does not decide the exact config key names** (`pointer_fields`/`blocking_fields` are working
-  names, not final).
 - **Does not implement a third pointer-field kind** beyond the two identified -- if a real case
   needs something else later, that's a separate RFC, per this project's own "add a field once a
   pattern recurs" discipline.
 - **Does not retroactively migrate this repo's own config** -- covered by whatever milestone
   implements this RFC, not decided here.
+- **Does not perform the broader backward-compatibility-shim audit** named above -- separate work.
 
 ## References
 
@@ -107,3 +113,4 @@ non-breaking shape `header_layout`/`known_fields` already established.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial RFC. **Why:** found live discussing whether an adopting org could add its own relationship vocabulary the way it can already add record types -- it can't, today, closing exactly the gap BUG-8 names in the README's own claim. | **structural** |
+> | 2026-09-08 | Design settled through discussion: per-type only, no global list; renamed `blocking_fields` to `narrative_fields` (names the mechanism, not today's one use case); no backward-compatibility default -- an undeclared type gets zero fields of either kind checked, matching `header_layout`/`known_fields`'s own undeclared-means-skip precedent; `urzua graph` gains a `kind` field per edge. Config key names, per-type-vs-global, and backward compatibility were all previously open questions -- now decided; README correction scope and this RFC's own undeclared `Implements` field remain open. | **substantive** |
