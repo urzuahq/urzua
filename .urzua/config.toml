@@ -15,7 +15,7 @@ spec = "SPEC-16"
 dir = "docs/rfc"
 required_fields = ["Status", "Date", "Author"]
 header_shape = "yaml-frontmatter"
-known_fields = ["Supersedes / Superseded-by", "Amends"]
+known_fields = ["Stable-Id", "Supersedes / Superseded-by", "Amends"]
 spec = "SPEC-17"
 
 # MILE-0074: Author required (same accountability argument as adr/rfc,
@@ -26,7 +26,7 @@ spec = "SPEC-17"
 dir = "docs/specs"
 required_fields = ["Status", "Date", "Version", "Author"]
 header_shape = "yaml-frontmatter"
-known_fields = ["Embodiment", "Derives-from", "Implements", "Parent"]
+known_fields = ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
 spec = "SPEC-18"
 
 [record_types.milestone]
