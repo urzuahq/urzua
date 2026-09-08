@@ -13,6 +13,11 @@ Add `Severity::Info` alongside `Error`/`Warning` in `report.rs`, for findings wo
 
 Every finding today is Error or Warning -- there's no severity for genuinely informational output (e.g. a future `suggested_action`-only note, or `embodiment.locator-promotion-candidate`'s own "consider promoting" nudge, which is arguably info-shaped today and only Warning because nothing else exists).
 
+This owns *which severity levels exist* in `Severity` itself; MILE-80 owns *making a rule's severity
+configurable per repo* (SPEC-1's own unbuilt "which checks are errors vs. warnings" promise) --
+related, found independently, kept separate since one is a schema/enum question and the other is a
+config-surface question. Resolve which comes first when either is picked up.
+
 ## Blocked on
 
 `—`

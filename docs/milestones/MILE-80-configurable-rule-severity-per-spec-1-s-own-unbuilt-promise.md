@@ -10,14 +10,13 @@
 
 `Severity` is a hardcoded two-value enum (`Error`/`Warning`) baked directly into ~13 call sites
 across `rules.rs`, with zero config surface -- despite SPEC-1 explicitly listing "which checks are
-errors vs. warnings" as configurable from v0. Two distinct things need deciding before building
-either: (a) should `Severity` itself gain more values (e.g. `Info`), which is a *findings*-severity
-question feeding `blocking`/exit-code computation the same way `Error`/`Warning` already do; and (b)
-separately, should the CLI gain a general log-verbosity control (debug/info-as-diagnostic-noise
-while a command runs), which is orthogonal to findings entirely -- a finding is either a real
-problem or it isn't, verbosity is about how much the tool narrates while deciding that. Once
-resolved, make whichever severity axis is chosen configurable per rule in `.urzua/config.toml`,
-fulfilling SPEC-1's original promise.
+errors vs. warnings" as configurable from v0. This milestone owns *making a rule's severity
+configurable per repo* in `.urzua/config.toml` (a config-surface question); whether `Severity`
+itself gains more values (e.g. `Info` — MILE-46, found independently, same day) is a separate
+schema/enum question, kept apart deliberately rather than conflated. Also separate: whether the CLI
+should gain a general log-verbosity control (debug/info-as-diagnostic-noise while a command runs) —
+orthogonal to findings entirely, since a finding is either a real problem or it isn't, while
+verbosity is about how much the tool narrates while deciding that.
 
 ## Why
 
