@@ -45,7 +45,14 @@ Widen `doctor`'s checks along two new axes, in addition to what SPEC-15 already 
    its report becomes "what's configured, what's missing, what to do about it," not only a CI gate.
 2. **Template/config agreement** (folds in MILE-6): for every configured type with `header_shape !=
    "yaml-frontmatter"`, does `.urzua/templates/<type>.md` exist? `warn` if not — `urzua new <type>`
-   will otherwise fail loud only when someone actually tries it.
+   will otherwise fail loud only when someone actually tries it. **This is narrower than MILE-6's
+   full scope**: MILE-6's own title names template/config *section* agreement — does the template
+   actually contain a heading for every `required_fields`/section the config declares, not just
+   whether the file exists at all. A present-but-incomplete template passes the existence check
+   above and still violates that fuller contract. Either this proposal's first cut is existence-only
+   (leaving section-completeness for a later pass), or MILE-6 itself should be read as two separate
+   checks — worth resolving explicitly rather than letting "folds in MILE-6" overstate what's
+   actually being proposed here.
 3. **Environment preconditions**, not just config preconditions:
    - Is `gh` authenticated? `resolve_identity()` silently falls through to `git config user.name`
      otherwise — worth surfacing before a write attributes to the wrong identity source.

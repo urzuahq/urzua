@@ -37,12 +37,21 @@ about relationship-completion and locator-repointing, a different shape of gap):
 - **Detect**: for every record whose `Author`/`Deciders` classifies as `FieldState::Placeholder`,
   resolve the record's file's first commit (`git log --follow --format=%an --reverse -- <path> |
   head -1`, or the equivalent via `urzua_io`'s existing git-shelling patterns) and report it as a
-  candidate value, the same shape as a Tier 1 finding.
+  candidate value, the same shape as a Tier 1 finding. **Left genuinely unresolved by this sketch,
+  not glossed over**: `Author` is single-valued but `Deciders` is "one or more" (SPEC-16) — one
+  first-commit name can't populate both the same way, and a raw `git log` author name is a commit
+  identity, not necessarily the same verified-or-fallback identity `resolve_identity()` already
+  produces (`gh api user` > `git config user.name`, in that order) — the two could disagree for the
+  same person. Any real design would need a separate mapping/cardinality rule per field, and to
+  decide whether a bare commit-author name is even eligible evidence, or only a `gh`-verified one.
 - **Apply**: write the resolved value back under the same hard gates `--apply` already enforces
   (resolved identity for the *operator* running the write, revision-log entry, byte-preserving
   everything else) — this writes a *different* record's historical field, not the operator's own
-  attribution, so the revision-log entry would need to say "resolved from git history," not "written
-  by the identity resolution tier."
+  attribution. A revision-log entry that just says "resolved from git history" would not actually
+  satisfy ADR-14's own auditability bar (undoable *by inspection*) — it would need to name the exact
+  commit and command used, the same specificity Tier 1's findings already report (`evidence: [...]`).
+  Until that provenance shape is nailed down, this stays a **detect-only** sketch — apply is not
+  proposed to ship alongside detect the way Tier 1's did.
 
 ## Open questions
 
@@ -50,6 +59,11 @@ about relationship-completion and locator-repointing, a different shape of gap):
   commits, or a commit authored by an agent under a shared bot identity could all make the git
   answer wrong in exactly the cases where a human hasn't reviewed it — the opposite of ADR-15's
   "single-valued, no inference" clause if the answer is actually ambiguous.
+- **Is git commit history "evidence already in the record tree" at all, under ADR-15's own wording?**
+  ADR-32 already treats git blame as legitimate evidence for locator-drift detection, but that's a
+  different application (has this file's *cited path* changed) than this proposal's (who is this
+  *record's* real author) — the precedent doesn't automatically transfer, and ADR-15's eligibility
+  test was written before either use existed. Needs its own reasoning, not an inherited assumption.
 - **Does this belong in `fix` at all, or is it `migrate`-shaped?** MILE-78 was a one-time backfill,
   not an ongoing repair loop the way Tier 1's Embodiment recomputation is (new drift can appear
   indefinitely; a placeholder-to-real-author gap, once backfilled once, mostly doesn't recur). ADR-33
