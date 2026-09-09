@@ -8,7 +8,7 @@ Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
 Derives-from: ADR-3, ADR-34
 ---
-# 36 — Filenames carry the type prefix going forward; legacy names stay valid forever
+# 36 — Filenames carry the type prefix going forward
 
 ## Context
 
@@ -79,10 +79,37 @@ unchanged. `urzua new` emits unpadded numbers as of this amendment; existing rec
 separately, in one pass across the whole corpus, tracked as its own piece of work rather than
 folded silently into this note.
 
+## Amendment (2026-09-09): legacy-filename acceptance removed
+
+`BUG-9` found this Decision's "legacy names stay valid forever" bullet borrowed ADR-33's
+non-disruptive-deprecation precedent onto a case that doesn't share its justification. ADR-33's
+permanent parsing for `blockquote`/`bold-list` headers has a real, ongoing reason: any future
+adopter's own pre-existing corpus will legitimately use those shapes on day one, before they've
+decided anything about this tool. The legacy `NNNN-slug.md` filename shape has no equivalent case —
+no one arriving at their own corpus for the first time chooses a bare-number filename over a typed
+one; it only ever existed as this repo's own pre-ADR-36 history. That history no longer exists
+either: checked live, zero files in this corpus use the legacy shape today, falsifying this
+Decision's own Consequences claim ("will hold a mix ... indefinitely") from the moment it was
+written, not just by drift since.
+
+**Decision, superseding the fourth bullet above: legacy `NNNN-slug.md` filenames are no longer
+accepted.** `record_id`, `filename_number`, and `next_display_number` now recognize only the
+type-prefixed `TYPE-NNNN-slug.md` shape; a reference to a bare-number filename is dangling, the same
+as a reference to any other nonexistent record. The type-prefix-in-filename, no-zero-padding, and
+slug-stays bullets are unchanged.
+
+This ADR's own H1 title is edited by this amendment, dropping the now-false "legacy names stay
+valid forever" clause it asserted — the title is a live claim like any other, not exempt from the
+correction this amendment makes to the Decision itself; the original wording is preserved above in
+the unedited Decision/Consequences sections and this amendment's own text.
+
 ## References
 
 - BUG-2 — the defect this decision's remaining scope is purely stylistic on top of.
-- ADR-33 — the non-disruptive-deprecation precedent this decision follows exactly.
+- BUG-9 — the live audit (zero legacy-shaped files in the corpus) this amendment acts on.
+- ADR-33 — the non-disruptive-deprecation precedent this decision originally, and mistakenly,
+  extended to filenames; still correct for header shapes, which retain a real ongoing case this
+  amendment does not touch.
 - ADR-3 — display-number-is-identity, unchanged by this decision.
 - `rust/crates/urzua-core/src/rules.rs` — `record_id`, `filename_number`, `title_number`.
 - `rust/crates/urzua-core/src/new_record.rs` — `next_display_number`.

@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M21GZ8KZEZHKHS9WWNW2YNS5
-Status: Open
+Status: Fixed
 Found-in: researched live, in response to a question about whether other backward-compatibility shims exist in urzua-core for imagined future adopters rather than real ones (raised alongside RFC-23/ADR-44)
-Regression-test: not yet written -- fix scope (remove the legacy-shape branches vs. keep and just document the divergence) not yet decided
+Regression-test: urzua-core::rules::tests::a_legacy_pre_type_prefix_filename_no_longer_resolves, urzua-core::rules::tests::filename_title_consistency_skips_a_legacy_shaped_filename, urzua-core::new_record::tests::next_display_number_ignores_a_legacy_pre_type_prefix_filename
 ---
 # 9 — Legacy pre-ADR-36 filename support is unexercised dead weight in this repo's own corpus
 
@@ -31,21 +31,25 @@ diverged from it. No rule audits whether a documented architectural prediction i
 the current corpus -- the same permanent content-scope ceiling this project names elsewhere, applied
 here to an ADR's own factual claim rather than a spec's.
 
-## What's still undecided
+## Fix
 
-Whether the right fix is removing the legacy-shape support entirely (this repo's own justification
-for keeping it no longer holds) or keeping it -- unlike header-shape parsing (`ADR-33`, tracked via
+Decided: remove the legacy-shape support entirely -- this repo's own justification for keeping it
+(a real, mixed corpus) no longer holds, and unlike header-shape parsing (`ADR-33`, tracked via
 `MILE-85`), which has an explicit, real reason to stay (a first-time evaluator's *own* pre-existing
-corpus, a case every adopter can hit), legacy filename numbering is a much narrower, more
-idiosyncratic historical convention specific to this project's own past -- a genuinely weaker case
-for external relevance than header shapes are. Not decided here.
+corpus, a case every adopter can hit), legacy filename numbering was always a narrower,
+idiosyncratic historical convention specific to this project's own past.
+
+`record_id`, `filename_number`, and `next_display_number` (`rules.rs`/`new_record.rs`) now
+recognize only the type-prefixed `TYPE-NNNN-slug.md` shape. A reference to a legacy-shaped filename
+is dangling, the same as a reference to any other nonexistent record -- tracked via ADR-36's own
+amendment, not restated here.
 
 ## References
 
 - RFC-23/ADR-44 -- the conversation that prompted this research: are there other backward-
   compatibility shims in `urzua-core` for imagined adopters rather than real ones.
 - ADR-36 -- the decision whose own stated expectation ("a mix ... indefinitely") this bug found to
-  no longer hold.
+  no longer hold; its own amendment is the actual fix this bug tracks.
 - ADR-33/MILE-85 -- the comparable, but stronger-justified, case (header-shape parsing) this bug
   distinguishes itself from.
 
@@ -54,3 +58,4 @@ for external relevance than header shapes are. Not decided here.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial bug record, `Status: Open`. Not yet fixed -- whether to remove the legacy-shape support or keep it (and if kept, why, given the corpus that justified it no longer exists) is not yet decided. | **structural** |
+> | 2026-09-09 | `Status: Fixed`. Legacy filename-shape acceptance removed from `record_id`/`filename_number`/`next_display_number`, per ADR-36's own amendment. | **substantive** |

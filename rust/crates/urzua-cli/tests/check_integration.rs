@@ -286,12 +286,12 @@ fn audit_exits_0_on_reciprocated_supersession() {
     )
     .unwrap();
     std::fs::write(
-        dir.join("docs/adr/0001-x.md"),
+        dir.join("docs/adr/ADR-1-x.md"),
         "# 0001 — X\n\n> Status: Accepted\n> Supersedes / Superseded-by: ADR-0002\n",
     )
     .unwrap();
     std::fs::write(
-        dir.join("docs/adr/0002-y.md"),
+        dir.join("docs/adr/ADR-2-y.md"),
         "# 0002 — Y\n\n> Status: Superseded\n> Supersedes / Superseded-by: ADR-0001\n",
     )
     .unwrap();
@@ -320,12 +320,12 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
     // ADR-0001 claims to supersede ADR-0002, but ADR-0002 never points back --
     // exactly the reciprocity violation `audit` exists to catch.
     std::fs::write(
-        dir.join("docs/adr/0001-x.md"),
+        dir.join("docs/adr/ADR-1-x.md"),
         "# 0001 — X\n\n> Status: Accepted\n> Supersedes / Superseded-by: ADR-0002\n",
     )
     .unwrap();
     std::fs::write(
-        dir.join("docs/adr/0002-y.md"),
+        dir.join("docs/adr/ADR-2-y.md"),
         "# 0002 — Y\n\n> Status: Superseded\n",
     )
     .unwrap();
