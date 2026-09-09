@@ -490,34 +490,28 @@ fn is_terminal_status(record_type: &str, status: &str) -> bool {
     terminal.contains(&status)
 }
 
-/// A record's own identifier, derived from its filename. Two accepted
-/// shapes (ADR-0036): the current default `TYPE-NNNN-slug.md`, type prefix
-/// explicit in the filename (matching how a record is referenced in prose
-/// everywhere else, e.g. `Implements: ADR-0036`); and the legacy
-/// `NNNN-slug.md`, type implied by directory -- accepted permanently, never
-/// requiring a rename, the same non-disruptive precedent as header-shape
-/// deprecation (ADR-0033). Filename-derived, not header-derived, so a
-/// record can be referenced before its own header claims anything about
-/// itself.
+/// A record's own identifier, derived from its filename: `TYPE-NNNN-slug.md`,
+/// type prefix explicit in the filename, matching how a record is referenced
+/// in prose everywhere else (e.g. `Implements: ADR-36`). Filename-derived,
+/// not header-derived, so a record can be referenced before its own header
+/// claims anything about itself.
 ///
-/// BUG-0002: no fixed digit-count is required in either shape (any
-/// non-empty numeric prefix resolves) -- a hardcoded 4-digit check here
-/// would silently stop matching past 9999 records of one type. Matching
-/// itself is done by numeric value (`normalize_id`), not by this string, so
-/// `ADR-0034` and a hand-typed `ADR-34` reference resolve identically
-/// regardless of padding.
+/// BUG-2: no fixed digit-count is required (any non-empty numeric prefix
+/// resolves) -- a hardcoded 4-digit check here would silently stop matching
+/// past 9999 records of one type. Matching itself is done by numeric value
+/// (`normalize_id`), not by this string, so `ADR-0034` and a hand-typed
+/// `ADR-34` reference resolve identically regardless of padding.
+///
+/// ADR-36's amendment removed acceptance of the legacy, pre-type-prefix
+/// `NNNN-slug.md` shape (BUG-9): it was never a real shape any adopter's own
+/// corpus would independently use, only this repo's own pre-ADR-36 history,
+/// and that history no longer exists in the corpus either.
 pub(crate) fn record_id(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
     let type_prefix = record.type_prefix.clone();
 
-    if let Some(rest) = stem.strip_prefix(&format!("{type_prefix}-")) {
-        let number = rest.split_once('-').map_or(rest, |(n, _)| n);
-        if !number.is_empty() && number.chars().all(|c| c.is_ascii_digit()) {
-            return Some(format!("{type_prefix}-{number}"));
-        }
-    }
-
-    let (number, _rest) = stem.split_once('-')?;
+    let rest = stem.strip_prefix(&format!("{type_prefix}-"))?;
+    let number = rest.split_once('-').map_or(rest, |(n, _)| n);
     if number.is_empty() || !number.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
@@ -662,21 +656,14 @@ pub fn filename_title_consistency(
     )
 }
 
-/// Same dual-pattern acceptance as `record_id` (ADR-0036/BUG-0002): the
-/// current default `TYPE-NNNN-slug.md` and the legacy `NNNN-slug.md`, any
+/// Same acceptance as `record_id` (ADR-36/BUG-2): `TYPE-NNNN-slug.md`, any
 /// non-empty numeric prefix, no fixed digit-count.
 fn filename_number(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
     let type_prefix = record.type_prefix.clone();
 
-    if let Some(rest) = stem.strip_prefix(&format!("{type_prefix}-")) {
-        let number = rest.split_once('-').map_or(rest, |(n, _)| n);
-        if !number.is_empty() && number.chars().all(|c| c.is_ascii_digit()) {
-            return Some(number.to_string());
-        }
-    }
-
-    let (number, _rest) = stem.split_once('-')?;
+    let rest = stem.strip_prefix(&format!("{type_prefix}-"))?;
+    let number = rest.split_once('-').map_or(rest, |(n, _)| n);
     (!number.is_empty() && number.chars().all(|c| c.is_ascii_digit())).then(|| number.to_string())
 }
 
@@ -1321,8 +1308,8 @@ mod tests {
 
     #[test]
     fn a_resolving_pointer_surfaces_target_status_without_judging_it() {
-        let target = record("docs/rfc/0001-x.md", "rfc", "> Status: Draft\n");
-        let source = record("docs/specs/0001-x.md", "spec", "> Implements: RFC-0001\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
+        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
 
         let (exec, findings) = pointer_resolution(&[target, source]);
         assert_eq!(exec.records_examined, 1);
@@ -1344,9 +1331,9 @@ mod tests {
         // Every spec's `Parent: SPEC-N` pointer was completely unchecked
         // before Parent was added to this rule's scanned fields -- a typo'd
         // or dangling Parent would never have been caught.
-        let parent = record("docs/specs/0001-v0-cli.md", "spec", "> Status: Draft\n");
+        let parent = record("docs/specs/SPEC-1-v0-cli.md", "spec", "> Status: Draft\n");
         let child = record(
-            "docs/specs/0002-urzua-check.md",
+            "docs/specs/SPEC-2-urzua-check.md",
             "spec",
             "> Parent: SPEC-1 (v0 CLI). Extra trailing prose that isn't a reference.\n",
         );
@@ -1460,7 +1447,7 @@ mod tests {
         // The exact live case this rule was built for: MILE-2/3's Blocked-on
         // named BUG-3, which had already shipped (Status: Fixed) with nothing
         // catching it, since Blocked-on used to be unchecked free-text prose.
-        let bug = record("docs/bugs/0003-x.md", "bug", "> Status: Fixed\n");
+        let bug = record("docs/bugs/BUG-3-x.md", "bug", "> Status: Fixed\n");
         let milestone = record(
             "docs/milestones/MILE-2-x.md",
             "milestone",
@@ -1519,8 +1506,12 @@ mod tests {
         // Before the fix, record_id() rejected any numeric prefix that
         // wasn't exactly 4 digits -- past 9999 records of one type,
         // references would have silently stopped resolving.
-        let target = record("docs/rfc/10000-x.md", "rfc", "> Status: Draft\n");
-        let source = record("docs/specs/0001-x.md", "spec", "> Implements: RFC-10000\n");
+        let target = record("docs/rfc/RFC-10000-x.md", "rfc", "> Status: Draft\n");
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "> Implements: RFC-10000\n",
+        );
         let (_, findings) = pointer_resolution(&[target, source]);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Warning);
@@ -1530,8 +1521,8 @@ mod tests {
     fn a_reference_resolves_regardless_of_zero_padding() {
         // ADR-0034 (the filename's own padding) and a hand-typed ADR-34
         // reference must resolve to the same record (BUG-0002).
-        let target = record("docs/adr/0034-x.md", "adr", "> Status: Accepted\n");
-        let source = record("docs/specs/0001-y.md", "spec", "> Implements: ADR-34\n");
+        let target = record("docs/adr/ADR-0034-x.md", "adr", "> Status: Accepted\n");
+        let source = record("docs/specs/SPEC-1-y.md", "spec", "> Implements: ADR-34\n");
         let (_, findings) = pointer_resolution(&[target, source]);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Warning);
@@ -1545,20 +1536,17 @@ mod tests {
     }
 
     #[test]
-    fn a_type_prefixed_filename_resolves_the_same_as_a_legacy_one() {
-        // ADR-0036: the current default is ADR-0036-slug.md; the legacy
-        // 0036-slug.md must keep resolving forever, and both must be
-        // referenceable interchangeably.
-        let new_style = record("docs/adr/ADR-0036-x.md", "adr", "> Status: Accepted\n");
+    fn a_legacy_pre_type_prefix_filename_no_longer_resolves() {
+        // ADR-36's amendment (BUG-9): the pre-type-prefix `NNNN-slug.md`
+        // shape was never a real external-adopter case, only this repo's own
+        // pre-ADR-36 history, and that history no longer exists in the
+        // corpus. A reference to a filename in that shape is now correctly
+        // dangling, not silently resolved.
         let legacy_style = record("docs/adr/0037-y.md", "adr", "> Status: Accepted\n");
-        let source = record(
-            "docs/specs/0001-z.md",
-            "spec",
-            "> Implements: ADR-0036, ADR-0037\n",
-        );
-        let (_, findings) = pointer_resolution(&[new_style, legacy_style, source]);
-        assert_eq!(findings.len(), 2, "unexpected findings: {findings:?}");
-        assert!(findings.iter().all(|f| f.severity == Severity::Warning));
+        let source = record("docs/specs/0001-z.md", "spec", "> Implements: ADR-37\n");
+        let (_, findings) = pointer_resolution(&[legacy_style, source]);
+        assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
+        assert_eq!(findings[0].severity, Severity::Error);
     }
 
     #[test]
@@ -1580,28 +1568,31 @@ mod tests {
     }
 
     #[test]
-    fn filename_title_consistency_accepts_both_filename_shapes() {
+    fn filename_title_consistency_skips_a_legacy_shaped_filename() {
+        // No type prefix means no derivable filename_number -- the rule has
+        // nothing to compare a title against, so it skips rather than
+        // silently accepting or falsely flagging it (BUG-9/ADR-36 amendment).
         let new_style = record(
-            "docs/adr/ADR-0036-x.md",
+            "docs/adr/ADR-36-x.md",
             "adr",
-            "# 0036 — X\n\n> Status: Accepted\n",
+            "# 36 — X\n\n> Status: Accepted\n",
         );
         let legacy_style = record(
             "docs/adr/0037-y.md",
             "adr",
-            "# 0037 — Y\n\n> Status: Accepted\n",
+            "# 37 — Y\n\n> Status: Accepted\n",
         );
         let mut full_text = HashMap::new();
         full_text.insert(
             new_style.path.clone(),
-            "# 0036 — X\n\n> Status: Accepted\n".to_string(),
+            "# 36 — X\n\n> Status: Accepted\n".to_string(),
         );
         full_text.insert(
             legacy_style.path.clone(),
-            "# 0037 — Y\n\n> Status: Accepted\n".to_string(),
+            "# 37 — Y\n\n> Status: Accepted\n".to_string(),
         );
         let (exec, findings) = filename_title_consistency(&[new_style, legacy_style], &full_text);
-        assert_eq!(exec.records_examined, 2);
+        assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -1673,7 +1664,7 @@ mod tests {
 
     #[test]
     fn filename_title_mismatch_is_a_planted_violation_observed_failing() {
-        let r = record("docs/adr/0001-x.md", "adr", "# 0002 — Wrong Number\n");
+        let r = record("docs/adr/ADR-1-x.md", "adr", "# 0002 — Wrong Number\n");
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), "# 0002 — Wrong Number\n".to_string());
 
@@ -1686,11 +1677,12 @@ mod tests {
 
     #[test]
     fn matching_filename_and_title_produce_no_finding() {
-        let r = record("docs/adr/0001-x.md", "adr", "# 0001 — Correct\n");
+        let r = record("docs/adr/ADR-1-x.md", "adr", "# 0001 — Correct\n");
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), "# 0001 — Correct\n".to_string());
 
-        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        let (exec, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -1848,12 +1840,12 @@ mod tests {
         // 0002 claims to supersede 0001, but 0001 doesn't reciprocally name
         // 0002 -- a reader of 0001 would never know it was superseded.
         let old = record(
-            "docs/adr/0001-x.md",
+            "docs/adr/ADR-1-x.md",
             "adr",
             "> Supersedes / Superseded-by: —\n",
         );
         let new = record(
-            "docs/adr/0002-y.md",
+            "docs/adr/ADR-2-y.md",
             "adr",
             "> Supersedes / Superseded-by: ADR-0001\n",
         );
@@ -1867,12 +1859,12 @@ mod tests {
     #[test]
     fn a_reciprocated_supersession_produces_no_finding() {
         let old = record(
-            "docs/adr/0001-x.md",
+            "docs/adr/ADR-1-x.md",
             "adr",
             "> Supersedes / Superseded-by: ADR-0002\n",
         );
         let new = record(
-            "docs/adr/0002-y.md",
+            "docs/adr/ADR-2-y.md",
             "adr",
             "> Supersedes / Superseded-by: ADR-0001\n",
         );
@@ -1884,7 +1876,7 @@ mod tests {
     #[test]
     fn an_em_dash_supersession_value_is_not_examined() {
         let r = record(
-            "docs/adr/0001-x.md",
+            "docs/adr/ADR-1-x.md",
             "adr",
             "> Supersedes / Superseded-by: —\n",
         );

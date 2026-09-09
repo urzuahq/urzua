@@ -124,17 +124,17 @@ mod tests {
 
     #[test]
     fn graph_includes_a_resolving_implements_edge_not_dangling() {
-        let target = record("docs/rfc/0001-x.md", "rfc", "> Status: Accepted\n");
-        let source = record("docs/adr/0001-y.md", "adr", "> Implements: RFC-0001\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
+        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-1\n");
         let edges = graph(&[target, source]);
         assert_eq!(edges.len(), 1);
-        assert_eq!(edges[0].to, "RFC-0001");
+        assert_eq!(edges[0].to, "RFC-1");
         assert!(!edges[0].dangling);
     }
 
     #[test]
     fn graph_marks_a_non_resolving_reference_as_dangling_observed_failing() {
-        let source = record("docs/adr/0001-y.md", "adr", "> Implements: RFC-9999\n");
+        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-9999\n");
         let edges = graph(&[source]);
         assert_eq!(edges.len(), 1);
         assert!(edges[0].dangling);

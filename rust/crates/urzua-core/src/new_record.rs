@@ -7,20 +7,30 @@
 /// type's directory. Never reuses a number even if one was deleted --
 /// cross-references elsewhere may still assume the old numbering held.
 ///
-/// Reads both filename shapes (ADR-0036): legacy `NNNN-slug.md` (number is
-/// the first segment) and the current default `TYPE-NNNN-slug.md` (number
-/// is the second segment) -- a directory with a mix of old and new
-/// filenames still finds the true max across both, never colliding.
+/// Reads the current `TYPE-NNNN-slug.md` shape (number is the second
+/// segment). ADR-36's amendment dropped acceptance of the legacy
+/// `NNNN-slug.md` shape (BUG-9): it was never a real external-adopter case,
+/// and this repo's own pre-ADR-36 filenames no longer exist in the corpus.
+///
+/// Validates the complete shape, not just enough to find a number:
+/// `strip_suffix(".md")` requires the extension, and the three-way split
+/// requires a nonempty type prefix, a numeric second segment, and a nonempty
+/// slug -- a directory entry like `ADR-999` (no `.md`) or `-999-slug.md`
+/// (empty prefix) is real, once a stray non-record file sits in a type's
+/// directory, and must not silently affect the computed max.
 pub fn next_display_number(filenames: &[String]) -> u32 {
     filenames
         .iter()
         .filter_map(|name| {
-            let mut parts = name.split('-');
-            let first = parts.next()?;
-            if let Ok(n) = first.parse::<u32>() {
-                return Some(n);
+            let stem = name.strip_suffix(".md")?;
+            let mut parts = stem.splitn(3, '-');
+            let prefix = parts.next()?;
+            let number = parts.next()?;
+            let slug = parts.next()?;
+            if prefix.is_empty() || slug.is_empty() {
+                return None;
             }
-            parts.next()?.parse::<u32>().ok()
+            number.parse::<u32>().ok()
         })
         .max()
         .map_or(1, |highest| highest + 1)
@@ -215,23 +225,33 @@ mod tests {
     #[test]
     fn next_display_number_skips_past_the_highest_existing_prefix() {
         let filenames = vec![
-            "0001-first.md".to_string(),
-            "0016-a-bold-list-header-shape.md".to_string(),
-            "0009-ninth.md".to_string(),
+            "ADR-1-first.md".to_string(),
+            "ADR-16-a-bold-list-header-shape.md".to_string(),
+            "ADR-9-ninth.md".to_string(),
         ];
         assert_eq!(next_display_number(&filenames), 17);
     }
 
     #[test]
-    fn next_display_number_finds_the_max_across_mixed_legacy_and_type_prefixed_filenames() {
-        // ADR-0036: a directory can hold both shapes at once (existing
-        // legacy files never get renamed); the true max must span both.
+    fn next_display_number_ignores_a_legacy_pre_type_prefix_filename() {
+        // ADR-36's amendment (BUG-9): a legacy `NNNN-slug.md` filename no
+        // longer contributes to the max -- it has no type-prefix segment to
+        // read a number from, so it's silently excluded, not miscounted.
+        let filenames = vec!["0001-legacy.md".to_string(), "ADR-9-ninth.md".to_string()];
+        assert_eq!(next_display_number(&filenames), 10);
+    }
+
+    #[test]
+    fn next_display_number_rejects_a_malformed_directory_entry_observed_failing() {
+        // A directory entry missing the .md extension, or with an empty type
+        // prefix, must not silently contribute to the computed max -- the
+        // shape must be validated in full, not just enough to find a number.
         let filenames = vec![
-            "0001-first.md".to_string(),
-            "ADR-0036-newer.md".to_string(),
-            "0009-ninth.md".to_string(),
+            "ADR-999".to_string(),      // no .md extension at all
+            "-999-slug.md".to_string(), // empty type prefix
+            "ADR-8-real.md".to_string(),
         ];
-        assert_eq!(next_display_number(&filenames), 37);
+        assert_eq!(next_display_number(&filenames), 9);
     }
 
     #[test]
