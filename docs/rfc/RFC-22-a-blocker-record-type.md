@@ -38,12 +38,21 @@ configured type -- zero `urzua-core` changes, matching `milestone`/`bug`/`waiver
 ## Open questions
 
 - **Does today's volume justify it?** Checked the real corpus: 10 real `Blocked-on` values exist
-  across every milestone, and only one (`MILE-38`'s: `Blocked-on: MILE-38 (staleness detection for
+  across every milestone, and only one (`MILE-39`'s: `Blocked-on: MILE-38 (staleness detection for
   code comments citing an amended record) -- deliberately sequenced first so that...`) carries real
   narrative; the other nine are short, one-line judgment calls (`a decision to actually build it`,
   `real adopter demand for AgDR round-tripping`, `RFC-9's own Q2`). Worth weighing against this
   project's own pattern for `Parent`/`Blocked-on`/`Amends`, each added only once a shape recurred
   three or more times -- but that's a data point for the discussion, not a decision made here.
+- **Does this proposal still make sense against RFC-23/ADR-44's now-Accepted design?** RFC-23/ADR-44
+  decided `pointer_fields`/`narrative_fields` as per-type config concepts, with `narrative_fields`
+  (the category `Blocked-on` would belong to) inherently staleness-checked by the same mechanism this
+  RFC's Motivation cites (`blocked-on.stale`). Once that ships (MILE-90), the "closing the asymmetry"
+  argument in Motivation gets weaker in one specific way: `Blocked-on` could simply stay a
+  `narrative_field` rather than needing a whole new `blocker` record type just to become a clean
+  pointer -- the type-vs-config question this RFC's own Proposal doesn't yet address. The separate
+  "structured blocking relationship as a generic capability" argument is unaffected by this and
+  stands on its own.
 - **What would the required fields on `blocker` actually be?** Not designed yet -- "what's blocking"
   and "a resolution condition" are placeholders, not a real schema.
 - **Would this apply retroactively to the 10 existing values, or only going forward?**
@@ -61,3 +70,6 @@ configured type -- zero `urzua-core` changes, matching `milestone`/`bug`/`waiver
   this RFC is accepted.
 - RFC-21 -- a related case (a proposed generic field, checked against real corpus volume) worth
   reading alongside this one, not a verdict on this one.
+- RFC-23/ADR-44 -- the now-Accepted config-declared pointer/narrative-field mechanism this RFC's own
+  Open Questions weigh against: whether `blocker`-the-type is still needed once `Blocked-on` can be a
+  plain `narrative_field`.

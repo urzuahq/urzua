@@ -84,6 +84,9 @@ being reconsidered.
 - RFC-23 -- the proposal this ADR decides; the design's own open questions and rejected
   alternatives (`blocking_fields` as a name, a global field list, a backward-compat default).
 - BUG-8 -- the concrete defect (README overstatement) this decision closes.
+- BUG-9 -- the separate audit this decision's Consequences names as "raised, not resolved"; filed
+  in the same PR as this ADR, it found legacy pre-`ADR-36` filename support as the one other real
+  instance of the same shim pattern.
 - ADR-38/39/43 -- the "declared, not voted or inferred" precedent this decision extends to pointer
   fields.
 - RFC-20 -- the CLI/command taxonomy RFC, whose own table asserts pointer fields are "plain field

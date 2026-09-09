@@ -9,7 +9,7 @@ Regression-test: not yet written -- fix is a design decision (RFC-23), not a mec
 ## What was wrong
 
 The README's "Lineage between record types is also declared, not assumed" section (added earlier
-this session) claims: *"None of `Implements`, `Derives-from`, or the chain's shape is special-cased
+this session) claims: *"None of `Implements`, `Derives-from`, or the graph's shape is special-cased
 in `urzua-core` — they're plain field names an org declares in `known_fields` per type, resolved
 generically by one rule..."* and gives, as an example of the engine's flexibility, an org adding a
 field like `Feeds-into` that points forward instead of back.
