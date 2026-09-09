@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -32,8 +32,10 @@ accident.
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
 header_shape = "yaml-frontmatter"
-known_fields = ["Realized-by", "Stable-Id"]
+known_fields = ["Realized-by", "Stable-Id", "Implements"]
 spec = "SPEC-9"
+pointer_fields = ["Implements"]
+narrative_fields = []
 ```
 
 | Field | Values | Notes |
@@ -43,6 +45,7 @@ spec = "SPEC-9"
 | `Regression-test` | free text | The specific test name/path proving the fix — **required, not optional**. A `Status: Fixed` bug with a blank or placeholder `Regression-test` is a `field.quality` finding for free; no new rule was needed. |
 | `Realized-by` | optional, `known_fields` | Reused, generic — points at the actual fix commit/function, same evidence field every other type uses. |
 | `Stable-Id` | optional, `known_fields` | Assigned by `urzua new bug` or backfilled by `migrate ids` (SPEC-14), same as any other type. |
+| `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this bug's fix realizes, when the bug arose from following one. Not yet used by any bug record in this corpus, but declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — no `narrative_fields` for `bug`. |
 
 No `Phase`/`Track` — a bug isn't planned or grouped the way a milestone is; it either exists because
 something broke, or it doesn't exist yet.
@@ -68,3 +71,4 @@ something broke, or it doesn't exist yet.
 > | 2026-09-08 | Header shape changed from `blockquote` to `yaml-frontmatter`, `header_layout` removed (ADR-33/38 amendments); `spec = "SPEC-9"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). | **substantive** |
 > | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
+> | 2026-09-09 | Added `Implements` to `known_fields`, declared `pointer_fields = ["Implements"]`/`narrative_fields = []` in config (MILE-90/ADR-44), realizing this spec's own field-table text above (a bug can point at the decision its fix realizes) as a checked config declaration, not just documented prose. **Why:** MILE-90 closes `BUG-8`'s claim that relationship fields are config-declared generically -- `bug` was one of the types that hadn't actually declared this axis yet. | **substantive** |

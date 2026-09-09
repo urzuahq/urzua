@@ -140,8 +140,10 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     std::fs::write(
         dir.join(".urzua/config.toml"),
         "schema_version = 1\n\n\
-         [record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n\n\
-         [record_types.waiver]\ndir = \"docs/waiver\"\nrequired_fields = []\n",
+         [record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n\
+         known_fields = [\"Implements\"]\npointer_fields = [\"Implements\"]\nnarrative_fields = []\n\n\
+         [record_types.waiver]\ndir = \"docs/waiver\"\nrequired_fields = []\n\
+         pointer_fields = []\nnarrative_fields = []\n",
     )
     .unwrap();
     // A dangling pointer -- pointer.resolution's one error case, and not

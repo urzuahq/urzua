@@ -18,7 +18,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use urzua_core::config::Config;
 use urzua_core::record::Record;
-use urzua_core::report::{CheckReport, ReportStatus, ScopeInfo};
+use urzua_core::report::{CheckReport, Finding, ReportStatus, RuleExecution, ScopeInfo};
 use urzua_core::rules;
 
 mod init;
@@ -477,6 +477,8 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let mut required_by_type = HashMap::new();
     let mut header_layout_by_type = HashMap::new();
     let mut known_fields_by_type = HashMap::new();
+    let mut pointer_fields_by_type = HashMap::new();
+    let mut narrative_fields_by_type = HashMap::new();
     for (name, cfg) in &config.record_types {
         required_by_type.insert(name.clone(), cfg.required_fields.clone());
         if let Some(layout) = cfg.header_layout {
@@ -491,38 +493,45 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 .collect();
             known_fields_by_type.insert(name.clone(), allowed);
         }
+        if let Some(pointer_fields) = &cfg.pointer_fields {
+            pointer_fields_by_type.insert(name.clone(), pointer_fields.clone());
+        }
+        if let Some(narrative_fields) = &cfg.narrative_fields {
+            narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
+        }
     }
 
-    let (exec1, findings1) = rules::header_required_fields(&records, &required_by_type);
-    let (exec2, findings2) = rules::pointer_resolution(&records);
-    let (exec3, findings3) = rules::field_quality(&records, &required_by_type);
-    let (exec4, findings4) = rules::filename_title_consistency(&records, &full_text);
-    let (exec5, findings5) = rules::supersession_reciprocity(&records);
-    let (exec6, findings6) = rules::revision_log_change_class(&records, &full_text);
     let drifted = compute_drifted_records(&repo_root, &records);
-    let (exec7, findings7) = rules::embodiment_consistency(&records, &drifted);
-    let (exec8, findings8) = rules::embodiment_locator_promotion_candidate(&records);
-    let (exec9, findings9) = rules::header_layout_consistency(&records, &header_layout_by_type);
-    let (exec10, findings10) = rules::header_field_set_consistency(&records, &known_fields_by_type);
-    let (exec11, findings11) = rules::blocked_on_stale(&records);
-    let (exec12, findings12) = rules::type_no_declared_spec(&config, &config_path);
-    let (exec13, findings13) = rules::header_deprecated_shape(&config, &config_path);
-    let (exec14, findings14) = rules::header_pointer_field_clean(&records);
 
-    let mut findings = findings1;
-    findings.extend(findings2);
-    findings.extend(findings3);
-    findings.extend(findings4);
-    findings.extend(findings5);
-    findings.extend(findings6);
-    findings.extend(findings7);
-    findings.extend(findings8);
-    findings.extend(findings9);
-    findings.extend(findings10);
-    findings.extend(findings11);
-    findings.extend(findings12);
-    findings.extend(findings13);
-    findings.extend(findings14);
+    // Each rule's (RuleExecution, Vec<Finding>) collected into one list --
+    // rules_executed/findings both derive from it below, so there's no
+    // second hand-written list that has to be kept in sync by hand.
+    let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
+        rules::header_required_fields(&records, &required_by_type),
+        rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type),
+        rules::field_quality(&records, &required_by_type),
+        rules::filename_title_consistency(&records, &full_text),
+        rules::supersession_reciprocity(&records),
+        rules::revision_log_change_class(&records, &full_text),
+        rules::embodiment_consistency(&records, &drifted),
+        rules::embodiment_locator_promotion_candidate(&records),
+        rules::header_layout_consistency(&records, &header_layout_by_type),
+        rules::header_field_set_consistency(&records, &known_fields_by_type),
+        rules::narrative_field_stale(&records, &config),
+        rules::type_no_declared_spec(&config, &config_path),
+        rules::header_deprecated_shape(&config, &config_path),
+        rules::header_pointer_field_clean(&records, &config),
+        rules::config_pointer_declaration_missing(&config, &config_path),
+        rules::config_pointer_field_not_known(&config, &config_path),
+        rules::config_pointer_narrative_overlap(&config, &config_path),
+    ];
+
+    let mut rules_executed = Vec::with_capacity(rule_results.len());
+    let mut findings = Vec::new();
+    for (exec, rule_findings) in rule_results {
+        rules_executed.push(exec);
+        findings.extend(rule_findings);
+    }
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
@@ -543,10 +552,7 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let report = CheckReport {
         status,
         files_examined: records.len(),
-        rules_executed: vec![
-            exec1, exec2, exec3, exec4, exec5, exec6, exec7, exec8, exec9, exec10, exec11, exec12,
-            exec13, exec14,
-        ],
+        rules_executed,
         scope: ScopeInfo {
             source: format!("{:?}", discovered.source),
             record_types: config.record_types.keys().cloned().collect(),
@@ -583,7 +589,19 @@ fn run_audit(config_path: Option<PathBuf>) -> ExitCode {
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
 
-    let (exec1, findings1) = rules::pointer_resolution(&records);
+    let mut pointer_fields_by_type = HashMap::new();
+    let mut narrative_fields_by_type = HashMap::new();
+    for (name, cfg) in &config.record_types {
+        if let Some(pointer_fields) = &cfg.pointer_fields {
+            pointer_fields_by_type.insert(name.clone(), pointer_fields.clone());
+        }
+        if let Some(narrative_fields) = &cfg.narrative_fields {
+            narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
+        }
+    }
+
+    let (exec1, findings1) =
+        rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type);
     let (exec2, findings2) = rules::supersession_reciprocity(&records);
     let mut findings = findings1;
     findings.extend(findings2);
@@ -687,7 +705,20 @@ fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
-    let edges = urzua_core::graph::graph(&records);
+
+    let mut pointer_fields_by_type = HashMap::new();
+    let mut narrative_fields_by_type = HashMap::new();
+    for (name, cfg) in &config.record_types {
+        if let Some(pointer_fields) = &cfg.pointer_fields {
+            pointer_fields_by_type.insert(name.clone(), pointer_fields.clone());
+        }
+        if let Some(narrative_fields) = &cfg.narrative_fields {
+            narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
+        }
+    }
+
+    let edges =
+        urzua_core::graph::graph(&records, &pointer_fields_by_type, &narrative_fields_by_type);
 
     let out = serde_json::json!({ "edges": edges });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());

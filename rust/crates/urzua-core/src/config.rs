@@ -55,6 +55,27 @@ pub struct RecordTypeConfig {
     /// decides its canonical fields, rather than guessed at here.
     #[serde(default)]
     pub known_fields: Option<Vec<String>>,
+    /// Clean, comma-separated reference fields (MILE-0090/ADR-0044) --
+    /// existence-checked by `pointer_resolution`, enforced clean by
+    /// `header_pointer_field_clean`. Declared, not voted, same "undeclared
+    /// means skip, no implicit default" principle as `known_fields`: this
+    /// tool has no real external adopters yet whose behavior a hardcoded
+    /// fallback would need to preserve. Every field named here must also
+    /// appear in this type's `required_fields`/`known_fields`
+    /// (`config.pointer-field-not-known`) and must not also appear in
+    /// `narrative_fields` (`config.pointer-narrative-overlap`).
+    #[serde(default)]
+    pub pointer_fields: Option<Vec<String>>,
+    /// Prose-tolerant reference fields with an optional embedded reference
+    /// (MILE-0090/ADR-0044) -- resolved the same as `pointer_fields` but
+    /// never subject to the clean-format check, and separately checked for
+    /// the target's terminal status (`narrative_field_stale`). A type
+    /// declaring either `pointer_fields` or `narrative_fields` must declare
+    /// both explicitly, even as an empty array
+    /// (`config.pointer-declaration-missing`) -- omitting one is not the
+    /// same as deliberately declaring zero fields of that kind.
+    #[serde(default)]
+    pub narrative_fields: Option<Vec<String>>,
     /// Which spec (if any) documents this type's schema as a coherent
     /// feature area (MILE-0077/ADR-0041 -- "does this type need a spec"
     /// stays editorial, never inferred). Declared, not voted, same
@@ -155,6 +176,37 @@ dir = "docs/bugs"
             Some("SPEC-6".to_string())
         );
         assert_eq!(config.record_types.get("bug").unwrap().spec, None);
+    }
+
+    #[test]
+    fn pointer_and_narrative_fields_round_trip() {
+        let toml = r#"
+schema_version = 1
+
+[record_types.rfc]
+dir = "docs/rfc"
+pointer_fields = ["Implements", "Amends"]
+narrative_fields = []
+
+[record_types.bug]
+dir = "docs/bugs"
+"#;
+        let config = parse(toml).unwrap();
+        assert_eq!(
+            config.record_types.get("rfc").unwrap().pointer_fields,
+            Some(vec!["Implements".to_string(), "Amends".to_string()])
+        );
+        assert_eq!(
+            config.record_types.get("rfc").unwrap().narrative_fields,
+            Some(vec![])
+        );
+        // Undeclared means None, not an implicit empty default -- distinct
+        // from an explicit `= []`, per ADR-44's "no implicit default".
+        assert_eq!(config.record_types.get("bug").unwrap().pointer_fields, None);
+        assert_eq!(
+            config.record_types.get("bug").unwrap().narrative_fields,
+            None
+        );
     }
 
     #[test]
