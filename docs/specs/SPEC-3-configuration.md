@@ -1,8 +1,9 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
+Subject: '`.urzua/config.toml` -- the schema for record types, required/known fields, and per-type behavior.'
 Implements: RFC-1, RFC-11
 Parent: SPEC-1
 ---
@@ -146,3 +147,4 @@ false.
 > | 2026-08-20 | Split out of SPEC-1's Configuration section and expanded. | **structural** |
 > | 2026-09-07 | `urzua doctor` split out into its own spec (SPEC-15). **Why:** doctor is a real, standalone feature area with its own output shape and its own bug history (BUG-4, found the same day), not merely a detail of how config is structured — folding it into SPEC-3 by default rather than by a deliberate call was exactly the kind of inconsistency MILE-77's review named. Success criterion 3 corrected to note "which rules are off" isn't actually true yet (MILE-80). | **structural** |
 > | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |

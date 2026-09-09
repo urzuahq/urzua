@@ -2,23 +2,31 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.2'
+Version: '0.3'
 Author: '@beauwilliams'
+Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` alone.'
 Implements: MILE-36
-Parent: SPEC-1
+Parent: —
 ---
-# SPEC-19 — `AGENTS.md`
+# SPEC-19 — Repository agent guardrails
 
 ## Purpose
 
-`AGENTS.md` is this repo's durable, discoverable home for practices an AI agent needs to work in it
-correctly — written directly by [MILE-36](../milestones/MILE-36-write-agents-md-capturing-this-session-s-practices.md)
-with no preceding RFC or ADR, the same "no decision point existed" situation as `doctor` (SPEC-15):
-it was named as worth writing, not debated into existence. This spec exists to give that already-
-built artifact the same governed home every other feature area has (ADR-41's "coherent feature area"
-principle), going from the milestone straight to a spec — skipping the ADR stage is legitimate when,
-as here, there was no real decision to record (RFC-4's own "common path, not the only path" already
-established this).
+This spec governs this repository's own agent-guardrail mechanisms — whatever constrains or guides
+an AI agent working in this repo, as opposed to `urzua`-the-product's own schema or CLI. **Today
+that's exactly one mechanism: `AGENTS.md`.** If a second mechanism is ever added (a CI check
+enforcing something `AGENTS.md` states, a second instructions file, a hook), it gets documented here
+too, under its own section, rather than spinning up a new spec per mechanism — the same "coherent
+feature area" reasoning `ADR-41` already applies to record types, applied here to the different
+question of what governs an *agent's* behavior in this repo rather than what governs a *record*.
+
+`AGENTS.md` itself was written directly by
+[MILE-36](../milestones/MILE-36-write-agents-md-capturing-this-session-s-practices.md) with no
+preceding RFC or ADR, the same "no decision point existed" situation as `doctor` (`SPEC-15`): it was
+named as worth writing, not debated into existence. This spec exists to give that already-built
+artifact the same governed home every other feature area has, going from the milestone straight to a
+spec — skipping the ADR stage is legitimate when, as here, there was no real decision to record
+(`RFC-4`'s own "common path, not the only path" already established this).
 
 Distinct from a `spec`-the-record-type instance in one respect: `AGENTS.md` itself is not a governed
 record (`urzua check` doesn't validate it — it has no `.urzua/config.toml` entry, no header, no
@@ -26,10 +34,14 @@ record (`urzua check` doesn't validate it — it has no `.urzua/config.toml` ent
 maintained, and a place for `Why` to accumulate as it changes, since `AGENTS.md`'s own prose doesn't
 carry a revision log the way a record does.
 
-## What belongs in `AGENTS.md`
+No `Parent`: this spec doesn't narrow or split off from `SPEC-1` (the v0 CLI's own scope) — its
+subject is a different axis entirely (agent behavior, not the product), and its real lineage is
+already stated via `Implements: MILE-36`.
+
+## The `AGENTS.md` mechanism: what belongs in it
 
 Its own opening line draws the boundary already: `CONTRIBUTING.md` is the human-facing equivalent;
-`AGENTS.md` states what that file doesn't need to. Concretely, as of this spec's `Version: 0.2`,
+`AGENTS.md` states what that file doesn't need to. Concretely, as of this spec's `Version: 0.3`,
 nine sections, grouped by what kind of guardrail they are:
 
 - **What urzua is, and what it refuses to be** — the tool's own founding constraints, restated from
@@ -107,3 +119,4 @@ same pattern applied to a different feature area).
 > | 2026-09-09 | `AGENTS.md` gained "What urzua is, and what it refuses to be" (grounding agent behavior in `SPEC-1`'s own constraints, not just process rules) and "Git workflow" (never commit directly to `main`), and had three existing rules broadened after an adversarial review found real loopholes: Status-ownership now covers decision-proxy fields, not just the literal key; "don't patch around a finding" now covers findings on touched-not-authored code; "don't build speculative capability" now covers discovering an existing stale shim, not just writing new ones. **Why:** the git-workflow gap is exactly how an agent came to edit files directly on `main` earlier the same session; the loopholes were found by deliberately construing the scenario where each rule's prior wording didn't actually stop a slightly-different-shaped version of the mistake it was written for. | **substantive** |
 > | 2026-09-09 | A second, independent adversarial review of the previous entry's own changes found a real, self-defeating defect: `AGENTS.md` told agents to check `pointer_fields`/`narrative_fields` in `.urzua/config.toml` as declared config, but those keys don't exist yet (`RFC-23`/`ADR-44` propose them; `MILE-90` hasn't built them), and `RecordTypeConfig` uses `deny_unknown_fields`, so following the instruction literally would break the build. Corrected to name only the two keys that exist today, with an explicit note on the proposed-not-built third axis. Also replaced an unfalsifiable "check for a PR number collision" instruction with two concrete manual commands, since no automated check exists yet (`MILE-89`). **Why:** this project's own "verify before trusting" discipline applies to `AGENTS.md`'s own claims about the codebase as much as to any other document — this backfill exists partly because that discipline had never been applied to `AGENTS.md` itself until an adversarial review did it after the fact, not before merge. | **substantive** |
 > | 2026-09-09 | Backfilled this spec's "What belongs in `AGENTS.md`" section (stale since `Version: 0.1`, describing 3 sections against the file's actual 9) and added the standing rule that every substantive `AGENTS.md` change adds its own entry here, in the same PR — closing the exact gap that let the four rows above accumulate only after the fact, in one backfill, instead of one at a time as each change shipped. | **structural** |
+> | 2026-09-09 | Reframed from "`AGENTS.md` agent instructions for this repo" to **"Repository agent guardrails"**: this spec governs this repo's agent-guardrail mechanisms in general, of which `AGENTS.md` is the sole one that exists today, not `AGENTS.md` specifically by name — leaves room for a second mechanism to join this same spec later instead of needing its own. File renamed to match. Added the new `Subject` field (`MILE-91`) and corrected `Parent` to `—` (`BUG-10`): this spec's real lineage is `Implements: MILE-36`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |

@@ -21,10 +21,12 @@ spec = "SPEC-17"
 # MILE-0074: Author required (same accountability argument as adr/rfc,
 # MILE-0078), Embodiment/Derives-from a project-wide optional convention
 # (not SPEC-1-specific baggage). Implements/Parent are the two pointer
-# fields every spec already carries.
+# fields every spec already carries. MILE-91: Subject required -- a
+# one-line, free-text summary of what the spec is about, no backlink
+# semantics; BUG-10 corrected most specs' Parent value in the same pass.
 [record_types.spec]
 dir = "docs/specs"
-required_fields = ["Status", "Date", "Version", "Author"]
+required_fields = ["Status", "Date", "Version", "Author", "Subject"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
 spec = "SPEC-18"

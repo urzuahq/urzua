@@ -1,8 +1,9 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
+Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
 ---
 # SPEC-4 — The corpus acceptance suite
@@ -204,3 +205,4 @@ applied to the copy that never ran, which is exactly the false confidence this g
 > |---|---|---|
 > | 2026-08-20 | Split out of SPEC-1 §"Acceptance test". | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
