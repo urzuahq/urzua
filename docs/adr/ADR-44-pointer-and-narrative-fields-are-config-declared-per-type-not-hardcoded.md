@@ -85,20 +85,20 @@ Review found four real gaps in this decision, resolved in full on RFC-23's own a
 References). Consequence for this ADR:
 
 - **Three new checks ship alongside the config-driven rules**, all Error severity, all part of this
-  decision's own build, not deferred follow-up: `config.pointer-declaration-missing` (a type
-  declaring neither `pointer_fields` nor `narrative_fields` at all must fail visibly, not read as
-  "zero fields, on purpose"), `config.pointer-field-not-known` (a field named in either list must
-  also appear in that type's `required_fields`/`known_fields` -- no automatic exception, checked
-  explicitly), and `config.pointer-narrative-overlap` (a field cannot be declared in both lists for
-  one type).
+  decision's own build, not deferred follow-up: `config.pointer-declaration-missing` (a type must
+  declare **both** `pointer_fields` and `narrative_fields` explicitly, even as empty arrays --
+  declaring only one and omitting the other must fail visibly, not read as "zero fields, on
+  purpose"), `config.pointer-field-not-known` (a field named in either list must also appear in that
+  type's `required_fields`/`known_fields` -- no automatic exception, checked explicitly), and
+  `config.pointer-narrative-overlap` (a field cannot be declared in both lists for one type).
 - **`narrative_fields` are staleness-checked by definition**, for any field in the list, not a
   `Blocked-on`-specific behavior incidentally reused. No change to the mechanism this ADR already
   decided -- `blocked_on_stale` generalizing to read its field list from config already implied
   this; this amendment only makes it explicit.
-- `known_fields` remains the sole source of truth for "which fields a type's header may carry" --
-  membership in `pointer_fields`/`narrative_fields` was considered as an automatic exception to that
-  and rejected, to keep one config list answering one question each rather than either silently
-  extending the other.
+- `required_fields`/`known_fields` together remain the source of truth for "which fields a type's
+  header may carry" -- membership in `pointer_fields`/`narrative_fields` was considered as an
+  automatic exception to that and rejected, to keep one pair of config lists answering one question
+  each rather than either silently extending the other.
 
 ## References
 

@@ -93,14 +93,16 @@ ships -- a real, visible migration, not a hidden default silently doing the same
 Review on the PR that filed this RFC found four real, unanswered questions in the design above.
 Resolved:
 
-1. **A type can silently omit both lists entirely.** `pointer_fields`/`narrative_fields` as plain
-   `Option<Vec<String>>` config keys means a type that forgets to declare either one is
+1. **A type can silently omit either list, or both.** `pointer_fields`/`narrative_fields` as plain
+   `Option<Vec<String>>` config keys means a type that forgets to declare one of them (or both) is
    indistinguishable, at the config level, from a type that deliberately declares zero fields of
-   that kind -- both read as "examined stays 0." That's a real regression from this RFC's own
-   "declared, not silently inferred" bar: undeclared should fail *visibly*, not just skip quietly.
-   **Resolution:** a new check, `config.pointer-declaration-missing` (Error), fires when a
-   configured type has neither key present in `.urzua/config.toml` at all. An explicit empty array
-   (`pointer_fields = []`) is a real declaration and does not fire; an absent key does.
+   that kind -- all three read as "examined stays 0" for whatever's missing. That's a real
+   regression from this RFC's own "declared, not silently inferred" bar: undeclared should fail
+   *visibly*, not just skip quietly. **Resolution:** a new check, `config.pointer-declaration-missing`
+   (Error), fires when a configured type does not have **both** keys present in
+   `.urzua/config.toml` -- declaring only `pointer_fields` and omitting `narrative_fields` fires,
+   the same as omitting both. An explicit empty array (`pointer_fields = []`) is a real declaration
+   and does not fire on its own; only an absent key does, on either side.
 
 2. **Relationship to `known_fields` was undefined.** A field named in `pointer_fields`/
    `narrative_fields` but not also in that type's `required_fields`/`known_fields` would resolve
@@ -122,17 +124,18 @@ Resolved:
 4. **Whether `narrative_fields` are inherently staleness-checked was unstated.** Re-reading ADR-44's
    own Context section, the category was already defined as "staleness-aware, prose-tolerant
    pointers" -- staleness-checking is what distinguishes a narrative field from a plain pointer
-   field, not a `Blocked-on`-specific side effect layered on afterward. The `Motivated-by` example
-   in this RFC's Proposal section was arguing against naming the category "blocking_fields," never
-   proposing an exception from staleness-checking -- a `Motivated-by` pointing at a since-`Rejected`
-   record is exactly as worth flagging as a `Blocked-on` pointing at an already-`Fixed` bug.
-   **Resolution:** no mechanism change. Clarifying statement only: every `narrative_fields` entry,
-   for any type, is checked against its target's terminal status by the same generalized rule
-   `blocked_on_stale` becomes (reading its field list from config instead of hardcoding
-   `Blocked-on`).
+   field, not a `Blocked-on`-specific side effect layered on afterward. This RFC's own Proposal
+   section already said as much ("separately checked by `blocked_on_stale` for target
+   terminal-status," stated for the category, not just `Blocked-on`); its later `Motivated-by`
+   example argued against naming the category `blocking_fields`, never against staleness-checking
+   itself -- a `Motivated-by` pointing at a since-`Rejected` record is exactly as worth flagging as a
+   `Blocked-on` pointing at an already-`Fixed` bug. **Resolution:** no mechanism change and no new
+   design decision here -- this entry exists only to state explicitly, in one place, what the
+   Proposal section had already implied but never said in so many words.
 
-`Motivated-by` itself remains unbuilt and undecided -- named here only as the example that surfaced
-question 4, scoped out to RFC-24 per this project's "add a field once a pattern recurs" discipline.
+`Motivated-by` itself remains unbuilt and undecided -- named here only as the example (from this
+RFC's own original Proposal section, not this amendment) that surfaced question 4, scoped out to
+RFC-24 per this project's "add a field once a pattern recurs" discipline.
 
 ## Non-goals
 

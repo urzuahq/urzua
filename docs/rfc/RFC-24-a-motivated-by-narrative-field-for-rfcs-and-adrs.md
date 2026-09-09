@@ -15,10 +15,11 @@ reference to a record whose own staleness would be worth flagging.
 ## Motivation
 
 Filed as a direct side effect of resolving four review gaps in RFC-23/ADR-44, not from any real
-case in this corpus yet. That amendment settled that every `narrative_fields` entry, for any field
-declared that way, is checked against its target's terminal status by the same mechanism
-`blocked_on_stale` generalizes to -- `Motivated-by` was the example used to argue `narrative_fields`
-should be named for the mechanism, not `blocking_fields`, since a motivation pointer isn't about
+case in this corpus yet. RFC-23's own Proposal section already settled that every `narrative_fields`
+entry, for any field declared that way, is checked against its target's terminal status by the same
+mechanism `blocked_on_stale` generalizes to -- `Motivated-by` was the example that Proposal section
+used to argue `narrative_fields` should be named for the mechanism, not `blocking_fields`, since a
+motivation pointer isn't about
 blocking at all. That argument doesn't require the field to exist; it only requires the *name*
 `narrative_fields` to not misdescribe it if it ever did. This RFC exists so that "should `Motivated-
 by` actually be built" gets asked and answered on its own evidence, rather than smuggled in as an
@@ -52,8 +53,8 @@ checked for target terminal-status by the same generalized staleness rule.
 
 ## References
 
-- RFC-23 -- the amendment that used `Motivated-by` as its naming argument for `narrative_fields`
-  and deferred actually building it to this RFC.
+- RFC-23 -- its original Proposal section used `Motivated-by` as its naming argument for
+  `narrative_fields`; its later amendment deferred actually building the field to this RFC.
 - ADR-44 -- the decision RFC-23 realizes; its own Context section already frames `narrative_fields`
   as "staleness-aware, prose-tolerant pointers," the shape this RFC would reuse unchanged.
 
@@ -61,4 +62,4 @@ checked for target terminal-status by the same generalized staleness rule.
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-09-09 | Initial RFC, `Status: Draft`. **Why:** RFC-23's amendment used `Motivated-by` as a naming argument without deciding whether to build it -- scoped out here so that decision happens on its own evidence. | **structural** |
+> | 2026-09-09 | Initial RFC, `Status: Draft`. **Why:** RFC-23's original Proposal section used `Motivated-by` as a naming argument without deciding whether to build it -- scoped out here so that decision happens on its own evidence. | **structural** |
