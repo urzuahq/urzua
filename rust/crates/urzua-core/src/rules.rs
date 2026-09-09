@@ -378,11 +378,12 @@ pub fn header_pointer_field_clean(records: &[Record]) -> (RuleExecution, Vec<Fin
             };
             examined += 1;
 
+            if value.trim() == "—" {
+                continue;
+            }
+
             for entry in value.split(',') {
                 let entry = entry.trim();
-                if entry == "—" || entry.is_empty() {
-                    continue;
-                }
                 let is_clean_reference = entry
                     .split_once('-')
                     .map(|(prefix, num)| {
@@ -1410,6 +1411,31 @@ mod tests {
             "docs/adr/0008-x.md",
             "adr",
             "> Status: Accepted\n> Derives-from: RFC-8, ADR-15, ADR-19\n",
+        );
+        let (_, findings) = header_pointer_field_clean(&[r]);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn an_empty_entry_between_commas_is_flagged_not_silently_skipped() {
+        // A trailing/double comma (`RFC-1,,ADR-2`) produces an empty
+        // split segment -- that must be flagged, not treated as a second
+        // "no value" placeholder alongside the real one, "—".
+        let r = record(
+            "docs/adr/0011-x.md",
+            "adr",
+            "> Status: Accepted\n> Derives-from: RFC-1,,ADR-2\n",
+        );
+        let (_, findings) = header_pointer_field_clean(&[r]);
+        assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn a_bare_placeholder_field_is_still_not_flagged() {
+        let r = record(
+            "docs/adr/0012-x.md",
+            "adr",
+            "> Status: Accepted\n> Parent: —\n",
         );
         let (_, findings) = header_pointer_field_clean(&[r]);
         assert!(findings.is_empty());
