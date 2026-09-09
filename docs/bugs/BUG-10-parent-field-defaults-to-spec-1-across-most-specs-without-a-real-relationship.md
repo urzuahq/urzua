@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M23VWTEK4ZKNMZPX4VW70D2P
 Status: Fixed
-Found-in: audited live, while reviewing the SPEC-19 reframe (from "AGENTS.md instructions" to "repository agent guardrails") -- checking whether `Parent` should also be corrected on SPEC-19 surfaced the same question for every other spec
-Regression-test: none in the code sense -- this is a corpus-content defect, not a rule/behavior defect. `pointer.resolution` only ever verified that `Parent` resolves to an existing record (ADR-40), never that it's the *right* record; no rule can check that mechanically. Verified by hand: each corrected value now matches that spec's own real `Implements`/`Derives-from` lineage instead of a blanket default.
+Found-in: 'audited live, while reviewing the SPEC-19 reframe (from "AGENTS.md instructions" to "repository agent guardrails") -- checking whether `Parent` should also be corrected on SPEC-19 surfaced the same question for every other spec'
+Regression-test: 'none in the code sense -- this is a corpus-content defect, not a rule/behavior defect. `pointer.resolution` only ever verified that `Parent` resolves to an existing record (ADR-40), never that it''s the *right* record; no rule can check that mechanically. Verified by hand: each corrected value now matches that spec''s own real `Implements`/`Derives-from` lineage instead of a blanket default.'
 ---
 # 10 — Parent field defaults to SPEC-1 across most specs without a real relationship
 
