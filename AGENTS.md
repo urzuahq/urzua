@@ -53,16 +53,20 @@ conversation history. If you're doing multi-step work worth remembering:
   or `urzua graph` against the real corpus rather than trusting memory of an earlier turn.
 - **`urzua new`'s assigned display number is provisional, not reserved.** It's a scan of the local
   filesystem, blind to numbers already claimed by other open, unmerged branches or PRs (MILE-89) — a
-  real collision this project has hit live. Before opening a PR, check whether another open PR
-  claims the same number for the same type; a collision found this way is expected and cheap to
-  rename, not a bug in the tool.
+  real collision this project has hit live. There's no automated check for this yet (MILE-89 is
+  unbuilt): before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
+  pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
+  — a collision found this way is expected and cheap to rename, not a bug in the tool.
 - **Before hand-writing any record header or field, check `.urzua/config.toml`'s
-  `header_shape`/`known_fields`/`pointer_fields`/`narrative_fields` for that type.** Declared config
-  is the source of truth for header shape and field vocabulary — never freehand an annotation
-  convention (e.g. baking a status or explanation into a pointer field's own value) because it looks
-  consistent with nearby records; check what's actually declared, and check it again against any
-  rule you've just built or fixed in the same session, since matching an anti-pattern you just
-  banned elsewhere is a real, observed failure mode.
+  `header_shape`/`known_fields` for that type.** Declared config is the source of truth for header
+  shape and field vocabulary — never freehand an annotation convention (e.g. baking a status or
+  explanation into a pointer field's own value) because it looks consistent with nearby records;
+  check what's actually declared, and check it again against any rule you've just built or fixed in
+  the same session, since matching an anti-pattern you just banned elsewhere is a real, observed
+  failure mode. (RFC-23/ADR-44 propose adding `pointer_fields`/`narrative_fields` as a third
+  declared-config axis alongside these two — Accepted, but not yet built; `MILE-90` tracks the
+  implementation. Don't add those keys to `.urzua/config.toml` before then: `RecordTypeConfig` uses
+  `#[serde(deny_unknown_fields)]`, so an undeclared key is a hard parse error, not a no-op.)
 
 ## Verify before trusting
 
@@ -115,7 +119,9 @@ A live finding is signal, not a bug in the checker — whether it's on code you 
 you're merely touching, or unrelated code you happened to notice. Fix the real gap it names, or
 leave it firing while the decision gets made separately — don't widen a config list, an enum, or an
 ignore-list just to make a diff come up clean, regardless of whose diff it is or how old the
-underlying issue is.
+underlying issue is. Same rule as the stale-shim case above, applied to a live checker finding
+instead of something you noticed by reading code — in both cases, file the defect, don't quietly
+absorb it.
 
 ## Before calling anything done
 
