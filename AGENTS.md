@@ -62,15 +62,16 @@ conversation history. If you're doing multi-step work worth remembering:
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
   — a collision found this way is expected and cheap to rename, not a bug in the tool.
 - **Before hand-writing any record header or field, check `.urzua/config.toml`'s
-  `header_shape`/`known_fields` for that type.** Declared config is the source of truth for header
-  shape and field vocabulary — never freehand an annotation convention (e.g. baking a status or
-  explanation into a pointer field's own value) because it looks consistent with nearby records;
-  check what's actually declared, and check it again against any rule you've just built or fixed in
-  the same session, since matching an anti-pattern you just banned elsewhere is a real, observed
-  failure mode. (RFC-23/ADR-44 propose adding `pointer_fields`/`narrative_fields` as a third
-  declared-config axis alongside these two — Accepted, but not yet built; `MILE-90` tracks the
-  implementation. Don't add those keys to `.urzua/config.toml` before then: `RecordTypeConfig` uses
-  `#[serde(deny_unknown_fields)]`, so an undeclared key is a hard parse error, not a no-op.)
+  `header_shape`/`known_fields`/`pointer_fields`/`narrative_fields` for that type.** Declared config
+  is the source of truth for header shape, field vocabulary, and relationship-field behavior — never
+  freehand an annotation convention (e.g. baking a status or explanation into a pointer field's own
+  value) because it looks consistent with nearby records; check what's actually declared, and check
+  it again against any rule you've just built or fixed in the same session, since matching an
+  anti-pattern you just banned elsewhere is a real, observed failure mode. (`pointer_fields`/
+  `narrative_fields`, MILE-90/ADR-44: a type declaring either must declare both explicitly, even as
+  `[]` — omitting one is a `config.pointer-declaration-missing` finding, not read as "zero fields, on
+  purpose." Every field named in either list must also be in that type's `required_fields`/
+  `known_fields`.)
 
 ## Verify before trusting
 

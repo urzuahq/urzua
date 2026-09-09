@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -26,6 +26,8 @@ prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
 header_shape = "yaml-frontmatter"
 spec = "SPEC-6"
+pointer_fields = ["Implements"]
+narrative_fields = ["Blocked-on"]
 ```
 
 `prefix` (2026-09-07 addition) decouples the type's own name — used for the `urzua new milestone
@@ -39,8 +41,8 @@ Per-record-type, not global — any type can shorten its own prefix without affe
 | `Status` | `Planned` \| `InProgress` \| `Blocked` \| `Done` \| `WontDo` | The realization axis for a milestone — orthogonal to whatever `Embodiment` on the RFC/ADR it implements is doing. `WontDo` is terminal, for work deliberately deferred or decided against — distinct from `Blocked` (a specific, nameable blocker exists and the work is still intended) and from leaving a milestone `Planned` (which misrepresents a reversed decision as still-pending work). Precedent: `bug`'s `WontFix`, `adr`'s `Rejected`/`Superseded` — every other record type in this corpus already has a terminal "decided against" state; milestone didn't until this version. |
 | `Phase` | a plain tag (`0`, `1`, ...) | Sequential grouping. Not a resolved pointer — no cross-referencing, just a bucket. |
 | `Track` | a plain tag (`header-format`, `section-checks`, ...) | Parallel workstream. Also a plain tag, not a pointer. |
-| `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). |
-| `Blocked-on` | free text, optionally citing a record ID; optional | What has to be true before this milestone can move. Free text with no reference token stays legal ("a decision not yet made"); a real ID (`BUG-3`) is checked by `pointer.resolution` for resolution and by `blocked-on.stale` (ADR-42) for whether the target has since reached a terminal status. Was a body section (`## Blocked on`) before this version — moved into the header (ADR-42) since it's the one field-shaped exception in the schema that hadn't been. |
+| `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). Declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
+| `Blocked-on` | free text, optionally citing a record ID; optional | What has to be true before this milestone can move. Free text with no reference token stays legal ("a decision not yet made"); a real ID (`BUG-3`) is checked by `pointer.resolution` for resolution and by `narrative-field.stale` (ADR-42, generalized by MILE-90/ADR-44) for whether the target has since reached a terminal status. Declared as this type's one `narrative_fields` entry (MILE-90/ADR-44) — prose-tolerant, unlike `Implements`. Was a body section (`## Blocked on`) before this version — moved into the header (ADR-42) since it's the one field-shaped exception in the schema that hadn't been. |
 
 `Status` is documented here but not mechanically validated: nothing in `urzua-core` checks a
 record's `Status` value against an enum for any record type today (RFC-9's field-presence rules
@@ -95,3 +97,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-08 | Header shape changed from `blockquote` to `yaml-frontmatter`, `header_layout` removed (ADR-33/38 amendments); `spec = "SPEC-6"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). **Why:** ADR-33's migration scope widened to all six configured types the same day; `header_layout` has nothing left to distinguish once no type declares `Blockquote`. | **substantive** |
 > | 2026-09-08 | Bumped to `0.5`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
+> | 2026-09-09 | Declared `pointer_fields = ["Implements"]`/`narrative_fields = ["Blocked-on"]` in config (MILE-90/ADR-44), replacing the two rules' prior hardcoded field list; `blocked-on.stale` renamed `narrative-field.stale`. **Why:** `BUG-8` named this exact type's schema as an example of the genericity `pointer.resolution` claimed but didn't have. | **substantive** |

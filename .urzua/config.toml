@@ -10,13 +10,20 @@ required_fields = ["Status", "Date", "Author", "Deciders"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
 spec = "SPEC-16"
+# MILE-0090/ADR-0044: relationship fields are config-declared, not
+# hardcoded per rule. Supersedes / Superseded-by stays outside this axis
+# (own mechanism, own reciprocity check) even though it's pointer-shaped.
+pointer_fields = ["Derives-from"]
+narrative_fields = []
 
 [record_types.rfc]
 dir = "docs/rfc"
 required_fields = ["Status", "Date", "Author"]
 header_shape = "yaml-frontmatter"
-known_fields = ["Stable-Id", "Supersedes / Superseded-by", "Amends"]
+known_fields = ["Stable-Id", "Supersedes / Superseded-by", "Amends", "Implements"]
 spec = "SPEC-17"
+pointer_fields = ["Implements", "Amends"]
+narrative_fields = []
 
 # MILE-0074: Author required (same accountability argument as adr/rfc,
 # MILE-0078), Embodiment/Derives-from a project-wide optional convention
@@ -30,6 +37,8 @@ required_fields = ["Status", "Date", "Version", "Author", "Subject"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
 spec = "SPEC-18"
+pointer_fields = ["Derives-from", "Implements", "Parent"]
+narrative_fields = []
 
 [record_types.milestone]
 dir = "docs/milestones"
@@ -38,13 +47,17 @@ required_fields = ["Status", "Phase", "Track"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Implements", "Blocked-on"]
 spec = "SPEC-6"
+pointer_fields = ["Implements"]
+narrative_fields = ["Blocked-on"]
 
 [record_types.bug]
 dir = "docs/bugs"
 required_fields = ["Status", "Found-in", "Regression-test"]
 header_shape = "yaml-frontmatter"
-known_fields = ["Realized-by", "Stable-Id"]
+known_fields = ["Realized-by", "Stable-Id", "Implements"]
 spec = "SPEC-9"
+pointer_fields = ["Implements"]
+narrative_fields = []
 
 [record_types.waiver]
 dir = "docs/waiver"
@@ -52,3 +65,5 @@ required_fields = ["Rule", "Scope", "Reason"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Expires"]
 spec = "SPEC-10"
+pointer_fields = []
+narrative_fields = []

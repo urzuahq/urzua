@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M21GTR4QWS6YKM00VEG16SAD
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: ADR-44
@@ -53,3 +53,4 @@ exactly that recurrence.
 > |---|---|---|
 > | 2026-09-08 | Initial milestone. **Why:** ADR-44 decided the design; this tracks building it, explicitly including the spec updates the decision itself names as a real consequence. | **structural** |
 > | 2026-09-09 | Scope widened per RFC-23/ADR-44's amendment: three new validation checks, and the concrete `bug`/`Implements` config declaration that motivated closing the review gaps. | **substantive** |
+> | 2026-09-09 | Shipped in full. `RecordTypeConfig` gained `pointer_fields`/`narrative_fields`; `pointer_resolution`/`header_pointer_field_clean`/`narrative_field_stale` (renamed from `blocked_on_stale`) read them per type via a shared `FieldKindSpec` capability table and `RelationKind` enum, replacing every hardcoded field-list array in `rules.rs`. All three new config-level rules built and tested. `urzua graph` gained `kind: RelationKind` on every edge, became config-driven, and now uses the same shared `build_normalized_index` helper -- closing `BUG-11` (a pre-existing normalization gap) and a separate pre-existing gap (`graph()` never included `Parent`) as a side effect of the same rewrite. All six types declare real `pointer_fields`/`narrative_fields` in `.urzua/config.toml`; `rfc`/`bug` gained `Implements` in `known_fields`. `SPEC-2`, `SPEC-13`, and all six type specs updated to match; README's `Feeds-into` example is now literally true, closing `BUG-8`. Two rule-id `const RULE_ID` extraction and `main.rs::run_check`'s two-hand-synced-lists collapse (folded in from the same codebase survey) also shipped. `cargo test`/`make ci` both pass against this repo's own corpus with zero new findings from the three new rules. `Status: Done`. | **substantive** |

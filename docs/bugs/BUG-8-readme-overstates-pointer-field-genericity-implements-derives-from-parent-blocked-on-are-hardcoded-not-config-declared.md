@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M21FJ787H49Q7Z6AK579KJSE
-Status: Open
+Status: Fixed
 Found-in: discussing whether header.pointer-field-clean's hardcoded field list (Implements/Derives-from/Parent) and pointer_resolution's own (Implements/Derives-from/Parent/Blocked-on) match this engine's own "declared, not hardcoded" pitch for an adopting org
-Regression-test: not yet written -- fix is a design decision (RFC-23), not a mechanical patch; a real test will exist once RFC-23 lands
+Regression-test: 'rust/crates/urzua-core/src/rules.rs :: a_resolving_pointer_surfaces_target_status_without_judging_it (config-declared `pointer_fields` per type, no hardcoded field list)'
 ---
 # 8 — README overstates pointer-field genericity -- Implements/Derives-from/Parent/Blocked-on are hardcoded, not config-declared
 
@@ -43,3 +43,4 @@ content-scope ceiling this project names elsewhere), so the overstatement shippe
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial bug record, `Status: Open`. Not yet fixed -- the real fix is a design decision (RFC-23), not a mechanical patch; README wording will be corrected once that's decided, either by making the claim true or by narrowing what it asserts. | **structural** |
+> | 2026-09-09 | Fixed by MILE-90/ADR-44: `pointer_resolution`, `header_pointer_field_clean`, and `narrative_field_stale` now read `pointer_fields`/`narrative_fields` per type from `.urzua/config.toml`, with no hardcoded field list anywhere in `rules.rs`. The README's `Feeds-into` example is now literally true, not aspirational. `Status: Fixed`. | **substantive** |
