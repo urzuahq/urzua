@@ -20,7 +20,8 @@ Two changes to `spec`'s own schema, landed together since both touch every spec'
   backfill).
 - `Parent` corrected per `BUG-10`'s audit: cleared to `—` on the seven specs where it never expressed
   a real relationship (`SPEC-6`/`9`/`10`/`16`/`17`/`18`/`19`), kept on the ten where `SPEC-1`'s own
-  prose documents a genuine split-off relationship.
+  prose documents a genuine split-off relationship (`SPEC-1` itself, the 18th spec, carries no
+  `Parent` field at all -- it's the root).
 - `SPEC-18` updated to document `Subject` as required and to state `Parent`'s real, narrower meaning
   now that its data is corrected.
 - `.urzua/templates/spec.md` corrected at the source: its throwaway header hardcoded

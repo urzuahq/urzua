@@ -87,8 +87,8 @@ same pattern applied to a different feature area).
 ## What's deliberately not built
 
 - **Making `AGENTS.md` itself a governed record type** — it would need a home directory, a header,
-  and a `Status` that mean something (a single-instance type is a real pattern already used
-  elsewhere? not currently, in this corpus) — not attempted here; this spec's own revision log is a
+  and a `Status` that mean something. No single-instance record type exists elsewhere in this
+  corpus, so that pattern isn't attempted here; this spec's own revision log is a
   sufficient history for a file this size, at this frequency of change, without inventing a new
   record-type instance for a single file.
 - **A `check` rule verifying `AGENTS.md`'s content matches what this spec describes** — would require

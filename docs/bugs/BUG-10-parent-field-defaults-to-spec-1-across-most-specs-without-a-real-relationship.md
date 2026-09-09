@@ -8,11 +8,11 @@ Regression-test: 'none in the code sense -- this is a corpus-content defect, not
 
 ## What was wrong
 
-Every one of this corpus's 18 real specs that carries a `Parent` field pointed to `SPEC-1`, with
-zero exceptions and zero differentiation ever exercised. For about half of them that's genuinely
-true: `SPEC-2`–`5`, `8`, `11`–`15` are the CLI-subcommand specs `SPEC-1`'s own Purpose section
-explicitly names as split out of it ("this spec is the parent of a sequential set"), and lists by
-title in its own table.
+Of this corpus's 18 real specs, 17 carry a `Parent` field at all (`SPEC-1` itself, the root, never
+has one) -- and every single one of those 17 pointed to `SPEC-1`, with zero exceptions and zero
+differentiation ever exercised. For 10 of them that's genuinely true: `SPEC-2`–`5`, `8`, `11`–`15`
+are the CLI-subcommand specs `SPEC-1`'s own Purpose section explicitly names as split out of it
+("this spec is the parent of a sequential set"), and lists by title in its own table.
 
 For the other seven -- `SPEC-6`/`9`/`10` (the `milestone`/`bug`/`waiver` record-type specs),
 `SPEC-16`/`17`/`18` (the `adr`/`rfc`/`spec` schema specs), and `SPEC-19` (`AGENTS.md`) -- it's false.
