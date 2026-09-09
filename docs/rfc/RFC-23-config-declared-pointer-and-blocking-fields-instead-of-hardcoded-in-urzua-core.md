@@ -88,6 +88,52 @@ ships -- a real, visible migration, not a hidden default silently doing the same
   imagined future adopters rather than any real one? Raised live alongside this RFC's own
   no-defaults decision; scoped as a separate audit, not answered here.
 
+## Amendment (2026-09-09): four gaps CodeRabbit found in this proposal, resolved
+
+Review on the PR that filed this RFC found four real, unanswered questions in the design above.
+Resolved:
+
+1. **A type can silently omit both lists entirely.** `pointer_fields`/`narrative_fields` as plain
+   `Option<Vec<String>>` config keys means a type that forgets to declare either one is
+   indistinguishable, at the config level, from a type that deliberately declares zero fields of
+   that kind -- both read as "examined stays 0." That's a real regression from this RFC's own
+   "declared, not silently inferred" bar: undeclared should fail *visibly*, not just skip quietly.
+   **Resolution:** a new check, `config.pointer-declaration-missing` (Error), fires when a
+   configured type has neither key present in `.urzua/config.toml` at all. An explicit empty array
+   (`pointer_fields = []`) is a real declaration and does not fire; an absent key does.
+
+2. **Relationship to `known_fields` was undefined.** A field named in `pointer_fields`/
+   `narrative_fields` but not also in that type's `required_fields`/`known_fields` would resolve
+   correctly (`pointer_resolution` doesn't consult `known_fields`) while `header.field-set-
+   consistency` simultaneously reports it as an undeclared field -- two config lists disagreeing
+   about whether the same field is legitimate. Considered making membership in `pointer_fields`/
+   `narrative_fields` automatically satisfy `known_fields` (no duplicate bookkeeping) and rejected
+   it: `known_fields` should stay the single, explicit source of truth for "which fields this type's
+   header may carry," full stop -- not something a field can back into by being named as a pointer
+   elsewhere. **Resolution:** a new check, `config.pointer-field-not-known` (Error), fires when an
+   entry in `pointer_fields`/`narrative_fields` isn't also present in that type's `required_fields`
+   or `known_fields`. Declaring a pointer field costs two config lines, not one -- the redundancy is
+   the point, not an oversight.
+3. **Overlap between the two lists was undefined.** A field named in both `pointer_fields` and
+   `narrative_fields` for the same type would be ambiguous about which validation behavior (clean-
+   only vs. prose-tolerant) applies, and could double-emit `urzua graph` edges. **Resolution:** a
+   new check, `config.pointer-narrative-overlap` (Error), fires when the same field name appears in
+   both lists for one type. Mutually exclusive, no precedence rule needed.
+4. **Whether `narrative_fields` are inherently staleness-checked was unstated.** Re-reading ADR-44's
+   own Context section, the category was already defined as "staleness-aware, prose-tolerant
+   pointers" -- staleness-checking is what distinguishes a narrative field from a plain pointer
+   field, not a `Blocked-on`-specific side effect layered on afterward. The `Motivated-by` example
+   in this RFC's Proposal section was arguing against naming the category "blocking_fields," never
+   proposing an exception from staleness-checking -- a `Motivated-by` pointing at a since-`Rejected`
+   record is exactly as worth flagging as a `Blocked-on` pointing at an already-`Fixed` bug.
+   **Resolution:** no mechanism change. Clarifying statement only: every `narrative_fields` entry,
+   for any type, is checked against its target's terminal status by the same generalized rule
+   `blocked_on_stale` becomes (reading its field list from config instead of hardcoding
+   `Blocked-on`).
+
+`Motivated-by` itself remains unbuilt and undecided -- named here only as the example that surfaced
+question 4, scoped out to RFC-24 per this project's "add a field once a pattern recurs" discipline.
+
 ## Non-goals
 
 - **Does not implement a third pointer-field kind** beyond the two identified -- if a real case
@@ -107,6 +153,10 @@ ships -- a real, visible migration, not a hidden default silently doing the same
   "plain field names an org declares" -- this RFC is what would make that literally true.
 - RFC-22 -- a related, separately-filed idea (a `blocker` record type) that would sit on top of
   whichever design this RFC lands on, not a substitute for it.
+- MILE-90 -- the milestone that builds this RFC's design, including the three validation checks
+  this amendment adds.
+- RFC-24 -- scopes out the `Motivated-by` field this amendment's naming argument used as its
+  example, without deciding whether to build it.
 
 > **Revision log**
 >
@@ -114,3 +164,4 @@ ships -- a real, visible migration, not a hidden default silently doing the same
 > |---|---|---|
 > | 2026-09-08 | Initial RFC. **Why:** found live discussing whether an adopting org could add its own relationship vocabulary the way it can already add record types -- it can't, today, closing exactly the gap BUG-8 names in the README's own claim. | **structural** |
 > | 2026-09-08 | Design settled through discussion: per-type only, no global list; renamed `blocking_fields` to `narrative_fields` (names the mechanism, not today's one use case); no backward-compatibility default -- an undeclared type gets zero fields of either kind checked, matching `header_layout`/`known_fields`'s own undeclared-means-skip precedent; `urzua graph` gains a `kind` field per edge. Config key names, per-type-vs-global, and backward compatibility were all previously open questions -- now decided; README correction scope and this RFC's own undeclared `Implements` field remain open. | **substantive** |
+> | 2026-09-09 | Amendment: resolved four gaps found on review -- added three new validation checks (`config.pointer-declaration-missing`, `config.pointer-field-not-known`, `config.pointer-narrative-overlap`) and clarified that `narrative_fields` are inherently staleness-checked, no mechanism change needed. | **substantive** |
