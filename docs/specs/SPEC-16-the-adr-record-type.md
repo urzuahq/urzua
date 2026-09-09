@@ -1,9 +1,10 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-08
 Status: Accepted
 Author: '@beauwilliams'
-Parent: SPEC-1
+Subject: 'The `adr` record type -- schema, required fields, and lifecycle for decision records.'
+Parent: —
 Implements: ADR-10
 ---
 # SPEC-16 — The `adr` record type
@@ -77,3 +78,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-08 | Added `Derives-from: RFC-1 (Accepted)`. **Why:** `adr` is a founding type decided by RFC-1, not by any single ADR (unlike `milestone`/`bug`/`waiver`, each pointing at the ADR that decided them) -- this spec cited RFC-1 in prose and References but never backlinked it in the header, the same pointer every other type declares. | **substantive** |
 > | 2026-09-08 | Corrected: replaced `Derives-from: RFC-1` with `Implements: ADR-10`. **Why:** the previous entry's premise was wrong -- `ADR-10` is exactly the single decision record `milestone`/`bug`/`waiver`'s own specs each point at (`Implements: ADR-N`), just missed when this spec was first written; `adr` is not an exception to that pattern after all. RFC-1 stays cited in References as the proposal ADR-10 decided. | **substantive** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |

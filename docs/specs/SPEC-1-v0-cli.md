@@ -1,9 +1,10 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-07-29
 Status: Draft
 Embodiment: Not started
 Author: '@beauwilliams'
+Subject: 'The v0 CLI''s cross-cutting rules and success criteria -- the parent of the sequential command/type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
 Derives-from: RFC-1
 ---
@@ -185,6 +186,7 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-07 | Added `milestone` (ADR-34/SPEC-6) and `bug` (ADR-35) record types -- zero `urzua-core` changes, same footprint as `waiver`. Fixed two real defects found using them: `check`'s `paths` argument silently examined the whole corpus regardless of what was requested (BUG-1), and record identifiers required an exact 4-digit filename prefix, bounding every type at 9999 records, with matching now done by numeric value rather than exact string (BUG-2). | **substantive** |
 > | 2026-09-07 | `urzua new` emits type-prefixed filenames (`ADR-36-slug.md`) going forward (ADR-36); legacy `NNNN-slug.md` filenames never get renamed and resolve identically forever. Caught and fixed a second, independent instance of BUG-2's defect class in `filename_title_consistency`'s own filename/H1 parsing. | **substantive** |
 > | 2026-09-07 | Extended the child-spec table with SPEC-6, 8-15; shrank `new`/`fix`/`audit`/`explain`/`graph`/`migrate`'s inline `## Commands` prose down to one-line pointers, matching how `init`/`check` already point to SPEC-5/SPEC-2 instead of duplicating their design. **Why:** those commands got their own specs (MILE-77) and the inline prose had become a second, independently-drifting description of the same design -- no rule said which one won if they ever disagreed. `SPEC-3` entry corrected to no longer claim `doctor` (split out to SPEC-15). | **structural** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 
 ## Acceptance test: the three-corpus suite
 

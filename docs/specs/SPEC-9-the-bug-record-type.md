@@ -1,10 +1,11 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
+Subject: 'The `bug` record type -- real, already-found defects and required regression-test accountability.'
 Implements: ADR-35
-Parent: SPEC-1
+Parent: —
 ---
 # SPEC-9 — The `bug` record type
 
@@ -66,3 +67,4 @@ something broke, or it doesn't exist yet.
 > | 2026-09-07 | Initial spec. **Why:** `bug` (ADR-35) was documented only as an ADR while `milestone`, the same shape of decision (a configured record type), got a matching spec (SPEC-6) — MILE-77 named this inconsistency and this spec resolves it for `bug`. | **structural** |
 > | 2026-09-08 | Header shape changed from `blockquote` to `yaml-frontmatter`, `header_layout` removed (ADR-33/38 amendments); `spec = "SPEC-9"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). | **substantive** |
 > | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |

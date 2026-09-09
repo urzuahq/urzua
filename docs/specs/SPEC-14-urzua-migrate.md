@@ -1,8 +1,9 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
+Subject: '`urzua migrate ids`/`urzua migrate schema` -- backfilling stable IDs and previewing schema changes.'
 Implements: ADR-21, ADR-22
 Parent: SPEC-1
 ---
@@ -64,3 +65,4 @@ missing if invoked without both `--report` and `--field <Name>`, rather than doi
 > |---|---|---|
 > | 2026-09-07 | Initial spec, bundling `migrate ids` and `migrate schema` since SPEC-1 already treats them as one feature area under one verb. **Why:** MILE-77 found `migrate` documented only as two separate ADRs while comparable-complexity command areas (`check`, `init`) had specs. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |

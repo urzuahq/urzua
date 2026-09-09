@@ -3,6 +3,10 @@
 This file is for any AI agent working in this repository. `CONTRIBUTING.md` is the human-facing
 equivalent; read both, but this one states things CONTRIBUTING.md doesn't need to.
 
+`docs/specs/SPEC-19-repository-agent-guardrails.md` governs this file: what belongs in it and why,
+and its revision log is where this file's own change history lives, since this prose carries none
+itself. Any substantive edit here adds a matching entry there, in the same PR.
+
 ## What urzua is, and what it refuses to be
 
 `urzua` is a governance engine for decision records (ADRs/RFCs/specs/milestones/bugs/waivers as

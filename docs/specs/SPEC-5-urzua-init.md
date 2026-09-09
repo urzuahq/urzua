@@ -1,8 +1,9 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
+Subject: '`urzua init` -- record-type selection, `.urzua/` layout, and the adopt-existing-corpus path.'
 Implements: RFC-1
 Parent: SPEC-1
 ---
@@ -170,3 +171,4 @@ migration without a reverse-reference scan is the documented data-loss shape.
 > |---|---|---|
 > | 2026-08-20 | Initial spec. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
+> | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
