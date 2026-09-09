@@ -6,7 +6,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-34 (Accepted)
+Derives-from: ADR-34
 ---
 # 35 — `bug`: a configured record type requiring a named regression test
 

@@ -6,7 +6,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: ADR-14 (Accepted)
+Derives-from: ADR-14
 ---
 # 41 — Specs are organized by feature area decided editorially
 

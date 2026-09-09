@@ -5,7 +5,7 @@ Date: 2026-09-04
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-15 (Accepted)
+Derives-from: RFC-15
 ---
 # 11 — A waiver is a first-class record, not an ignore list
 

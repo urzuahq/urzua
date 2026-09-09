@@ -4,7 +4,7 @@ Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
 Implements: ADR-11
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-10 — The `waiver` record type
 

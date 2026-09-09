@@ -5,7 +5,7 @@ Date: 2026-09-08
 Version: '0.1'
 Author: '@beauwilliams'
 Implements: MILE-36
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-19 — `AGENTS.md`
 

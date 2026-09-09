@@ -6,7 +6,7 @@ Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-3 (Accepted), ADR-23 (Accepted)
+Derives-from: RFC-3, ADR-23
 ---
 # 26 — No second human-format rendering on stderr
 

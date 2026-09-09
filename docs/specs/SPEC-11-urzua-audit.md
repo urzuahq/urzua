@@ -4,7 +4,7 @@ Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
 Implements: ADR-30
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 ---
 # SPEC-11 — `urzua audit`
 

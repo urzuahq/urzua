@@ -6,7 +6,7 @@ Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-2 (Accepted)
+Derives-from: RFC-2
 ---
 # 31 — Accept RFC-2: `urzua fix` already is the detect/apply split; fix identity-resolution priority
 

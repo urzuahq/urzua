@@ -6,7 +6,7 @@ Date: 2026-09-05
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-10 (Accepted)
+Derives-from: RFC-10
 ---
 # 16 — A bold-list header shape, declared per profile
 

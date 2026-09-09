@@ -7,7 +7,7 @@ Date: 2026-09-07
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-10 (Accepted)
+Derives-from: RFC-10
 ---
 # 38 — Header layout is declared per type, not templated or voted
 

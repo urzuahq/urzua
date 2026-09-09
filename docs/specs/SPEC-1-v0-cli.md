@@ -5,7 +5,7 @@ Status: Draft
 Embodiment: Not started
 Author: '@beauwilliams'
 Implements: ADR-1, ADR-2, ADR-3
-Derives-from: RFC-1 (Accepted)
+Derives-from: RFC-1
 ---
 # SPEC-1 — `urzua` v0 CLI
 

@@ -6,7 +6,7 @@ Date: 2026-09-05
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-8 (Accepted), ADR-15 (Accepted)
+Derives-from: RFC-8, ADR-15
 ---
 # 19 — `urzua fix`: detect mode only, apply mode deferred
 

@@ -5,7 +5,7 @@ Date: 2026-09-04
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: ADR-23
-Derives-from: RFC-3 (Accepted)
+Derives-from: RFC-3
 ---
 # 7 — Every entry point emits JSON with a status field on stdout
 

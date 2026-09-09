@@ -3,7 +3,7 @@ Version: '0.2'
 Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
-Parent: SPEC-1 (v0 CLI), which lists the bug classes this suite must reproduce.
+Parent: SPEC-1
 ---
 # SPEC-4 — The corpus acceptance suite
 
@@ -13,6 +13,7 @@ A validator is only as trustworthy as the defects it has been shown to catch. Pr
 acceptance suite built from documented, anticipated bug classes — each with a known-correct
 outcome — run against synthetic corpora designed to exercise real corpus variance (irregular
 formatting, wrapped fields, mixed header shapes) rather than only clean, hand-crafted fixtures.
+`Parent`'s target, `SPEC-1`, lists the bug classes this suite must reproduce.
 
 This spec turns that bug-class catalog into an executable suite, and is a prerequisite for
 SPEC-2's criterion 3.

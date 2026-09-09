@@ -3,7 +3,7 @@ Version: '0.4'
 Date: 2026-09-08
 Status: Accepted
 Author: '@beauwilliams'
-Parent: SPEC-1 (v0 CLI).
+Parent: SPEC-1
 Implements: ADR-10
 ---
 # SPEC-16 — The `adr` record type

@@ -6,7 +6,7 @@ Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
-Derives-from: RFC-1 (Accepted), ADR-18 (Accepted)
+Derives-from: RFC-1, ADR-18
 ---
 # 24 — `urzua explain` and `urzua graph`: the relationship graph as queryable data
 

@@ -4,16 +4,16 @@ Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
 Implements: RFC-1, RFC-3, RFC-10, RFC-11
-Parent: SPEC-1 (v0 CLI). Cross-cutting rules — no-silent-no-op, the permanent
+Parent: SPEC-1
 ---
 # SPEC-2 — `urzua check`
-> content-scope ceiling, the three-corpus acceptance bar — are stated there and are not restated
-> here except where this command narrows them.
 
 ## Purpose
 
 The validator, and the whole of Phase 0. Everything else in the roadmap parses and validates
-records first, so this is the one piece nothing routes around.
+records first, so this is the one piece nothing routes around. Cross-cutting rules — no-silent-
+no-op, the permanent content-scope ceiling, the three-corpus acceptance bar — are stated in
+`Parent`'s target, `SPEC-1`, and are not restated here except where this command narrows them.
 
 `check` reads records, applies rules, and reports findings. It never writes. `--fix` is deferred to
 RFC-8 and is out of scope here for a recorded reason: a bulk cross-reference rewrite caused a
