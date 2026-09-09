@@ -79,12 +79,36 @@ being reconsidered.
   in `urzua-core` for the same reason this one did (imagined future adopters, not real ones) --
   scoped as a separate research task before any bug gets filed for it.
 
+## Amendment (2026-09-09): three validation checks added; `narrative_fields` clarified
+
+Review found four real gaps in this decision, resolved in full on RFC-23's own amendment (see
+References). Consequence for this ADR:
+
+- **Three new checks ship alongside the config-driven rules**, all Error severity, all part of this
+  decision's own build, not deferred follow-up: `config.pointer-declaration-missing` (a type must
+  declare **both** `pointer_fields` and `narrative_fields` explicitly, even as empty arrays --
+  declaring only one and omitting the other must fail visibly, not read as "zero fields, on
+  purpose"), `config.pointer-field-not-known` (a field named in either list must also appear in that
+  type's `required_fields`/`known_fields` -- no automatic exception, checked explicitly), and
+  `config.pointer-narrative-overlap` (a field cannot be declared in both lists for one type).
+- **`narrative_fields` are staleness-checked by definition**, for any field in the list, not a
+  `Blocked-on`-specific behavior incidentally reused. No change to the mechanism this ADR already
+  decided -- `blocked_on_stale` generalizing to read its field list from config already implied
+  this; this amendment only makes it explicit.
+- `required_fields`/`known_fields` together remain the source of truth for "which fields a type's
+  header may carry" -- membership in `pointer_fields`/`narrative_fields` was considered as an
+  automatic exception to that and rejected, to keep one pair of config lists answering one question
+  each rather than either silently extending the other.
+
 ## References
 
 - RFC-23 -- the proposal this ADR decides; the design's own open questions and rejected
-  alternatives (`blocking_fields` as a name, a global field list, a backward-compat default).
+  alternatives (`blocking_fields` as a name, a global field list, a backward-compat default), and
+  its own amendment resolving the four gaps this ADR's amendment reflects.
 - BUG-8 -- the concrete defect (README overstatement) this decision closes.
 - ADR-38/39/43 -- the "declared, not voted or inferred" precedent this decision extends to pointer
   fields.
 - RFC-20 -- the CLI/command taxonomy RFC, whose own table asserts pointer fields are "plain field
   names an org declares" -- this decision is what makes that literally true.
+- MILE-90 -- the milestone that builds this decision, including the three checks this amendment
+  adds.
