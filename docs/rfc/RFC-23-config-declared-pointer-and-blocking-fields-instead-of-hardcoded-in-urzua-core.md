@@ -86,7 +86,8 @@ ships -- a real, visible migration, not a hidden default silently doing the same
   proposal would make legible instead of ad hoc. Left open, not decided here.
 - **Are there other backward-compatibility shims already in `urzua-core`** that exist only for
   imagined future adopters rather than any real one? Raised live alongside this RFC's own
-  no-defaults decision; scoped as a separate audit, not answered here.
+  no-defaults decision; scoped as a separate audit, not answered here -- the audit landed as BUG-9
+  (legacy pre-`ADR-36` filename support), filed in the same PR as this RFC.
 
 ## Amendment (2026-09-09): four gaps CodeRabbit found in this proposal, resolved
 

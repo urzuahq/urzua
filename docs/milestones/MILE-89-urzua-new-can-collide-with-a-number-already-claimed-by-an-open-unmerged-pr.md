@@ -28,6 +28,13 @@ before either branch was pushed. Silent if it hadn't been: two real RFCs with th
 discovered only once both merged and `filename.title-consistency`/numbering rules had no way to
 flag it either, since each branch in isolation looks perfectly valid.
 
+## References
+
+- RFC-13 -- "a vacated number is a record, not a gap": the aftermath half of this same failure
+  class (what to do once a collision forced a renumber), proposed but not yet decided. This
+  milestone is the prevention half; RFC-13's tombstone is what a real collision resolves into once
+  it happens anyway.
+
 > **Revision log**
 >
 > | Date | Change | Class |
