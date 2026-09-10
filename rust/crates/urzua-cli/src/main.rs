@@ -782,7 +782,7 @@ fn run_new(
     let title = title.unwrap_or_else(|| "Title".to_string());
     let stable_id = urzua_id::StableId::generate();
     let today = urzua_io::today();
-    let author = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
+    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
         Ok(id) => id,
         Err(e) => {
             eprintln!("urzua new: could not resolve an identity: {e}");
@@ -794,7 +794,7 @@ fn run_new(
         display_number,
         title: &title,
         stable_id: stable_id.as_str(),
-        author: &author,
+        author: &identity.name,
         today: &today,
     };
 
@@ -865,6 +865,7 @@ fn run_new(
         "path": file_path.strip_prefix(&repo_root).unwrap_or(&file_path),
         "display_number": display_number,
         "stable_id": stable_id.as_str(),
+        "warnings": identity.warning.into_iter().collect::<Vec<_>>(),
     });
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
 
@@ -912,7 +913,7 @@ fn run_fix(
     let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
 
     if !apply {
-        print_fix_report(examined, &repairs, &[]);
+        print_fix_report(examined, &repairs, &[], None);
         return ExitCode::from(if examined == 0 { 2 } else { 0 });
     }
 
@@ -952,7 +953,7 @@ fn run_fix(
                 continue;
             }
         };
-        match urzua_core::fix::apply_repair(&fresh_content, &repair, &today, &identity) {
+        match urzua_core::fix::apply_repair(&fresh_content, &repair, &today, &identity.name) {
             Ok(new_content) => match std::fs::write(&full_path, new_content) {
                 Ok(()) => applied.push(repair),
                 Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),
@@ -961,7 +962,7 @@ fn run_fix(
         }
     }
 
-    print_fix_report(examined, &applied, &failed);
+    print_fix_report(examined, &applied, &failed, identity.warning.as_deref());
     ExitCode::from(if failed.is_empty() { 0 } else { 1 })
 }
 
@@ -971,6 +972,7 @@ fn print_fix_report(
     examined: usize,
     repairs: &[urzua_core::fix::Repair],
     failed: &[(PathBuf, String)],
+    warning: Option<&str>,
 ) {
     let status = if examined == 0 {
         "not-run"
@@ -987,6 +989,7 @@ fn print_fix_report(
         "records_examined": examined,
         "repairs": repairs,
         "failed": failed.iter().map(|(p, e)| serde_json::json!({"record": p, "error": e})).collect::<Vec<_>>(),
+        "warnings": warning.into_iter().collect::<Vec<_>>(),
     });
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
 }

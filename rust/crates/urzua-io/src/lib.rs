@@ -87,24 +87,41 @@ pub fn today() -> String {
 
 const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Identity tiering per RFC-0002 §2, amended by ADR-0031: `gh api user` wins
-/// even over an explicit `--by` (warns on divergence rather than silently
-/// discarding it); `--by` wins over `git config user.name` (BUG-0016).
-/// Errors rather than defaulting when none of the three resolve.
-pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<String, String> {
+/// `resolve_identity`'s result plus any non-fatal notice about it. Structured
+/// rather than a bare `eprintln!` so a caller can fold `warning` into its own
+/// JSON report instead of it landing as unparseable stderr prose.
+pub struct ResolvedIdentity {
+    pub name: String,
+    pub warning: Option<String>,
+}
+
+/// Identity tiering (RFC-0002 §2, amended by ADR-0031 in this repo's own
+/// records): `gh api user` wins even over an explicit `--by` (surfaced via
+/// `warning` on divergence, never silently discarding `--by`); `--by` wins
+/// over `git config user.name`. Errors rather than defaulting when none of
+/// the three resolve.
+pub fn resolve_identity(
+    explicit: Option<&str>,
+    repo_root: &Path,
+) -> Result<ResolvedIdentity, String> {
     if let Some(login) = gh_authenticated_login() {
-        if let Some(by) = explicit {
-            if by != login {
-                eprintln!(
-                    "warning: --by '{by}' differs from the authenticated gh login '{login}' -- using '{login}' (ADR-0031)"
-                );
-            }
-        }
-        return Ok(login);
+        let warning = match explicit {
+            Some(by) if by != login => Some(format!(
+                "--by '{by}' differs from the authenticated gh login '{login}' -- using '{login}'"
+            )),
+            _ => None,
+        };
+        return Ok(ResolvedIdentity {
+            name: login,
+            warning,
+        });
     }
 
     if let Some(by) = explicit {
-        return Ok(by.to_string());
+        return Ok(ResolvedIdentity {
+            name: by.to_string(),
+            warning: None,
+        });
     }
 
     if let Ok(output) = Command::new("git")
@@ -115,7 +132,10 @@ pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<Stri
         if output.status.success() {
             let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !name.is_empty() {
-                return Ok(name);
+                return Ok(ResolvedIdentity {
+                    name,
+                    warning: None,
+                });
             }
         }
     }
@@ -411,11 +431,12 @@ mod tests {
         fs::remove_dir_all(&tmp).ok();
         fs::remove_dir_all(&stub_dir).ok();
 
+        let result = result.unwrap();
         assert_eq!(
-            result.as_deref(),
-            Ok("test"),
+            result.name, "test",
             "with gh unavailable, git config user.name must win over nothing"
         );
+        assert!(result.warning.is_none());
     }
 
     /// gh unavailable, git config unset, explicit --by given -> --by
@@ -445,7 +466,9 @@ mod tests {
         fs::remove_dir_all(&tmp).ok();
         fs::remove_dir_all(&stub_dir).ok();
 
-        assert_eq!(result.as_deref(), Ok("explicit-name"));
+        let result = result.unwrap();
+        assert_eq!(result.name, "explicit-name");
+        assert!(result.warning.is_none());
     }
 
     #[test]
@@ -464,7 +487,9 @@ mod tests {
         fs::remove_dir_all(&tmp).ok();
         fs::remove_dir_all(&stub_dir).ok();
 
-        assert_eq!(result.as_deref(), Ok("explicit-name"));
+        let result = result.unwrap();
+        assert_eq!(result.name, "explicit-name");
+        assert!(result.warning.is_none());
     }
 
     #[test]
@@ -482,7 +507,9 @@ mod tests {
         fs::remove_dir_all(&tmp).ok();
         fs::remove_dir_all(&stub_dir).ok();
 
-        assert_eq!(result.as_deref(), Ok("gh-login"));
+        let result = result.unwrap();
+        assert_eq!(result.name, "gh-login");
+        assert!(result.warning.unwrap().contains("explicit-name"));
     }
 
     fn commit_all(dir: &Path, message: &str) -> String {
