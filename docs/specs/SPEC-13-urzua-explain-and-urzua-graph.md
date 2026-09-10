@@ -32,8 +32,11 @@ added is invisible to `explain`, the same limitation `embodiment.consistency` al
 
 Every edge named by a type's config-declared `pointer_fields` ∪ `narrative_fields` (MILE-90/ADR-44),
 plus the still-hardcoded `Supersedes`/`Superseded-by` (its own mechanism, outside that axis), across
-the whole corpus. Config-driven, not a hardcoded field list — a type's own `Parent`, or any other
-declared relationship field, appears for free the moment it's declared, with no code change here.
+every record with a resolvable identity (`record_id`) — a record whose filename doesn't match its
+type's configured prefix/number shape contributes no outgoing edges, the same precondition
+`pointer_resolution`'s index-building already has. Config-driven, not a hardcoded field list — a
+type's own `Parent`, or any other declared relationship field, appears for free the moment it's
+declared, with no code change here.
 
 Each edge is tagged:
 
