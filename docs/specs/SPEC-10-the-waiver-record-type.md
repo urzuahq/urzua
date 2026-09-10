@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -26,6 +26,8 @@ required_fields = ["Rule", "Scope", "Reason"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Stable-Id", "Expires"]
 spec = "SPEC-10"
+pointer_fields = []
+narrative_fields = []
 ```
 
 | Field | Values | Notes |
@@ -34,6 +36,12 @@ spec = "SPEC-10"
 | `Scope` | a file path, or `*` | `*` covers every file the rule examines for this waiver's `Rule`. |
 | `Reason` | free text, required | Why this exception is reviewed and accepted, not left to drift — the whole reviewability point of not using an ignore list. |
 | `Expires` | `YYYY-MM-DD`, optional | No expiry means the exception is asserted **structural** (the same shape as SPEC-1's permanent content-scope ceiling). A stated expiry means the waiver **reverts to blocking automatically** once passed — no separate "expired" state anyone has to notice or configure. |
+
+No relationship fields (MILE-90/ADR-44): both `pointer_fields` and `narrative_fields` are declared
+empty, not omitted — a waiver names a rule and a scope, never another record, so there's nothing for
+either axis to cover. Declaring both `[]` rather than leaving them undeclared satisfies
+`config.pointer-declaration-missing`, the same "explicit zero, not an implicit default" principle
+`known_fields`/`header_layout` already follow.
 
 No `Status` field: a waiver's lifecycle is entirely computed from `Expires` (`is_active(today)`),
 not separately authored — unlike every other record type, there is nothing for a human to declare
@@ -78,3 +86,4 @@ computed from non-waived findings only.
 > | 2026-09-08 | Header shape declared as `yaml-frontmatter` (ADR-33/42 amendment) -- `waiver` never declared `header_layout` (no records exist yet to have settled on a sub-format), so nothing to remove here, unlike the other five types. `spec = "SPEC-10"` declared in config, closing `type.no-declared-spec`'s live finding for this type (ADR-43). | **substantive** |
 > | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
+> | 2026-09-09 | Declared `pointer_fields = []`/`narrative_fields = []` in config (MILE-90/ADR-44) — explicit zero, not omitted, since `waiver` is the one type with no relationship fields to declare. **Why:** MILE-90's new `config.pointer-declaration-missing` rule requires every type to make this choice explicit. | **structural** |

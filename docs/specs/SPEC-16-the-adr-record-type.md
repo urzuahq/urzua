@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-08
 Status: Accepted
 Author: '@beauwilliams'
@@ -26,6 +26,8 @@ required_fields = ["Status", "Date", "Author", "Deciders"]
 header_shape = "yaml-frontmatter"
 known_fields = ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
 spec = "SPEC-16"
+pointer_fields = ["Derives-from"]
+narrative_fields = []
 ```
 
 | Field | Values | Notes |
@@ -37,8 +39,8 @@ spec = "SPEC-16"
 | `Embodiment` | `Not started` \| `Specified` \| `Implemented` \| `Verified` \| `Drift detected` \| `Inactive` | Optional; computed-vs-stated consistency checked by `embodiment.consistency` (ADR-18) when `Realized-by` is also present. |
 | `Realized-by` | categorized locators (`spec:`/`code:`/`test:`), optional | The evidence `Embodiment` is computed from. |
 | `Stable-Id` | a ULID, optional | Backfilled by `migrate ids` (ADR-3/21) for records predating it. |
-| `Derives-from` | comma-separated, optional | Points at the RFC(s) this ADR decides. |
-| `Supersedes / Superseded-by` | comma-separated or `—`, optional | Reciprocity checked by `relation.supersession-reciprocity`, status-aware (only binds once the claiming record is itself terminal-accepted). |
+| `Derives-from` | comma-separated, optional | Points at the RFC(s) this ADR decides. Declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
+| `Supersedes / Superseded-by` | comma-separated or `—`, optional | Reciprocity checked by `relation.supersession-reciprocity`, status-aware (only binds once the claiming record is itself terminal-accepted). Stays outside the `pointer_fields`/`narrative_fields` axis (own mechanism, own reciprocity check) even though `urzua graph` reports its edges `kind: pointer` (MILE-90/ADR-44) — its values are always clean references, never prose. |
 
 ## Why amendments, not revisions
 
@@ -79,3 +81,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-08 | Added `Derives-from: RFC-1 (Accepted)`. **Why:** `adr` is a founding type decided by RFC-1, not by any single ADR (unlike `milestone`/`bug`/`waiver`, each pointing at the ADR that decided them) -- this spec cited RFC-1 in prose and References but never backlinked it in the header, the same pointer every other type declares. | **substantive** |
 > | 2026-09-08 | Corrected: replaced `Derives-from: RFC-1` with `Implements: ADR-10`. **Why:** the previous entry's premise was wrong -- `ADR-10` is exactly the single decision record `milestone`/`bug`/`waiver`'s own specs each point at (`Implements: ADR-N`), just missed when this spec was first written; `adr` is not an exception to that pattern after all. RFC-1 stays cited in References as the proposal ADR-10 decided. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
+> | 2026-09-09 | Declared `pointer_fields = ["Derives-from"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing `pointer.resolution`'s prior hardcoded field list. Noted `Supersedes / Superseded-by`'s `urzua graph` `kind: pointer` labeling stays a separate, unchanged mechanism outside this axis. | **substantive** |

@@ -177,19 +177,19 @@ RFC-1 (proposal)  <--Derives-from--  ADR-10 (decision)  <--Implements--  SPEC-16
 
 Concretely: [`RFC-1`](docs/rfc/RFC-1-unified-record-schema-core-and-profiles.md) proposed a unified core-plus-profile schema. [`ADR-10`](docs/adr/ADR-10-unified-record-schema-core-and-profiles.md) decided it, and its header carries `Derives-from: RFC-1` — "I'm deciding the thing that RFC proposed." [`SPEC-16`](docs/specs/SPEC-16-the-adr-record-type.md) is the buildable detail of what ADR-10 decided, and carries `Implements: ADR-10` — "I'm the built-out reference for what that ADR decided." Each points backward at the thing it came from, never forward at what came later, since the later record usually doesn't exist yet when the earlier one is written.
 
-`urzua check` resolves every one of these pointers against the real corpus (`pointer.resolution`): a typo'd or dangling reference is a finding, not a silent broken link. `urzua graph` dumps the whole thing as edges — every `Implements`/`Derives-from`/`Supersedes`/`Parent` reference across every record, each tagged `dangling: bool` — so the graph shape (who points at whom, and how many times) is a query, not something you infer by reading every file:
+`urzua check` resolves every one of these pointers against the real corpus (`pointer.resolution`): a typo'd or dangling reference is a finding, not a silent broken link. `urzua graph` dumps the whole thing as edges — every field a type declares in its config (`Implements`/`Derives-from`/`Parent`/...), plus `Supersedes`/`Superseded-by`, across every record, each tagged `kind: "pointer" | "narrative"` and `dangling: bool` — so the graph shape (who points at whom, and how many times) is a query, not something you infer by reading every file:
 
 ```
 $ urzua graph
 {"edges": [
-  {"from": "SPEC-8",  "relation": "Implements",  "to": "ADR-15", "dangling": false},
-  {"from": "SPEC-8",  "relation": "Implements",  "to": "ADR-18", "dangling": false},
-  {"from": "SPEC-16", "relation": "Implements",  "to": "ADR-10", "dangling": false},
-  {"from": "ADR-10",  "relation": "Derives-from", "to": "RFC-1", "dangling": false}
+  {"from": "SPEC-8",  "relation": "Implements",  "to": "ADR-15", "kind": "pointer", "dangling": false},
+  {"from": "SPEC-8",  "relation": "Implements",  "to": "ADR-18", "kind": "pointer", "dangling": false},
+  {"from": "SPEC-16", "relation": "Implements",  "to": "ADR-10", "kind": "pointer", "dangling": false},
+  {"from": "ADR-10",  "relation": "Derives-from", "to": "RFC-1", "kind": "pointer", "dangling": false}
 ]}
 ```
 
-None of `Implements`, `Derives-from`, or the graph's shape is special-cased in `urzua-core` — they're plain field names an org declares in `known_fields` per type, resolved generically by one rule that doesn't know or care what "RFC" or "ADR" means. A different org could:
+None of `Implements`, `Derives-from`, or the graph's shape is special-cased in `urzua-core` — they're plain field names an org declares in `known_fields` (so the field is recognized at all) and in `pointer_fields` or `narrative_fields` (so it's actually resolved, checked, and graphed — `known_fields` alone only gets a field past field-set validation), resolved generically by one rule that doesn't know or care what "RFC" or "ADR" means. A different org could:
 
 - Skip the RFC stage entirely and decide directly (this repo's own `milestone`/`bug` types do exactly that — `ADR-34`/`ADR-35` with no RFC upstream of either).
 - Point an `incident-review` type at a `runbook` type instead of an ADR at an RFC — same mechanism, different vocabulary.

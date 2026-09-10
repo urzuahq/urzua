@@ -6,6 +6,8 @@ Author: '@beauwilliams'
 Deciders: '@beauwilliams'
 Supersedes / Superseded-by: —
 Derives-from: RFC-23
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-core/src/config.rs
 ---
 # 44 — Pointer and narrative fields are config-declared per type, not hardcoded
 
@@ -99,6 +101,19 @@ References). Consequence for this ADR:
   header may carry" -- membership in `pointer_fields`/`narrative_fields` was considered as an
   automatic exception to that and rejected, to keep one pair of config lists answering one question
   each rather than either silently extending the other.
+
+## Amendment (2026-09-09): shipped
+
+`MILE-90` built this decision in full: `pointer_fields`/`narrative_fields` on `RecordTypeConfig`,
+all three rules reading them per type, the three new validation checks, `urzua graph`'s `kind`
+field, and all six types declaring real values in `.urzua/config.toml`. `Embodiment: Verified` and
+`Realized-by` added above, pointing at the code and tests this decision is realized by.
+
+`blocked_on_stale` — named throughout this ADR's frozen Context/Decision/Consequences text, left
+as originally decided rather than silently edited — shipped as `narrative_field_stale`
+(`narrative-field.stale`): the same mechanism, renamed because it now generalizes to any
+`narrative_fields` entry, not `Blocked-on` specifically. Every other reference in this document to
+`blocked_on_stale` should be read as that rule under its current name.
 
 ## References
 
