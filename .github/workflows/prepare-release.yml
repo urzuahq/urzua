@@ -1,13 +1,13 @@
 name: prepare release
 
-# A deliberate, maintainer-triggered act -- never a trigger on merge (ADR-0029).
-# Bumps rust/Cargo.toml's version, compiles CHANGELOG.md from every .changeset/
-# fragment (plus Conventional Commits since the last tag), commits, tags, and
-# pushes. The push of a `v*` tag is what starts the existing tag-triggered
-# release.yml (cross-compiled binaries, GitHub Release) -- this workflow does
-# not build or publish anything itself.
+# Opens or updates a "release" branch PR on every push to main that has
+# something to release -- the compiled version bump and CHANGELOG.md
+# section are a real diff, reviewable before anything lands (ADR-0045,
+# superseding ADR-0029's single-dispatched-job direct push). Merging that
+# PR is the deliberate act; publish-release.yml runs on that merge.
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 concurrency:
   group: prepare-release
@@ -18,12 +18,19 @@ permissions:
 
 jobs:
   prepare-release:
+    # Skip re-triggering on the push this same workflow's own merged PR
+    # produces -- there's nothing left to prepare at that point, and
+    # without this guard every such push would otherwise fail loudly
+    # (PrepareRelease finding no pending changes) rather than just being a
+    # no-op.
+    if: "!contains(github.event.head_commit.message, 'chore: prepare release')"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # The one job in this repo that pushes directly -- narrow and explicit,
-      # not the workflow-level default.
+      # Pushes the release branch and opens/updates its PR -- narrow and
+      # explicit, not the workflow-level default.
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,10 +46,17 @@ jobs:
           sudo mv knope-x86_64-unknown-linux-musl/knope /usr/local/bin/knope
           knope --version
 
-      - name: configure git identity for the release commit
+      - name: configure git identity for the release-prep commit
         run: |
           git config user.name "urzua-release-bot"
           git config user.email "urzua-release-bot@users.noreply.github.com"
 
-      - name: bump version, compile CHANGELOG.md, tag, and push (ADR-0029)
-        run: knope release --verbose
+      # Fails fast (PrepareRelease, or the commit step right after it, when
+      # there's nothing pending) and every later step is skipped -- expected
+      # on a routine push with no unreleased changesets, so the job itself
+      # doesn't go red for it.
+      - name: open or update the release PR (ADR-0045)
+        run: knope prepare-release --verbose
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        continue-on-error: true

@@ -87,11 +87,13 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: create the GitHub release
+      # publish-release.yml's `knope release` already created this release
+      # (real changelog-sourced notes, ADR-0045) by the time this job runs --
+      # upload attaches the built archives to it rather than creating a
+      # second, conflicting release object.
+      - name: upload the built archives to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/*.tar.gz \
-            --repo "${{ github.repository }}" \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
+          gh release upload "${{ github.ref_name }}" dist/*.tar.gz \
+            --repo "${{ github.repository }}"

@@ -8,3 +8,57 @@ versioned_files = [
     { path = "rust/Cargo.toml", regex = '(?m)^version = "(?<version>[^"]+)"$' },
 ]
 changelog = "CHANGELOG.md"
+
+# Required for CreatePullRequest/Release to reach the GitHub API (ADR-0045).
+[github]
+owner = "urzuahq"
+repo = "urzua"
+
+# Opens/updates the release PR (ADR-0045) -- run via `knope prepare-release`
+# in .github/workflows/prepare-release.yml. Every accumulated
+# .changeset/*.md fragment plus any Conventional Commits since the last tag
+# are compiled into the version bump and CHANGELOG.md section this PR shows
+# as a real diff, before anything lands on main.
+[[workflows]]
+name = "prepare-release"
+
+[[workflows.steps]]
+type = "Command"
+command = "git switch -c release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore: prepare release $version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release"
+
+[[workflows.steps]]
+type = "CreatePullRequest"
+base = "main"
+
+[workflows.steps.title]
+template = "chore: prepare release $version"
+
+[workflows.steps.body]
+template = "Opened by knope's prepare-release workflow (ADR-0045). Merging this PR tags and publishes the release described below.\n\n$changelog"
+
+# CreatePullRequest has no labels field -- this PR consumes .changeset/*.md
+# fragments rather than adding one, so it needs the same no-changeset
+# opt-out any other fragment-less PR uses (ADR-0029).
+[[workflows.steps]]
+type = "Command"
+command = "gh pr edit release --add-label no-changeset"
+
+# Tags and creates the GitHub Release once the PR above merges -- run via
+# `knope release` in .github/workflows/publish-release.yml. Assumes the
+# version bump and changelog are already committed on main.
+[[workflows]]
+name = "release"
+
+[[workflows.steps]]
+type = "Release"
