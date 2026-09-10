@@ -1,11 +1,11 @@
 ---
-Status: Accepted
+Status: Superseded
 Embodiment: Verified
 Realized-by: code:knope.toml, code:.github/workflows/ci.yml, code:.github/workflows/prepare-release.yml
 Date: 2026-09-06
 Author: '@beauwilliams'
 Deciders: '@beauwilliams'
-Supersedes / Superseded-by: ADR-28
+Supersedes / Superseded-by: ADR-28, ADR-45
 Derives-from: —
 ---
 # 29 — Changesets via `knope`, superseding lockstep verification
