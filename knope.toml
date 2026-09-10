@@ -29,6 +29,19 @@ command = "git switch -c release"
 [[workflows.steps]]
 type = "PrepareRelease"
 
+# PrepareRelease only regex-bumps rust/Cargo.toml's version line -- it
+# doesn't know Cargo.lock exists, so the lockfile's own recorded version
+# for every workspace member goes stale (BUG-0014). --offline: this only
+# needs to refresh the local path-dependency versions already resolved,
+# never touch external dependency pins or hit the network.
+[[workflows.steps]]
+type = "Command"
+command = "cargo check --offline --manifest-path rust/Cargo.toml --workspace"
+
+[[workflows.steps]]
+type = "Command"
+command = "git add rust/Cargo.lock"
+
 [[workflows.steps]]
 type = "Command"
 command = "git commit -m \"chore: prepare release $version\""
