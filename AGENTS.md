@@ -55,6 +55,9 @@ conversation history. If you're doing multi-step work worth remembering:
   resolves with `urzua graph` before treating the record as done.
 - Before assuming something isn't already tracked, run `urzua check docs/`, `urzua explain <path>`,
   or `urzua graph` against the real corpus rather than trusting memory of an earlier turn.
+- **Before hand-writing a field the tool already computes, run the subcommand that computes it.**
+  `urzua fix --apply` derives `Embodiment` from `Realized-by`'s actual tier — don't hand-assert
+  `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.
 - **`urzua new`'s assigned display number is provisional, not reserved.** It's a scan of the local
   filesystem, blind to numbers already claimed by other open, unmerged branches or PRs (MILE-89) — a
   real collision this project has hit live. There's no automated check for this yet (MILE-89 is
