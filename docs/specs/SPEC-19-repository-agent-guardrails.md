@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.4'
+Version: '0.5'
 Author: '@beauwilliams'
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` alone.'
 Implements: MILE-36
@@ -121,3 +121,4 @@ same pattern applied to a different feature area).
 > | 2026-09-09 | Backfilled this spec's "What belongs in `AGENTS.md`" section (stale since `Version: 0.1`, describing 3 sections against the file's actual 9) and added the standing rule that every substantive `AGENTS.md` change adds its own entry here, in the same PR — closing the exact gap that let the four rows above accumulate only after the fact, in one backfill, instead of one at a time as each change shipped. | **structural** |
 > | 2026-09-09 | Reframed from "`AGENTS.md` agent instructions for this repo" to **"Repository agent guardrails"**: this spec governs this repo's agent-guardrail mechanisms in general, of which `AGENTS.md` is the sole one that exists today, not `AGENTS.md` specifically by name — leaves room for a second mechanism to join this same spec later instead of needing its own. File renamed to match. Added the new `Subject` field (`MILE-91`) and corrected `Parent` to `—` (`BUG-10`): this spec's real lineage is `Implements: MILE-36`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | `AGENTS.md`'s "check declared config" bullet updated for MILE-90/ADR-44: `pointer_fields`/`narrative_fields` now exist and are checked alongside `header_shape`/`known_fields`, replacing the prior warning not to add those keys before they shipped. **Why:** this spec's own standing rule requires a matching revision-log entry in the same PR as any substantive `AGENTS.md` change. | **substantive** |
+> | 2026-09-10 | Added a bullet to "Verify before trusting": when a change invalidates a claim in prose, grep the whole file or corpus for that claim's key phrase before calling the change done, not just the section being actively edited. | **substantive** |

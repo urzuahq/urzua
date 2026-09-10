@@ -86,6 +86,8 @@ about behavior as true:
   isn't verified yet.
 - Don't assume a design decision matches what's actually implemented. Grep the code, don't just
   read the ADR.
+- When a change invalidates a claim in prose, grep the whole file (or corpus) for that claim's key
+  phrase before calling the change done — not just the section being actively edited.
 
 ## Never silently rewrite an Accepted decision
 
