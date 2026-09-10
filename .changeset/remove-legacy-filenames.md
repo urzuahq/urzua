@@ -1,5 +1,5 @@
 ---
-default: minor
+default: major
 ---
 
 # Legacy pre-type-prefix filenames no longer resolve

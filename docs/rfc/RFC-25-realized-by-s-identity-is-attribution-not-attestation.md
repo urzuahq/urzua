@@ -92,3 +92,4 @@ is correct as shipped and is not reconsidered here.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial RFC, `Status: Draft`. | **structural** |
+> | 2026-09-10 | Proposal §1 executed ahead of formal acceptance: reworded `.changeset/identity-verified-first.md` per this RFC's own text, since it named this as time-sensitive (the fragment ships into `CHANGELOG.md` the moment `ADR-45`'s release PR merges). `Status` stays `Draft` -- executing one time-sensitive proposal item isn't the same as accepting the RFC itself. | **substantive** |
