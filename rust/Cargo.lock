@@ -612,7 +612,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "urzua-agdr"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "urzua-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -637,7 +637,7 @@ dependencies = [
 
 [[package]]
 name = "urzua-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cargo_metadata",
  "serde",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "urzua-id"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -657,7 +657,7 @@ dependencies = [
 
 [[package]]
 name = "urzua-io"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "thiserror",
