@@ -2,7 +2,7 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Accepted
 Date: 2026-09-10
-Version: '0.1'
+Version: '0.2'
 Author: '@beauwilliams'
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-29, ADR-45
@@ -31,17 +31,28 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   `embodiment.consistency`'s drift check (`ADR-32`) reads git blame/log history on locators, and a
   shallow checkout makes it silently unable to detect anything, not an error.
 - **`changeset` job**: requires a `.changeset/*.md` fragment added in the diff, or the `no-changeset`
-  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only.
+  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only. The `pull_request:` trigger
+  explicitly lists `[opened, synchronize, reopened, labeled, unlabeled]` (`BUG-15`) — the default
+  three types alone leave this job evaluating a stale, pre-label event payload whenever the label is
+  applied after the PR already exists (the common case for a fragment-less PR filed as an
+  afterthought, and always the case for `prepare-release.yml`'s own automated PR below).
 
 ## `prepare-release.yml` / `publish-release.yml` — the two-step release (`ADR-45`)
 
 - **`prepare-release.yml`** runs on every push to `main`, guarded against re-triggering on its own
   release-prep commit message. It force-pushes a `release` branch built from `main`, running knope's
-  `prepare-release` workflow (`PrepareRelease` → commit → push → `CreatePullRequest`), which compiles
-  every accumulated `.changeset/*.md` fragment plus any Conventional Commits since the last tag into
-  a version bump and `CHANGELOG.md` section. `continue-on-error: true` on the knope invocation:
-  when there's nothing to release, the first step to run out of fragments fails fast and the rest of
-  the job never executes, without turning a routine docs-only merge into a red check.
+  `prepare-release` workflow (`PrepareRelease` → `cargo check --offline` → commit → push →
+  `CreatePullRequest`), which compiles every accumulated `.changeset/*.md` fragment plus any
+  Conventional Commits since the last tag into a version bump and `CHANGELOG.md` section.
+  `continue-on-error: true` on the knope invocation: when there's nothing to release, the first step
+  to run out of fragments fails fast and the rest of the job never executes, without turning a
+  routine docs-only merge into a red check.
+- The `cargo check --offline` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
+  version line — it has no knowledge of `Cargo.lock`, which independently records each workspace
+  member's resolved version and goes stale the instant `Cargo.toml` changes without it (`BUG-14`,
+  found on this mechanism's first real run: every `--locked` build/test/clippy invocation in this
+  repo failed against the resulting PR). `--offline` refreshes only the local path-dependency
+  versions already resolved — no external dependency pin changes, no network access.
 - The resulting PR **is** the reviewable release artifact — the actual version bump and compiled
   changelog, visible as a real diff, not trusted sight-unseen inside a single dispatched job. Covered
   by the `no-changeset` label: it consumes fragments, it doesn't add one.
@@ -109,3 +120,4 @@ Tag-triggered (`push: tags: ["v*"]`), untouched by `ADR-45` except for one conse
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial spec. **Why:** the CI/CD pipeline had real decisions spread across four ADRs and three workflow files with no single buildable reference — found live while building `ADR-45`'s two-step release flow, the same "coherent feature area, decided editorially" gap `ADR-41` already named for record types, here applied to infrastructure for the first time. | **structural** |
+> | 2026-09-10 | Documented two fixes found on this mechanism's first real run, same-day as `ADR-45` merged: `BUG-14` (`prepare-release`'s missing `Cargo.lock` regeneration) and `BUG-15` (`ci.yml`'s changeset gate missing `labeled`/`unlabeled` trigger types). **Why:** this spec's own standing purpose is to stay the accurate, buildable reference — leaving it describing the pre-fix mechanism the same day it changed would be the exact doc-drift gap this project's own `AGENTS.md` now explicitly guards against. | **substantive** |

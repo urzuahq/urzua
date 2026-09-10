@@ -3,8 +3,14 @@ name: ci
 # Deliberately unfiltered: no `branches:` restriction and no workflow-level
 # `paths:` filter. A filtered required check can fail to report on a PR that
 # doesn't touch the filtered paths, which deadlocks a merge that requires it.
+# `labeled`/`unlabeled` added to the default [opened, synchronize, reopened]
+# set (BUG-0015): the `changeset` job's own condition depends on the
+# `no-changeset` label, but a label added after a PR opens doesn't trigger a
+# re-run under the default types -- the job evaluates the stale, pre-label
+# event payload and fails even when the label is already applied.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   workflow_dispatch:
