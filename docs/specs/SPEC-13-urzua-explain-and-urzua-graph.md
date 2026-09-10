@@ -12,9 +12,11 @@ Parent: SPEC-1
 ## Purpose
 
 Two read-only relationship queries over data every other rule already parses — neither needs a new
-schema field or config change. Bundled into one spec because they're the same feature area (queryable
-relationship data) answering two directions of the same question: "which decisions govern this
-file" (`explain`) and "what does the whole graph look like" (`graph`).
+schema field. `explain` needs no config change either; `graph` reads `pointer_fields`/
+`narrative_fields` from existing config (MILE-90/ADR-44), not a new key. Bundled into one spec
+because they're the same feature area (queryable relationship data) answering two directions of the
+same question: "which decisions govern this file" (`explain`) and "what does the whole graph look
+like" (`graph`).
 
 ## `urzua explain <path>`
 

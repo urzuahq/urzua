@@ -109,6 +109,12 @@ all three rules reading them per type, the three new validation checks, `urzua g
 field, and all six types declaring real values in `.urzua/config.toml`. `Embodiment: Verified` and
 `Realized-by` added above, pointing at the code and tests this decision is realized by.
 
+`blocked_on_stale` — named throughout this ADR's frozen Context/Decision/Consequences text, left
+as originally decided rather than silently edited — shipped as `narrative_field_stale`
+(`narrative-field.stale`): the same mechanism, renamed because it now generalizes to any
+`narrative_fields` entry, not `Blocked-on` specifically. Every other reference in this document to
+`blocked_on_stale` should be read as that rule under its current name.
+
 ## References
 
 - RFC-23 -- the proposal this ADR decides; the design's own open questions and rejected

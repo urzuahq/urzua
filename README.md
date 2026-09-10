@@ -189,7 +189,7 @@ $ urzua graph
 ]}
 ```
 
-None of `Implements`, `Derives-from`, or the graph's shape is special-cased in `urzua-core` — they're plain field names an org declares in `known_fields` per type, resolved generically by one rule that doesn't know or care what "RFC" or "ADR" means. A different org could:
+None of `Implements`, `Derives-from`, or the graph's shape is special-cased in `urzua-core` — they're plain field names an org declares in `known_fields` (so the field is recognized at all) and in `pointer_fields` or `narrative_fields` (so it's actually resolved, checked, and graphed — `known_fields` alone only gets a field past field-set validation), resolved generically by one rule that doesn't know or care what "RFC" or "ADR" means. A different org could:
 
 - Skip the RFC stage entirely and decide directly (this repo's own `milestone`/`bug` types do exactly that — `ADR-34`/`ADR-35` with no RFC upstream of either).
 - Point an `incident-review` type at a `runbook` type instead of an ADR at an RFC — same mechanism, different vocabulary.
