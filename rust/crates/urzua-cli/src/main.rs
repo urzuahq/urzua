@@ -45,6 +45,8 @@ enum Command {
         /// Record type, as configured in .urzua/config.toml (e.g. adr, rfc, spec).
         record_type: String,
         title: Option<String>,
+        #[arg(long)]
+        by: Option<String>,
     },
 
     /// Validate records. Non-zero exit on error.
@@ -165,7 +167,11 @@ fn main() -> ExitCode {
         Command::Check { paths } => run_check(cli.config, paths),
         Command::Explain { path } => run_explain(cli.config, path),
         Command::Graph => run_graph(cli.config),
-        Command::New { record_type, title } => run_new(cli.config, record_type, title),
+        Command::New {
+            record_type,
+            title,
+            by,
+        } => run_new(cli.config, record_type, title, by),
         Command::Audit => run_audit(cli.config),
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
@@ -729,7 +735,12 @@ fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
 /// Creates a record from the configured template with a stable ID assigned
 /// (ADR-0003). Never asks the author to pick a number -- scans the type's
 /// directory for the highest existing prefix and takes the next one.
-fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<String>) -> ExitCode {
+fn run_new(
+    config_path: Option<PathBuf>,
+    record_type: String,
+    title: Option<String>,
+    by: Option<String>,
+) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
         Err(e) => {
@@ -771,7 +782,7 @@ fn run_new(config_path: Option<PathBuf>, record_type: String, title: Option<Stri
     let title = title.unwrap_or_else(|| "Title".to_string());
     let stable_id = urzua_id::StableId::generate();
     let today = urzua_io::today();
-    let author = match urzua_io::resolve_identity(None, &repo_root) {
+    let author = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
         Ok(id) => id,
         Err(e) => {
             eprintln!("urzua new: could not resolve an identity: {e}");

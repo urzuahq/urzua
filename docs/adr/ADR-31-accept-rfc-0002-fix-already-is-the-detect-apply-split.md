@@ -83,9 +83,35 @@ always verified-first. The timeout is additive robustness, no behavior change on
 - Content-hash drift detection remains a named gap: `check`/`fix` can tell you a locator exists, not
   that it still says what it said when the record was last marked `Verified`.
 
+## Amendment (2026-09-10): split the two ambient tiers; `--by` now outranks `git config`
+
+BUG-16 established that none of `resolve_identity`'s three tiers is a real attestation — `gh api
+user` is the only one requiring a possessed, live credential; `git config user.name` and `--by` are
+equally unsigned, equally spoofable local input. Treating `git config` as uniformly senior to `--by`
+(this ADR's original decision) followed from that flattened "ambient beats explicit" framing, not
+from any actual difference in trust between the two. It also had a practical cost: `git config
+user.name` is near-universal on any machine that can commit at all, which made `--by` effectively
+unreachable in the overwhelming majority of real invocations — a deliberately typed `--by` was
+silently discarded with no warning, for no security benefit over respecting it.
+
+Decided: split the two ambient tiers instead of one uniform order.
+
+- `gh api user` still wins even over an explicit `--by` — it's the one tier a live credential
+  actually backs, and a stderr warning fires on divergence instead of silently discarding `--by`.
+- Explicit `--by` now wins over `git config user.name` — no security property is protected by
+  overriding deliberate input with an equally-weak ambient default, and this makes `--by` reachable
+  for real use again.
+
+New order: `gh api user` → explicit `--by` → `git config user.name` → error. `urzua new` also gains
+a `--by` flag it previously lacked entirely, so both callers of `resolve_identity` expose the same
+surface.
+
 ## References
 
 - RFC-2 — accepted by this ADR.
 - ADR-18/19/20 — the decisions that already satisfied most of RFC-2's proposal.
 - RFC-8 §4 — the re-verify-before-write decision that satisfied RFC-2's second open question.
+- BUG-16 — neither ambient tier is a real attestation; the finding behind the amendment above.
+- RFC-25 — the "attribution, not attestation" wording correction; explicitly leaves tier order alone,
+  pointing back here as the right vehicle for an order change.
 - `rust/crates/urzua-io/src/lib.rs` — `resolve_identity`.
