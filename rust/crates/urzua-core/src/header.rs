@@ -21,6 +21,14 @@ pub struct Header {
     /// header-shaped region was found at all -- a reportable finding, never
     /// an empty result silently treated as "no fields."
     pub region: Option<(usize, usize)>,
+    /// Why `region` is `None`, when the reason is a real parse failure worth
+    /// surfacing verbatim (BUG-0012) -- currently only populated for
+    /// `yaml-frontmatter`, whose deserializer already carries a line/reason a
+    /// human or agent can act on directly, unlike "the anchor line never
+    /// matched" for the other two shapes. `None` whenever `region` is
+    /// `Some`, and `None` for the other two shapes' own "nothing matched"
+    /// case -- there's no comparably specific diagnosis to surface there.
+    pub parse_error: Option<String>,
 }
 
 impl Header {
@@ -160,7 +168,11 @@ pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
         fields.extend(line_fields);
     }
 
-    Header { fields, region }
+    Header {
+        fields,
+        region,
+        parse_error: None,
+    }
 }
 
 /// Strip a leading `> ` (or bare `>`) blockquote marker. Returns `None` for a
@@ -199,12 +211,14 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
         return Header {
             fields: Vec::new(),
             region: None,
+            parse_error: None,
         };
     };
     if first.trim_end() != "---" {
         return Header {
             fields: Vec::new(),
             region: None,
+            parse_error: None,
         };
     }
 
@@ -224,16 +238,34 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
         return Header {
             fields: Vec::new(),
             region: None,
+            parse_error: None,
         };
     };
 
-    let Ok(yaml_serde::Value::Mapping(mapping)) =
-        yaml_serde::from_str::<yaml_serde::Value>(&yaml_text)
-    else {
-        return Header {
-            fields: Vec::new(),
-            region: None,
-        };
+    // Unlike the two early returns above ("no anchor line matched at all"),
+    // a value here means real YAML syntax was attempted and failed --
+    // yaml_serde's own error already carries a line and reason (BUG-0012),
+    // worth surfacing verbatim instead of collapsing into the same generic
+    // "no header-shaped region found" every other None case reports.
+    let parsed = yaml_serde::from_str::<yaml_serde::Value>(&yaml_text);
+    let mapping = match parsed {
+        Ok(yaml_serde::Value::Mapping(mapping)) => mapping,
+        Ok(_) => {
+            return Header {
+                fields: Vec::new(),
+                region: None,
+                parse_error: Some(
+                    "YAML frontmatter must be a mapping of key: value pairs".to_string(),
+                ),
+            };
+        }
+        Err(e) => {
+            return Header {
+                fields: Vec::new(),
+                region: None,
+                parse_error: Some(e.to_string()),
+            };
+        }
     };
 
     let fields = mapping
@@ -252,6 +284,7 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
     Header {
         fields,
         region: Some((1, closing_line)),
+        parse_error: None,
     }
 }
 
@@ -434,5 +467,46 @@ mod tests {
         let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
         assert_eq!(h.region, None);
         assert!(h.fields.is_empty());
+    }
+
+    #[test]
+    fn invalid_yaml_surfaces_the_real_parse_error_observed_failing() {
+        // BUG-0012: before this fix, region: None was the only signal --
+        // yaml_serde's own error (which already carries a line and reason)
+        // was discarded, forcing manual byte-level diagnosis every time.
+        let doc = "---\nstatus: [unterminated\n---\n# Title\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.region, None);
+        assert!(
+            h.parse_error.is_some_and(|e| !e.is_empty()),
+            "expected a real parse error message, got None"
+        );
+    }
+
+    #[test]
+    fn a_value_starting_with_a_backtick_surfaces_the_real_parse_error_observed_failing() {
+        // The exact live case BUG-0012 was found from: a backtick is a
+        // reserved YAML indicator character and cannot start an unquoted
+        // plain scalar (hit on 9 real spec files' Subject field this
+        // session).
+        let doc = "---\nSubject: `oops\nStatus: Draft\n---\n# Title\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.region, None);
+        assert!(
+            h.parse_error.is_some_and(|e| !e.is_empty()),
+            "expected a real parse error message, got None"
+        );
+    }
+
+    #[test]
+    fn a_top_level_scalar_is_no_region_with_a_specific_reason() {
+        // Valid YAML, but not the mapping shape a header requires -- distinct
+        // from a genuine syntax error, so it gets its own diagnosis rather
+        // than yaml_serde's Err (there is none; this parses successfully).
+        let doc = "---\njust a plain string\n---\n# Title\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.region, None);
+        assert!(h.fields.is_empty());
+        assert!(h.parse_error.is_some_and(|e| e.contains("mapping")));
     }
 }

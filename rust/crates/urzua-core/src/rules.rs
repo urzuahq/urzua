@@ -30,6 +30,10 @@ pub fn header_required_fields(
         examined += 1;
 
         if record.header.region.is_none() {
+            let detail = match &record.header.parse_error {
+                Some(e) => format!(" -- YAML parse error: {e}"),
+                None => String::new(),
+            };
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: Severity::Error,
@@ -37,7 +41,7 @@ pub fn header_required_fields(
                 line: None,
  waived: None,
                 message: format!(
-                    "no header-shaped region found -- required fields {required:?} cannot be checked"
+                    "no header-shaped region found -- required fields {required:?} cannot be checked{detail}"
                 ),
             });
             continue;
@@ -1384,6 +1388,31 @@ mod tests {
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Deciders"));
+    }
+
+    #[test]
+    fn a_broken_yaml_header_surfaces_the_real_parse_error_observed_failing() {
+        // BUG-0012: before this fix, a header that failed to parse as YAML
+        // produced only "no header-shaped region found" -- the real
+        // yaml_serde error (line, reason) was discarded, forcing manual
+        // byte-level diagnosis every time this was actually hit.
+        let r = Record::parse_with_shape(
+            PathBuf::from("docs/adr/ADR-1-x.md"),
+            "adr".to_string(),
+            "---\nSubject: `oops\nStatus: Draft\n---\n# Title\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+        );
+        let mut required = HashMap::new();
+        required.insert("adr".to_string(), vec!["Status".to_string()]);
+
+        let (exec, findings) = header_required_fields(&[r], &required);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].message.contains("YAML parse error"),
+            "expected the real parse error surfaced, got: {}",
+            findings[0].message
+        );
     }
 
     #[test]

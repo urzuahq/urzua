@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2405KW390GQJDF7XSRR3JX8
-Status: Open
+Status: Fixed
 Found-in: 'hit live, twice in one session: a hand-written Subject value starting with a backtick (an invalid unquoted YAML plain-scalar start) on 9 specs, and an unquoted colon-space inside a plain scalar on a bug record''s own header -- both produced the same unhelpful message'
-Regression-test: 'not yet written -- fix scope (surface yaml_serde''s real error message vs. a more specific but still-generic diagnosis) not yet decided'
+Regression-test: 'rust/crates/urzua-core/src/header.rs :: a_value_starting_with_a_backtick_surfaces_the_real_parse_error_observed_failing, invalid_yaml_surfaces_the_real_parse_error_observed_failing; rust/crates/urzua-core/src/rules.rs :: a_broken_yaml_header_surfaces_the_real_parse_error_observed_failing'
 ---
 # 12 — A broken YAML header reports "no header-shaped region found" instead of the real parse error
 
@@ -54,3 +54,4 @@ diagnosis every time.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-09 | Initial bug record, `Status: Open`. Not yet fixed -- whether to surface `yaml_serde`'s raw error message verbatim, or wrap it in a still-generic-but-more-specific diagnosis, is not yet decided. | **structural** |
+> | 2026-09-10 | Fixed: `Header` gains a `parse_error: Option<String>` field, populated for `yaml-frontmatter` with `yaml_serde`'s own error verbatim on a genuine syntax failure, or a specific "must be a mapping" message when the YAML parses but isn't the right shape. `header.required-fields`'s message now appends `-- YAML parse error: <detail>` when present, instead of the same generic "no header-shaped region found" every other `None` case reports. Scope decision: surface the raw message verbatim (not a re-wrapped diagnosis) -- `yaml_serde` already includes a line and reason, and re-deriving that ourselves would just be a second, likely-drifting copy of the same information. `Status: Fixed`. | **substantive** |
