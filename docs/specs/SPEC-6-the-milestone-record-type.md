@@ -25,6 +25,7 @@ dir = "docs/milestones"
 prefix = "MILE"
 required_fields = ["Status", "Phase", "Track"]
 header_shape = "yaml-frontmatter"
+known_fields = ["Stable-Id", "Implements", "Blocked-on"]
 spec = "SPEC-6"
 pointer_fields = ["Implements"]
 narrative_fields = ["Blocked-on"]

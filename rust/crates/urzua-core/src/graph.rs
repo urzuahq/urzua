@@ -82,6 +82,12 @@ pub fn graph(
 ) -> Vec<GraphEdge> {
     let index = build_normalized_index(records);
 
+    // Supersedes / Superseded-by is pushed unconditionally below, its own
+    // mechanism outside the pointer_fields/narrative_fields axis (ADR-44) --
+    // excluded here so a config that also lists it in either declared list
+    // can't produce a duplicate edge or a conflicting `kind`.
+    const SUPERSESSION_FIELD: &str = "Supersedes / Superseded-by";
+
     let mut edges = Vec::new();
     for record in records {
         let Some(from) = record_id(record) else {
@@ -90,16 +96,22 @@ pub fn graph(
 
         let mut fields: Vec<(&str, RelationKind)> = Vec::new();
         if let Some(pointer_fields) = pointer_fields_by_type.get(&record.record_type) {
-            fields.extend(pointer_fields.iter().map(|f| (f.as_str(), POINTER.kind)));
+            fields.extend(
+                pointer_fields
+                    .iter()
+                    .filter(|f| f.as_str() != SUPERSESSION_FIELD)
+                    .map(|f| (f.as_str(), POINTER.kind)),
+            );
         }
         if let Some(narrative_fields) = narrative_fields_by_type.get(&record.record_type) {
             fields.extend(
                 narrative_fields
                     .iter()
+                    .filter(|f| f.as_str() != SUPERSESSION_FIELD)
                     .map(|f| (f.as_str(), NARRATIVE.kind)),
             );
         }
-        fields.push(("Supersedes / Superseded-by", POINTER.kind));
+        fields.push((SUPERSESSION_FIELD, POINTER.kind));
 
         for (field_name, kind) in fields {
             let Some(value) = record.header.get(field_name) else {
@@ -239,6 +251,25 @@ mod tests {
         );
         let edges = graph(&[old, new], &HashMap::new(), &HashMap::new());
         assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].kind, RelationKind::Pointer);
+    }
+
+    #[test]
+    fn a_config_that_also_declares_supersedes_does_not_duplicate_the_edge_observed_failing() {
+        // Supersedes / Superseded-by is pushed unconditionally, its own
+        // mechanism outside the pointer_fields/narrative_fields axis
+        // (ADR-44) -- a config that also lists it in either declared list
+        // must not produce a second, possibly differently-kinded edge for
+        // the same reference.
+        let old = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
+        let new = record(
+            "docs/adr/ADR-2-y.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-1\n",
+        );
+        let pointer_fields = field_map(&[("adr", &["Supersedes / Superseded-by"])]);
+        let edges = graph(&[old, new], &pointer_fields, &HashMap::new());
+        assert_eq!(edges.len(), 1, "unexpected edges: {edges:?}");
         assert_eq!(edges[0].kind, RelationKind::Pointer);
     }
 }
