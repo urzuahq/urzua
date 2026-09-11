@@ -415,6 +415,34 @@ fn fix_could_not_run_emits_json() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Regression for a real exit-code change CodeRabbit's own adversarial pass
+/// found: the pre-refactor code kept `fix --apply`'s exit code independent
+/// of `examined` (`0` if nothing failed, `1` otherwise) -- an empty corpus
+/// exited `0`. An early draft of `build_fix_report` unconditionally treated
+/// `examined == 0` as `FixStatus::NotRun` (exit `2`) regardless of mode,
+/// silently changing apply mode's exit code on an empty/undiscovered corpus.
+#[test]
+fn fix_apply_on_an_empty_corpus_still_exits_0() {
+    let dir = fixture_repo("fix-apply-empty");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.toml"),
+        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["fix", "--apply", "--force"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "fix --apply on an empty corpus must still exit 0, matching pre-refactor behavior: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn explain_could_not_run_emits_json() {
     let dir = fixture_repo("explain-noconfig");

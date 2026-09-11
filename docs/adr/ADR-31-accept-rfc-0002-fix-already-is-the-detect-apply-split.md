@@ -100,7 +100,7 @@ explicit `--by`. That order is superseded by what follows.
 Decided: split the two ambient tiers instead of one uniform order.
 
 - `gh api user` still wins even over an explicit `--by` — it's the one tier a live credential
-  actually backs. Divergence is surfaced as a `warnings` entry in the caller's JSON output instead of
+  actually backs. Divergence is surfaced as a `notices` entry in the caller's JSON output instead of
   silently discarding `--by`.
 - Explicit `--by` now wins over `git config user.name` — no security property is protected by
   overriding deliberate input with an equally-weak ambient default, and this makes `--by` reachable
