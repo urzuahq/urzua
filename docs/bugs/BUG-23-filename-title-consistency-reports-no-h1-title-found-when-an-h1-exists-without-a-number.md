@@ -1,15 +1,14 @@
 ---
 Stable-Id: 01M28H5J5BV7WN2ER002C7M37A
 Status: Open
-Found-in: 'migrated from GitHub issue #1 (Phase 8.1, filed 2026-09-05), which ran `urzua check` against three real foreign ADR corpora -- npryce/adr-tools and upstream adr/madr -- and hit a 100% error rate on `filename.title-consistency`; every record reported "no H1 title found" despite an H1 being plainly present (`# 1. Record architecture decisions`, `# Add Status Field`). Re-verified live in this repo on 2026-09-11: the single uniform message is still the only one emitted.'
+Found-in: 'migrated from GitHub issue #1 (Phase 8.1, filed 2026-09-05), which ran `urzua check` against two real foreign ADR corpora -- npryce/adr-tools and upstream adr/madr (the issue says "three" but names two; the MADR project contributes two different header conventions across its history, which is likely the miscount) -- and hit a 100% error rate on `filename.title-consistency`; every record reported "no H1 title found" despite an H1 being plainly present (`# 1. Record architecture decisions`, `# Add Status Field`). Re-verified live in this repo on 2026-09-11: the single uniform message is still the only one emitted.'
 Regression-test: 'not yet written -- needs a planted-violation test per message branch (an H1 that is genuinely absent vs. an H1 present but carrying no parseable number), observed failing on the current single-message code first'
-Implements: —
 ---
 # 23 — filename.title-consistency reports "no H1 title found" when an H1 exists without a number
 
 ## What was wrong
 
-`filename_title_consistency` (`rust/crates/urzua-core/src/rules.rs:905-914`) branches on
+`filename_title_consistency` (`rust/crates/urzua-core/src/rules.rs:904-914`) branches on
 `title_number(content)` returning `None` and emits one message for every reason it can return `None`:
 
 ```rust
