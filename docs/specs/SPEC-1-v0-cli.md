@@ -125,11 +125,12 @@ AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fie
 
 ## Output contract
 
-**Every command implements `Report` and prints through one shared `emit()` function (ADR-46).**
-Stdout is the only stream, unconditionally — success or failure, every command, every invocation.
-No stderr for anything this codebase's own code can structure into JSON, including genuine errors
-(ADR-26's amendment) — the one exception two commands still lag on (`urzua init`, `urzua migrate
-ids`, both plain-text prose end to end, filed as their own bug) is a real gap, not a design choice.
+**Every command except `urzua init` and `urzua migrate ids` implements `Report` and prints through
+one shared `emit()` function (ADR-46).** Those two remain plain-text prose end to end -- a real,
+named gap (BUG-20), not a design choice -- so "unconditionally" below describes the other eight
+commands, not literally every invocation of the binary. For everything else: stdout is the only
+stream, success or failure, every invocation. No stderr for anything this codebase's own code can
+structure into JSON, including genuine errors (ADR-26's amendment).
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
   `ExplainReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `DoctorReport`, `CouldNotRun`)
@@ -216,6 +217,7 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-07 | Extended the child-spec table with SPEC-6, 8-15; shrank `new`/`fix`/`audit`/`explain`/`graph`/`migrate`'s inline `## Commands` prose down to one-line pointers, matching how `init`/`check` already point to SPEC-5/SPEC-2 instead of duplicating their design. **Why:** those commands got their own specs (MILE-77) and the inline prose had become a second, independently-drifting description of the same design -- no rule said which one won if they ever disagreed. `SPEC-3` entry corrected to no longer claim `doctor` (split out to SPEC-15). | **structural** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Added the `## Output contract` section (`ADR-46`, `BUG-19`): one shared `Report`/`Notice`/`emit()` contract every command implements, replacing five independently-hand-rolled JSON shapes. **Why:** `check`, `fix`, `new`/`explain`/`graph`/`doctor` each printed a different, incompatible shape, contradicting `ADR-7`'s own "every future command must emit this same shape" rule; a real duplicate-JSON-key bug was found and killed in an earlier draft of this design (a generic envelope composed in via `#[serde(flatten)]`) before it shipped. | **substantive** |
+> | 2026-09-11 | Corrected this same section's opening sentence, which overclaimed "every command" when `urzua init`/`urzua migrate ids` are named exceptions two sentences later. **Why:** caught by review before merge -- the section contradicted itself within four lines. | **structural** |
 
 ## Acceptance test: the three-corpus suite
 

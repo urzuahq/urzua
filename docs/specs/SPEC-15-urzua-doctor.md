@@ -33,10 +33,12 @@ command's output contract.
   "status": "ok | warn | error",
   "checks": [
     { "check": "config-exists", "status": "ok", "message": "..." }
-  ],
-  "notices": []
+  ]
 }
 ```
+
+(`notices` -- see below -- is omitted here since it's empty in this example; present, non-empty, only
+when there's a real observation to report.)
 
 `status` is the worst severity across `checks` (`error` beats `warn` beats `ok`). Exit codes: `2` if
 `.urzua/config.toml` doesn't exist at all (run `urzua init` first); `1` if the config fails to parse,
