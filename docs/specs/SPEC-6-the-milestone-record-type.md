@@ -2,7 +2,7 @@
 Version: '0.7'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `milestone` record type -- this project''s own planned-work backlog as a checkable corpus.'
 Implements: ADR-34
 Parent: —

@@ -3,8 +3,8 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-core/src/new_record.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/new_record.rs
 Date: 2026-09-07
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: ADR-3, ADR-34
 ---

@@ -2,8 +2,8 @@
 Status: Superseded
 Embodiment: Implemented
 Date: 2026-09-06
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: ADR-29
 Derives-from: —
 ---

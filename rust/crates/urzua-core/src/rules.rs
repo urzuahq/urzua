@@ -2179,7 +2179,7 @@ mod tests {
 
     #[test]
     fn field_quality_passes_a_real_value() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Author: @someone\n");
+        let r = record("docs/adr/0001-x.md", "adr", "> Author: someone\n");
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 

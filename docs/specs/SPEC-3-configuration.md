@@ -2,7 +2,7 @@
 Version: '0.4'
 Date: 2026-08-20
 Status: Draft
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`.urzua/config.toml` -- the schema for record types, required/known fields, and per-type behavior.'
 Implements: RFC-1, RFC-11
 Parent: SPEC-1

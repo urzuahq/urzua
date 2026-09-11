@@ -2,7 +2,7 @@
 Stable-Id: 01M23CESRZYX7K4D1XE5JGSD62
 Status: Draft
 Date: 2026-09-09
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 24 — A Motivated-by narrative field for RFCs and ADRs
 

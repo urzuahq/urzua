@@ -2,7 +2,7 @@
 Version: '0.3'
 Date: 2026-08-20
 Status: Draft
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
 ---

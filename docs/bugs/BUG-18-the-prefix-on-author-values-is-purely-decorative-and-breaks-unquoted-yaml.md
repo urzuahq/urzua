@@ -2,7 +2,7 @@
 Stable-Id: 01M26DVVGZAATR67X7Z5P637ZW
 Status: Open
 Found-in: 'noticed live comparing urzua new''s auto-filled Author value (resolve_identity''s bare login, e.g. `beauwilliams`) against the hand-typed corpus convention (`''@beauwilliams''`, quoted) -- asked why the tool''s own output doesn''t match, and found the `@` serves no function anywhere in the codebase, while forcing the exact YAML-quoting workaround its own presence necessitates'
-Regression-test: 'not yet written -- fix scope (drop @ going forward vs. backfill every existing record) not yet decided'
+Regression-test: 'none in the code sense -- this is a corpus-content defect, not a rule/behavior defect, the same class as BUG-10. No code changed: `resolve_identity()` already emitted the bare login and `render_synthetic_yaml` already serializes through a real YAML mapping, so no rule could regress here. Verified instead by parsing every record header in the corpus through `yaml.safe_load` after the backfill -- all 89 `Author` values parse as unprefixed plain scalars, zero parse failures -- and by confirming directly that `Author: @beauwilliams` unquoted is still a `ScannerError` while `Author: beauwilliams` is not. The form is now stated in SPEC-16 rather than left as an undocumented hand-copied habit.'
 ---
 # 18 — the '@' prefix on Author values is purely decorative and breaks unquoted YAML
 
@@ -41,10 +41,20 @@ and finding they disagreed.
   correct and needs no change.
 - BUG-12 -- the same defect class (a reserved YAML indicator character forcing avoidable quoting),
   found for `Subject` instead of `Author`.
-- Every `Author: '@...'` line across this corpus -- the convention this bug questions.
+- The `Author: '@...'` lines this corpus carried when this bug was filed -- the convention it
+  questions. Since corrected; none remain (see the revision log below).
+- The `Deciders: '@...'` lines this corpus carried alongside them -- the same defect in the same
+  field family, found while fixing this one and corrected in the same pass. MILE-78 had already
+  treated `Author`/`Deciders` as one unit when it backfilled both.
+- `docs/specs/SPEC-16-the-adr-record-type.md`, `SPEC-17`, `SPEC-18` -- where the no-`@` form is now
+  stated for each type that requires `Author`. SPEC-17/18's "same as `adr`" pointers scoped only to
+  the resolution mechanism, never the written form, so each states it directly rather than relying
+  on an inheritance that wasn't actually there.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether to drop `@` going forward only (existing records untouched, both forms remain valid once quoted) or backfill every existing record to match is not yet decided. | **structural** |
+> | 2026-09-11 | Backfilled all 132 `Author`/`Deciders` values across 88 files to the bare login, and stated the form in SPEC-16 (bumped `0.6` -> `0.7`). **Why:** of the two scopes this record left open, backfilling is the only one that actually removes the hazard -- dropping `@` going forward alone would have left 132 quoted values in place and the corpus carrying two conventions indefinitely. Scope note: extended to `Deciders`, which this record's own text didn't name. It is the identical defect in the same field family (44 `'@beauwilliams'` values, same forced quoting), and fixing only `Author` would have left a single record showing `Author: beauwilliams` beside `Deciders: '@beauwilliams'` -- a new inconsistency rather than a fix. `Status` left `Open` for the user to move. | **substantive** |
+> | 2026-09-11 | Corrections to the entry above, from an adversarial review of the change. (1) SPEC-16 had been given the wording "written exactly as `resolve_identity()` emits it -- a bare login"; that is wrong. Only the `gh api user` tier emits a login -- `git config user.name` emits a display name and `--by` arbitrary free text, and `render_synthetic_yaml` legitimately quotes a value containing a colon or comma. Reworded to claim only what this bug actually establishes: no decorative `@` prefix. The same overclaim is left standing in this record's own "What was wrong" narrative above, which is a point-in-time account, not a live assertion. (2) This record's References cited sets the same change had emptied; reworded to past tense. (3) SPEC-17/18 were said to inherit the form via their "same as `adr`" pointers -- those scope to the resolution mechanism only, so both now state the form directly. (4) The corpus held 134 such values, not 132: ADR-37's two were already unprefixed, so this record's "every hand-written value" framing was never exactly true. | **substantive** |

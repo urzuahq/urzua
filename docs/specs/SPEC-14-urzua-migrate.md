@@ -2,7 +2,7 @@
 Version: '0.3'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua migrate ids`/`urzua migrate schema` -- backfilling stable IDs and previewing schema changes.'
 Implements: ADR-21, ADR-22
 Parent: SPEC-1

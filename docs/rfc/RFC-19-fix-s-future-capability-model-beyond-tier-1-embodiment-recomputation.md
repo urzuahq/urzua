@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH89CRA0KXRE2W8J3V6FM
 Status: Draft
 Date: 2026-09-08
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 19 — Fix's future capability model: beyond Tier 1 Embodiment recomputation
 

@@ -2,8 +2,8 @@
 Status: Accepted
 Embodiment: Not started
 Date: 2026-07-29
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 1 — Rust as the implementation language

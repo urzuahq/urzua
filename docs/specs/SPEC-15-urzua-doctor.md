@@ -2,7 +2,7 @@
 Version: '0.3'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua doctor` -- diagnosing whether checks are actually wired to CI/hooks, not just present.'
 Implements: —
 Parent: SPEC-1
