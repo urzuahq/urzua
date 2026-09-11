@@ -217,6 +217,55 @@ The chain above is one path through this repo's own graph, documented here becau
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs/rfc/) / [`docs/adr/`](docs/adr/) for what's designed but not yet built, including the fuller claim-graph model (AND/OR composites, cross-record-shared claims) this release's Embodiment tracking deliberately ships a narrower slice of first.
 
+## Where this is going
+
+Destination: **the checkable specification layer for agent-authored change.** The engine governs
+the record a change traces back to. It never reads the change.
+
+| | Diff-level review | Urzua |
+|---|---|---|
+| Object | the change: diff, PR, shipped codebase | the record the change claims to implement |
+| Standard | config authored alongside the review tool | accepted records: status, lineage, evidence |
+| Question | does this change meet the bar, and how risky is it? | does an accepted decision exist, did it precede the code, does its claim still hold? |
+| Runs | on a PR, as a service | offline, deterministic, in CI or a hook |
+
+Urzua reads no diffs, scores no risk, and calls no model.
+
+The premise in one line: independent verification requires a standard defined outside the
+generation process, and such a standard is worth checking against only if it is itself
+verifiable — accepted by a named human, carrying evidence of what realizes it, re-checked as the
+code moves underneath it. The first half is the
+[agentic change management](https://www.coderabbit.ai/guides/what-is-agentic-change-management)
+framing; the second half is this engine.
+
+**Designed, not built.** All `Draft`, none decided, each with a milestone holding the decision open:
+
+| RFC | Proposes | Milestone |
+|---|---|---|
+| [RFC-7](docs/rfc/RFC-7-agent-enforcement-harness-not-just-agent-instructions.md) | Enforcement that fires independent of an agent's compliance. An `AGENTS.md`, `CLAUDE.md`, or Cursor rule is a request, not a guarantee — including this repo's own. | MILE-12 |
+| [RFC-12](docs/rfc/RFC-12-the-decision-before-implementation-gate.md) | Code back-pointing at a record that isn't accepted cannot merge. Refuses the merge, never the edit: implementing while a decision is pending is often what reveals the decision was wrong. | MILE-14 |
+| [RFC-9](docs/rfc/RFC-9-agentic-repair-tier.md) | A second repair tier for the prose the mechanical tier permanently can't fix. The agent never writes; every hunk is mechanically re-verified before a human sees it. | MILE-13 |
+
+Agent-facing surface, also unbuilt: a read-only MCP server (MILE-29, scope undecided in MILE-47), a
+guarded edit command on `fix --apply`'s write path (MILE-79), and a `next_action` on every command's
+output (MILE-72, MILE-44).
+
+**Out of scope permanently:** diff review, risk scoring, reviewer routing, a model anywhere in the
+mechanical tier, telemetry, and any hosted dependency. SPEC-1's "mechanical, offline, and
+deterministic" is a boundary, not a stage to grow out of.
+
+**Unproven, stated plainly:**
+
+- **One corpus — its own.** "Config-driven, not hardcoded" is a design claim until the engine runs
+  green on a second real corpus with no escape hatches (MILE-51).
+  [BUG-8](docs/bugs/BUG-8-readme-overstates-pointer-field-genericity-implements-derives-from-parent-blocked-on-are-hardcoded-not-config-declared.md)
+  is what that gap looked like the last time it reached this README.
+- **Acceptance is a convention, not a mechanism.** `Status: Accepted` is an `AGENTS.md` rule agents
+  are asked to respect, with no enforcement behind it
+  ([BUG-16](docs/bugs/BUG-16-none-of-fix-s-identity-resolution-tiers-are-a-real-attestation.md),
+  [RFC-25](docs/rfc/RFC-25-realized-by-s-identity-is-attribution-not-attestation.md), MILE-18,
+  MILE-19). That is RFC-7's own argument, not yet applied here.
+
 ## Maintenance
 
 Released for use, actively maintained: this is a real tool being built in the open, not published only for reference. Issues and PRs are triaged. The schema and CLI contract may still change before `v1.0.0`; `CHANGELOG.md` calls out anything breaking. `CHANGELOG.md` itself is compiled from per-PR changesets (`.changeset/`, [ADR-29](docs/adr/ADR-29-changesets-via-knope-supersedes-lockstep-verification.md)). See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the format.
