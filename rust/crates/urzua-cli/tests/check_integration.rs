@@ -527,3 +527,142 @@ fn a_bad_flag_emits_json_not_a_panic() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// `urzua init`'s real report shape (BUG-20): `proposed`/`written`/
+/// `config_toml`, not plain-text prose. `--dry-run` must include
+/// `config_toml` (nothing else to read the preview from); a real write must
+/// not (`new`'s own established convention -- the caller reads the file).
+#[test]
+fn init_dry_run_reports_the_proposed_config_as_structured_json() {
+    let dir = fixture_repo("init-dry-run");
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["init", "--dry-run"]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["dry_run"], true, "stdout: {stdout}");
+    assert_eq!(parsed["written"], false, "stdout: {stdout}");
+    assert_eq!(parsed["proposed"][0]["name"], "adr", "stdout: {stdout}");
+    assert!(
+        parsed["config_toml"]
+            .as_str()
+            .unwrap()
+            .contains("[record_types.adr]"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        !dir.join(".urzua/config.toml").exists(),
+        "--dry-run must not write"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn init_real_write_omits_config_toml_from_the_report() {
+    let dir = fixture_repo("init-write");
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["init"]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["written"], true, "stdout: {stdout}");
+    assert!(
+        parsed.get("config_toml").is_none(),
+        "a real write must not echo the content back, matching `new`'s convention: {stdout}"
+    );
+    assert!(dir.join(".urzua/config.toml").exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `urzua migrate ids`'s real report shape (BUG-20): `missing`/`results`
+/// with a real per-file outcome, not `[OK]`/`[SKIPPED]`/`[FAILED]` prose
+/// lines.
+#[test]
+fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
+    let dir = fixture_repo("migrate-ids");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.toml"),
+        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+    )
+    .unwrap();
+    // No header-shaped region -- deliberately exercises the `skipped`
+    // outcome, the one path with a real per-file `error` message.
+    std::fs::write(dir.join("docs/adr/0001-x.md"), "# 0001 — X\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["apply"], true, "stdout: {stdout}");
+    assert_eq!(
+        parsed["results"][0]["outcome"], "skipped",
+        "stdout: {stdout}"
+    );
+    assert!(
+        parsed["results"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("no header-shaped region"),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A real write failure exits 1, matching `fix --apply`'s own
+/// `PartialFailure` signal -- unlike `Skipped`, which stays exit 0.
+#[test]
+fn migrate_ids_exits_1_on_a_real_write_failure() {
+    let dir = fixture_repo("migrate-ids-write-fail");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.toml"),
+        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+    )
+    .unwrap();
+    // A real header-shaped region (a blockquote line) so the backfill
+    // attempts a write, then made read-only so that write fails.
+    let record_path = dir.join("docs/adr/0001-x.md");
+    std::fs::write(&record_path, "# 0001 — X\n\n> Status: Accepted\n").unwrap();
+    commit_all(&dir);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&record_path, std::fs::Permissions::from_mode(0o444)).unwrap();
+    }
+
+    let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&record_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(
+        parsed["results"][0]["outcome"], "failed",
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -24,6 +24,10 @@ prints through one function -- concretely:
   JSON object to stdout instead of Rust's default raw text to stderr.
 - A bad CLI flag now produces the same JSON-on-stdout, real-exit-code behavior as any other fatal
   error, instead of clap's own unstructured usage message.
-
-`urzua init` and `urzua migrate ids` are not part of this change -- both remain plain-text prose end
-to end, tracked separately (BUG-20).
+- `urzua init` and `urzua migrate ids` join the contract too: `init` reports `proposed`/`written`,
+  with the full rendered config only present on `--dry-run` (nothing else to read the preview from,
+  since nothing was written); `migrate ids` reports `missing` and, when `--apply` runs, a real
+  per-file `applied`/`skipped`/`failed` outcome instead of `[OK]`/`[SKIPPED]`/`[FAILED]` prose lines.
+  `migrate ids --apply` also now exits 1 if any file failed to write, matching `fix --apply`'s own
+  signal for the same shape of outcome -- previously exit 0 unconditionally, even on a real write
+  failure.

@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M286MMQZFQ3S4THK6S2KCBCW
-Status: Open
+Status: Fixed
 Found-in: 'implementing ADR-46''s Report/emit() contract -- checking every commands eprintln! guard clause found these two are plain text end to end, not just on their error paths'
-Regression-test: 'not yet written -- fix scope (a Report-shaped rewrite for each, vs. some narrower convention that fits plain-text-by-nature commands) not yet decided'
+Regression-test: 'rust/crates/urzua-cli/tests/check_integration.rs::init_dry_run_reports_the_proposed_config_as_structured_json/init_real_write_omits_config_toml_from_the_report/migrate_ids_apply_reports_per_file_outcomes_as_structured_json/migrate_ids_exits_1_on_a_real_write_failure'
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs
 ---
 # 20 — `urzua init` and `migrate ids` still print plain-text prose, not JSON
 
@@ -35,12 +36,13 @@ either directly in a terminal gets a readable summary. The gap only became visib
 ## References
 
 - ADR-23 -- originally named `init`/`doctor` as not-yet-migrated; `doctor` closed its half, this bug
-  tracks the other.
-- ADR-46 -- the `Report`/`Notice`/`emit()` contract every other command now follows.
-- `rust/crates/urzua-cli/src/main.rs` -- `run_init`, `run_migrate_ids`.
+  tracked the other.
+- ADR-46 -- the `Report`/`Notice`/`emit()` contract both commands now follow.
+- `rust/crates/urzua-cli/src/commands/init.rs`/`migrate.rs` -- the fix.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right shape is a `Report`-typed rewrite matching every other command, or a deliberately different convention for commands whose output is narrative by nature, is not yet decided. | **structural** |
+> | 2026-09-11 | `Status: Fixed`. Built real `InitReport` (`proposed`/`written`/`config_toml`, the last only present on `--dry-run`, matching `new`'s own established convention of not echoing content back on a real write) and `MigrateIdsReport` (`missing`/`results`, each result a real `applied`/`skipped`/`failed` outcome with an error message where relevant). `migrate ids --apply` now also exits 1 on a real write failure, matching `fix --apply`'s `PartialFailure` signal for the same shape of outcome -- previously exit 0 unconditionally, a failed backfill visible only by reading the body. Landed alongside a mechanical split of `main.rs` (1392 lines, every command's logic and report type in one file) into one module per command under `commands/`, plus a `discovery.rs` for shared plumbing -- both new report types were written directly into their command's own module rather than added to the flat file first. | **substantive** |
