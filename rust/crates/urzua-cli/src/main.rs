@@ -15,11 +15,30 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::error::ErrorKind;
 use clap::{Parser, Subcommand};
 use urzua_core::config::Config;
 use urzua_core::record::Record;
-use urzua_core::report::{CheckReport, Finding, ReportStatus, RuleExecution, ScopeInfo};
+use urzua_core::report::{
+    CheckReport, CouldNotRun, ExplainReport, Finding, FixFailure, FixReport, FixStatus,
+    GraphReport, MigrateSchemaReport, NewReport, Notice, NoticeSeverity, Report, ReportStatus,
+    RuleExecution, ScopeInfo,
+};
 use urzua_core::rules;
+
+/// `Notice.subject` constants, one per emitter, matching `Finding.rule`'s
+/// existing `const RULE_ID` convention (ADR-0046).
+const NOTICE_IDENTITY: &str = "identity";
+
+/// The one place every command prints (ADR-0046) -- printing is I/O, so this
+/// lives here, not in `urzua-core::report` (which stays pure and defines
+/// only the data shapes `Report` describes). Not a generic envelope around
+/// the payload -- each `Report` stays its own real, fully-typed struct; this
+/// just gives every one of them the same last step.
+fn emit<T: Report>(report: &T) -> ExitCode {
+    println!("{}", serde_json::to_string_pretty(report).unwrap());
+    report.exit_code()
+}
 
 mod init;
 
@@ -160,8 +179,30 @@ enum ExportFormat {
     Agdr,
 }
 
+/// `--help`/`--version` surface as `Err(_)` too (`ErrorKind::DisplayHelp`/
+/// `DisplayVersion`), not a separate success path -- print as clap already
+/// rendered them and exit 0, the one stated plain-text exception (matching
+/// `cargo`'s own convention: help/version are never gated behind a
+/// machine-format flag). Every other parse error goes through the same
+/// `emit()`/`CouldNotRun` path as any other fatal command error.
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    std::panic::set_hook(Box::new(|info| {
+        use std::io::Write;
+        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string() });
+        // write_all + let-ignore, never println!/a panicking macro here -- a
+        // broken pipe during the hook itself would double-panic and abort
+        // with no output at all, defeating the hook's entire purpose.
+        let _ = std::io::stdout().write_all(out.to_string().as_bytes());
+        let _ = std::io::stdout().write_all(b"\n");
+    }));
+
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
+            e.exit()
+        }
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+    };
 
     match cli.command {
         Command::Check { paths } => run_check(cli.config, paths),
@@ -185,10 +226,9 @@ fn main() -> ExitCode {
         } => run_migrate_schema_report(cli.config, field),
         Command::Migrate {
             target: MigrateTarget::Schema { .. },
-        } => {
-            eprintln!("urzua migrate schema: pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)");
-            ExitCode::from(2)
-        }
+        } => emit(&CouldNotRun::from(
+            "pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)",
+        )),
         Command::Export { .. } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => run_init(dry_run),
@@ -206,8 +246,9 @@ fn main() -> ExitCode {
 /// Exit code 2: could not run at all -- distinct from "ran and found
 /// nothing," per SPEC-0001's exit-code contract.
 fn not_implemented(name: &str) -> ExitCode {
-    eprintln!("`urzua {name}` is not implemented yet -- see docs/specs/0001-v0-cli.md");
-    ExitCode::from(2)
+    emit(&CouldNotRun::from(format!(
+        "`urzua {name}` is not implemented yet -- see docs/specs/0001-v0-cli.md"
+    )))
 }
 
 /// Adopt mode only (SPEC-0005). Never clobbers an existing config; `--dry-run`
@@ -307,6 +348,24 @@ enum DoctorStatus {
 struct DoctorReport {
     status: DoctorStatus,
     checks: Vec<DoctorCheck>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    notices: Vec<Notice>,
+    /// Not serialized -- `run_doctor` has three real exit codes (2 = config
+    /// missing, 1 = config parse error or any check `Error`, 0 = otherwise),
+    /// but `status` alone can't distinguish the first two (both are
+    /// `DoctorStatus::Error`). Set explicitly by whichever branch builds the
+    /// report, so `exit_code()` never has to (mis)derive it from `status`.
+    #[serde(skip)]
+    exit_code: u8,
+}
+
+impl Report for DoctorReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(self.exit_code)
+    }
 }
 
 /// Emits one report, JSON, unconditionally (ADR-23) -- BUG-4 was `doctor`
@@ -315,10 +374,7 @@ struct DoctorReport {
 fn run_doctor() -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => {
-            eprintln!("urzua doctor: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let mut checks = Vec::new();
@@ -333,15 +389,12 @@ fn run_doctor() -> ExitCode {
                 config_path.display()
             ),
         });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&DoctorReport {
-                status: DoctorStatus::Error,
-                checks,
-            })
-            .unwrap()
-        );
-        return ExitCode::from(2);
+        return emit(&DoctorReport {
+            status: DoctorStatus::Error,
+            checks,
+            notices: Vec::new(),
+            exit_code: 2,
+        });
     }
     checks.push(DoctorCheck {
         check: "config-exists".to_string(),
@@ -364,15 +417,12 @@ fn run_doctor() -> ExitCode {
                 status: DoctorStatus::Error,
                 message: format!("config does not parse: {e}"),
             });
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&DoctorReport {
-                    status: DoctorStatus::Error,
-                    checks,
-                })
-                .unwrap()
-            );
-            return ExitCode::from(1);
+            return emit(&DoctorReport {
+                status: DoctorStatus::Error,
+                checks,
+                notices: Vec::new(),
+                exit_code: 1,
+            });
         }
     };
 
@@ -444,38 +494,34 @@ fn run_doctor() -> ExitCode {
         DoctorStatus::Ok
     };
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&DoctorReport { status, checks }).unwrap()
-    );
-
-    if has_error {
-        ExitCode::from(1)
-    } else {
-        ExitCode::from(0)
-    }
+    emit(&DoctorReport {
+        status,
+        checks,
+        notices: Vec::new(),
+        exit_code: if has_error { 1 } else { 0 },
+    })
 }
 
 fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
-        Err(e) => return report_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => return report_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => return report_could_not_run(&e.to_string()),
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
     let scoped = match scope_to_requested_paths(&repo_root, &discovered.paths, &paths) {
         Ok(p) => p,
-        Err(e) => return report_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let (records, full_text) = load_records(&repo_root, &scoped, &config);
@@ -545,7 +591,8 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     urzua_core::waiver::apply_waivers(&mut findings, &waivers, &urzua_io::today());
 
     let active_findings = || findings.iter().filter(|f| f.waived.is_none());
-    let blocking = active_findings().any(|f| f.severity == urzua_core::report::Severity::Error);
+    let blocking =
+        active_findings().any(|f| f.severity == urzua_core::report::FindingSeverity::Error);
 
     let status = if records.is_empty() {
         ReportStatus::NotRun
@@ -565,10 +612,10 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         },
         blocking,
         findings,
+        notices: Vec::new(),
     };
 
-    print_report(&report);
-    ExitCode::from(report.exit_code() as u8)
+    emit(&report)
 }
 
 /// Cross-record reconciliation: supersession reciprocity and dangling
@@ -579,18 +626,18 @@ fn run_check(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
 fn run_audit(config_path: Option<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => return report_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => return report_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => return report_could_not_run(&e.to_string()),
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
@@ -616,7 +663,8 @@ fn run_audit(config_path: Option<PathBuf>) -> ExitCode {
     urzua_core::waiver::apply_waivers(&mut findings, &waivers, &urzua_io::today());
 
     let active_findings = || findings.iter().filter(|f| f.waived.is_none());
-    let blocking = active_findings().any(|f| f.severity == urzua_core::report::Severity::Error);
+    let blocking =
+        active_findings().any(|f| f.severity == urzua_core::report::FindingSeverity::Error);
 
     let status = if records.is_empty() {
         ReportStatus::NotRun
@@ -636,10 +684,10 @@ fn run_audit(config_path: Option<PathBuf>) -> ExitCode {
         },
         blocking,
         findings,
+        notices: Vec::new(),
     };
 
-    print_report(&report);
-    ExitCode::from(report.exit_code() as u8)
+    emit(&report)
 }
 
 /// "Which decisions govern this file" (ADR-0024) -- every record whose
@@ -647,39 +695,29 @@ fn run_audit(config_path: Option<PathBuf>) -> ExitCode {
 fn run_explain(config_path: Option<PathBuf>, path: String) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => {
-            eprintln!("urzua explain: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("urzua explain: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("urzua explain: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
-    let governing = urzua_core::graph::explain(&records, &path);
+    let governing_records = urzua_core::graph::explain(&records, &path);
 
-    let out = serde_json::json!({
-        "path": path,
-        "governing_records": governing,
-    });
-    println!("{}", serde_json::to_string_pretty(&out).unwrap());
-
-    ExitCode::from(0)
+    emit(&ExplainReport {
+        status: ReportStatus::Ok,
+        path,
+        governing_records,
+        notices: Vec::new(),
+    })
 }
 
 /// The full record-relationship graph, as data (ADR-0024). Stdout is always
@@ -687,27 +725,18 @@ fn run_explain(config_path: Option<PathBuf>, path: String) -> ExitCode {
 fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => {
-            eprintln!("urzua graph: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("urzua graph: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("urzua graph: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
@@ -726,10 +755,11 @@ fn run_graph(config_path: Option<PathBuf>) -> ExitCode {
     let edges =
         urzua_core::graph::graph(&records, &pointer_fields_by_type, &narrative_fields_by_type);
 
-    let out = serde_json::json!({ "edges": edges });
-    println!("{}", serde_json::to_string_pretty(&out).unwrap());
-
-    ExitCode::from(0)
+    emit(&GraphReport {
+        status: ReportStatus::Ok,
+        edges,
+        notices: Vec::new(),
+    })
 }
 
 /// Creates a record from the configured template with a stable ID assigned
@@ -743,27 +773,20 @@ fn run_new(
 ) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => {
-            eprintln!("urzua new: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("urzua new: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let Some(type_config) = config.record_types.get(&record_type) else {
-        eprintln!(
-            "urzua new: unrecognized record type '{record_type}' -- see [record_types] in {}",
+        return emit(&CouldNotRun::from(format!(
+            "unrecognized record type '{record_type}' -- see [record_types] in {}",
             config_path.display()
-        );
-        return ExitCode::from(2);
+        )));
     };
 
     let dir = repo_root.join(&type_config.dir);
@@ -773,8 +796,10 @@ fn run_new(
             .filter_map(|e| e.file_name().into_string().ok())
             .collect(),
         Err(e) => {
-            eprintln!("urzua new: could not read {}: {e}", dir.display());
-            return ExitCode::from(2);
+            return emit(&CouldNotRun::from(format!(
+                "could not read {}: {e}",
+                dir.display()
+            )))
         }
     };
     let display_number = urzua_core::new_record::next_display_number(&filenames);
@@ -785,8 +810,9 @@ fn run_new(
     let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("urzua new: could not resolve an identity: {e}");
-            return ExitCode::from(2);
+            return emit(&CouldNotRun::from(format!(
+                "could not resolve an identity: {e}"
+            )))
         }
     };
 
@@ -821,11 +847,10 @@ fn run_new(
         match urzua_io::read_to_string(&template_path) {
             Ok(template) => urzua_core::new_record::render_from_template(&template, &params),
             Err(e) => {
-                eprintln!(
-                    "urzua new: no template at {} and no synthesizable shape declared: {e}",
+                return emit(&CouldNotRun::from(format!(
+                    "no template at {} and no synthesizable shape declared: {e}",
                     template_path.display()
-                );
-                return ExitCode::from(2);
+                )))
             }
         }
     };
@@ -848,28 +873,39 @@ fn run_new(
     );
     let file_path = dir.join(&filename);
     if file_path.exists() {
-        eprintln!(
-            "urzua new: {} already exists -- refusing to overwrite",
+        return emit(&CouldNotRun::from(format!(
+            "{} already exists -- refusing to overwrite",
             file_path.display()
-        );
-        return ExitCode::from(2);
+        )));
     }
 
     if let Err(e) = std::fs::write(&file_path, content) {
-        eprintln!("urzua new: could not write {}: {e}", file_path.display());
-        return ExitCode::from(2);
+        return emit(&CouldNotRun::from(format!(
+            "could not write {}: {e}",
+            file_path.display()
+        )));
     }
 
-    let out = serde_json::json!({
-        "status": "ok",
-        "path": file_path.strip_prefix(&repo_root).unwrap_or(&file_path),
-        "display_number": display_number,
-        "stable_id": stable_id.as_str(),
-        "warnings": identity.warning.into_iter().collect::<Vec<_>>(),
-    });
-    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    let notices = identity
+        .warning
+        .into_iter()
+        .map(|message| Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_IDENTITY.to_string(),
+            message,
+        })
+        .collect();
 
-    ExitCode::from(0)
+    emit(&NewReport {
+        status: ReportStatus::Ok,
+        path: file_path
+            .strip_prefix(&repo_root)
+            .unwrap_or(&file_path)
+            .to_path_buf(),
+        display_number,
+        stable_id: stable_id.as_str().to_string(),
+        notices,
+    })
 }
 
 /// Detect mode only (ADR-0015 §3): read-only, safe in CI. Apply mode
@@ -885,51 +921,46 @@ fn run_fix(
     force: bool,
 ) -> ExitCode {
     if tier != 1 {
-        eprintln!("urzua fix: only tier 1 is implemented so far (ADR-0015 defines tiers 2 and 3, not yet built)");
-        return ExitCode::from(2);
+        return emit(&CouldNotRun::from(
+            "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
+        ));
     }
     if apply && ids.is_empty() && !force {
-        eprintln!("urzua fix --apply: pass --ids <record,...> or --force (never the default)");
-        return ExitCode::from(2);
+        return emit(&CouldNotRun::from(
+            "urzua fix --apply: pass --ids <record,...> or --force (never the default)",
+        ));
     }
 
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => return report_fix_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => return report_fix_could_not_run(&e),
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => return report_fix_could_not_run(&e.to_string()),
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
     let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
 
     if !apply {
-        print_fix_report(examined, &repairs, &[], None);
-        return ExitCode::from(if examined == 0 { 2 } else { 0 });
+        return emit(&build_fix_report(examined, repairs, Vec::new(), None));
     }
 
     let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
         Ok(id) => id,
-        Err(e) => {
-            eprintln!("urzua fix --apply: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
     let _lock = match urzua_io::FixLock::acquire(&repo_root) {
         Ok(lock) => lock,
-        Err(e) => {
-            eprintln!("urzua fix --apply: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let today = urzua_io::today();
@@ -962,47 +993,47 @@ fn run_fix(
         }
     }
 
-    print_fix_report(examined, &applied, &failed, identity.warning.as_deref());
-    ExitCode::from(if failed.is_empty() { 0 } else { 1 })
+    emit(&build_fix_report(
+        examined,
+        applied,
+        failed,
+        identity.warning,
+    ))
 }
 
-/// ADR-0026: stdout is the JSON report, unconditionally, with no second
-/// human-format rendering.
-fn print_fix_report(
+fn build_fix_report(
     examined: usize,
-    repairs: &[urzua_core::fix::Repair],
-    failed: &[(PathBuf, String)],
-    warning: Option<&str>,
-) {
+    repairs: Vec<urzua_core::fix::Repair>,
+    failed: Vec<(PathBuf, String)>,
+    warning: Option<String>,
+) -> FixReport {
     let status = if examined == 0 {
-        "not-run"
+        FixStatus::NotRun
     } else if !failed.is_empty() {
-        "partial-failure"
+        FixStatus::PartialFailure
     } else if repairs.is_empty() {
-        "ok"
+        FixStatus::Ok
     } else {
-        "repairs-available"
+        FixStatus::RepairsAvailable
     };
 
-    let report = serde_json::json!({
-        "status": status,
-        "records_examined": examined,
-        "repairs": repairs,
-        "failed": failed.iter().map(|(p, e)| serde_json::json!({"record": p, "error": e})).collect::<Vec<_>>(),
-        "warnings": warning.into_iter().collect::<Vec<_>>(),
-    });
-    println!("{}", serde_json::to_string_pretty(&report).unwrap());
-}
-
-fn report_fix_could_not_run(message: &str) -> ExitCode {
-    eprintln!("urzua fix: could not run: {message}");
-    let report = serde_json::json!({
-        "status": "not-run",
-        "records_examined": 0,
-        "repairs": [],
-    });
-    println!("{}", serde_json::to_string_pretty(&report).unwrap());
-    ExitCode::from(2)
+    FixReport {
+        status,
+        records_examined: examined,
+        repairs,
+        failed: failed
+            .into_iter()
+            .map(|(record, error)| FixFailure { record, error })
+            .collect(),
+        notices: warning
+            .into_iter()
+            .map(|message| Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_IDENTITY.to_string(),
+                message,
+            })
+            .collect(),
+    }
 }
 
 /// Backfills a `Stable-Id` header field (ADR-0003/0021) into every record
@@ -1097,45 +1128,36 @@ fn run_migrate_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
 fn run_migrate_schema_report(config_path: Option<PathBuf>, field: String) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
-        Err(e) => {
-            eprintln!("urzua migrate schema --report: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
     let config = match load_config(&config_path) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("urzua migrate schema --report: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("urzua migrate schema --report: could not run: {e}");
-            return ExitCode::from(2);
-        }
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
     let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
     if records.is_empty() {
-        eprintln!("urzua migrate schema --report: no records discovered -- nothing to check");
-        return ExitCode::from(2);
+        return emit(&CouldNotRun::from(
+            "no records discovered -- nothing to check",
+        ));
     }
 
-    let report = urzua_core::migrate::schema_report(&records, &field);
+    let would_fail = urzua_core::migrate::schema_report(&records, &field);
 
-    let out = serde_json::json!({
-        "field": field,
-        "records_examined": records.len(),
-        "would_fail": report,
-    });
-    println!("{}", serde_json::to_string_pretty(&out).unwrap());
-
-    ExitCode::from(0)
+    emit(&MigrateSchemaReport {
+        status: ReportStatus::Ok,
+        records_examined: records.len(),
+        field,
+        would_fail,
+        notices: Vec::new(),
+    })
 }
 
 /// Restrict discovered files to those under any of the requested paths,
@@ -1288,28 +1310,4 @@ fn compute_drifted_records(
     }
 
     drifted
-}
-
-fn report_could_not_run(message: &str) -> ExitCode {
-    let report = CheckReport {
-        status: ReportStatus::NotRun,
-        files_examined: 0,
-        rules_executed: vec![],
-        scope: ScopeInfo {
-            source: "unavailable".to_string(),
-            record_types: vec![],
-        },
-        blocking: false,
-        findings: vec![],
-    };
-    eprintln!("urzua check: could not run: {message}");
-    print_report(&report);
-    ExitCode::from(2)
-}
-
-/// ADR-0026: stdout is the JSON report, unconditionally, and that is the
-/// only rendering -- no second, human-format copy on stderr. There is one
-/// shape, not a machine one and a human one kept in sync by hand.
-fn print_report(report: &CheckReport) {
-    println!("{}", serde_json::to_string_pretty(report).unwrap());
 }

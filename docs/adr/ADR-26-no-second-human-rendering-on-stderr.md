@@ -46,9 +46,37 @@ compatibility guarantee.
 - Error messages (`eprintln!("... could not run: {e}")`) are unaffected — they were never a
   duplicate rendering of a success result and remain exactly as they were.
 
+## Amendment (2026-09-11): stderr eliminated even for the genuine-error case
+
+This ADR's own Consequences said: *"Error messages (`eprintln!("... could not run: {e}")`) are
+unaffected — they were never a duplicate rendering of a success result and remain exactly as they
+were."* That was correct at the time, because the JSON on a fatal path didn't contain the actual
+error message — only a bare `{"status": "not-run"}`, with the real text existing solely on stderr.
+ADR-46's `CouldNotRun` type changes that premise: the error message now lives inside the JSON itself.
+Once it does, the `eprintln!` of the same text **is** the duplicate rendering this ADR exists to
+eliminate — the exemption's own justification no longer holds.
+
+Decided: stderr is eliminated for every path this codebase's own code controls, fatal or not. The
+same reasoning that killed the success-path stderr rendering applies without change to the error
+path once the message is structured — this tool's consumer, even reading a CI log after a failure,
+is an agent, not a human at a terminal; most CI log viewers (GitHub Actions included) merge stdout
+and stderr into one interleaved stream regardless, so a stream split doesn't reliably survive to
+whoever reads it either way.
+
+Two things this does **not** touch, both already decided:
+
+- `--help`/`--version` stay plain text on stdout, never JSON-wrapped — clap's own output, not this
+  codebase's, and the same industry-standard exemption `cargo`/`rustc`/every clap-based tool already
+  makes (help/version generation is never gated behind a machine-format flag). See ADR-46.
+- Rust panics still hit stderr by default — the language's panic hook, not this ADR's stderr rule,
+  and outside what any `eprintln!` removal touches. ADR-46's `std::panic::set_hook` is the deliberate,
+  separate answer to that gap.
+
 ## References
 
 - ADR-23 — the decision this narrows further.
+- ADR-46 — `Report`/`Notice`/`emit()`; `CouldNotRun` is what made the amendment above possible by
+  putting the error message inside the JSON in the first place.
 - RFC-3 — the original proposal; this ADR resolves its "human still sees everything on the same
   terminal" framing in favor of no second rendering at all, since this tool has no human-primary
   invocation path left to serve.

@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -46,8 +46,10 @@ Filenames emitted going forward carry the type's prefix (`ADR-38-slug.md`, ADR-3
 
 ## Output
 
-Stdout is the JSON report (ADR-23): `path`, `display_number`, `stable_id`. No other fields — `new`
-does not echo the generated content back; the caller reads the file at `path` if it needs to.
+Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id`, plus an optional
+`notices` array (ADR-46) carrying non-fatal observations -- e.g. an explicit `--by` diverging from
+the identity `resolve_identity` actually used -- omitted entirely when empty. `new` still does not
+echo the generated content back; the caller reads the file at `path` if it needs to.
 
 ## Purity boundary
 
@@ -81,3 +83,4 @@ take content and parameters, returning a string.
 > | 2026-09-07 | Initial spec. **Why:** MILE-77 found `new` documented only as an ADR while comparable-complexity command areas (`check`, `init`) had specs. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | §Output's "No other fields" is now false: `notices` (ADR-46) can carry a non-fatal identity-divergence observation. **Why:** this spec's own literal wording would otherwise contradict the shipped output the moment `--by` diverges from an authenticated `gh` login. | **substantive** |

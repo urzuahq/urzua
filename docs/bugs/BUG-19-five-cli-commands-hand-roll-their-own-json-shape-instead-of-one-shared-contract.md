@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M26JPHSH390CDZV1VQVP45FG
-Status: Open
+Status: Fixed
 Found-in: 'reviewing where resolve_identity''s gh-vs-by divergence warning should live -- asked whether there''s a single generic output function every command already goes through, and found there isn''t'
-Regression-test: 'not yet written -- fix scope (one shared Report/Notice type all five commands adopt, vs. a narrower convention) not yet decided'
+Regression-test: 'rust/crates/urzua-core/src/report.rs::tests::notices_never_move_a_successful_exit_code, rust/crates/urzua-cli/tests/check_integration.rs::fix_could_not_run_emits_json/explain_could_not_run_emits_json/graph_could_not_run_emits_json/doctor_missing_config_emits_parseable_json_with_checks'
+Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/main.rs
 ---
 # 19 — Five CLI commands hand-roll their own JSON shape instead of one shared contract
 
@@ -67,3 +68,4 @@ looked locally reasonable in isolation.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right shape is one generic envelope every command adopts, a narrower shared `warnings: Vec<String>` convention, or something else is not yet decided. | **structural** |
+> | 2026-09-11 | `Status: Fixed` (ADR-46). Neither candidate named above: a generic envelope was tried and killed by a confirmed duplicate-JSON-key bug (`#[serde(flatten)]`-composing a shared `status` field into `CheckReport`, which already owns one); `warnings: Vec<String>` was replaced, not kept, since a bare string can't carry `severity`/`subject`. Landed instead: a `Report` trait (`notices()`/`exit_code()`) plus a real `Notice` type, no shared struct composition. `check`/`fix`/`new`/`explain`/`graph`/`doctor` all migrated; `init`/`migrate ids` remain out of scope (plain-text prose end to end, filed separately). | **substantive** |

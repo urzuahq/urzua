@@ -46,19 +46,23 @@ which motivates deciding this now rather than after v1.0.0.
 
 - Every future command's default output changes shape: JSON on stdout is not something a caller
   opts into, it's what's already there.
-- `urzua init` and `urzua doctor` do not yet follow this contract — they predate the JSON report
-  shape entirely and print plain status text on stdout. Bringing them into line is real, separate
-  follow-up work, not implied by this ADR.
+- **Stale as of ADR-46**: `urzua doctor` now follows this contract fully (it did not when this ADR
+  shipped). `urzua init` and `urzua migrate ids` still don't — both are plain-text prose end to end,
+  a materially different redesign than a drop-in `Report` struct. Filed as its own bug rather than
+  fixed piecemeal.
 - ADR-7's "human-readable format is not contractual" clause still holds, now for the stderr
   rendering specifically.
 - **Narrowed by ADR-26**: the stderr human-rendering clause in this decision (the paragraph above
   describing it) was removed shortly after this ADR shipped — there is no second rendering at all,
   on stderr or anywhere else. Everything else in this ADR (stdout is always the JSON report,
   unconditionally, no `--format` flag) stands unchanged.
+- **Extended by ADR-46**: the one shape every command shares is now concrete (`Report`/`Notice`/
+  `emit()`), not just an aspiration this ADR names.
 
 ## References
 
 - ADR-7 — the narrower decision this supersedes.
+- ADR-46 — the concrete shared shape (`Report`/`Notice`/`emit()`) this ADR's "same shape" goal names
+  but doesn't itself specify.
 - RFC-3 — the original proposal this restores.
-- `rust/crates/urzua-cli/src/main.rs` — `print_report`, `print_fix_report`, and
-  `run_migrate_schema_report`'s output paths.
+- `rust/crates/urzua-cli/src/main.rs` — `emit()`, and every `run_*` function's output path.

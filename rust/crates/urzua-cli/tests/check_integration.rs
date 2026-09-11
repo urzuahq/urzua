@@ -389,3 +389,113 @@ fn init_then_check_flags_a_pre_existing_blockquote_record() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+fn assert_valid_json_object(stdout: &str) -> serde_json::Value {
+    let parsed: serde_json::Value = serde_json::from_str(stdout)
+        .unwrap_or_else(|e| panic!("stdout was not valid JSON: {e}\nstdout: {stdout}"));
+    assert!(parsed.is_object(), "stdout: {stdout}");
+    parsed
+}
+
+/// Before ADR-0046/`Report`/`emit()`, `fix`'s "could not run" path (no
+/// config) printed nothing to stdout at all -- only an `eprintln!`. Every
+/// fatal path now emits real, parseable JSON, unconditionally.
+#[test]
+fn fix_could_not_run_emits_json() {
+    let dir = fixture_repo("fix-noconfig");
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["fix"]);
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn explain_could_not_run_emits_json() {
+    let dir = fixture_repo("explain-noconfig");
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["explain", "README.md"]);
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn graph_could_not_run_emits_json() {
+    let dir = fixture_repo("graph-noconfig");
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["graph"]);
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `doctor`'s missing-config path builds its own richer `DoctorReport`
+/// (with the `checks` array intact) rather than the shared `CouldNotRun` --
+/// still real, parseable JSON, with the 2/1/0 exit-code split preserved.
+#[test]
+fn doctor_missing_config_emits_parseable_json_with_checks() {
+    let dir = fixture_repo("doctor-noconfig-json");
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["doctor"]);
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert!(parsed["checks"].is_array(), "stdout: {stdout}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `--help` is the one stated plain-text exception (ADR-0046, matching
+/// `cargo`'s own convention) -- never JSON-wrapped, exit 0.
+#[test]
+fn help_exits_0_with_plain_text_not_json() {
+    let dir = fixture_repo("help");
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["--help"]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&stdout).is_err(),
+        "--help must not be JSON-wrapped: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A genuine bad-flag parse error goes through `try_parse()` -> `emit()`
+/// like any other fatal command error -- not a clap-owned panic/exit with
+/// unstructured stderr text.
+#[test]
+fn a_bad_flag_emits_json_not_a_panic() {
+    let dir = fixture_repo("bad-flag");
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["--this-flag-does-not-exist"]);
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
