@@ -3,8 +3,8 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/graph.rs
 Date: 2026-09-06
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-1, ADR-18
 ---

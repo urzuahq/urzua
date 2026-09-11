@@ -2,7 +2,7 @@
 Version: '0.6'
 Date: 2026-09-08
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
 Implements: ADR-10

@@ -2,7 +2,7 @@
 Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
 Parent: SPEC-1

@@ -2,7 +2,7 @@
 Stable-Id: 01M26DVVGZAATR67X7Z5P637ZW
 Status: Open
 Found-in: 'noticed live comparing urzua new''s auto-filled Author value (resolve_identity''s bare login, e.g. `beauwilliams`) against the hand-typed corpus convention (`''@beauwilliams''`, quoted) -- asked why the tool''s own output doesn''t match, and found the `@` serves no function anywhere in the codebase, while forcing the exact YAML-quoting workaround its own presence necessitates'
-Regression-test: 'not yet written -- fix scope (drop @ going forward vs. backfill every existing record) not yet decided'
+Regression-test: 'none in the code sense -- this is a corpus-content defect, not a rule/behavior defect, the same class as BUG-10. No code changed: `resolve_identity()` already emitted the bare login and `render_synthetic_yaml` already serializes through a real YAML mapping, so no rule could regress here. Verified instead by parsing every record header in the corpus through `yaml.safe_load` after the backfill -- all 89 `Author` values parse as the bare login, zero parse failures -- and by confirming directly that `Author: @beauwilliams` unquoted is still a `ScannerError` while `Author: beauwilliams` is not. The form is now stated in SPEC-16 rather than left as an undocumented hand-copied habit.'
 ---
 # 18 — the '@' prefix on Author values is purely decorative and breaks unquoted YAML
 
@@ -42,9 +42,15 @@ and finding they disagreed.
 - BUG-12 -- the same defect class (a reserved YAML indicator character forcing avoidable quoting),
   found for `Subject` instead of `Author`.
 - Every `Author: '@...'` line across this corpus -- the convention this bug questions.
+- Every `Deciders: '@...'` line across this corpus -- the same defect in the same field family, found
+  while fixing this one and corrected in the same pass (see the revision log below). MILE-78 had
+  already treated `Author`/`Deciders` as one unit when it backfilled both.
+- `docs/specs/SPEC-16-the-adr-record-type.md` -- where the bare-login form is now stated for both
+  fields; SPEC-17/SPEC-18 inherit it through their existing "same as `adr`" pointers.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether to drop `@` going forward only (existing records untouched, both forms remain valid once quoted) or backfill every existing record to match is not yet decided. | **structural** |
+> | 2026-09-11 | Backfilled all 132 `Author`/`Deciders` values across 88 files to the bare login, and stated the form in SPEC-16 (bumped `0.6` -> `0.7`). **Why:** of the two scopes this record left open, backfilling is the only one that actually removes the hazard -- dropping `@` going forward alone would have left 132 quoted values in place and the corpus carrying two conventions indefinitely. Scope note: extended to `Deciders`, which this record's own text didn't name. It is the identical defect in the same field family (44 `'@beauwilliams'` values, same forced quoting), and fixing only `Author` would have left a single record showing `Author: beauwilliams` beside `Deciders: '@beauwilliams'` -- a new inconsistency rather than a fix. `Status` left `Open` for the user to move. | **substantive** |

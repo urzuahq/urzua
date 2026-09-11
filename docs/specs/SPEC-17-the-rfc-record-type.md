@@ -2,7 +2,7 @@
 Version: '0.7'
 Date: 2026-09-08
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
 Implements: ADR-10

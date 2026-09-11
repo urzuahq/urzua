@@ -2,7 +2,7 @@
 Version: '0.3'
 Date: 2026-08-20
 Status: Draft
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua init` -- record-type selection, `.urzua/` layout, and the adopt-existing-corpus path.'
 Implements: RFC-1
 Parent: SPEC-1

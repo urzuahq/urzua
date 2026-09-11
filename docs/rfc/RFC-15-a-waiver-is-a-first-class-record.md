@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-09-04
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 15 — A waiver is a first-class record, not an ignore list

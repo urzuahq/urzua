@@ -4,8 +4,8 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, code:.github/workflows/release.yml
 Date: 2026-09-10
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: ADR-29
 Derives-from: —
 ---

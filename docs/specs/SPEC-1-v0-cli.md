@@ -3,7 +3,7 @@ Version: '0.2'
 Date: 2026-07-29
 Status: Draft
 Embodiment: Not started
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The v0 CLI''s cross-cutting rules and success criteria -- the parent of the sequential command/type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
 Derives-from: RFC-1

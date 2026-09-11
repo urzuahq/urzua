@@ -1,7 +1,7 @@
 ---
 Status: Draft
 Date: 2026-08-12
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 12 — The decision-before-implementation gate: refuse the merge, not the edit

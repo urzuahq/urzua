@@ -2,8 +2,8 @@
 Status: Superseded
 Embodiment: Implemented
 Date: 2026-09-04
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: ADR-23
 Derives-from: RFC-3
 ---

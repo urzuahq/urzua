@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-08-11
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 11 — Declared boundaries: a policy is enforced at the width it declares, by every tool that touches it

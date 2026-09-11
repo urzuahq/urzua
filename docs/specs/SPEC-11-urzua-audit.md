@@ -2,7 +2,7 @@
 Version: '0.3'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua audit` -- cross-record reconciliation: supersession reciprocity and dangling references.'
 Implements: ADR-30
 Parent: SPEC-1

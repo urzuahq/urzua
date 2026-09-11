@@ -2,7 +2,7 @@
 Version: '0.7'
 Date: 2026-08-20
 Status: Draft
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
 Implements: RFC-1, RFC-3, RFC-10, RFC-11
 Parent: SPEC-1

@@ -2,7 +2,7 @@
 Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `waiver` record type -- time-boxed, scoped exceptions to a check finding.'
 Implements: ADR-11
 Parent: —

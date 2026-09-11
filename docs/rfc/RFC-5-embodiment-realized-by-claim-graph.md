@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-07-30
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 5 — Embodiment as a schema-level concept; `realized_by` as a claim graph

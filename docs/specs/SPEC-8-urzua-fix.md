@@ -2,7 +2,7 @@
 Version: '0.3'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
 Parent: SPEC-1

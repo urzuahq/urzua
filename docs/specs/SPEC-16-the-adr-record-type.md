@@ -1,8 +1,8 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-08
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `adr` record type -- schema, required fields, and lifecycle for decision records.'
 Parent: —
 Implements: ADR-10
@@ -34,8 +34,8 @@ narrative_fields = []
 |---|---|---|
 | `Status` | `Proposed` \| `Accepted` \| `Rejected` \| `Superseded` | Terminal once `Accepted`/`Rejected`/`Superseded` — the decision text itself is then frozen; further evolution is a dated `## Amendment` section, never a silent edit (ADR-14). |
 | `Date` | `YYYY-MM-DD` | When decided, not when last touched. |
-| `Author` | a real identity | Resolved automatically by `urzua new` (`resolve_identity()`), same tiering `fix --apply` uses (RFC-2 §2). |
-| `Deciders` | one or more real identities | Free text today — not yet tool-resolved (MILE-18, rescoped to note `Author` already is). |
+| `Author` | a real identity, written bare | Resolved automatically by `urzua new` (`resolve_identity()`), same tiering `fix --apply` uses (RFC-2 §2). Written exactly as `resolve_identity()` emits it — a bare login, no `@` prefix. The `@` is decorative (nothing in any crate reads, strips, or validates it) and is a reserved YAML indicator, so a prefixed value is invalid as a plain scalar and has to be quoted to parse at all (BUG-18). |
+| `Deciders` | one or more real identities, written bare | Free text today — not yet tool-resolved (MILE-18, rescoped to note `Author` already is). Same bare-login form as `Author`, for the same reason (BUG-18). |
 | `Embodiment` | `Not started` \| `Specified` \| `Implemented` \| `Verified` \| `Drift detected` \| `Inactive` | Optional; computed-vs-stated consistency checked by `embodiment.consistency` (ADR-18) when `Realized-by` is also present. |
 | `Realized-by` | categorized locators (`spec:`/`code:`/`test:`), optional | The evidence `Embodiment` is computed from. |
 | `Stable-Id` | a ULID, optional | Backfilled by `migrate ids` (ADR-3/21) for records predating it. |
@@ -82,3 +82,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-08 | Corrected: replaced `Derives-from: RFC-1` with `Implements: ADR-10`. **Why:** the previous entry's premise was wrong -- `ADR-10` is exactly the single decision record `milestone`/`bug`/`waiver`'s own specs each point at (`Implements: ADR-N`), just missed when this spec was first written; `adr` is not an exception to that pattern after all. RFC-1 stays cited in References as the proposal ADR-10 decided. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = ["Derives-from"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing `pointer.resolution`'s prior hardcoded field list. Noted `Supersedes / Superseded-by`'s `urzua graph` `kind: pointer` labeling stays a separate, unchanged mechanism outside this axis. | **substantive** |
+> | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`/`Deciders` now state the bare-login form explicitly (BUG-18). The `@` prefix every hand-typed value in this corpus carried was decorative -- nothing in any crate read, stripped, or validated it -- while being a reserved YAML indicator, so it forced the quoting its own presence necessitated, and disagreed with what `resolve_identity()` has always emitted. All 132 `Author`/`Deciders` values across the corpus were backfilled to match in the same change. | **substantive** |
