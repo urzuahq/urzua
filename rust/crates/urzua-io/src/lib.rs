@@ -87,16 +87,41 @@ pub fn today() -> String {
 
 const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// RFC-0002 §2's identity tiering, reused by `urzua fix --apply` (ADR-0019):
-/// a verified source outranks free text (ADR-0031). `gh api user` first,
-/// then `git config user.name`, then explicit `--by` only once neither
-/// verified source is available -- never used to silently override an
-/// authenticated `gh` login. Every applied write needs a real identity, so
-/// this returns an error rather than a placeholder when none of the three
-/// resolve.
-pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<String, String> {
+/// `resolve_identity`'s result plus any non-fatal notice about it. Structured
+/// rather than a bare `eprintln!` so a caller can fold `warning` into its own
+/// JSON report instead of it landing as unparseable stderr prose.
+pub struct ResolvedIdentity {
+    pub name: String,
+    pub warning: Option<String>,
+}
+
+/// Identity tiering (RFC-0002 §2, amended by ADR-0031 in this repo's own
+/// records): `gh api user` wins even over an explicit `--by` (surfaced via
+/// `warning` on divergence, never silently discarding `--by`); `--by` wins
+/// over `git config user.name`. Errors rather than defaulting when none of
+/// the three resolve.
+pub fn resolve_identity(
+    explicit: Option<&str>,
+    repo_root: &Path,
+) -> Result<ResolvedIdentity, String> {
     if let Some(login) = gh_authenticated_login() {
-        return Ok(login);
+        let warning = match explicit {
+            Some(by) if by != login => Some(format!(
+                "--by '{by}' differs from the authenticated gh login '{login}' -- using '{login}'"
+            )),
+            _ => None,
+        };
+        return Ok(ResolvedIdentity {
+            name: login,
+            warning,
+        });
+    }
+
+    if let Some(by) = explicit {
+        return Ok(ResolvedIdentity {
+            name: by.to_string(),
+            warning: None,
+        });
     }
 
     if let Ok(output) = Command::new("git")
@@ -107,16 +132,15 @@ pub fn resolve_identity(explicit: Option<&str>, repo_root: &Path) -> Result<Stri
         if output.status.success() {
             let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !name.is_empty() {
-                return Ok(name);
+                return Ok(ResolvedIdentity {
+                    name,
+                    warning: None,
+                });
             }
         }
     }
 
-    if let Some(by) = explicit {
-        return Ok(by.to_string());
-    }
-
-    Err("could not resolve an identity (gh api user, git config user.name both unavailable) -- pass --by explicitly".to_string())
+    Err("could not resolve an identity (gh api user unavailable, git config user.name unset) -- pass --by explicitly".to_string())
 }
 
 /// `Command::output()` blocks indefinitely if `gh` hangs -- an
@@ -285,6 +309,11 @@ fn run_git(dir: &Path, args: &[&str]) -> Result<String, DiscoveryError> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::Mutex;
+
+    /// Serializes PATH-stubbing tests -- `std::env::set_var("PATH", ...)` is
+    /// process-wide and Rust runs tests in parallel threads.
+    static PATH_MUTEX: Mutex<()> = Mutex::new(());
 
     fn init_repo(dir: &Path) {
         let run = |args: &[&str]| {
@@ -355,11 +384,28 @@ mod tests {
     /// `resolve_identity`'s gh-unavailable fallback be tested deterministically
     /// without depending on whether this machine actually has `gh` authenticated.
     fn prepend_failing_gh_to_path() -> (PathBuf, String) {
-        let stub_dir =
-            std::env::temp_dir().join(format!("urzua-io-fake-gh-{}", std::process::id()));
+        prepend_stub_gh_to_path("exit 1\n")
+    }
+
+    /// A stub `gh` ahead of the real PATH that succeeds and reports `login`
+    /// -- lets the gh-wins-even-over-explicit-`--by` tier be tested
+    /// deterministically, the mirror of `prepend_failing_gh_to_path`.
+    fn prepend_successful_gh_to_path(login: &str) -> (PathBuf, String) {
+        prepend_stub_gh_to_path(&format!("echo '{login}'\nexit 0\n"))
+    }
+
+    fn prepend_stub_gh_to_path(script_body: &str) -> (PathBuf, String) {
+        let stub_dir = std::env::temp_dir().join(format!(
+            "urzua-io-fake-gh-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         fs::create_dir_all(&stub_dir).unwrap();
         let stub_gh = stub_dir.join("gh");
-        fs::write(&stub_gh, "#!/bin/sh\nexit 1\n").unwrap();
+        fs::write(&stub_gh, format!("#!/bin/sh\n{script_body}")).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -372,6 +418,7 @@ mod tests {
 
     #[test]
     fn resolve_identity_falls_through_to_git_config_when_gh_is_unavailable() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let (stub_dir, original_path) = prepend_failing_gh_to_path();
 
         let tmp = std::env::temp_dir().join(format!("urzua-io-identity-{}", std::process::id()));
@@ -384,21 +431,20 @@ mod tests {
         fs::remove_dir_all(&tmp).ok();
         fs::remove_dir_all(&stub_dir).ok();
 
+        let result = result.unwrap();
         assert_eq!(
-            result.as_deref(),
-            Ok("test"),
+            result.name, "test",
             "with gh unavailable, git config user.name must win over nothing"
         );
+        assert!(result.warning.is_none());
     }
 
+    /// gh unavailable, git config unset, explicit --by given -> --by
+    /// resolves. Doesn't cover --by vs. a present git config -- see
+    /// `resolve_identity_prefers_explicit_by_over_git_config`.
     #[test]
     fn resolve_identity_never_lets_explicit_by_override_a_verified_gh_login() {
-        // No stub here: this asserts the *priority claim* structurally -- an
-        // explicit --by is only consulted after both gh and git config have
-        // already been tried, never checked first. Exercised via the
-        // gh-unavailable path since a real authenticated gh session isn't
-        // guaranteed in CI; the ordering itself (gh, then git config, then
-        // explicit) is what ADR-0031 fixed and what this pins.
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let (stub_dir, original_path) = prepend_failing_gh_to_path();
 
         let tmp = std::env::temp_dir().join(format!("urzua-io-identity-by-{}", std::process::id()));
@@ -408,13 +454,7 @@ mod tests {
             .current_dir(&tmp)
             .output()
             .unwrap();
-        // Deliberately no user.name configured anywhere -- forces the
-        // fallthrough to --by, proving --by is reachable at all once gh and
-        // git config both fail, not that it's ignored entirely.
-        // GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM point git at an empty file
-        // instead of this machine's real global config, which may well have
-        // a real user.name set and would otherwise make this test depend on
-        // whoever's machine it runs on.
+        // Isolates from this machine's real global git config.
         std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
         std::env::set_var("GIT_CONFIG_SYSTEM", "/dev/null");
 
@@ -426,7 +466,50 @@ mod tests {
         fs::remove_dir_all(&tmp).ok();
         fs::remove_dir_all(&stub_dir).ok();
 
-        assert_eq!(result.as_deref(), Ok("explicit-name"));
+        let result = result.unwrap();
+        assert_eq!(result.name, "explicit-name");
+        assert!(result.warning.is_none());
+    }
+
+    #[test]
+    fn resolve_identity_prefers_explicit_by_over_git_config() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (stub_dir, original_path) = prepend_failing_gh_to_path();
+
+        let tmp =
+            std::env::temp_dir().join(format!("urzua-io-identity-by2-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp); // sets local user.name to "test"
+
+        let result = resolve_identity(Some("explicit-name"), &tmp);
+
+        std::env::set_var("PATH", original_path);
+        fs::remove_dir_all(&tmp).ok();
+        fs::remove_dir_all(&stub_dir).ok();
+
+        let result = result.unwrap();
+        assert_eq!(result.name, "explicit-name");
+        assert!(result.warning.is_none());
+    }
+
+    #[test]
+    fn resolve_identity_lets_gh_win_over_a_differing_explicit_by() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (stub_dir, original_path) = prepend_successful_gh_to_path("gh-login");
+
+        let tmp = std::env::temp_dir().join(format!("urzua-io-identity-gh-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+
+        let result = resolve_identity(Some("explicit-name"), &tmp);
+
+        std::env::set_var("PATH", original_path);
+        fs::remove_dir_all(&tmp).ok();
+        fs::remove_dir_all(&stub_dir).ok();
+
+        let result = result.unwrap();
+        assert_eq!(result.name, "gh-login");
+        assert!(result.warning.unwrap().contains("explicit-name"));
     }
 
     fn commit_all(dir: &Path, message: &str) -> String {

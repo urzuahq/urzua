@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
@@ -232,6 +232,16 @@ and a rule set narrowed by a config error yields a confident zero over a swept c
 `status` is `not-run` — never `ok` — when zero files were selected. Keyed on the file count, not on
 a missing `base`.
 
+**The block above is illustrative (RFC-3's original camelCase framing), not the shipped shape** --
+the real field names are `snake_case` (`files_examined`, `rules_executed`), `status` is the real
+`ReportStatus` enum (`ok | findings-present | not-run`, not the four values shown above), and there
+is no stderr rendering at all (ADR-26/46: stdout is the only stream, unconditionally). This drift
+predates this revision and is filed separately (see the new bug this revision's own change references
+in `docs/bugs/`) rather than fixed here. What IS new in this revision: the real, shipped shape also
+carries an optional `notices: [{severity, subject, message}]` array (ADR-46) -- non-fatal
+observations (`Info`/`Warning` only) that never affect `status`/exit code, omitted entirely when
+empty.
+
 ## Exit codes
 
 | Code | When |
@@ -299,3 +309,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-08 | Reworded the header-format-consistency seed rule's rationale (§"The two seed rules") from a present-tense claim about the corpus's current state to historical framing. **Why:** ADR-33/ADR-42's corpus-wide `yaml-frontmatter` migration made the original wording -- "this corpus of 22 records carries three header formats" -- false the moment it landed; caught by adversarial review before the migration shipped, rather than left as another stale-prose instance for a future pass to find. | **substantive** |
 > | 2026-09-08 | Bumped to `0.5`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | Noted `notices` as a real, shipped addition to the output shape (ADR-46), and named -- rather than silently compounded -- the pre-existing drift between §Output contract's illustrative RFC-3-era JSON block and the real shipped shape (camelCase vs. `snake_case`, stderr rendering that no longer exists, a `status` enum that doesn't match `ReportStatus`). Filed as its own bug rather than fixed in this revision. | **substantive** |

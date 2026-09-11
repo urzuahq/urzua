@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-08-20
 Status: Draft
 Author: '@beauwilliams'
@@ -103,33 +103,36 @@ for.
   not parse is surfaced, never silently excluded — the whole point of the command is to say what it
   found.
 
-## Output
+## Output (shipped)
 
-Same contract as every other command (RFC-3), with `filesExamined` counting the files adopt
-inspected:
+Adopt mode only -- greenfield mode, `--types`/`--dir`, and `unclassified`-file tracking below this
+heading are still the Draft, not-yet-built design; the actual shipped shape (`Report`/ADR-46) is
+narrower:
 
 ```json
 {
-  "status": "ok | warn | error | not-run",
-  "filesExamined": 22,
-  "scope": { "source": "tracked-sweep", "base": null },
-  "created": [".urzua/config.toml", ".urzua/templates/adr.md"],
-  "adopted": [{ "type": "adr", "dir": "docs/adr", "records": 5 }],
-  "unclassified": ["docs/adr/_template.md"]
+  "status": "ok",
+  "dry_run": false,
+  "config_path": ".urzua/config.toml",
+  "proposed": [{ "name": "adr", "dir": "docs/adr", "record_count": 5 }],
+  "written": true
 }
 ```
 
-`unclassified` is not an error field. On a first adopt it is the most useful thing on screen, and in
-this repository its first entry would be the two templates — which is the finding that produced the
-layout above.
+`config_toml` (the full rendered config) is present only when `dry_run: true` -- there's nothing
+else to read the preview from, since nothing was written. A real write omits it, matching `new`'s own
+established convention (SPEC-12): the caller reads the file at `config_path` if it needs the content.
 
-## Exit codes
+## Exit codes (shipped)
 
 | Code | When |
 |---|---|
-| 0 | initialized, or already initialized and unchanged |
-| 1 | adopt completed with unclassified files |
-| 2 | refused — existing config, unwritable path, unknown type |
+| 0 | proposal computed (dry-run) or config written |
+| 2 | refused via `CouldNotRun` -- existing config, no record-shaped files found, unwritable path |
+
+Exit `1` ("adopt completed with unclassified files") is part of the Draft design above, not built --
+adopt today classifies every record-shaped file it finds by directory; nothing is reported as
+unclassified.
 
 ## Success criteria
 
@@ -172,3 +175,4 @@ migration without a reverse-reference scan is the documented data-loss shape.
 > | 2026-08-20 | Initial spec. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | Added `## Output (shipped)`/`## Exit codes (shipped)` documenting the real, narrower `InitReport` shape (BUG-20, ADR-46), separated from the Draft's own richer aspirational design (greenfield mode, `--types`/`--dir`, `unclassified` tracking, exit 1) so a reader can tell which parts are built. | **substantive** |

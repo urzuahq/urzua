@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -37,10 +37,16 @@ command's output contract.
 }
 ```
 
+(`notices` -- see below -- is omitted here since it's empty in this example; present, non-empty, only
+when there's a real observation to report.)
+
 `status` is the worst severity across `checks` (`error` beats `warn` beats `ok`). Exit codes: `2` if
 `.urzua/config.toml` doesn't exist at all (run `urzua init` first); `1` if the config fails to parse,
 or any check reports `error`; `0` otherwise — a `warn`-only report still exits `0`, since only an
-error blocks.
+error blocks. That 2/1/0 split is carried on an explicit, non-serialized field (ADR-46) precisely
+*because* the first two cases both report the same `status: error` -- `status` alone can't tell them
+apart, so the exit code doesn't try to derive it from `status`. `notices` (ADR-46) is omitted when
+empty, same as every other command's report.
 
 ## Checks, by id (shipped)
 
@@ -82,3 +88,4 @@ than compounded:
 > | 2026-09-07 | Initial spec, split out of SPEC-3. **Why:** doctor is a real, standalone feature area (its own output shape, its own bug history) that had been folded into configuration's spec by default rather than by a deliberate call; MILE-77's review named it as deserving its own spec. Written the same day BUG-4 (plain-text output) was found and fixed, so the shipped shape reflects the fix, not the pre-fix behavior. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | Added `notices` to the documented shape and explained why the 2/1/0 exit-code split lives on a separate field rather than being derived from `status` (ADR-46). | **substantive** |
