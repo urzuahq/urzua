@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-08
 Status: Accepted
 Author: beauwilliams
@@ -36,7 +36,7 @@ narrative_fields = []
 | `Status` | `Draft` \| `Accepted` | Unlike `adr`/`rfc`, a spec's `Status` doesn't track `Rejected`/`Superseded` states — a spec that's wrong gets corrected in place (that's the whole point of the living-document model), not superseded the way a frozen ADR would be. |
 | `Date` | `YYYY-MM-DD` | The spec's original creation date — stays fixed across revisions (confirmed against `SPEC-1` through `SPEC-15`: none update `Date` on a version bump, only the revision log's own dated rows track when each change landed). |
 | `Version` | `0.1`, `0.2`, ... | Bumped on every substantive or structural revision (ADR-14's amendment). |
-| `Author` | a real identity | Resolved automatically by `urzua new`, same as `adr`/`rfc` (MILE-74's accountability decision, MILE-78's precedent). Required as of this version — backfilled onto every pre-existing spec that lacked it. |
+| `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new`, same as `adr`/`rfc` (MILE-74's accountability decision, MILE-78's precedent). Required as of version `0.2` — backfilled onto every pre-existing spec that lacked it. Written without a decorative `@` prefix (BUG-18, SPEC-16); note MILE-78's backfill predates that and used the now-retired `'@handle'` form, corrected corpus-wide by BUG-18. |
 | `Subject` | one line, free text | What feature, record type, schema, or practice the spec is actually about — readable at a glance without opening `Purpose`. No cross-reference or backlink semantics; not resolved by any rule. Required (`MILE-91`), backfilled onto every pre-existing spec. |
 | `Stable-Id` | a ULID, optional | Assigned unconditionally by `urzua new spec` (ADR-21: every type gets one), first exercised by `SPEC-19` — no earlier spec was ever created through the tool. |
 | `Embodiment` | optional | `SPEC-1`'s own field, kept as a project-wide optional convention rather than treated as its historical baggage (MILE-74) — any spec may use it, none but `SPEC-1` currently do. |
@@ -80,3 +80,4 @@ than `SPEC-1`-specific, `Implements`/`Parent` declared since every spec already 
 > | 2026-09-08 | Added `Stable-Id` to `known_fields`. **Why:** found live creating the first-ever tool-generated spec (`SPEC-19`) -- `render_synthetic_yaml` assigns every type a `Stable-Id` unconditionally (ADR-21), but no `spec` had ever been created through `urzua new` before MILE-74 made that possible, so this gap sat unexercised until now. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = ["Derives-from", "Implements", "Parent"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing the "resolved regardless of per-type declaration" text above -- that was accurate before this version but became false the moment `pointer.resolution` became config-driven. | **substantive** |
+> | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`'s row stated the resolution mechanism but not the written form, and cited MILE-78 as precedent -- MILE-78 being the record that established the `'@handle'` form BUG-18 has now retired, so the citation pointed at the superseded convention. Both corrected. Also fixed "required as of this version", which was written when this spec was at `0.2` and silently re-pointed at every later version. | **substantive** |
