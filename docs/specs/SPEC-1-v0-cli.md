@@ -1,5 +1,5 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-07-29
 Status: Draft
 Embodiment: Not started
@@ -74,10 +74,11 @@ failed, whatever its test coverage says.
 ## Commands
 
 ### `urzua init`
-**Specified in full by SPEC-5.** Selects which record types the repository keeps, writes
-`.urzua/` with config and templates, and adopts an existing corpus in place without moving files.
-Absent from this spec's original command surface — the gap surfaced when the bootstrap plan needed
-it.
+**Specified in full by SPEC-5** (still `Draft`: only adopt mode, with `--dry-run`, is built).
+Adopts an existing corpus in place without moving files, inferring record types from what's already
+on disk and writing `.urzua/config.toml`. Type *selection* (`--types`/`--dir`, built-in profiles)
+and template creation are SPEC-5's target design, not current behavior. Absent from this spec's
+original command surface — the gap surfaced when the bootstrap plan needed it.
 
 ### `urzua new <type> [title]`
 **Specified in full by SPEC-12.** Creates a record from the configured template with a stable ID
@@ -122,6 +123,33 @@ what a newly-required field would break before it's added to config.
 
 ### `urzua export --format=agdr` / `urzua import`
 AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields.
+
+## Output contract
+
+**Every command implements `Report` and prints through one shared `emit()` function (ADR-46).**
+Stdout is the only stream, success or failure, every invocation. No stderr for anything this
+codebase's own code can structure into JSON, including genuine errors (ADR-26's amendment).
+
+- **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
+  `ExplainReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
+  `DoctorReport`, `CouldNotRun`)
+  stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
+  no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
+  and was killed by a confirmed duplicate-JSON-key bug before it shipped.
+- **`Notice` carries a non-fatal observation an agent can pattern-match on** — `severity`
+  (`Info`/`Warning`, deliberately never `Error`), `subject` (a per-emitter constant, e.g.
+  `"identity"`), `message`. A `notices` field never changes a report's exit code; this is structural
+  (the type has no `Error` variant to set), not a convention someone could violate by mistake.
+- **Exit code is a channel independent of stdout/stderr content.** `Report::exit_code()` drives it —
+  0 clean, 1 blocking findings, 2 could not run — the same contract a CI script gates on (`urzua
+  check docs/ || exit 1`) whether output is JSON, plain text, or nothing at all.
+- **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
+  JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
+  a machine-format flag.
+- **A `std::panic::set_hook` covers the one gap `Report`/`emit()` can't reach**: an unexpected panic
+  prints a minimal ad hoc JSON object to stdout before the process exits, instead of Rust's default
+  raw-text-to-stderr behavior. Not routed through `Notice`/`Report` — a panic is a lower-level escape
+  hatch, not another instance of the five-command contract.
 
 ## Configuration
 
@@ -187,6 +215,9 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-07 | `urzua new` emits type-prefixed filenames (`ADR-36-slug.md`) going forward (ADR-36); legacy `NNNN-slug.md` filenames never get renamed and resolve identically forever. Caught and fixed a second, independent instance of BUG-2's defect class in `filename_title_consistency`'s own filename/H1 parsing. | **substantive** |
 > | 2026-09-07 | Extended the child-spec table with SPEC-6, 8-15; shrank `new`/`fix`/`audit`/`explain`/`graph`/`migrate`'s inline `## Commands` prose down to one-line pointers, matching how `init`/`check` already point to SPEC-5/SPEC-2 instead of duplicating their design. **Why:** those commands got their own specs (MILE-77) and the inline prose had become a second, independently-drifting description of the same design -- no rule said which one won if they ever disagreed. `SPEC-3` entry corrected to no longer claim `doctor` (split out to SPEC-15). | **structural** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | Added the `## Output contract` section (`ADR-46`, `BUG-19`): one shared `Report`/`Notice`/`emit()` contract every command implements, replacing five independently-hand-rolled JSON shapes. **Why:** `check`, `fix`, `new`/`explain`/`graph`/`doctor` each printed a different, incompatible shape, contradicting `ADR-7`'s own "every future command must emit this same shape" rule; a real duplicate-JSON-key bug was found and killed in an earlier draft of this design (a generic envelope composed in via `#[serde(flatten)]`) before it shipped. | **substantive** |
+> | 2026-09-11 | Corrected this same section's opening sentence, which overclaimed "every command" when `urzua init`/`urzua migrate ids` are named exceptions two sentences later. **Why:** caught by review before merge -- the section contradicted itself within four lines. | **structural** |
+> | 2026-09-11 | "Every command" is now literally true: `init`/`migrate ids` gained real `Report` types (BUG-20), so the exception carved out above is removed rather than left stale. `§urzua init` also corrected -- it claimed type selection and template creation, neither of which is built (SPEC-5 is still `Draft` for exactly that reason). | **substantive** |
 
 ## Acceptance test: the three-corpus suite
 

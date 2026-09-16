@@ -75,13 +75,13 @@ pub fn apply_waivers(findings: &mut [Finding], waivers: &[Waiver], today: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::report::Severity;
+    use crate::report::FindingSeverity;
     use std::path::PathBuf;
 
     fn finding(rule: &str, file: &str) -> Finding {
         Finding {
             rule: rule.to_string(),
-            severity: Severity::Error,
+            severity: FindingSeverity::Error,
             file: PathBuf::from(file),
             line: None,
             message: "x".to_string(),

@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -29,6 +29,25 @@ backfill timestamps from git history is a named, tracked simplification, not sil
 since nothing in the schema currently reads or sorts by a stable ID's embedded timestamp.
 
 `urzua-id::StableId::generate()` wraps `ulid::Ulid::generate()`.
+
+**Output (shipped, ADR-46)**:
+
+```json
+{
+  "status": "ok",
+  "apply": true,
+  "missing": ["docs/adr/0001-x.md"],
+  "results": [
+    { "record": "docs/adr/0001-x.md", "outcome": "applied" }
+  ]
+}
+```
+
+`results` is present only on `--apply` (a dry run has nothing to report per-file beyond `missing`
+itself). Each result's `outcome` is `applied`, `skipped` (no header-shaped region found -- carries an
+`error` message), or `failed` (the write itself failed -- also carries an `error` message). Exit code
+is 1 if any result is `failed`, 0 otherwise -- `skipped` does not affect it, since it isn't a write
+failure.
 
 ## `urzua migrate schema --report --field <Name>`
 
@@ -66,3 +85,4 @@ missing if invoked without both `--report` and `--field <Name>`, rather than doi
 > | 2026-09-07 | Initial spec, bundling `migrate ids` and `migrate schema` since SPEC-1 already treats them as one feature area under one verb. **Why:** MILE-77 found `migrate` documented only as two separate ADRs while comparable-complexity command areas (`check`, `init`) had specs. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | Added `migrate ids`'s output contract (`missing`/`results`, BUG-20, ADR-46) -- previously undocumented, since the command printed plain-text prose rather than JSON. `--apply` now also exits 1 on a real write failure, matching `fix --apply`'s own signal for the same shape of outcome. | **substantive** |

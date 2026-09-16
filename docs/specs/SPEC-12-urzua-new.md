@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -18,9 +18,9 @@ template's own placeholder text for a human to pick.
 ## The three paths, in priority order
 
 1. **A checked-in template exists (`.urzua/templates/<type>.md`) — fill it in.** The H1's number and
-   title, `Date`, `Author` (resolved the same way `fix --apply` resolves an identity: explicit `--by`
-   wins outright, else `gh api user`, else `git config user.name` — SPEC-8's identity tiering,
-   reused rather than redesigned), and a freshly generated `Stable-Id` line inserted right after the
+   title, `Date`, `Author` (resolved the same way `fix --apply` resolves an identity: `gh api user`
+   wins even over an explicit `--by`, which wins over `git config user.name` — SPEC-8's identity
+   tiering, reused rather than redesigned), and a freshly generated `Stable-Id` line inserted right after the
    header's first line. Everything else — `Status: Proposed | Accepted | ...`, `Deciders`, an
    `Embodiment` starting value — stays exactly the enumerated placeholder text already in the
    template, because those are decisions a human makes, not values `new` can compute.
@@ -46,8 +46,10 @@ Filenames emitted going forward carry the type's prefix (`ADR-38-slug.md`, ADR-3
 
 ## Output
 
-Stdout is the JSON report (ADR-23): `path`, `display_number`, `stable_id`. No other fields — `new`
-does not echo the generated content back; the caller reads the file at `path` if it needs to.
+Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id`, plus an optional
+`notices` array (ADR-46) carrying non-fatal observations -- e.g. an explicit `--by` diverging from
+the identity `resolve_identity` actually used -- omitted entirely when empty. `new` still does not
+echo the generated content back; the caller reads the file at `path` if it needs to.
 
 ## Purity boundary
 
@@ -81,3 +83,5 @@ take content and parameters, returning a string.
 > | 2026-09-07 | Initial spec. **Why:** MILE-77 found `new` documented only as an ADR while comparable-complexity command areas (`check`, `init`) had specs. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | §Output's "No other fields" is now false: `notices` (ADR-46) can carry a non-fatal identity-divergence observation. **Why:** this spec's own literal wording would otherwise contradict the shipped output the moment `--by` diverges from an authenticated `gh` login. | **substantive** |
+> | 2026-09-11 | Corrected §"The three paths"' identity-resolution order, stale since ADR-31's amendment (`gh api user` wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). **Why:** caught by review before merge; the same stale order SPEC-8 was already corrected for elsewhere in this same change. | **substantive** |
