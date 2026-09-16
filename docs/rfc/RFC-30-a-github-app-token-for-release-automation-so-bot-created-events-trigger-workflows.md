@@ -1,10 +1,19 @@
 ---
 Stable-Id: 01M2MMFZ5XEV4R5BX3DFGZ5PZM
-Status: Draft
+Status: Rejected
 Date: 2026-09-16
 Author: beauwilliams
 ---
 # 30 — A GitHub App token for release automation, so bot-created events trigger workflows
+
+> **Rejected (2026-09-16) by ADR-47.** Not because the approach was wrong — it would have worked —
+> but because every motivation below is now covered without a new external identity or a private key
+> to hold: the tag trigger by `BUG-28`, the stale label payload by `BUG-34`, and the held `ci` run by
+> `ADR-47`, which runs the checks inside `publish-release.yml` instead of asking whether another
+> workflow ran. `ADR-47` also verifies the exact released commit, which this proposal would not have.
+>
+> Kept rather than deleted: "why didn't we just use an App token?" is the obvious question to ask in
+> six months, and the answer is below.
 
 ## Summary
 
