@@ -50,9 +50,20 @@ pub enum ReportStatus {
     NotRun,
 }
 
+/// How the examined set was selected. A declared contract value (SPEC-0002),
+/// not a rendering of whichever internal type happened to produce it -- a
+/// `Debug` rendering makes an ordinary rename a silent contract change
+/// (BUG-0025). Lives here rather than in `urzua-io` because the value is part
+/// of the output contract, and `urzua-core` stays free of I/O (ADR-0005).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScopeSource {
+    TrackedSweep,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ScopeInfo {
-    pub source: String,
+    pub source: ScopeSource,
     pub record_types: Vec<String>,
 }
 
@@ -283,6 +294,7 @@ impl Report for MigrateSchemaReport {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     fn warning_notice() -> Notice {
@@ -303,7 +315,7 @@ mod tests {
             files_examined: 1,
             rules_executed: vec![],
             scope: ScopeInfo {
-                source: "test".to_string(),
+                source: ScopeSource::TrackedSweep,
                 record_types: vec![],
             },
             blocking: false,
