@@ -1,0 +1,10 @@
+# Paths whose change can affect what an installer receives (ADR-0049).
+# Read by ci.yml's changeset gate: a PR touching none of these cannot need a
+# changelog entry, so it is not asked for one.
+#
+# Each line is a prefix. Deliberately NOT the same list as publish-release.yml's
+# packaging step, which copies files *into* the archive -- rust/ is source that
+# produces the binary, not a file that ships. See the ADR.
+rust/
+README.md
+LICENSE

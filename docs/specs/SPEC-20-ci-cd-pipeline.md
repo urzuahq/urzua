@@ -31,8 +31,13 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   `embodiment.consistency`'s drift check (`ADR-32`) reads git blame/log history on locators, and a
   shallow checkout makes it silently unable to detect anything, not an error.
 - **`changeset` job**: requires a `.changeset/*.md` fragment added in the diff, or the `no-changeset`
-  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only. The label is read from **the
-  PR's current state, not from `github.event`** (`BUG-34`): a payload is a snapshot taken when the
+  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only, and **only asks at all when the
+  PR touches a path declared in `.github/release-paths`** (`rust/`, `README.md`, `LICENSE` — `ADR-49`).
+  A PR touching none of them cannot affect what an installer receives, so it is not asked for a
+  judgement the repository's structure already determines; it passes with a log line saying so. That
+  set is deliberately not `publish-release.yml`'s packaging list: this names paths whose *change* can
+  affect the archive, that one names files copied *into* it. When the gate does apply, the label is
+  read from **the PR's current state, not from `github.event`** (`BUG-34`): a payload is a snapshot taken when the
   event fired, and a PR opened by automation is labelled in a later step, so the payload never
   carries it and a re-run replays the same stale snapshot. The job therefore always starts and
   reports why it skipped, rather than being skipped by a job-level `if:`. The `pull_request:` trigger
