@@ -45,9 +45,11 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   `CreatePullRequest`), which compiles every accumulated `.changeset/*.md` fragment plus any
   Conventional Commits since the last tag into a version bump and `CHANGELOG.md` section. The job
   installs the pinned toolchain and a cargo cache first, because that `cargo check` needs both
-  (`BUG-27`). **No `continue-on-error`**: the workflow's `if:` guard already skips the one expected
-  no-op — its own release commit — so anything reaching the knope step is a real failure. Swallowing
-  it hid a six-day release outage once.
+  (`BUG-27`). **No `continue-on-error`**: swallowing the failure hid a six-day release outage once.
+  The cost is that `knope prepare-release` treats nothing-to-release as an error, so **every
+  `no-changeset` merge turns this workflow red** (`BUG-33`) — the guard skips only its own release
+  commit, not a routine merge with no fragment. The failure direction is the safe one; a gate that
+  is red on routine merges is still a gate nobody reads.
 - The `cargo check` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
   version line — it has no knowledge of `Cargo.lock`, which independently records each workspace
   member's resolved version and goes stale the instant `Cargo.toml` changes without it (`BUG-14`,
@@ -71,9 +73,11 @@ tag-triggered build workflow silently never runs — publishing a release with n
 error. `release.yml` previously held the last three jobs and is deleted.
 
 - **`verify-ci`**: refuses to publish unless the `ci` check-run concluded `success` for the tree
-  being released. Checks the release PR's **head sha**, not the merge commit — the head has
-  definitively finished (it gated the merge) while `ci` on the merge commit races this workflow. Same
-  tree either way: the merge is a squash of a PR whose checks passed.
+  being released. Checks the release PR's **head sha**, not the merge commit, because `ci` on the
+  merge commit races this workflow. It does **not** work because the head "gated the merge" — `main`
+  has no branch protection, so nothing gates any merge, and the release PR is mergeable with no
+  checks at all. In practice this gate asks whether a human approved the held `ci` run: merging
+  before that approval publishes nothing and leaves `main` bumped with no tag.
 - **`release`**: runs knope's `release` workflow (just the `Release` step) — tags the now-current
   version and creates the GitHub Release, with the compiled changelog as its notes since `[github]`
   config is present. Outputs the resolved tag, read from the same anchored `rust/Cargo.toml` line
@@ -89,9 +93,18 @@ error. `release.yml` previously held the last three jobs and is deleted.
 - GitHub Release binaries only (`ADR-13`) — not published to crates.io; `Cargo.lock` is committed for
   this reason (a binary, not a library other crates depend on).
 
-**Known manual step:** the release PR's own `ci` run is triggered by a bot-pushed branch, so GitHub
-holds it in `action_required` until a human approves it. Undocumented until `BUG-28`; removing it
-needs either a PAT or moving the checks inside this workflow, neither decided yet.
+**Known manual steps — two, not one.** Both stem from `GITHUB_TOKEN` events not triggering
+workflows, the same cause as `BUG-28`:
+
+1. The release PR's `ci` run is held at `action_required` until a human approves it.
+2. Approving it runs the **stale `opened` payload**, captured before knope's own labelling step, so
+   the changeset job runs when it should skip and fails. A human must remove and re-add the
+   `no-changeset` label to fire a `labeled` event from a real actor (`BUG-34`). `BUG-15`'s
+   `labeled`/`unlabeled` trigger types exist for exactly this and are inert here, because the label
+   is applied with `GITHUB_TOKEN`.
+
+Neither step is discoverable from the failure: the job asks for a label that is already present.
+`RFC-30` proposes removing both by acting as a GitHub App.
 
 ## `knope.toml` / `.changeset/*.md` — the fragment format (`ADR-29`)
 
@@ -139,4 +152,5 @@ needs either a PAT or moving the checks inside this workflow, neither decided ye
 > |---|---|---|
 > | 2026-09-10 | Initial spec. **Why:** the CI/CD pipeline had real decisions spread across four ADRs and three workflow files with no single buildable reference — found live while building `ADR-45`'s two-step release flow, the same "coherent feature area, decided editorially" gap `ADR-41` already named for record types, here applied to infrastructure for the first time. | **structural** |
 > | 2026-09-10 | Documented two fixes found on this mechanism's first real run, same-day as `ADR-45` merged: `BUG-14` (`prepare-release`'s missing `Cargo.lock` regeneration) and `BUG-15` (`ci.yml`'s changeset gate missing `labeled`/`unlabeled` trigger types). **Why:** this spec's own standing purpose is to stay the accurate, buildable reference — leaving it describing the pre-fix mechanism the same day it changed would be the exact doc-drift gap this project's own `AGENTS.md` now explicitly guards against. | **substantive** |
+> | 2026-09-16 | Corrected three claims, all disproved by the `v0.2.1` run: the `no-changeset` no-op (`BUG-33`), `verify-ci`'s "it gated the merge" justification (`main` is unprotected), and the manual gate being one step rather than two (`BUG-34`). **Why:** this spec's standing purpose is to be the accurate, buildable reference, and each of these read as settled while being false -- the kind of claim that survives precisely because it is written down. | **substantive** |
 > | 2026-09-16 | Rewrote the release section: `publish-release.yml` now owns the whole publish (tag, release, binaries, upload) and `release.yml` is deleted. Documented the previously-undocumented manual approval the release PR's own `ci` run requires. **Why:** `BUG-28` -- the tag is bot-pushed, GitHub never triggers a workflow from a `GITHUB_TOKEN` event, so the separate tag-triggered build workflow silently never ran and `v0.2.0` published with zero binaries. This spec described a coupling that did not exist. | **substantive** |
