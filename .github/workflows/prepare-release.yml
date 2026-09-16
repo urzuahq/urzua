@@ -46,17 +46,27 @@ jobs:
           sudo mv knope-x86_64-unknown-linux-musl/knope /usr/local/bin/knope
           knope --version
 
+      # knope.toml's prepare-release runs `cargo check` to regenerate
+      # Cargo.lock after the version bump (BUG-0014), so this job needs a
+      # real toolchain and a populated registry -- without them that step
+      # cannot resolve any external dependency and knope aborts (BUG-0027).
+      - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+
       - name: configure git identity for the release-prep commit
         run: |
           git config user.name "urzua-release-bot"
           git config user.email "urzua-release-bot@users.noreply.github.com"
 
-      # Fails fast (PrepareRelease, or the commit step right after it, when
-      # there's nothing pending) and every later step is skipped -- expected
-      # on a routine push with no unreleased changesets, so the job itself
-      # doesn't go red for it.
+      # No continue-on-error: the `if:` guard above already skips the one
+      # expected no-op case (this workflow's own release commit), so any
+      # failure reaching here is real. Swallowing it hid a six-day release
+      # outage once (BUG-0027) -- a workflow that reports success while
+      # doing nothing is the failure this project exists to prevent.
       - name: open or update the release PR (ADR-0045)
         run: knope prepare-release --verbose
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        continue-on-error: true
