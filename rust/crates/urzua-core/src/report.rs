@@ -234,7 +234,11 @@ pub enum FixStatus {
     NotRun,
     PartialFailure,
     Ok,
+    /// Detect mode found repairs, none applied yet.
     RepairsAvailable,
+    /// Apply mode wrote one or more repairs, no failures -- distinct from
+    /// `RepairsAvailable` so a completed apply doesn't read as still-pending.
+    Applied,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -251,7 +255,7 @@ impl Report for FixReport {
         match self.status {
             FixStatus::NotRun => ExitCode::from(2),
             FixStatus::PartialFailure => ExitCode::from(1),
-            FixStatus::Ok | FixStatus::RepairsAvailable => ExitCode::from(0),
+            FixStatus::Ok | FixStatus::RepairsAvailable | FixStatus::Applied => ExitCode::from(0),
         }
     }
 }

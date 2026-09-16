@@ -74,10 +74,11 @@ failed, whatever its test coverage says.
 ## Commands
 
 ### `urzua init`
-**Specified in full by SPEC-5.** Selects which record types the repository keeps, writes
-`.urzua/` with config and templates, and adopts an existing corpus in place without moving files.
-Absent from this spec's original command surface — the gap surfaced when the bootstrap plan needed
-it.
+**Specified in full by SPEC-5** (still `Draft`: only adopt mode, with `--dry-run`, is built).
+Adopts an existing corpus in place without moving files, inferring record types from what's already
+on disk and writing `.urzua/config.toml`. Type *selection* (`--types`/`--dir`, built-in profiles)
+and template creation are SPEC-5's target design, not current behavior. Absent from this spec's
+original command surface — the gap surfaced when the bootstrap plan needed it.
 
 ### `urzua new <type> [title]`
 **Specified in full by SPEC-12.** Creates a record from the configured template with a stable ID
@@ -125,15 +126,13 @@ AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fie
 
 ## Output contract
 
-**Every command except `urzua init` and `urzua migrate ids` implements `Report` and prints through
-one shared `emit()` function (ADR-46).** Those two remain plain-text prose end to end -- a real,
-named gap (BUG-20), not a design choice -- so "unconditionally" below describes the other eight
-commands, not literally every invocation of the binary. For everything else: stdout is the only
-stream, success or failure, every invocation. No stderr for anything this codebase's own code can
-structure into JSON, including genuine errors (ADR-26's amendment).
+**Every command implements `Report` and prints through one shared `emit()` function (ADR-46).**
+Stdout is the only stream, success or failure, every invocation. No stderr for anything this
+codebase's own code can structure into JSON, including genuine errors (ADR-26's amendment).
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
-  `ExplainReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `DoctorReport`, `CouldNotRun`)
+  `ExplainReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
+  `DoctorReport`, `CouldNotRun`)
   stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
   no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
   and was killed by a confirmed duplicate-JSON-key bug before it shipped.
@@ -218,6 +217,7 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Added the `## Output contract` section (`ADR-46`, `BUG-19`): one shared `Report`/`Notice`/`emit()` contract every command implements, replacing five independently-hand-rolled JSON shapes. **Why:** `check`, `fix`, `new`/`explain`/`graph`/`doctor` each printed a different, incompatible shape, contradicting `ADR-7`'s own "every future command must emit this same shape" rule; a real duplicate-JSON-key bug was found and killed in an earlier draft of this design (a generic envelope composed in via `#[serde(flatten)]`) before it shipped. | **substantive** |
 > | 2026-09-11 | Corrected this same section's opening sentence, which overclaimed "every command" when `urzua init`/`urzua migrate ids` are named exceptions two sentences later. **Why:** caught by review before merge -- the section contradicted itself within four lines. | **structural** |
+> | 2026-09-11 | "Every command" is now literally true: `init`/`migrate ids` gained real `Report` types (BUG-20), so the exception carved out above is removed rather than left stale. `§urzua init` also corrected -- it claimed type selection and template creation, neither of which is built (SPEC-5 is still `Draft` for exactly that reason). | **substantive** |
 
 ## Acceptance test: the three-corpus suite
 

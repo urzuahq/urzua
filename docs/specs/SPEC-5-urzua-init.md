@@ -20,7 +20,13 @@ landscape is ADR-only; RFC-1's core+profile model spans types by design, and `in
 surface where a user sees that they may have ADRs, RFCs, specs and PRDs under one schema. `init`
 instantiates profiles — it does not invent a second concept.
 
-## The two modes, and which one matters
+**This spec's `Status` is `Draft` for a reason: only adopt mode, with `--dry-run`, is actually
+built.** `## Output (shipped)`/`## Exit codes (shipped)` describe exactly what exists today.
+Everything else below -- greenfield mode, `--types`/`--dir` flags, built-in profiles,
+unclassified-file tracking, the exit-1 case -- is the target design this spec argues for, not
+current behavior. Read the rest of this document as a proposal, not a manual.
+
+## The two modes, and which one matters (Draft -- only adopt is built)
 
 | Mode | Trigger | What it does |
 |---|---|---|
@@ -70,7 +76,10 @@ live, and no rule needs to know it exists.
 in `cache/` may be required for a correct run — a fresh clone with no cache produces identical
 results, only slower.
 
-## Type selection
+## Type selection (Draft -- not built)
+
+`init` today takes only `--dry-run`; none of the flags below exist, and there is no interactive
+mode or built-in profile set. Adopt infers types from what's already on disk instead.
 
 ```
 urzua init                          # interactive: pick types
@@ -93,21 +102,19 @@ for.
 
 ## Safety
 
-- **Never clobber.** An existing `.urzua/config.toml` is not overwritten. `init` reports what
-  exists and exits 2.
-- **Idempotent.** Re-running against an initialized repository is a no-op that reports the current
-  state — the same property that makes it safe in a provisioning script.
-- **`--dry-run` prints the plan and writes nothing**, and is the documented way to see what adopt
-  inferred before committing to it.
-- **Adopt reports what it could not classify**, by path. A file under a record directory that does
-  not parse is surfaced, never silently excluded — the whole point of the command is to say what it
-  found.
+- **Never clobber.** (Built.) An existing `.urzua/config.toml` is not overwritten. `init` reports
+  what exists and exits 2.
+- **Idempotent.** (Built, via the never-clobber refusal above -- a re-run exits 2, not 0.) A
+  re-run against an initialized repository changes nothing.
+- **`--dry-run` prints the plan and writes nothing** (built), and is the documented way to see what
+  adopt inferred before committing to it.
+- **Adopt reports what it could not classify**, by path. (Draft -- not built.) A file under a
+  record directory that does not parse would be surfaced rather than silently excluded; today adopt
+  reports only what it did classify.
 
 ## Output (shipped)
 
-Adopt mode only -- greenfield mode, `--types`/`--dir`, and `unclassified`-file tracking below this
-heading are still the Draft, not-yet-built design; the actual shipped shape (`Report`/ADR-46) is
-narrower:
+The real, shipped shape (`InitReport`/ADR-46):
 
 ```json
 {
@@ -130,15 +137,17 @@ established convention (SPEC-12): the caller reads the file at `config_path` if 
 | 0 | proposal computed (dry-run) or config written |
 | 2 | refused via `CouldNotRun` -- existing config, no record-shaped files found, unwritable path |
 
-Exit `1` ("adopt completed with unclassified files") is part of the Draft design above, not built --
+Exit `1` ("adopt completed with unclassified files") is part of the Draft design, not built --
 adopt today classifies every record-shaped file it finds by directory; nothing is reported as
 unclassified.
 
-## Success criteria
+## Success criteria (Draft -- criteria 1 and 2 describe unbuilt behavior)
 
 1. `urzua init --types adr,rfc,spec` on this repository produces a config under which
    `urzua check` runs, with both templates reported as unclassified rather than as errors.
-2. Re-running changes nothing and exits 0.
+   (`--types` and unclassified-reporting are both unbuilt.)
+2. Re-running changes nothing and exits 0. (Today it exits 2 -- the never-clobber refusal. Whether
+   a no-op re-run should exit 0 instead is an open question this spec hasn't resolved.)
 3. `--dry-run` output matches what a real run then does, byte for byte.
 4. Adopt moves no files, and a `git status` after it shows only `.urzua/` and `.gitignore`.
 

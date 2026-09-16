@@ -6,6 +6,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use urzua_core::header::HeaderShape;
 use urzua_core::report::{CouldNotRun, MigrateSchemaReport, Notice, Report, ReportStatus};
 
 use crate::discovery::{find_repo_root, load_config, load_records};
@@ -112,10 +113,21 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         };
 
         let id = urzua_id::StableId::generate();
+        let header_shape = config
+            .record_types
+            .get(&r.record_type)
+            .map(|cfg| cfg.header_shape)
+            .unwrap_or_default();
+        let new_line = match header_shape {
+            HeaderShape::YamlFrontmatter => format!("Stable-Id: {}", id.as_str()),
+            HeaderShape::BoldList => format!("- **Stable-Id:** {}", id.as_str()),
+            HeaderShape::Blockquote => format!("> Stable-Id: {}", id.as_str()),
+        };
         let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
-        // region.0 is the 1-indexed first header line; inserting at this
-        // 0-indexed Vec position places the new field right after it.
-        lines.insert(region.0, format!("> Stable-Id: {}", id.as_str()));
+        // region.0 is the 1-indexed first header line (the opening `---`
+        // for yaml-frontmatter); inserting at this 0-indexed Vec position
+        // places the new field right after it, valid for all three shapes.
+        lines.insert(region.0, new_line);
         let new_content = lines.join("\n") + "\n";
 
         let full_path = repo_root.join(&r.path);

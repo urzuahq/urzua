@@ -3,6 +3,7 @@
 //! -- scans the type's directory for the highest existing prefix and takes
 //! the next one.
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -118,18 +119,29 @@ pub fn run(
         urzua_core::new_record::slugify(&title)
     );
     let file_path = dir.join(&filename);
-    if file_path.exists() {
-        return emit(&CouldNotRun::from(format!(
-            "{} already exists -- refusing to overwrite",
-            file_path.display()
-        )));
-    }
-
-    if let Err(e) = std::fs::write(&file_path, content) {
-        return emit(&CouldNotRun::from(format!(
-            "could not write {}: {e}",
-            file_path.display()
-        )));
+    // `create_new` is atomic (matching `FixLock`'s own pattern) -- a
+    // separate `exists()` check followed by `write` would leave a race
+    // window where a concurrent `new` invocation for the same slug clobbers
+    // the other's file instead of refusing.
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&file_path)
+        .and_then(|mut f| f.write_all(content.as_bytes()))
+    {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return emit(&CouldNotRun::from(format!(
+                "{} already exists -- refusing to overwrite",
+                file_path.display()
+            )))
+        }
+        Err(e) => {
+            return emit(&CouldNotRun::from(format!(
+                "could not write {}: {e}",
+                file_path.display()
+            )))
+        }
     }
 
     let notices = identity

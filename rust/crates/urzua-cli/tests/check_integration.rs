@@ -627,6 +627,8 @@ fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
 
 /// A real write failure exits 1, matching `fix --apply`'s own
 /// `PartialFailure` signal -- unlike `Skipped`, which stays exit 0.
+/// Unix-only: the failure is induced via a read-only file permission.
+#[cfg(unix)]
 #[test]
 fn migrate_ids_exits_1_on_a_real_write_failure() {
     let dir = fixture_repo("migrate-ids-write-fail");

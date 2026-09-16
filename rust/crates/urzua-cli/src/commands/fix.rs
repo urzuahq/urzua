@@ -126,6 +126,8 @@ fn build_fix_report(
         FixStatus::PartialFailure
     } else if repairs.is_empty() {
         FixStatus::Ok
+    } else if ran_apply {
+        FixStatus::Applied
     } else {
         FixStatus::RepairsAvailable
     };
