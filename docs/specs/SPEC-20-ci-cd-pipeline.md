@@ -45,15 +45,17 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
 - **`prepare-release.yml`** runs on every push to `main`, guarded against re-triggering on its own
   release-prep commit message. It force-pushes a `release` branch built from `main`, running knope's
   `prepare-release` workflow (`PrepareRelease` → `cargo check` → commit → push →
-  `CreatePullRequest`), which compiles every accumulated `.changeset/*.md` fragment plus any
-  Conventional Commits since the last tag into a version bump and `CHANGELOG.md` section. The job
+  `CreatePullRequest`), which compiles every accumulated `.changeset/*.md` fragment into a version
+  bump and `CHANGELOG.md` section. **Fragments are the only trigger** — `ignore_conventional_commits`
+  is set, because a commit prefix infers "releasable" from a message with no knowledge of which tree
+  changed, and only `rust/` produces the released artifact (`ADR-48`, `BUG-35`). The job
   installs the pinned toolchain and a cargo cache first, because that `cargo check` needs both
   (`BUG-27`). **No `continue-on-error`**: swallowing every failure hid a six-day release outage once.
   Instead the step tolerates **one documented error by name** — knope's `releases::no_release`, which
-  a merge carrying no changeset and no releasable commit legitimately produces (`BUG-33`) — emits a
-  `::notice::` saying so, and fails on anything else with its original exit code. A fragment count
-  would not do: knope also releases on Conventional Commits since the last tag, so "no fragments" is
-  not "nothing to release".
+  a merge carrying no changeset legitimately produces (`BUG-33`) — emits a `::notice::` saying so,
+  and fails on anything else with its original exit code. Tolerating the error by name rather than
+  counting fragments up front also survives `ADR-48`: the count and the trigger now agree, but the
+  step does not depend on their agreeing.
 - The `cargo check` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
   version line — it has no knowledge of `Cargo.lock`, which independently records each workspace
   member's resolved version and goes stale the instant `Cargo.toml` changes without it (`BUG-14`,
@@ -116,7 +118,8 @@ unrepresentable — including on a re-run, which replays the original payload.
   GitHub API — added by `ADR-45`, absent under the original single-dispatched-job design.
   `[[workflows]]` declares two named workflows, `prepare-release` and `release`, invoked as `knope
   prepare-release` / `knope release` respectively.
-- A fragment (`.changeset/*.md`) is real changesets format: `default: major | minor | patch`
+- A fragment (`.changeset/*.md`) is the sole release trigger (`ADR-48`) and is real changesets
+  format: `default: major | minor | patch`
   frontmatter plus a Markdown body, one per user-visible PR. On a pre-`1.0.0` package, a `major`
   fragment bumps the minor version position per standard semver pre-1.0 convention (knope's default),
   never jumps straight to `1.0.0` on its own.

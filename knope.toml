@@ -26,8 +26,13 @@ name = "prepare-release"
 type = "Command"
 command = "git switch -c release"
 
+# Changesets are the only release trigger (ADR-0048). knope honours
+# Conventional Commits as well by default, which infers "releasable" from a
+# commit message with no idea which tree changed -- and only rust/ produces
+# the released artifact, while docs/, ts/, platform/ and scripts/ do not.
 [[workflows.steps]]
 type = "PrepareRelease"
+ignore_conventional_commits = true
 
 # PrepareRelease only regex-bumps rust/Cargo.toml's version line -- it
 # doesn't know Cargo.lock exists, so the lockfile's own recorded version
