@@ -2,7 +2,7 @@
 Stable-Id: 01M25Z27VBE63ABNE2QRSQSXGR
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, code:.github/workflows/release.yml
+Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-10
 Author: beauwilliams
 Deciders: beauwilliams
@@ -93,6 +93,41 @@ any other workflow in this repo.
   unchanged, only the single-dispatched-job sequencing is replaced.
 - ADR-28 -- the original rejection of a Node-based changelog tool, the reasoning this decision does
   not revisit.
-- `knope.toml`, `.github/workflows/prepare-release.yml`, `.github/workflows/publish-release.yml`,
-  `.github/workflows/release.yml` -- this decision's realization.
+- `knope.toml`, `.github/workflows/prepare-release.yml`, `.github/workflows/publish-release.yml`
+  -- this decision's realization.
 - SPEC-20 -- the CI/CD pipeline spec this decision's mechanism is documented under.
+- BUG-27, BUG-28 -- the two defects the first real end-to-end run of this flow exposed; see the
+  amendment below.
+
+## Amendment (2026-09-16): one workflow owns the publish; `release.yml` is gone
+
+This decision's Consequences said the release tag `knope release` pushes "fires the existing
+tag-triggered `release.yml` unchanged." **That is false, and was never true.** GitHub does not
+trigger workflows from events created with `GITHUB_TOKEN` — a deliberate recursion guard. Under
+ADR-29 a maintainer pushed the tag by hand, so `release.yml` fired; under this decision a bot pushes
+it, so `release.yml` has not run since 2026-09-05. `v0.2.0` published with a correct changelog and
+zero binaries before anyone noticed (BUG-28).
+
+Decided: `publish-release.yml` owns the entire publish — `verify-ci`, `release`, `build`, `upload` —
+and `release.yml` is deleted. The cross-workflow trigger this decision depended on does not exist, so
+the dependency is removed rather than worked around. Two consequences of that:
+
+- **`verify-ci` moves into `publish-release.yml` and checks the release PR's head sha**, not the
+  merge commit — the head has definitively concluded (it gated the merge), while `ci` on the merge
+  commit races this workflow. The release-gating property this decision claimed is preserved, on a
+  commit where it can actually be evaluated.
+- **The upload job asserts the release carries its three archives** and fails otherwise. A release
+  object existing is not the same as a release being installable, and this flow had no check that
+  could tell those apart.
+
+Two further corrections to this decision's original text, both found in the same first real run:
+
+- The `cargo check --offline` step this decision's `knope.toml` introduced could never succeed in
+  the job it ran in — no toolchain, no registry (BUG-27). `--offline` is dropped and
+  `prepare-release.yml` now installs the toolchain.
+- **The release PR's own `ci` run requires manual approval.** It is triggered by a bot-pushed branch,
+  so GitHub holds it in `action_required` until a human approves. This decision documented no such
+  step; it has been a silent manual gate in the flow since it shipped, and it remains one. Removing
+  it needs either a PAT (re-opening the recursion risk this decision avoided) or the checks to move
+  inside `publish-release.yml` too — undecided here, named so the next person doesn't rediscover it
+  as a surprise.
