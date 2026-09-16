@@ -2,8 +2,8 @@
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-07
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-1, RFC-4
 ---

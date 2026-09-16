@@ -2,7 +2,7 @@
 Stable-Id: 01M21DVCZ1P6XRJX0SJAX9MBYE
 Status: Draft
 Date: 2026-09-08
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 22 — A blocker record type
 

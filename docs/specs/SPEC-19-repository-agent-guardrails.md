@@ -3,7 +3,7 @@ Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
 Version: '0.6'
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` alone.'
 Implements: MILE-36
 Parent: —

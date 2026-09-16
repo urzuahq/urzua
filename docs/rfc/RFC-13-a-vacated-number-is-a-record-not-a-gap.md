@@ -1,7 +1,7 @@
 ---
 Status: Draft
 Date: 2026-08-18
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 13 — A vacated identifier is a record, not a gap

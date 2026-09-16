@@ -1,8 +1,8 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-08
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
 Implements: ADR-10
@@ -34,7 +34,7 @@ narrative_fields = []
 |---|---|---|
 | `Status` | `Draft` \| `Discussion` \| `Accepted` \| `Rejected` \| `Superseded` | An RFC's own lifecycle is independent of whether an ADR has decided it yet — `Accepted`/`Rejected` here means the *proposal itself* reached that state, not that a governing ADR necessarily exists (`pointer.resolution` surfaces a Draft-target's status when an ADR derives from it, per RFC-12, but never judges it). |
 | `Date` | `YYYY-MM-DD` | When proposed. |
-| `Author` | a real identity | Resolved automatically by `urzua new`, same as `adr`. |
+| `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new`, same as `adr` -- including the form: no decorative `@` prefix, which nothing reads and which forces avoidable YAML quoting (BUG-18, SPEC-16). |
 | `Stable-Id` | a ULID, optional | Assigned unconditionally by `urzua new rfc` (ADR-21: every type gets one); backfilled by `migrate ids` for records predating it. |
 | `Supersedes / Superseded-by` | comma-separated or `—`, optional | Same reciprocity model as `adr`. |
 | `Amends` | comma-separated, optional | An RFC narrowing or correcting an earlier one without fully superseding it — distinct from `Supersedes`, which replaces outright. Declared as one of this type's `pointer_fields` entries (MILE-90/ADR-44) — previously never resolved by anything. |
@@ -69,3 +69,4 @@ ADR's own `Deciders` field records.
 > | 2026-09-08 | Added `Stable-Id` to `known_fields`. **Why:** found live creating the first `rfc` records via `urzua new rfc` (RFC-18/19/20) -- `render_synthetic_yaml` assigns every type a `Stable-Id` unconditionally (ADR-21), but no prior `rfc` had ever been created through the tool, so this gap sat unexercised until now. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Added `Implements` to `known_fields`, declared `pointer_fields = ["Implements", "Amends"]`/`narrative_fields = []` in config (MILE-90/ADR-44). **Why:** `RFC-23`'s own header (`Implements: BUG-8`) had been silently tripping `header.field-set-consistency` since it was written -- `rfc` never declared `Implements` as known despite already using it in practice. `Amends` had also never been resolved by anything; declaring it a `pointer_fields` entry makes it real. | **substantive** |
+> | 2026-09-11 | Bumped to `0.8`. **Why:** `Author`'s row stated the resolution mechanism ("same as `adr`") but not the written form, so BUG-18's no-`@` convention wasn't actually inherited by a reader of this spec alone -- it only looked like it was. Stated explicitly; this type's own `Author` values were backfilled in the same change. | **substantive** |

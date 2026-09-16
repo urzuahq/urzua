@@ -4,8 +4,8 @@ Stable-Id: 01M1Z17D93V6R1JMM21ETKZKV8
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/header.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
 Date: 2026-09-07
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-10
 ---

@@ -2,8 +2,8 @@
 Stable-Id: 01M21GQHRW1JGSVYTVMRD0R7HB
 Status: Accepted
 Date: 2026-09-08
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-23
 Embodiment: Verified

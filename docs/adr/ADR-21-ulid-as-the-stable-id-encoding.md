@@ -3,8 +3,8 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-id/src/lib.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-id/src/lib.rs
 Date: 2026-09-05
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: ADR-3
 ---

@@ -2,7 +2,7 @@
 Stable-Id: 01M26CZYSJH627W6GSMHZGWHWP
 Status: Draft
 Date: 2026-09-10
-Author: '@beauwilliams'
+Author: beauwilliams
 Amends: RFC-2
 ---
 # 25 — Realized-by's identity is attribution, not attestation

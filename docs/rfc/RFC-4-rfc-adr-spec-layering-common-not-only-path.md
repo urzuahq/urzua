@@ -1,7 +1,7 @@
 ---
 Status: Draft
 Date: 2026-07-30
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 4 — RFC → ADR → Spec layering: the common path, not the only path

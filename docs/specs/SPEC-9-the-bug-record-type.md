@@ -2,7 +2,7 @@
 Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'The `bug` record type -- real, already-found defects and required regression-test accountability.'
 Implements: ADR-35
 Parent: —

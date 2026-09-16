@@ -3,7 +3,7 @@ Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Accepted
 Date: 2026-09-10
 Version: '0.2'
-Author: '@beauwilliams'
+Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-29, ADR-45
 Parent: —

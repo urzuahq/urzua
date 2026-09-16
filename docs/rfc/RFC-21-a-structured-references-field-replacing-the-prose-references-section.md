@@ -2,7 +2,7 @@
 Stable-Id: 01M215TJWNXAJRZ30G6Z7TQBPF
 Status: Rejected
 Date: 2026-09-08
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 21 — A structured References field, replacing the prose References section
 

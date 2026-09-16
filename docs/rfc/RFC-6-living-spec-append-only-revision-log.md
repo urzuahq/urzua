@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-07-30
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 6 — The living-spec problem: an append-only revision log, not edit-in-place

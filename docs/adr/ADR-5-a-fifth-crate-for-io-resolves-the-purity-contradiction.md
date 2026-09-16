@@ -2,8 +2,8 @@
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-04
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 5 — A fifth crate, `urzua-io`, resolves the purity contradiction

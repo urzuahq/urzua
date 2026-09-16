@@ -2,8 +2,8 @@
 Status: Accepted
 Embodiment: Specified
 Date: 2026-07-29
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 4 — Polyglot monorepo, organized by language at the root

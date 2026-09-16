@@ -2,7 +2,7 @@
 Stable-Id: 01M21FK8QA0D6QJQWHKBND90WB
 Status: Accepted
 Date: 2026-09-08
-Author: '@beauwilliams'
+Author: beauwilliams
 Implements: BUG-8
 ---
 # 23 — Config-declared pointer and blocking fields, instead of hardcoded in `urzua-core`

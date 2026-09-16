@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH8T1X2K6EVTB2TS4CGWT
 Status: Draft
 Date: 2026-09-08
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 20 — How the CLI's commands relate: check, doctor, fix, and beyond
 

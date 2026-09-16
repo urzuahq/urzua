@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-07-29
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 1 — A unified record schema: core fields plus declared profiles

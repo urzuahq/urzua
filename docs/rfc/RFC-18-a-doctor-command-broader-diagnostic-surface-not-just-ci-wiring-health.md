@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH7KH9GXM31VZ5F5ZMFEV
 Status: Draft
 Date: 2026-09-08
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 18 — A doctor command: broader diagnostic surface, not just CI-wiring health
 

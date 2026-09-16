@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-08-11
-Author: '@beauwilliams'
+Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
 # 10 — The record header is a closed structure, validated as a whole
