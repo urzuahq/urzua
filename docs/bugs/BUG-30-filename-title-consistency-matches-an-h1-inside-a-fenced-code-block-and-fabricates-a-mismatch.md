@@ -2,7 +2,7 @@
 Stable-Id: 01M2MF5SJQ1PRBKNHX4WFMVNDV
 Status: Fixed
 Found-in: 'building a synthetic corpus to reproduce BUG-23 -- a record whose only `# ` line sat inside a shell snippet reported a mismatch against that snippet'
-Regression-test: 'rust/crates/urzua-core/src/rules.rs :: filename_title_consistency_ignores_an_h1_inside_a_fenced_block_observed_failing'
+Regression-test: 'rust/crates/urzua-core/src/rules.rs :: filename_title_consistency_ignores_an_h1_inside_a_fenced_block_observed_failing, filename_title_consistency_closes_a_fence_only_on_its_own_marker_observed_failing'
 Realized-by: code:rust/crates/urzua-core/src/rules.rs
 ---
 # 30 — filename.title-consistency matches an H1 inside a fenced code block and fabricates a mismatch
@@ -46,6 +46,21 @@ did not author.
 the frontmatter region, since a YAML comment line there starts with `# ` and would read as a title
 for the same reason — but only when the header region opens at line 1, because blockquote and
 bold-list headers sit *after* the H1 and skipping past those would skip the title itself.
+
+## A second instance, caught in review
+
+The first fix tracked fences with a boolean toggled by any line opening with three backticks or
+tildes. That is not how a fence closes. A block opened with four backticks legitimately contains
+three-backtick lines, and a backtick block contains `~~~` as ordinary text -- toggling on either
+reopens the body mid-block, and the next sample heading becomes the title again. Demonstrated
+against the same corpus: a record whose only heading sat inside a nested fence reported
+`the H1 title '1. sample' claims 1`.
+
+The fence now records its opening marker and length, and closes only on the same marker, at that
+length or longer, with nothing following it.
+
+Worth recording because the first fix was verified against a corpus that had no nested fences --
+the same gap in coverage that let the original defect through, reproduced one level down.
 
 ## References
 

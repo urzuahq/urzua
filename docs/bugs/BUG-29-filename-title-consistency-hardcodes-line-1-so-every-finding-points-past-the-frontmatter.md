@@ -10,7 +10,8 @@ Realized-by: code:rust/crates/urzua-core/src/rules.rs
 ## What was wrong
 
 Both `Finding` sites in `filename_title_consistency` wrote `line: Some(1)` as a literal. Every record
-in this corpus opens with YAML frontmatter, so an H1 is never on line 1 — `ADR-36`'s sits on line 11.
+in this corpus opens with YAML frontmatter, so an H1 is never on line 1 -- the real
+`docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md` carries its H1 on line 11.
 Every finding this rule emitted pointed an editor at the `---` opening the header instead of the
 title it was complaining about.
 

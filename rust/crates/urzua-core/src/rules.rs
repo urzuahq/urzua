@@ -985,7 +985,7 @@ fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'
     let skip_through = header_region
         .filter(|&(start, _)| start == 1)
         .map(|(_, end)| end);
-    let mut in_fence = false;
+    let mut fence: Option<(u8, usize)> = None;
 
     for (idx, line) in content.lines().enumerate() {
         let lineno = idx + 1;
@@ -994,13 +994,28 @@ fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'
         }
 
         let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
-            continue;
+        if let Some(marker @ (b'`' | b'~')) = trimmed.bytes().next() {
+            let run = trimmed.bytes().take_while(|&b| b == marker).count();
+            if run >= 3 {
+                match fence {
+                    // A fence closes only on its own marker, at its own
+                    // length or longer, with nothing following. A shorter
+                    // run or the other family is content -- closing on
+                    // either reopens the body mid-block.
+                    Some((open, len))
+                        if marker == open && run >= len && trimmed[run..].trim().is_empty() =>
+                    {
+                        fence = None;
+                    }
+                    None => fence = Some((marker, run)),
+                    Some(_) => {}
+                }
+                continue;
+            }
         }
         // A fenced `# ` is sample text; matching it fabricates a mismatch
         // against a number that is not a record number.
-        if in_fence || !line.starts_with("# ") {
+        if fence.is_some() || !line.starts_with("# ") {
             continue;
         }
 
@@ -2294,6 +2309,30 @@ mod tests {
             "a fenced heading is not a title, got: {}",
             findings[0].message
         );
+    }
+
+    #[test]
+    fn filename_title_consistency_closes_a_fence_only_on_its_own_marker_observed_failing() {
+        // A fence closes on its own marker at its own length or longer. A
+        // shorter run, or the other marker family, is content -- treating
+        // either as a close reopens the body and the sample heading inside
+        // it becomes the title.
+        for body in [
+            "````md\n```\n# 1. sample\n```\n````\n",
+            "```md\n~~~\n# 1. sample\n~~~\n```\n",
+        ] {
+            let (r, full_text) = yaml_record(
+                "docs/adr/ADR-8-x.md",
+                &format!("---\nStatus: Accepted\n---\nProse.\n\n{body}"),
+            );
+            let (_, findings) = filename_title_consistency(&[r], &full_text);
+            assert_eq!(findings.len(), 1);
+            assert!(
+                findings[0].message.contains("no H1 title found"),
+                "nested fence {body:?} leaked a heading: {}",
+                findings[0].message
+            );
+        }
     }
 
     #[test]
