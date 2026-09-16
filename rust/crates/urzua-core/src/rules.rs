@@ -901,29 +901,48 @@ pub fn filename_title_consistency(
         };
         examined += 1;
 
-        let Some(title_number) = title_number(content) else {
+        let mut push = |line: Option<usize>, message: String| {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Error,
                 file: record.path.clone(),
-                line: Some(1),
+                line,
                 waived: None,
-                message: "no H1 title found to check against the filename's number".to_string(),
+                message,
             });
+        };
+
+        // Skipping instead would drop a record the rule was asked about.
+        let Ok(filename_number) = filename_number.parse::<u64>() else {
+            push(
+                None,
+                format!("filename number {filename_number} is too large to compare"),
+            );
             continue;
         };
 
-        if filename_number.parse::<u64>().ok() != title_number.parse::<u64>().ok() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: Some(1),
- waived: None,
-                message: format!(
-                    "filename claims number {filename_number}, but the H1 title claims {title_number}"
+        match first_h1(content, record.header.region) {
+            None => push(
+                None,
+                "no H1 title found to check against the filename's number".to_string(),
+            ),
+            Some(h1) => match h1.number {
+                None => push(
+                    Some(h1.line),
+                    format!(
+                        "H1 title '{}' carries no number to check against the filename's number {filename_number}",
+                        elided(h1.text)
+                    ),
                 ),
-            });
+                Some(n) if n != filename_number => push(
+                    Some(h1.line),
+                    format!(
+                        "filename claims number {filename_number}, but the H1 title '{}' claims {n}",
+                        elided(h1.text)
+                    ),
+                ),
+                Some(_) => {}
+            },
         }
     }
 
@@ -947,17 +966,89 @@ fn filename_number(record: &Record) -> Option<String> {
     (!number.is_empty() && number.chars().all(|c| c.is_ascii_digit())).then(|| number.to_string())
 }
 
-/// The document's own claimed number, from its first H1 heading: `# 0001 —
-/// Title` or `# SPEC-0001 — Title`. Compared against `filename_number` by
-/// numeric value (BUG-0002), not fixed digit-count or exact string, so
-/// `# 36 — Title` in a `37-slug.md`-adjacent file still correctly mismatches
-/// while `0036`/`36` never falsely mismatch on padding alone.
-fn title_number(content: &str) -> Option<String> {
-    let first_line = content.lines().find(|l| l.starts_with("# "))?;
-    let after_hash = first_line.trim_start_matches('#').trim();
-    let first_token = after_hash.split_whitespace().next()?;
-    let digits: String = first_token.chars().filter(|c| c.is_ascii_digit()).collect();
-    (!digits.is_empty()).then_some(digits)
+/// Whether an H1 exists and whether it carries a number are independent
+/// questions, so they stay independent `Option`s rather than collapsing into
+/// one absent value.
+struct H1<'a> {
+    /// 1-indexed, matching [`crate::header::Header::region`].
+    line: usize,
+    text: &'a str,
+    /// Compared by numeric value (BUG-0002), so padding never mismatches.
+    number: Option<u64>,
+}
+
+/// Frontmatter is skipped because a YAML comment line inside it starts with
+/// `# ` and would otherwise read as the title. Only a region opening at line
+/// 1 is frontmatter -- blockquote and bold-list headers sit *after* the H1,
+/// where skipping past them would skip the title itself.
+fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'_>> {
+    let skip_through = header_region
+        .filter(|&(start, _)| start == 1)
+        .map(|(_, end)| end);
+    let mut fence: Option<(u8, usize)> = None;
+
+    for (idx, line) in content.lines().enumerate() {
+        let lineno = idx + 1;
+        if skip_through.is_some_and(|end| lineno <= end) {
+            continue;
+        }
+
+        let trimmed = line.trim_start();
+        if let Some(marker @ (b'`' | b'~')) = trimmed.bytes().next() {
+            let run = trimmed.bytes().take_while(|&b| b == marker).count();
+            if run >= 3 {
+                match fence {
+                    // A fence closes only on its own marker, at its own
+                    // length or longer, with nothing following. A shorter
+                    // run or the other family is content -- closing on
+                    // either reopens the body mid-block.
+                    Some((open, len))
+                        if marker == open && run >= len && trimmed[run..].trim().is_empty() =>
+                    {
+                        fence = None;
+                    }
+                    None => fence = Some((marker, run)),
+                    Some(_) => {}
+                }
+                continue;
+            }
+        }
+        // A fenced `# ` is sample text; matching it fabricates a mismatch
+        // against a number that is not a record number.
+        if fence.is_some() || !line.starts_with("# ") {
+            continue;
+        }
+
+        let text = line[2..].trim();
+        if text.is_empty() {
+            return None;
+        }
+        let digits: String = text
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .filter(char::is_ascii_digit)
+            .collect();
+
+        return Some(H1 {
+            line: lineno,
+            text,
+            number: digits.parse().ok(),
+        });
+    }
+
+    None
+}
+
+/// The text reaches the JSON contract, and a foreign corpus's H1 has no
+/// length this repo controls.
+fn elided(text: &str) -> String {
+    const MAX: usize = 60;
+    if text.chars().count() <= MAX {
+        return text.to_string();
+    }
+    text.chars().take(MAX).chain(['…']).collect()
 }
 
 /// Rule 6 (ADR-0014): every existing revision-log entry names a real
@@ -2150,6 +2241,120 @@ mod tests {
         let (_, findings) = filename_title_consistency(&[r], &full_text);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("36") && findings[0].message.contains("99"));
+    }
+
+    /// A record with frontmatter, for the cases where the H1's own line
+    /// number is what's under test.
+    fn yaml_record(path: &str, content: &str) -> (Record, HashMap<PathBuf, String>) {
+        let r = Record::parse_with_shape(
+            PathBuf::from(path),
+            "adr".to_string(),
+            content,
+            crate::header::HeaderShape::YamlFrontmatter,
+        );
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
+        (r, full_text)
+    }
+
+    #[test]
+    fn filename_title_consistency_distinguishes_an_unnumbered_h1_observed_failing() {
+        // An H1 that exists but carries no number is a different defect from
+        // no H1 at all -- "add a title" vs. "this corpus numbers its records
+        // somewhere other than the H1" -- so it cannot share their message.
+        let (r, full_text) = yaml_record(
+            "docs/adr/ADR-7-x.md",
+            "---\nStatus: Accepted\n---\n# Add Status Field\n",
+        );
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            !findings[0].message.contains("no H1 title found"),
+            "an H1 that is present must not be reported as absent, got: {}",
+            findings[0].message
+        );
+        assert!(
+            findings[0].message.contains("Add Status Field"),
+            "expected the title quoted back, got: {}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn filename_title_consistency_reports_the_real_h1_line_observed_failing() {
+        // Every record in this corpus carries frontmatter, so an H1 is never
+        // on line 1 and a hardcoded line points the reader at the wrong place.
+        let (r, full_text) = yaml_record(
+            "docs/adr/ADR-36-x.md",
+            "---\nStatus: Accepted\n---\n# 99 — Wrong Number\n",
+        );
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].line, Some(4));
+    }
+
+    #[test]
+    fn filename_title_consistency_ignores_an_h1_inside_a_fenced_block_observed_failing() {
+        // Without fence tracking this reports a mismatch against `1` from a
+        // shell snippet -- a fabricated finding about a number that is not a
+        // record number, which is worse than saying nothing.
+        let (r, full_text) = yaml_record(
+            "docs/adr/ADR-8-x.md",
+            "---\nStatus: Accepted\n---\nProse, no heading.\n\n```sh\n# 1. install\n```\n",
+        );
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].message.contains("no H1 title found"),
+            "a fenced heading is not a title, got: {}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn filename_title_consistency_closes_a_fence_only_on_its_own_marker_observed_failing() {
+        // A fence closes on its own marker at its own length or longer. A
+        // shorter run, or the other marker family, is content -- treating
+        // either as a close reopens the body and the sample heading inside
+        // it becomes the title.
+        for body in [
+            "````md\n```\n# 1. sample\n```\n````\n",
+            "```md\n~~~\n# 1. sample\n~~~\n```\n",
+        ] {
+            let (r, full_text) = yaml_record(
+                "docs/adr/ADR-8-x.md",
+                &format!("---\nStatus: Accepted\n---\nProse.\n\n{body}"),
+            );
+            let (_, findings) = filename_title_consistency(&[r], &full_text);
+            assert_eq!(findings.len(), 1);
+            assert!(
+                findings[0].message.contains("no H1 title found"),
+                "nested fence {body:?} leaked a heading: {}",
+                findings[0].message
+            );
+        }
+    }
+
+    #[test]
+    fn filename_title_consistency_keeps_the_absent_h1_message() {
+        let (r, full_text) = yaml_record(
+            "docs/adr/ADR-9-x.md",
+            "---\nStatus: Accepted\n---\nNo heading anywhere.\n",
+        );
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].message,
+            "no H1 title found to check against the filename's number"
+        );
+    }
+
+    #[test]
+    fn filename_title_consistency_treats_an_empty_h1_as_absent() {
+        let (r, full_text) = yaml_record("docs/adr/ADR-9-x.md", "---\nStatus: Accepted\n---\n# \n");
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("no H1 title found"));
     }
 
     #[test]

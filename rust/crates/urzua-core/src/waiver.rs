@@ -20,11 +20,17 @@ pub struct Waiver {
 impl Waiver {
     /// A waiver with a passed expiry is not a waiver (RFC-0015 §3): treated
     /// as though it doesn't exist, with no separate "expired" state to
-    /// configure. ISO 8601 dates compare correctly as plain strings.
+    /// configure.
+    ///
+    /// The `<=` is lexical, which only holds once both sides are known
+    /// `YYYY-MM-DD`: any other value sorts above a real date
+    /// (`"2026-09-16" <= "soon"`) and would suppress findings forever. A
+    /// non-date expiry expires immediately instead -- this mechanism may
+    /// fail toward more findings, never fewer.
     pub fn is_active(&self, today: &str) -> bool {
         match &self.expires {
             None => true,
-            Some(expires) => today <= expires.as_str(),
+            Some(expires) => is_iso_date(expires) && today <= expires.as_str(),
         }
     }
 
@@ -56,6 +62,18 @@ pub fn load_waivers(records: &[Record]) -> Vec<Waiver> {
             })
         })
         .collect()
+}
+
+/// Calendar validity (a 31st of February) is deliberately unchecked: it still
+/// orders correctly against a real date, which is all `is_active` asks.
+fn is_iso_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && [0, 1, 2, 3, 5, 6, 8, 9]
+            .iter()
+            .all(|&i| bytes[i].is_ascii_digit())
 }
 
 /// Mark each finding covered by an active waiver. Findings are never
@@ -111,6 +129,26 @@ mod tests {
         };
         assert!(w.is_active("2025-12-31"));
         assert!(!w.is_active("2026-01-02"));
+    }
+
+    #[test]
+    fn an_unparseable_expiry_does_not_suppress_observed_failing() {
+        // `today <= expires` is a string compare, so any value sorting above
+        // a date -- "soon", "TBD", or a single-digit month -- suppresses
+        // forever. A waiver nobody can expire is the one failure this
+        // mechanism must not have.
+        for bad in ["soon", "TBD", "Q4", "2026-9-16"] {
+            let w = Waiver {
+                id: "w1".into(),
+                rule: "r".into(),
+                scope: "*".into(),
+                expires: Some(bad.into()),
+            };
+            assert!(
+                !w.is_active("2026-09-16"),
+                "{bad:?} must not act as a permanent waiver"
+            );
+        }
     }
 
     #[test]
