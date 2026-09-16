@@ -238,6 +238,11 @@ code moves underneath it. The first half is the
 [agentic change management](https://www.coderabbit.ai/guides/what-is-agentic-change-management)
 framing; the second half is this engine.
 
+[RFC-27](docs/rfc/RFC-27-urzua-s-position-in-agentic-change-management-one-engine-one-philosophy.md)
+(`Draft`) is that position as a record, including the boundary test separating engine scope from a
+deferred ecosystem of tools built *around* the engine. The engine stays complete with none of that
+ecosystem built.
+
 **Designed, not built.** All `Draft`, none decided, each with a milestone holding the decision open:
 
 | RFC | Proposes | Milestone |
