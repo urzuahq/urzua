@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
-use crate::report::{Finding, RuleExecution, Severity};
+use crate::report::{Finding, FindingSeverity, RuleExecution};
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -36,7 +36,7 @@ pub fn header_required_fields(
             };
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Error,
+                severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: None,
  waived: None,
@@ -50,7 +50,7 @@ pub fn header_required_fields(
         for dup in record.header.duplicate_keys() {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Error,
+                severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: None,
  waived: None,
@@ -62,7 +62,7 @@ pub fn header_required_fields(
             if record.header.get(field).is_none() {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Error,
+                    severity: FindingSeverity::Error,
                     file: record.path.clone(),
                     line: None,
                     waived: None,
@@ -115,7 +115,7 @@ pub fn header_layout_consistency(
             let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Warning,
+                severity: FindingSeverity::Warning,
                 file: record.path.clone(),
                 line: None,
                 waived: None,
@@ -171,7 +171,7 @@ pub fn header_field_set_consistency(
             if !allowed.contains(&field.key.to_ascii_lowercase()) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Warning,
+                    severity: FindingSeverity::Warning,
                     file: record.path.clone(),
                     line: Some(field.line),
                     waived: None,
@@ -219,7 +219,7 @@ pub fn type_no_declared_spec(
         if type_config.spec.is_none() {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Warning,
+                severity: FindingSeverity::Warning,
                 file: config_path.to_path_buf(),
                 line: None,
                 waived: None,
@@ -263,7 +263,7 @@ pub fn header_deprecated_shape(
         if type_config.header_shape != crate::header::HeaderShape::YamlFrontmatter {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Warning,
+                severity: FindingSeverity::Warning,
                 file: config_path.to_path_buf(),
                 line: None,
                 waived: None,
@@ -390,7 +390,7 @@ pub fn config_pointer_declaration_missing(
         {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Error,
+                severity: FindingSeverity::Error,
                 file: config_path.to_path_buf(),
                 line: None,
                 waived: None,
@@ -452,7 +452,7 @@ pub fn config_pointer_field_not_known(
             if !declared.contains(&field.to_ascii_lowercase()) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Error,
+                    severity: FindingSeverity::Error,
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
@@ -504,7 +504,7 @@ pub fn config_pointer_narrative_overlap(
             if pointer_lower.contains(&field.to_ascii_lowercase()) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Error,
+                    severity: FindingSeverity::Error,
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
@@ -579,7 +579,7 @@ pub fn pointer_resolution(
                         let status = target.header.get("Status").unwrap_or("(no Status field)");
                         findings.push(Finding {
                             rule: RULE_ID.to_string(),
-                            severity: Severity::Warning,
+                            severity: FindingSeverity::Warning,
                             file: record.path.clone(),
                             line: None,
                             waived: None,
@@ -591,7 +591,7 @@ pub fn pointer_resolution(
                     None => {
                         findings.push(Finding {
                             rule: RULE_ID.to_string(),
-                            severity: Severity::Error,
+                            severity: FindingSeverity::Error,
                             file: record.path.clone(),
                             line: None,
                             waived: None,
@@ -668,7 +668,7 @@ pub fn header_pointer_field_clean(
                 if !is_clean_reference {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
-                        severity: Severity::Warning,
+                        severity: FindingSeverity::Warning,
                         file: record.path.clone(),
                         line: None,
                         waived: None,
@@ -734,7 +734,7 @@ pub fn narrative_field_stale(records: &[Record], config: &Config) -> (RuleExecut
                 if is_terminal_status(&target.record_type, status) {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
-                        severity: Severity::Warning,
+                        severity: FindingSeverity::Warning,
                         file: record.path.clone(),
                         line: None,
                         waived: None,
@@ -857,9 +857,9 @@ pub fn field_quality(
             examined += 1;
             let severity = match state {
                 FieldState::Present => continue,
-                FieldState::Blank => Severity::Error,
-                FieldState::Placeholder => Severity::Error,
-                FieldState::Pending => Severity::Warning,
+                FieldState::Blank => FindingSeverity::Error,
+                FieldState::Placeholder => FindingSeverity::Error,
+                FieldState::Pending => FindingSeverity::Warning,
             };
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
@@ -904,7 +904,7 @@ pub fn filename_title_consistency(
         let Some(title_number) = title_number(content) else {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Error,
+                severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: Some(1),
                 waived: None,
@@ -916,7 +916,7 @@ pub fn filename_title_consistency(
         if filename_number.parse::<u64>().ok() != title_number.parse::<u64>().ok() {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Error,
+                severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: Some(1),
  waived: None,
@@ -991,7 +991,7 @@ pub fn revision_log_change_class(
             if !matches!(class, "substantive" | "structural") {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Error,
+                    severity: FindingSeverity::Error,
                     file: record.path.clone(),
                     line: Some(entry.line),
                     waived: None,
@@ -1167,7 +1167,7 @@ pub fn embodiment_consistency(
         if stated.trim() != computed {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity: Severity::Warning,
+                severity: FindingSeverity::Warning,
                 file: record.path.clone(),
                 line: None,
                 waived: None,
@@ -1234,7 +1234,7 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
         let first_path = paths.iter().next().expect("checked len >= 2 above").clone();
         findings.push(Finding {
             rule: RULE_ID.to_string(),
-            severity: Severity::Warning,
+            severity: FindingSeverity::Warning,
             file: first_path,
             line: None,
             waived: None,
@@ -1288,7 +1288,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
             let Some(target) = index.get(&normalize_id(&reference)) else {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Error,
+                    severity: FindingSeverity::Error,
                     file: record.path.clone(),
                     line: None,
  waived: None,
@@ -1306,7 +1306,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
             if !target_names_back {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: Severity::Error,
+                    severity: FindingSeverity::Error,
                     file: record.path.clone(),
                     line: None,
  waived: None,
@@ -1778,7 +1778,7 @@ mod tests {
             pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
         assert!(findings[0].message.contains("Draft"));
     }
 
@@ -1788,7 +1788,7 @@ mod tests {
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
         let (_, findings) = pointer_resolution(&[source], &pointer_fields, &HashMap::new());
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Error);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
 
     #[test]
@@ -1805,7 +1805,7 @@ mod tests {
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
         let (_, findings) = pointer_resolution(&[parent, child], &pointer_fields, &HashMap::new());
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
         assert!(findings[0].message.contains("Parent: SPEC-1 resolves"));
     }
 
@@ -1815,7 +1815,7 @@ mod tests {
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
         let (_, findings) = pointer_resolution(&[child], &pointer_fields, &HashMap::new());
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Error);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));
     }
 
@@ -1837,7 +1837,7 @@ mod tests {
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("RFC-1 (Accepted)"));
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
     }
 
     #[test]
@@ -1958,7 +1958,7 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("BUG-3"));
         assert!(findings[0].message.contains("Fixed"));
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
     }
 
     #[test]
@@ -2048,7 +2048,7 @@ mod tests {
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
         let (_, findings) = pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
     }
 
     #[test]
@@ -2060,7 +2060,7 @@ mod tests {
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
         let (_, findings) = pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
     }
 
     #[test]
@@ -2083,7 +2083,7 @@ mod tests {
         let (_, findings) =
             pointer_resolution(&[legacy_style, source], &pointer_fields, &HashMap::new());
         assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
-        assert_eq!(findings[0].severity, Severity::Error);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
 
     #[test]
@@ -2174,7 +2174,7 @@ mod tests {
 
         let (_, findings) = field_quality(&[r], &required);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
     }
 
     #[test]
@@ -2198,7 +2198,7 @@ mod tests {
 
         let (_, findings) = field_quality(&[r], &required);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Error);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
 
     #[test]

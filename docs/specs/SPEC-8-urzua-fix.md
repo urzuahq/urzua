@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-09-07
 Status: Accepted
 Author: '@beauwilliams'
@@ -61,9 +61,10 @@ Every one of the following is a hard gate — none are optional, none are defaul
 
 - **`--ids <record,...>` or `--force` is required.** Nothing applies without one; `--force` (apply to
   every detected repair) is never implied by `--apply` alone.
-- **Identity is required**, resolved via `urzua-io::resolve_identity` (`--by` wins outright, else
-  `gh api user`, else `git config user.name`); none resolving is a hard error, never a placeholder
-  author.
+- **Identity is required**, resolved via `urzua-io::resolve_identity` (`gh api user` wins even over
+  an explicit `--by`, which wins over `git config user.name` -- ADR-31's amendment); none resolving
+  is a hard error, never a placeholder author. A `--by` that diverges from an authenticated `gh`
+  login surfaces as a `notices` entry (ADR-46) rather than being silently overridden or discarded.
 - **A missing Revision log section refuses that record's write outright.** ADR-14's reversibility
   clause is enforced per write, not assumed — a repair with nowhere to record itself is reported
   failed, and every other selected repair still proceeds independently. Partial failure is a
@@ -114,3 +115,4 @@ asserted by test, not assumed by convention.
 > | 2026-09-07 | Initial spec, bundling ADR-15/18/19/20 into one buildable document for the `fix` feature area. **Why:** MILE-77 named this as a real feature area (an eligibility test, one computation, a detect/apply split, and apply's hard gates) that was documented only as four separate ADRs, none of which was a complete build reference on its own. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-11 | Corrected the identity-resolution order, stale since ADR-31's amendment (`gh api user` now wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). Noted the new `notices` field (ADR-46) for a `--by`/`gh` divergence. **Why:** found live, touching this exact paragraph for the `notices` addition -- leaving the identity-order claim wrong while editing the sentence next to it would have been the same "found it, patched around it" mistake this project's own `AGENTS.md` already warns against. | **substantive** |

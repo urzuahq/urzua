@@ -1,10 +1,17 @@
-//! `urzua init` adopt mode (SPEC-0005). Adopt is the primary case: every
+//! `urzua init` adopt mode (SPEC-5). Adopt is the primary case: every
 //! codebase this project's design was drawn from already had records before
 //! it had tooling. Adopt never moves a file -- it reads the tree, proposes a
 //! config, and writes only under `.urzua/`.
 
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
+use urzua_core::report::{CouldNotRun, Notice, Report, ReportStatus};
+
+use crate::discovery::find_repo_root;
+use crate::emit;
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ProposedRecordType {
     pub name: String,
     pub dir: String,
@@ -90,6 +97,97 @@ pub fn render_config_toml(proposed: &[ProposedRecordType]) -> String {
         out.push_str("header_shape = \"yaml-frontmatter\"\n");
     }
     out
+}
+
+/// `urzua init`'s report (SPEC-5).
+#[derive(serde::Serialize)]
+struct InitReport {
+    status: ReportStatus,
+    dry_run: bool,
+    config_path: PathBuf,
+    proposed: Vec<ProposedRecordType>,
+    written: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_toml: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    notices: Vec<Notice>,
+}
+
+impl Report for InitReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
+/// Never clobbers an existing config; `--dry-run` produces byte-identical
+/// output to the real run, differing only in whether the file is actually
+/// written.
+pub fn run(dry_run: bool) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
+
+    let config_path = repo_root.join(".urzua/config.toml");
+    if config_path.exists() {
+        return emit(&CouldNotRun::from(format!(
+            "{} already exists -- refusing to overwrite. Edit it directly, or remove it to re-run adopt.",
+            config_path.display()
+        )));
+    }
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+        Ok(d) => d,
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+    };
+
+    let proposed = detect_record_types(&repo_root, &discovered.paths);
+    if proposed.is_empty() {
+        return emit(&CouldNotRun::from(
+            "no record-shaped files found under docs/ -- nothing to adopt",
+        ));
+    }
+
+    let rendered = render_config_toml(&proposed);
+    let relative_config_path = config_path
+        .strip_prefix(&repo_root)
+        .unwrap_or(&config_path)
+        .to_path_buf();
+
+    if dry_run {
+        return emit(&InitReport {
+            status: ReportStatus::Ok,
+            dry_run: true,
+            config_path: relative_config_path,
+            proposed,
+            written: false,
+            config_toml: Some(rendered),
+            notices: Vec::new(),
+        });
+    }
+
+    if let Err(e) = std::fs::create_dir_all(config_path.parent().unwrap()) {
+        return emit(&CouldNotRun::from(format!("could not create .urzua/: {e}")));
+    }
+    if let Err(e) = std::fs::write(&config_path, &rendered) {
+        return emit(&CouldNotRun::from(format!(
+            "could not write {}: {e}",
+            config_path.display()
+        )));
+    }
+
+    emit(&InitReport {
+        status: ReportStatus::Ok,
+        dry_run: false,
+        config_path: relative_config_path,
+        proposed,
+        written: true,
+        config_toml: None,
+        notices: Vec::new(),
+    })
 }
 
 #[cfg(test)]
