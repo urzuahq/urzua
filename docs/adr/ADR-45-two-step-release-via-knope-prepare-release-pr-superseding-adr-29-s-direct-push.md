@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M25Z27VBE63ABNE2QRSQSXGR
 Status: Accepted
-Embodiment: Verified
+Embodiment: Implemented
 Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-10
 Author: beauwilliams
@@ -131,3 +131,40 @@ Two further corrections to this decision's original text, both found in the same
   it needs either a PAT (re-opening the recursion risk this decision avoided) or the checks to move
   inside `publish-release.yml` too — undecided here, named so the next person doesn't rediscover it
   as a surprise.
+
+## Amendment (2026-09-16, second): two claims the first amendment got wrong
+
+Shipping `v0.2.1` exercised this flow end to end for the first time without a defect consuming the
+run. Two statements in the amendment above are false.
+
+**"the head has definitively concluded (it gated the merge)".** It gated nothing. `main` has **no
+branch protection**, so no check is required and the release PR is mergeable with none at all —
+verified directly on `#39`, which reported `MERGEABLE` while its `ci` had never run. The reason to
+check the head sha rather than the merge commit still holds (the merge commit's `ci` races this
+workflow), but the stated justification does not.
+
+The consequence is sharper than the wording: `verify-ci` reads `missing` when `ci` has not run, and
+`ci` cannot run on a `GITHUB_TOKEN`-created PR without a human approving it. So `verify-ci` is not
+"did the tree pass" — it is "did a human approve the run." Merging the release PR before that
+approval publishes nothing and leaves `main` carrying a version bump with no tag.
+
+**The manual gate was two steps, not one.** This amendment recorded the `action_required` approval.
+Approving it replayed the *stale* `opened` payload, which predates knope's own labelling step, so the
+changeset gate ran when it should have skipped and failed — asking for a label that was already
+present. `BUG-34` fixed that half by reading the PR's live labels instead of the payload. The
+approval itself remains, and is the one manual step per release.
+
+Both trace to one cause this decision now depends on three times over: `GITHUB_TOKEN` events do not
+trigger workflows. `BUG-28` was fixed by deleting the dependency; the remaining two are GitHub's own
+mechanisms and cannot be removed the same way. `RFC-30` proposes acting as a GitHub App instead.
+
+This record's own `Embodiment` is corrected here too, from `Verified` to `Implemented`.
+`embodiment.consistency` had been flagging it: every `Realized-by` locator is a `code:` one, and
+nothing tests this flow, so `Verified` was a tier the evidence never supported. A decision record
+overstating its own embodiment while its prose overstated its own guarantees is the same defect
+twice, and only one of them was machine-checkable.
+
+Also recorded: `prepare-release` now fails on every `no-changeset` merge, because knope treats
+nothing-to-release as an error (`BUG-33`). That is the cost of `BUG-27` removing
+`continue-on-error`, and the right trade — but a workflow that goes red on routine merges is a gate
+nobody reads.

@@ -1,0 +1,52 @@
+name: checks
+# Implements: ADR-0047
+
+# The build/test/self-host gate, in one place so `ci` (on a PR) and
+# `publish-release` (on the tag being shipped) run the same definition rather
+# than two that can drift (ADR-0047).
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: The ref to check out. Defaults to the triggering ref.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: rust (fmt, clippy, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+          # embodiment.consistency's drift check (ADR-0032) reads git blame/log
+          # history on locators -- a shallow checkout makes it silently unable
+          # to detect anything, not an error, so this is load-bearing.
+          fetch-depth: 0
+      - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: cargo build --release
+        run: cargo build --workspace --release --locked
+      - name: cargo test
+        run: cargo test --workspace --locked
+      - name: urzua check docs/ (SPEC-0002 Phase A exit criterion -- self-hosting)
+        working-directory: .
+        run: rust/target/release/urzua check docs/

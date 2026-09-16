@@ -1,4 +1,5 @@
 name: prepare release
+# Implements: ADR-0029, ADR-0045
 
 # Opens or updates a "release" branch PR on every push to main that has
 # something to release -- the compiled version bump and CHANGELOG.md

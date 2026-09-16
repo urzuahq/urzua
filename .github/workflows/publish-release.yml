@@ -1,4 +1,5 @@
 name: publish release
+# Implements: ADR-0013, ADR-0045, ADR-0047
 
 # Runs when the release PR (opened by prepare-release.yml) merges into main
 # -- the deliberate act in this two-step flow (ADR-0045). Owns the entire
@@ -21,35 +22,24 @@ permissions:
   contents: read
 
 jobs:
-  # Refuses to publish unless ci concluded success for the exact tree being
-  # released. Checks the release PR's head sha, not the merge commit: the
-  # head has definitively finished (it gated the merge), while ci on the
-  # merge commit races this workflow. Same tree either way -- the merge is a
-  # squash of a PR whose checks passed.
-  verify-ci:
+  # Runs the checks here rather than asking whether `ci` ran elsewhere
+  # (ADR-0047). The release PR is opened with GITHUB_TOKEN, so its own `ci` run
+  # is held at action_required until a human approves it -- a cross-workflow
+  # query could only ever report "did someone click approve". This workflow is
+  # triggered by the human merge, so it always runs.
+  #
+  # Pinned to merge_commit_sha: for a squash merge that is the commit created
+  # on main, which is the commit knope tags below. The PR head is a different
+  # commit and the default checkout ref is a third -- verifying the released
+  # tree means naming it, not inferring it.
+  verify:
     if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      checks: read
-    steps:
-      - name: verify ci succeeded for the released tree
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          conclusion=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs" \
-            --jq '[.check_runs[] | select(.name == "ci")][0].conclusion // "missing"')
-          echo "ci conclusion for $HEAD_SHA: $conclusion"
-          if [ "$conclusion" != "success" ]; then
-            echo "::error::ci did not succeed for the released tree -- refusing to publish"
-            exit 1
-          fi
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ github.event.pull_request.merge_commit_sha }}
 
   release:
-    needs: verify-ci
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
