@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M28KB048PY0D3H4T5CGQXRPW
-Status: Open
+Status: Fixed
 Found-in: 'reading `check`''s raw JSON while investigating BUG-24 -- `scope.source` came back as the literal string `"GitTracked"`, which is not one of the four values SPEC-2 declares'
-Regression-test: 'not yet written -- `rust/crates/urzua-cli/src/main.rs`, asserting `scope.source` is one of the declared contract values for a sweep run, planted-failing against the current `format!("{:?}", ...)`'
+Regression-test: 'rust/crates/urzua-cli/tests/check_integration.rs :: scope_source_is_the_declared_contract_value_not_a_debug_rendering -- asserts the real binary''s stdout rather than the type, since urzua-core cannot use serde_json under ADR-0005''s purity allowlist'
+Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/discovery.rs
 ---
 # 25 — scope.source emits a Rust Debug-formatted enum variant instead of SPEC-2's declared contract values
 
@@ -39,6 +40,30 @@ Same class as BUG-4 (`doctor` emitted plain text where the contract said JSON) a
 wrote unescaped YAML): the shape of the output was never asserted against the document that
 specifies it.
 
+## Two corrections to this record
+
+**The `"unavailable"` fifth value is gone.** This record noted `report_could_not_run` emitting it from
+a hand-written string. `ADR-0046` replaced that helper with `CouldNotRun`, which carries no scope at
+all, so the value no longer exists.
+
+**The leak was in two command modules, not `main.rs`.** `ADR-0046`'s split moved it to
+`commands/check.rs:122` and `commands/audit.rs:73`. This record predates that.
+
+## The fix
+
+`ScopeSource` is a serde-renamed enum in `urzua-core::report`, beside `ReportStatus` and
+`FindingSeverity`, and `ScopeInfo.source` now holds it. The value is a declared contract value, so a
+rename of the internal `DiscoverySource` can no longer change public output.
+
+It lives in `urzua-core` rather than `urzua-io` because of the boundary `ADR-0005` enforces: the two
+crates cannot see each other, and `urzua-cli` is the only crate that depends on both. The adapter is
+therefore a single `discovery::scope_source()` — one function rather than one per command, so `check`
+and `audit` cannot disagree about the same fact (`ADR-0030`; the same defect `BUG-0011` found when
+`graph` built its own index beside `pointer_resolution`'s).
+
+`SPEC-0002` declares four values; only `tracked-sweep` is producible today, and the table now says so
+rather than documenting three modes that do not exist.
+
 ## References
 
 - `rust/crates/urzua-core/src/report.rs` -- `ScopeInfo`, whose `source: String` is the type-level
@@ -57,4 +82,5 @@ specifies it.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | Fixed, and two of this record's own claims corrected. **Why:** the value is the first thing an agent branches on, and it matched no declared value on any run since the field existed. Chosen as a deliberately small user-facing change to exercise the changeset and release path end to end after a day of pipeline repairs. | **substantive** |
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not fixed -- the fix touches the published JSON contract (a serde-tagged enum, the missing `base`, the undeclared `record_types`), so it needs a decision and a changeset, not a silent rename. | **structural** |

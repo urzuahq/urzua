@@ -70,7 +70,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         files_examined: records.len(),
         rules_executed: vec![exec1, exec2],
         scope: ScopeInfo {
-            source: format!("{:?}", discovered.source),
+            source: crate::discovery::scope_source(discovered.source),
             record_types: config.record_types.keys().cloned().collect(),
         },
         blocking,

@@ -7,7 +7,19 @@ use std::path::{Path, PathBuf};
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
+use urzua_core::report::ScopeSource;
 use urzua_core::rules;
+
+/// The contract value for how a run selected its records. The adapter lives
+/// here because `urzua-core` (which owns `ScopeSource`) and `urzua-io` (which
+/// owns `DiscoverySource`) cannot see each other -- `urzua-cli` is the only
+/// crate that does. One function, not one per command, so the two can never
+/// disagree about the same fact (ADR-0030).
+pub(crate) fn scope_source(source: urzua_io::DiscoverySource) -> ScopeSource {
+    match source {
+        urzua_io::DiscoverySource::GitTracked => ScopeSource::TrackedSweep,
+    }
+}
 
 pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
     let start = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));

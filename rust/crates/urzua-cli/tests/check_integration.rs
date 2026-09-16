@@ -40,6 +40,32 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
 }
 
 #[test]
+fn scope_source_is_the_declared_contract_value_not_a_debug_rendering() {
+    // SPEC-0002 declares this value. Emitting `format!("{:?}", ..)` of an
+    // internal enum made an ordinary rename a silent contract change
+    // (BUG-0025), so assert the real stdout rather than the type.
+    let dir = fixture_repo("scope-source");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.toml"),
+        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = [\"Status\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let parsed = assert_valid_json_object(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(parsed["scope"]["source"], "tracked-sweep");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn check_exits_0_on_a_clean_corpus() {
     let dir = fixture_repo("clean");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();

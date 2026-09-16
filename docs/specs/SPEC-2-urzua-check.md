@@ -125,12 +125,17 @@ input equal to the review's input.
 
 Explicit paths on argv override discovery and are used as given.
 
-| `scope.source` | Meaning | `base` |
-|---|---|---|
-| `tracked-sweep` | the tracked record set | `null` |
-| `git-diff` | changed against a base ref | the ref |
-| `argv` | explicit paths | `null` |
-| `none` | nothing selected | `null` |
+| `scope.source` | Meaning | `base` | Produced today |
+|---|---|---|---|
+| `tracked-sweep` | the tracked record set | `null` | **yes** |
+| `git-diff` | changed against a base ref | the ref | no — the mode is not built |
+| `argv` | explicit paths | `null` | no — see `BUG-24` |
+| `none` | nothing selected | `null` | no |
+
+The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of whichever internal
+type produced them. Only variants the tool can actually emit exist on that enum; the rest of this
+table is the declared vocabulary those modes will use when built, and is marked so a consumer is not
+misled into branching on a value no run produces.
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
