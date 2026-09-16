@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M2MMFYSSGJWJ5X97Z0FQ5YHT
-Status: Open
+Status: Fixed
 Found-in: 'shipping v0.2.1 -- the release PR''s approved `ci` run failed the changeset gate despite the PR carrying the `no-changeset` label, and only passed after a human removed and re-added the label by hand'
-Regression-test: 'not yet written -- the assertion is that a release PR reaches a green `ci` with no human label handling, which is only observable on a real release run; RFC-30 would make it testable by removing the cause'
+Regression-test: 'the gate no longer reads the event payload at all, so staleness is unrepresentable rather than tested around -- the observable assertion is a release PR reaching green `ci` with no label handling, checkable on the next release'
+Realized-by: code:.github/workflows/ci.yml
 ---
 # 34 — The release PR's changeset gate can never pass on its own, because the label is applied with GITHUB_TOKEN
 
@@ -46,15 +47,37 @@ This is the third symptom of one cause. `BUG-28`: a tag pushed with `GITHUB_TOKE
 silently. The release PR's own `ci`: created but held at `action_required`. This: a label applied
 with `GITHUB_TOKEN` triggers nothing, so a fix that depends on that trigger does nothing.
 
-## The manual step this creates
+## The fix
 
-Until fixed, every release needs a human to:
+Stop reading the label from the event payload. The job now queries the PR's current labels at run
+time:
 
-1. Approve the held `ci` run, and
-2. Remove and re-add the `no-changeset` label, because step 1 approves the *stale* payload.
+```yaml
+if: github.event_name == 'pull_request'     # job always starts
+...
+- name: check for the no-changeset opt-out
+  run: gh pr view "$NUMBER" --json labels --jq '.labels[].name' | grep -qx 'no-changeset'
+```
 
-Step 2 is undocumented anywhere and is not discoverable from the failure — the job's message says to
-add a label that is already present.
+A payload snapshot can be stale; the PR's own state cannot be. This removes the staleness rather
+than working around it, so it holds for a re-run too — a re-run replays the original payload, which
+the job no longer consults.
+
+`BUG-15`'s `labeled`/`unlabeled` trigger types stay. They are no longer load-bearing for correctness,
+but they still get a fresh run started promptly when a human labels a PR after opening it, rather
+than leaving a red check until the next push.
+
+Two consequences worth naming:
+
+- The job now **runs and passes** where it previously **skipped**. That is the better shape under
+  `ADR-29`'s "never a silent skip" rule: the log states that the opt-out was found, instead of the
+  check simply not appearing.
+- It needs `pull-requests: read`, declared at the job rather than widening the workflow default.
+
+**The approval gate is not fixed by this** and is a separate cause: a `GITHUB_TOKEN`-created PR still
+has its run held at `action_required`. That is one remaining manual step per release, addressed by
+`RFC-30`. Before this fix it was two, and the second was undiscoverable — the failing job asked for
+a label that was already present.
 
 ## References
 
@@ -68,4 +91,5 @@ add a label that is already present.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | Filed and fixed in the same change. **Why:** the workaround that unblocked `v0.2.1` -- removing and re-adding the label by hand -- is not something a release should require, and reading live state instead of a snapshot removes the failure mode rather than routing around it. The held-run approval is a different cause and stays open under `RFC-30`. | **substantive** |
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** found by running the release rather than reading the workflow -- `BUG-15`'s fix reads as complete in both the record and `SPEC-20`, and is inert in exactly the case both cite as its motivation. | **structural** |

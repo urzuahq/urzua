@@ -148,11 +148,11 @@ The consequence is sharper than the wording: `verify-ci` reads `missing` when `c
 "did the tree pass" — it is "did a human approve the run." Merging the release PR before that
 approval publishes nothing and leaves `main` carrying a version bump with no tag.
 
-**The manual gate is two steps, not one.** This amendment recorded the `action_required` approval.
-Approving it runs the *stale* `opened` payload, which predates knope's own labelling step, so the
-changeset gate runs when it should skip and fails. A human must then remove and re-add the label to
-fire a `labeled` event from a real actor. Neither step is discoverable from the failure — the job
-asks for a label that is already present (`BUG-34`).
+**The manual gate was two steps, not one.** This amendment recorded the `action_required` approval.
+Approving it replayed the *stale* `opened` payload, which predates knope's own labelling step, so the
+changeset gate ran when it should have skipped and failed — asking for a label that was already
+present. `BUG-34` fixed that half by reading the PR's live labels instead of the payload. The
+approval itself remains, and is the one manual step per release.
 
 Both trace to one cause this decision now depends on three times over: `GITHUB_TOKEN` events do not
 trigger workflows. `BUG-28` was fixed by deleting the dependency; the remaining two are GitHub's own

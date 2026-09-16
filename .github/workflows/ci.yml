@@ -61,17 +61,35 @@ jobs:
     name: changeset required
     # A `no-changeset` label is an explicit, visible opt-out (CI-only, docs-only,
     # internal-refactor PRs) -- never a silent skip (ADR-0029).
-    if: >-
-      github.event_name == 'pull_request' &&
-      !contains(github.event.pull_request.labels.*.name, 'no-changeset')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
+      # Read the label from the PR, not from `github.event`. The payload is a
+      # snapshot taken when the event fired, and a PR opened by automation is
+      # labelled in a later step -- so the payload never carries it, and a
+      # re-run replays the same stale snapshot (BUG-0034).
+      - name: check for the no-changeset opt-out
+        id: optout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh pr view "${{ github.event.pull_request.number }}" \
+               --repo "${{ github.repository }}" --json labels \
+               --jq '.labels[].name' | grep -qx 'no-changeset'; then
+            echo "no-changeset label present -- this PR declares it has nothing to tell an installer"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: verify this PR adds a .changeset fragment (ADR-0029)
+        if: steps.optout.outputs.skip != 'true'
         run: |
           set -euo pipefail
           git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1

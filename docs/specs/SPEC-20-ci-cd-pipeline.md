@@ -31,11 +31,14 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   `embodiment.consistency`'s drift check (`ADR-32`) reads git blame/log history on locators, and a
   shallow checkout makes it silently unable to detect anything, not an error.
 - **`changeset` job**: requires a `.changeset/*.md` fragment added in the diff, or the `no-changeset`
-  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only. The `pull_request:` trigger
-  explicitly lists `[opened, synchronize, reopened, labeled, unlabeled]` (`BUG-15`) — the default
-  three types alone leave this job evaluating a stale, pre-label event payload whenever the label is
-  applied after the PR already exists (the common case for a fragment-less PR filed as an
-  afterthought, and always the case for `prepare-release.yml`'s own automated PR below).
+  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only. The label is read from **the
+  PR's current state, not from `github.event`** (`BUG-34`): a payload is a snapshot taken when the
+  event fired, and a PR opened by automation is labelled in a later step, so the payload never
+  carries it and a re-run replays the same stale snapshot. The job therefore always starts and
+  reports why it skipped, rather than being skipped by a job-level `if:`. The `pull_request:` trigger
+  still lists `[opened, synchronize, reopened, labeled, unlabeled]` (`BUG-15`) — no longer
+  load-bearing for correctness, but it starts a fresh run promptly when a human labels a PR after
+  opening it.
 
 ## `prepare-release.yml` / `publish-release.yml` — the two-step release (`ADR-45`)
 
@@ -93,18 +96,14 @@ error. `release.yml` previously held the last three jobs and is deleted.
 - GitHub Release binaries only (`ADR-13`) — not published to crates.io; `Cargo.lock` is committed for
   this reason (a binary, not a library other crates depend on).
 
-**Known manual steps — two, not one.** Both stem from `GITHUB_TOKEN` events not triggering
-workflows, the same cause as `BUG-28`:
+**Known manual step:** the release PR's `ci` run is held at `action_required` until a human approves
+it, because `GITHUB_TOKEN` created the PR — the same cause as `BUG-28`. `RFC-30` proposes removing it
+by acting as a GitHub App.
 
-1. The release PR's `ci` run is held at `action_required` until a human approves it.
-2. Approving it runs the **stale `opened` payload**, captured before knope's own labelling step, so
-   the changeset job runs when it should skip and fails. A human must remove and re-add the
-   `no-changeset` label to fire a `labeled` event from a real actor (`BUG-34`). `BUG-15`'s
-   `labeled`/`unlabeled` trigger types exist for exactly this and are inert here, because the label
-   is applied with `GITHUB_TOKEN`.
-
-Neither step is discoverable from the failure: the job asks for a label that is already present.
-`RFC-30` proposes removing both by acting as a GitHub App.
+This was two steps until `BUG-34`: approving the run replayed the **stale `opened` payload**, taken
+before knope's own labelling step, so the changeset job ran when it should have skipped. The gate now
+reads the PR's current labels at run time rather than from the payload, which makes staleness
+unrepresentable — including on a re-run, which replays the original payload.
 
 ## `knope.toml` / `.changeset/*.md` — the fragment format (`ADR-29`)
 
