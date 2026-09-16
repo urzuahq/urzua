@@ -48,11 +48,12 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   `CreatePullRequest`), which compiles every accumulated `.changeset/*.md` fragment plus any
   Conventional Commits since the last tag into a version bump and `CHANGELOG.md` section. The job
   installs the pinned toolchain and a cargo cache first, because that `cargo check` needs both
-  (`BUG-27`). **No `continue-on-error`**: swallowing the failure hid a six-day release outage once.
-  The cost is that `knope prepare-release` treats nothing-to-release as an error, so **every
-  `no-changeset` merge turns this workflow red** (`BUG-33`) — the guard skips only its own release
-  commit, not a routine merge with no fragment. The failure direction is the safe one; a gate that
-  is red on routine merges is still a gate nobody reads.
+  (`BUG-27`). **No `continue-on-error`**: swallowing every failure hid a six-day release outage once.
+  Instead the step tolerates **one documented error by name** — knope's `releases::no_release`, which
+  a merge carrying no changeset and no releasable commit legitimately produces (`BUG-33`) — emits a
+  `::notice::` saying so, and fails on anything else with its original exit code. A fragment count
+  would not do: knope also releases on Conventional Commits since the last tag, so "no fragments" is
+  not "nothing to release".
 - The `cargo check` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
   version line — it has no knowledge of `Cargo.lock`, which independently records each workspace
   member's resolved version and goes stale the instant `Cargo.toml` changes without it (`BUG-14`,

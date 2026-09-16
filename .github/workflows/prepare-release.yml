@@ -62,12 +62,25 @@ jobs:
           git config user.name "urzua-release-bot"
           git config user.email "urzua-release-bot@users.noreply.github.com"
 
-      # No continue-on-error: the `if:` guard above already skips the one
-      # expected no-op case (this workflow's own release commit), so any
-      # failure reaching here is real. Swallowing it hid a six-day release
-      # outage once (BUG-0027) -- a workflow that reports success while
-      # doing nothing is the failure this project exists to prevent.
+      # Deliberately not `continue-on-error`, which swallowed a six-day
+      # release outage once (BUG-0027). This tolerates exactly one documented
+      # error -- knope's own `releases::no_release`, which a merge carrying no
+      # changeset and no releasable commit legitimately produces (BUG-0033) --
+      # and fails on anything else, including a future knope that stops
+      # emitting that identifier.
       - name: open or update the release PR (ADR-0045)
-        run: knope prepare-release --verbose
         env:
           GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          out=$(knope prepare-release --verbose 2>&1) && rc=0 || rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          if printf '%s' "$out" | grep -q 'releases::no_release'; then
+            echo "::notice::nothing to release -- no changeset fragment and no releasable commit since the last tag"
+            exit 0
+          fi
+          echo "::error::knope prepare-release failed (exit $rc)"
+          exit "$rc"
