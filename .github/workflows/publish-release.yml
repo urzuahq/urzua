@@ -1,9 +1,13 @@
 name: publish release
 
 # Runs when the release PR (opened by prepare-release.yml) merges into main
-# -- the deliberate act in this two-step flow (ADR-0045). Tags the
-# now-current version and creates the GitHub Release; the tag push fires
-# the existing tag-triggered release.yml (cross-compiled binaries) unchanged.
+# -- the deliberate act in this two-step flow (ADR-0045). Owns the entire
+# publish: tag, GitHub Release, cross-compiled binaries, and their upload.
+#
+# One workflow rather than two deliberately (BUG-0028). The tag here is
+# pushed with GITHUB_TOKEN, and GitHub never triggers a workflow from a
+# GITHUB_TOKEN event -- so a separate tag-triggered build workflow silently
+# never runs, and the release publishes with no binaries and no error.
 on:
   pull_request:
     types: [closed]
@@ -17,14 +21,43 @@ permissions:
   contents: read
 
 jobs:
-  publish-release:
+  # Refuses to publish unless ci concluded success for the exact tree being
+  # released. Checks the release PR's head sha, not the merge commit: the
+  # head has definitively finished (it gated the merge), while ci on the
+  # merge commit races this workflow. Same tree either way -- the merge is a
+  # squash of a PR whose checks passed.
+  verify-ci:
     if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: verify ci succeeded for the released tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs" \
+            --jq '[.check_runs[] | select(.name == "ci")][0].conclusion // "missing"')
+          echo "ci conclusion for $HEAD_SHA: $conclusion"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::ci did not succeed for the released tree -- refusing to publish"
+            exit 1
+          fi
+
+  release:
+    needs: verify-ci
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       # Pushes the release tag and creates the GitHub Release -- narrow and
       # explicit, not the workflow-level default.
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,3 +82,107 @@ jobs:
         run: knope release --verbose
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      # The tag knope just created, read from the same file and with the
+      # same anchored pattern knope.toml itself bumps -- never re-derived
+      # from a second source that could disagree with it.
+      - name: resolve the tag knope created
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 -E '^version = "' rust/Cargo.toml | sed 's/^version = "\(.*\)"$/\1/')
+          if [ -z "$version" ]; then
+            echo "::error::could not read the released version from rust/Cargo.toml"
+            exit 1
+          fi
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "resolved tag: v$version"
+
+  build:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+          # Cross-compiled from the same arm64 runner rather than a
+          # dedicated macos-13 (Intel) runner: those queue for a very long
+          # time or never schedule as GitHub winds down Intel-runner
+          # capacity, and rustc/Xcode already cross-compile this target
+          # cleanly from arm64 without needing real Intel hardware.
+          - target: x86_64-apple-darwin
+            os: macos-14
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      # Builds the tag knope created, not the branch head -- they are the
+      # same commit today, but pinning the ref means a push landing on main
+      # mid-publish can never produce binaries that disagree with the
+      # release they are attached to.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.release.outputs.tag }}
+      - name: install target
+        run: rustup target add ${{ matrix.target }}
+      - name: build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p urzua-cli
+      - name: package
+        run: |
+          name="urzua-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/urzua" "dist/$name/"
+          cp ../LICENSE ../README.md "dist/$name/"
+          tar -czf "dist/$name.tar.gz" -C dist "$name"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: rust/dist/urzua-${{ matrix.target }}.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: urzua-${{ matrix.target }}
+          path: rust/dist/urzua-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  upload:
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      # `knope release` above already created this release with real
+      # changelog-sourced notes (ADR-0045) -- upload attaches the archives to
+      # it rather than creating a second, conflicting release object.
+      - name: upload the built archives to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" dist/*.tar.gz --repo "${{ github.repository }}"
+      # A release with no attached archive is the defect BUG-0028 records:
+      # it looks published and cannot be installed. Assert rather than trust.
+      - name: verify the release actually carries its archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          count=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets | length')
+          echo "$TAG carries $count asset(s)"
+          if [ "$count" -lt 3 ]; then
+            echo "::error::expected 3 archives on $TAG, found $count"
+            exit 1
+          fi
