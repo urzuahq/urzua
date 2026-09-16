@@ -63,9 +63,15 @@ A payload snapshot can be stale; the PR's own state cannot be. This removes the 
 than working around it, so it holds for a re-run too — a re-run replays the original payload, which
 the job no longer consults.
 
-`BUG-15`'s `labeled`/`unlabeled` trigger types stay. They are no longer load-bearing for correctness,
-but they still get a fresh run started promptly when a human labels a PR after opening it, rather
-than leaving a red check until the next push.
+`BUG-15`'s `labeled`/`unlabeled` trigger types stay, and remain load-bearing. The live read fixes a
+*stale* payload — including on a re-run, which replays the original one — but not a label applied
+*after* a run has started. That run correctly sees no label and fails, and only a `labeled` event
+starts the correcting run.
+
+Observed on `#43`: the `opened` run began at 09:11:02, the label landed at 09:12:29, and the
+`labeled` run at 09:12:31 passed. The first failure was the gate working, not the defect recurring.
+For the release PR specifically the ordering cannot bite, because the run is held at
+`action_required` until a human approves it and knope's labelling step has long since finished.
 
 Two consequences worth naming:
 

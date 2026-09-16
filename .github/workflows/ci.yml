@@ -5,10 +5,10 @@ name: ci
 # `paths:` filter. A filtered required check can fail to report on a PR that
 # doesn't touch the filtered paths, which deadlocks a merge that requires it.
 # `labeled`/`unlabeled` added to the default [opened, synchronize, reopened]
-# set (BUG-0015), so labelling a PR starts a run promptly rather than leaving
-# a red check until the next push. No longer load-bearing for correctness:
-# the `changeset` job reads the label from the PR rather than from the event
-# payload (BUG-0034), so a stale payload cannot mislead it.
+# set (BUG-0015). Still load-bearing: the `changeset` job reads the label live
+# rather than from the event payload (BUG-0034), which fixes a *stale* payload
+# but not a label applied *after* the run started -- that run correctly sees no
+# label and fails, and only a `labeled` event starts the correcting one.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
