@@ -75,4 +75,5 @@ a number in a leading token) is part of what gets declared, and the two should b
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | Added measured evidence from `MILE-51`'s first run: against `npryce/adr-tools`, `filename.title-consistency` examines **zero** records, and `urzua new` writes a colliding `ADR-1-…` beside an existing `0001-…` (`BUG-37`). The motivation was previously reasoned from this repo's config surface alone; it now has a foreign corpus behind it, and the numbering half turns out to be a live defect rather than a latent gap. | **substantive** |
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** surfaced by an engine-principle review of the `BUG-23` fix -- the message defects were worth fixing on their own, but none of them closes the gap that the convention itself is not declarable, and leaving that unfiled would have let a message fix read as resolving it. | **structural** |
