@@ -4,6 +4,12 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.2.2 (2026-09-16)
+
+### Fixes
+
+- tolerate knope's no_release by name, not every failure (#41)
+
 ## 0.2.1 (2026-09-16)
 
 ### Fixes
