@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M2MMFX94TCYK8M5H9KQ2VEMW
-Status: Open
+Status: Fixed
 Found-in: 'checking why the prepare-release run that followed PR #37 was red -- knope exited 1 with `releases::no_release`, and #37 was a `no-changeset` PR with nothing to release'
-Regression-test: 'not yet written -- needs a workflow-level assertion that a no-changeset merge to main leaves prepare-release green, which cannot be unit-tested and wants either `allow_empty` or a guard step whose skip is itself visible'
+Regression-test: 'the branch logic was exercised against a stubbed knope for all four cases -- success, no_release, a real failure, and a non-1 exit -- confirming only no_release is tolerated and other exit codes propagate unchanged; end to end, the merge of this fix is itself a no-changeset merge and must leave prepare-release green'
+Realized-by: code:.github/workflows/prepare-release.yml
 ---
 # 33 — prepare-release fails on every no-changeset merge, because knope treats nothing-to-release as an error
 
@@ -41,16 +42,38 @@ The failure direction is right — a false alarm is safer than the silent succes
 but a workflow that goes red on routine merges trains a reader to ignore it, which is precisely how
 `BUG-27`'s outage survived six days. A gate nobody trusts is not a gate.
 
-## Options
+## The fix
 
-- `allow_empty: true` on the `PrepareRelease` step. Documented by knope for this exact case. Makes
-  the step a no-op instead of an error, and the subsequent commit/push steps then have nothing to
-  commit — so they need handling too.
-- A guard step that checks for pending fragments and exits the job early, **logging that it skipped
-  and why**. More code, but the skip is visible rather than inferred from a green tick.
+Neither option as originally framed. `allow_empty: true` leaves the subsequent commit/push steps
+with nothing to commit, moving the failure one step later. A pre-flight guard counting
+`.changeset/*.md` files would be wrong too: knope also releases on Conventional Commits since the
+last tag, so "no fragments" is not the same as "nothing to release" — the guard would skip a release
+that was genuinely due.
 
-The second is closer to this repo's own "no silent no-op" rule: a workflow that is green because it
-correctly did nothing should say so.
+Instead the step runs knope, captures its output, and tolerates **exactly one documented error**:
+
+```sh
+out=$(knope prepare-release --verbose 2>&1) && rc=0 || rc=$?
+printf '%s\n' "$out"
+[ "$rc" -eq 0 ] && exit 0
+if printf '%s' "$out" | grep -q 'releases::no_release'; then
+  echo "::notice::nothing to release -- no changeset fragment and no releasable commit since the last tag"
+  exit 0
+fi
+echo "::error::knope prepare-release failed (exit $rc)"
+exit "$rc"
+```
+
+This keeps `BUG-27`'s lesson intact. `continue-on-error` tolerates *every* failure, which is how a
+six-day outage stayed invisible. This tolerates one, by name, and everything else fails with its
+original exit code — including a future knope that stops emitting `releases::no_release`, which
+fails loudly rather than being silently re-swallowed.
+
+The skip emits a `::notice::` rather than passing quietly, so a green run that correctly did nothing
+says so — `ADR-29`'s "never a silent skip", applied to the workflow rather than to a job.
+
+Verified against a stubbed `knope` before shipping: success exits 0, `no_release` exits 0 with the
+notice, a real failure exits 1, and a non-1 exit code propagates as itself rather than collapsing.
 
 ## References
 
@@ -64,4 +87,5 @@ correctly did nothing should say so.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | Fixed. **Why:** both options this record originally proposed were wrong on inspection -- `allow_empty` moves the failure to the next step, and a fragment-count guard would skip a release genuinely due from Conventional Commits. Tolerating one error by name keeps `BUG-27`'s lesson (never swallow every failure) while removing the false alarm that trains a reader to ignore this workflow. | **substantive** |
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** found by reading the run history while shipping `v0.2.1`, not by any alert -- the red run sat unexamined because nothing distinguishes "failed for a real reason" from "correctly had nothing to do" in this workflow's output. | **structural** |
