@@ -47,6 +47,7 @@ record_types:
     known_fields:
       - "Stable-Id"
       - "Embodiment"
+      - "Realized-by"
       - "Derives-from"
       - "Implements"
       - "Parent"

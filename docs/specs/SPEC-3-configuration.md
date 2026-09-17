@@ -1,7 +1,9 @@
 ---
 Version: '0.4'
 Date: 2026-08-20
-Status: Draft
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
 Implements: RFC-1, RFC-11
@@ -166,3 +168,4 @@ indistinguishable in the report from one that ran clean:
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-17 | Documented the `rules` table: per-rule `level`, opt-in, and the two load-time errors. **Why:** `SPEC-1` listed "which checks are errors vs. warnings" as a v0 configuration surface and it was never built -- severity lived as 34 hardcoded literals in `rules.rs` with no config key at all (`MILE-80`). | **substantive** |
+> | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command reads `.urzua/config.yaml` on every invocation, and this spec was revised again today to document the `rules` table `MILE-80` shipped. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
