@@ -153,19 +153,61 @@ by symptom severity**, and to move the root blocker into the phase that needs it
 Concretely: `MILE-80` moves to Phase 0, and this RFC becomes a Phase 0 exit condition alongside
 `MILE-51`.
 
-## Open questions
+## The `[rules]` surface — decided 2026-09-17
 
-- **Can a rule be configured out of existence, or only down to a notice?** `ADR-7`'s no-silent-no-op
-  rule argues a disabled rule must still appear in `rules_executed` as deliberately skipped, which
-  differs from "absent". Decide before `MILE-80` designs the table.
-- **What is the default posture for an adopter?** Every primitive on, or a minimal structural set with
-  the rest opt-in? `MILE-51` argues the second; this repo's own corpus wants the first.
-- **`schema_version = 2`?** Adding `[rules]` under `deny_unknown_fields` is a breaking config change.
-  `ADR-12` owns versioning policy and has not been consulted.
-- **Is the eleven-primitive set right?** It is derived from today's seventeen. A set derived from what
+Four questions were open when this was filed. All four are now answered, and the design is borrowed
+from established linter practice rather than invented.
+
+**1. Can a rule be turned off? Yes, any of them — no `forbid` level.** rustc's `forbid` exists so a
+downstream config cannot relax an upstream one. Urzua has no config inheritance, so it would solve a
+problem that does not exist; revisit if shared configs ever land. `ADR-7` still constrains *how*: a
+disabled rule appears in `rules_executed` as deliberately skipped, never absent, so "off" and "ran
+clean" stay distinguishable.
+
+**2. Syntax: a scalar shorthand, widening to an inline table when a rule takes options.**
+
+```toml
+[rules]
+"header.conforms"         = "error"
+"reference.target-status" = "off"
+"config.key-required"     = { level = "warn", keys = ["spec"] }
+```
+
+The shape Cargo's `[lints]` uses — but chosen on ergonomics, not familiarity. Urzua ships as a binary
+and its users are not Rust developers. The common case is one word; the named `level` key says what it
+means, where ESLint's positional `["warn", {...}]` requires knowing that the first slot is severity.
+
+**3. `schema_version` bumps to 2.** `ADR-12` added the field from day one *"in the context of a config
+format about to exist in repos this project doesn't control."* This is the first real breaking change
+and the mechanism exists for it. An old binary then reports "schema_version 2 not supported" rather
+than "unknown field `rules`" — the same failure, a better error.
+
+**4. Default when `[rules]` is absent: structural rules on, policy rules off.**
+
+The classification becomes the default, which makes the distinction load-bearing rather than
+descriptive. The test that separates them: *can an adopter disagree with this rule and still be
+right?*
+
+- **Structural** — no. These check your corpus against **your own declarations**: you said records
+  need a `Status` field, do they have one; this reference names `ADR-7`, does `ADR-7` exist. They hold
+  no opinion about what you should declare.
+- **Policy** — yes, and many teams would. These check your corpus against **ours**: record types
+  should have specs, records should carry classified revision logs, evidence tiers should be claimed
+  via `Realized-by`, supersession should be bidirectional.
+
+An adopter's first run then checks only what they themselves declared. This repo opts its five policy
+rules back on explicitly — which has a second benefit worth stating: **our governance stops being
+implied by the binary and becomes visible in our own config**, where a reader can see it and copy it.
+`MILE-51` measured the alternative: nine errors and an unanswerable warning against a valid corpus.
+
+## Still open
+
+- **Is the eleven-primitive set right?** Derived from today's seventeen. A set derived from what
   corpora actually need might differ, and only a second and third adopted corpus would tell us.
 - **Does this supersede `MILE-51`'s five gaps or subsume them?** `RFC-32` dissolves entirely — under
   this proposal that rule does not exist. The others become configurations rather than new keys.
+- **Rule-family selection.** With eleven primitives a flat list is readable; Ruff's `select`/`ignore`
+  over code prefixes is the prior art if it ever isn't. Not needed at this size.
 
 ## What this does not propose
 
