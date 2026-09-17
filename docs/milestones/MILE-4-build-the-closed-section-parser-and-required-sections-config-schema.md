@@ -4,7 +4,7 @@ Stable-Id: 01M1Y5JE63FXMT7PV7QJQN7BXV
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
-Blocked-on: —
+Blocked-on: RFC-33
 ---
 # 4 — Build the closed section-parser and required_sections config schema
 
@@ -38,3 +38,4 @@ closes gap 4.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-17 | Absorbed into `RFC-33`'s declared document model. **Why:** this was scoped as a standalone section parser plus a `required_sections` schema. Under `ADR-53` those are two different layers: locating sections is `sections.from` in the document model (shape, `RFC-34`), and requiring them is a rule (policy). Building it as one thing would rebuild the conflation `ADR-53` exists to remove. The MADR paper test also already moved the target -- `sections.from: h2` is too flat, and `depth`/`items` are needed. | **substantive** |

@@ -1,5 +1,5 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M1YN87AP04NCFMXY4WBJK4EK
 Phase: '0'
 Track: corpus-corrections
@@ -78,3 +78,4 @@ downstream work this milestone informs; re-running this validation is how it eve
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Recorded the first run's result. `Status` stays `Planned` -- the claim fails and five schema gaps are now named with measurements behind each. **Why:** this is a validation milestone whose own Why calls it *"the cheapest, most informative validation available before building anything else on top of the current schema"* -- so the deliverable is the verdict, not a patch. Two drafted fixes were rejected under adversarial review for making the run quiet rather than the schema expressive; that reasoning is recorded above because it is the more durable half. | **substantive** |
+> | 2026-09-17 | `Status: Planned` → `Done`. **Why:** this milestone's deliverable is a verdict, not a fix, and the verdict exists: run against `npryce/adr-tools`, the founding claim **failed** -- `init` could not run, a hand-written config produced 9 blocking errors, and 10 of 17 rules examined zero records. That result produced `RFC-33` and `ADR-53`. Leaving it `Planned` claimed the validation had not happened when it is the single most consequential thing this project has run. | **substantive** |
