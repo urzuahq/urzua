@@ -48,7 +48,7 @@ fn scope_source_is_the_declared_contract_value_not_a_debug_rendering() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(
@@ -71,7 +71,7 @@ fn check_exits_0_on_a_clean_corpus() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(
@@ -98,7 +98,7 @@ fn check_exits_1_on_a_missing_required_field() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Deciders\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Deciders\"]\n",
     )
     .unwrap();
     std::fs::write(
@@ -136,7 +136,7 @@ fn an_untracked_scratch_file_is_never_examined() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(
@@ -165,7 +165,7 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\n\
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\n\
          record_types:\n\
          \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
          \x20   known_fields: [\"Implements\"]\n    pointer_fields: [\"Implements\"]\n    narrative_fields: []\n\
@@ -228,7 +228,7 @@ fn doctor_emits_json_not_plain_text_lines() {
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -271,7 +271,7 @@ fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\n\
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\n\
          record_types:\n\
          \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
          \x20 rfc:\n    dir: \"docs/rfc\"\n    required_fields: []\n",
@@ -312,7 +312,7 @@ fn audit_exits_0_on_reciprocated_supersession() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(
@@ -344,7 +344,7 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // ADR-0001 claims to supersede ADR-0002, but ADR-0002 never points back --
@@ -405,7 +405,11 @@ fn init_then_check_flags_a_pre_existing_blockquote_record() {
 
     let check_output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&check_output.stdout);
-    assert_eq!(check_output.status.code(), Some(1), "stdout: {stdout}");
+    // Exit 0, not 1: `init` proposes every rule at `warn`, so an adopted
+    // corpus is told what is irregular without being blocked on day one
+    // (MILE-51). The finding itself must still be present -- the assertion
+    // below is the real one, and the exit code is secondary to it.
+    assert_eq!(check_output.status.code(), Some(0), "stdout: {stdout}");
     assert!(
         stdout.contains("no header-shaped region found"),
         "stdout: {stdout}"
@@ -455,7 +459,7 @@ fn fix_apply_on_an_empty_corpus_still_exits_0() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -625,7 +629,7 @@ fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // No header-shaped region -- deliberately exercises the `skipped`
@@ -663,7 +667,7 @@ fn migrate_ids_exits_1_on_a_real_write_failure() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // A real header-shaped region (a blockquote line) so the backfill
@@ -695,4 +699,71 @@ fn migrate_ids_exits_1_on_a_real_write_failure() {
     );
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// ADR-7: "off" and "ran clean" must stay distinguishable. A rule a repository
+/// did not turn on is reported as not-enabled with zero records examined --
+/// never omitted, which would read as though it had run and found nothing.
+#[test]
+fn an_undeclared_rule_is_reported_as_not_enabled_never_omitted() {
+    let dir = fixture_repo("not-enabled");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {field.quality: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let executed = parsed["rules_executed"].as_array().unwrap();
+
+    let quality = executed
+        .iter()
+        .find(|r| r["rule"] == "field.quality")
+        .expect("a declared rule must appear");
+    assert_eq!(quality["status"], "ran");
+
+    let required = executed
+        .iter()
+        .find(|r| r["rule"] == "header.required-fields")
+        .expect("an undeclared rule must still appear, marked not-enabled");
+    assert_eq!(required["status"], "not-enabled");
+    assert_eq!(required["records_examined"], 0);
+
+    // Every rule this build ships is accounted for, so a reader can tell
+    // "not configured" from "does not exist".
+    assert_eq!(executed.len(), 19, "{executed:?}");
+}
+
+/// The declared level replaces whatever severity the rule body chose -- that is
+/// the whole of MILE-80. `field.quality` emits Error on a blank field; a
+/// repository declaring it `warn` must not be blocked by it.
+#[test]
+fn the_declared_level_overrides_the_rule_body_s_own_severity() {
+    let dir = fixture_repo("level-override");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {field.quality: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/0001-x.md"), "# 0001 — X\n\n> Status:\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let findings = parsed["findings"].as_array().unwrap();
+    assert!(!findings.is_empty(), "the rule must still fire: {parsed}");
+    for f in findings {
+        assert_eq!(f["severity"], "warning", "{f}");
+    }
+    assert_eq!(parsed["blocking"], false);
+    assert_eq!(output.status.code(), Some(0));
 }

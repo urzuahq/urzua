@@ -37,6 +37,17 @@ pub struct Finding {
 pub struct RuleExecution {
     pub rule: String,
     pub records_examined: usize,
+    /// ADR-7: a rule a repository did not turn on is reported as deliberately
+    /// skipped, never omitted -- "off" and "ran clean" must stay
+    /// distinguishable in the report.
+    pub status: RuleStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuleStatus {
+    Ran,
+    NotEnabled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

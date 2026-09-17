@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
-use crate::report::{Finding, FindingSeverity, RuleExecution};
+use crate::report::{Finding, FindingSeverity, RuleExecution, RuleStatus};
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -15,11 +15,57 @@ use std::path::PathBuf;
 /// Rule 1: header format consistency within a record type, per a
 /// config-declared required-field list. A majority-rule inference would
 /// silently ratify whatever drifted in, so the shape is declared, not voted.
+/// Every rule this build ships, by id. One canonical name per rule: the
+/// config is validated against this list, so a typo is a load-time error
+/// naming the valid set rather than a check that silently never runs.
+pub const RULE_HEADER_REQUIRED_FIELDS: &str = "header.required-fields";
+pub const RULE_HEADER_LAYOUT_CONSISTENCY: &str = "header.layout-consistency";
+pub const RULE_HEADER_FIELD_SET_CONSISTENCY: &str = "header.field-set-consistency";
+pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
+pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
+pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
+pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
+pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
+pub const RULE_POINTER_RESOLUTION: &str = "pointer.resolution";
+pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
+pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
+pub const RULE_NARRATIVE_FIELD_STALE: &str = "narrative-field.stale";
+pub const RULE_FIELD_QUALITY: &str = "field.quality";
+pub const RULE_FIELD_PENDING: &str = "field.pending";
+pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
+pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";
+pub const RULE_EMBODIMENT_CONSISTENCY: &str = "embodiment.consistency";
+pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
+    "embodiment.locator-promotion-candidate";
+pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
+
+pub const ALL_RULES: &[&str] = &[
+    RULE_HEADER_REQUIRED_FIELDS,
+    RULE_HEADER_LAYOUT_CONSISTENCY,
+    RULE_HEADER_FIELD_SET_CONSISTENCY,
+    RULE_TYPE_NO_DECLARED_SPEC,
+    RULE_HEADER_DEPRECATED_SHAPE,
+    RULE_CONFIG_POINTER_DECLARATION_MISSING,
+    RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
+    RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
+    RULE_POINTER_RESOLUTION,
+    RULE_POINTER_TARGET_STATUS,
+    RULE_HEADER_POINTER_FIELD_CLEAN,
+    RULE_NARRATIVE_FIELD_STALE,
+    RULE_FIELD_QUALITY,
+    RULE_FIELD_PENDING,
+    RULE_FILENAME_TITLE_CONSISTENCY,
+    RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+    RULE_EMBODIMENT_CONSISTENCY,
+    RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+    RULE_RELATION_SUPERSESSION_RECIPROCITY,
+];
+
 pub fn header_required_fields(
     records: &[Record],
     required_by_type: &HashMap<String, Vec<String>>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "header.required-fields";
+    const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -79,6 +125,7 @@ pub fn header_required_fields(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -98,7 +145,7 @@ pub fn header_layout_consistency(
     records: &[Record],
     declared_by_type: &HashMap<String, HeaderLayout>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "header.layout-consistency";
+    const RULE_ID: &str = RULE_HEADER_LAYOUT_CONSISTENCY;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -131,6 +178,7 @@ pub fn header_layout_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -157,7 +205,7 @@ pub fn header_field_set_consistency(
     records: &[Record],
     allowed_by_type: &HashMap<String, HashSet<String>>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "header.field-set-consistency";
+    const RULE_ID: &str = RULE_HEADER_FIELD_SET_CONSISTENCY;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -188,6 +236,7 @@ pub fn header_field_set_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -206,7 +255,7 @@ pub fn type_no_declared_spec(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "type.no-declared-spec";
+    const RULE_ID: &str = RULE_TYPE_NO_DECLARED_SPEC;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -234,6 +283,7 @@ pub fn type_no_declared_spec(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -250,7 +300,7 @@ pub fn header_deprecated_shape(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "header.deprecated-shape";
+    const RULE_ID: &str = RULE_HEADER_DEPRECATED_SHAPE;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -278,6 +328,7 @@ pub fn header_deprecated_shape(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -373,7 +424,7 @@ pub fn config_pointer_declaration_missing(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "config.pointer-declaration-missing";
+    const RULE_ID: &str = RULE_CONFIG_POINTER_DECLARATION_MISSING;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -405,6 +456,7 @@ pub fn config_pointer_declaration_missing(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -420,7 +472,7 @@ pub fn config_pointer_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "config.pointer-field-not-known";
+    const RULE_ID: &str = RULE_CONFIG_POINTER_FIELD_NOT_KNOWN;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -468,6 +520,7 @@ pub fn config_pointer_field_not_known(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -481,7 +534,7 @@ pub fn config_pointer_narrative_overlap(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "config.pointer-narrative-overlap";
+    const RULE_ID: &str = RULE_CONFIG_POINTER_NARRATIVE_OVERLAP;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -520,6 +573,7 @@ pub fn config_pointer_narrative_overlap(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -545,12 +599,22 @@ pub(crate) fn build_normalized_index(records: &[Record]) -> HashMap<String, &Rec
 /// (RFC-0012), not this checker's call. Both kinds resolve identically here;
 /// existence-checking isn't a `FieldKindSpec` capability; only the clean-
 /// format check and the staleness check differ per kind.
-pub fn pointer_resolution(
+/// Split out of `pointer.resolution` (MILE-80), which emitted a finding for
+/// *every* reference that resolved -- 172 of 213 on this repo's own corpus, all
+/// saying a reference worked. One rule id cannot carry two severities, so the
+/// dangling-reference error and this policy could never be levelled apart.
+///
+/// Fires only on the statuses a repository declares unacceptable. With none
+/// declared it examines nothing and reports nothing, rather than falling back
+/// to a built-in list -- the fallback is what `is_terminal_status`'s `_ => &[]`
+/// did, and it makes a rule silently stop applying.
+pub fn pointer_target_status(
     records: &[Record],
     pointer_fields_by_type: &HashMap<String, Vec<String>>,
     narrative_fields_by_type: &HashMap<String, Vec<String>>,
+    not_in: &[String],
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "pointer.resolution";
+    const RULE_ID: &str = RULE_POINTER_TARGET_STATUS;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -574,32 +638,21 @@ pub fn pointer_resolution(
             examined += 1;
 
             for reference in extract_references(value) {
-                match index.get(&normalize_id(&reference)) {
-                    Some(target) => {
-                        let status = target.header.get("Status").unwrap_or("(no Status field)");
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Warning,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            message: format!(
-                                "{field_name}: {reference} resolves; target Status = {status}"
-                            ),
-                        });
-                    }
-                    None => {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            message: format!(
-                                "{field_name}: {reference} does not resolve to any discovered record"
-                            ),
-                        });
-                    }
+                let Some(target) = index.get(&normalize_id(&reference)) else {
+                    continue;
+                };
+                let status = target.header.get("Status").unwrap_or("(no Status field)");
+                if not_in.iter().any(|s| s == status) {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "{field_name}: {reference} resolves, but its Status is {status}"
+                        ),
+                    });
                 }
             }
         }
@@ -609,6 +662,63 @@ pub fn pointer_resolution(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
+pub fn pointer_resolution(
+    records: &[Record],
+    pointer_fields_by_type: &HashMap<String, Vec<String>>,
+    narrative_fields_by_type: &HashMap<String, Vec<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_POINTER_RESOLUTION;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let index = build_normalized_index(records);
+
+    for record in records {
+        let fields = pointer_fields_by_type
+            .get(&record.record_type)
+            .into_iter()
+            .flatten()
+            .chain(
+                narrative_fields_by_type
+                    .get(&record.record_type)
+                    .into_iter()
+                    .flatten(),
+            );
+        for field_name in fields {
+            let Some(value) = record.header.get(field_name) else {
+                continue;
+            };
+            examined += 1;
+
+            for reference in extract_references(value) {
+                if index.contains_key(&normalize_id(&reference)) {
+                    continue;
+                }
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "{field_name}: {reference} does not resolve to any discovered record"
+                    ),
+                });
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -635,7 +745,7 @@ pub fn header_pointer_field_clean(
     records: &[Record],
     config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "header.pointer-field-clean";
+    const RULE_ID: &str = RULE_HEADER_POINTER_FIELD_CLEAN;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -685,6 +795,7 @@ pub fn header_pointer_field_clean(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -703,7 +814,7 @@ pub fn header_pointer_field_clean(
 /// this rule's job; that's `pointer_resolution`'s error case, reused rather
 /// than duplicated here.
 pub fn narrative_field_stale(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "narrative-field.stale";
+    const RULE_ID: &str = RULE_NARRATIVE_FIELD_STALE;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -751,6 +862,7 @@ pub fn narrative_field_stale(records: &[Record], config: &Config) -> (RuleExecut
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -840,11 +952,53 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
 /// unedited template text or an explicit pending marker passes that check
 /// and still isn't a real value. Blank is reported here too (redundantly
 /// with Rule 1) so this rule's own report is self-contained.
+/// Split out of `field.quality` (BUG-38). A required field marked `Pending`
+/// says someone decided the work is unfinished; a `Blank` one says someone
+/// forgot. A repository that does not declare this rule is not told about its
+/// own deliberate markers, which is the right default -- it wrote them.
+pub fn field_pending(
+    records: &[Record],
+    required_by_type: &HashMap<String, Vec<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_FIELD_PENDING;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(required) = required_by_type.get(&record.record_type) else {
+            continue;
+        };
+        for field in required {
+            examined += 1;
+            if classify(record.header.get(field)) != FieldState::Pending {
+                continue;
+            }
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Warning,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!("field '{field}' is marked pending -- work declared unfinished"),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
 pub fn field_quality(
     records: &[Record],
     required_by_type: &HashMap<String, Vec<String>>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "field.quality";
+    const RULE_ID: &str = RULE_FIELD_QUALITY;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -855,15 +1009,17 @@ pub fn field_quality(
         for field in required {
             let state = classify(record.header.get(field));
             examined += 1;
-            let severity = match state {
-                FieldState::Present => continue,
-                FieldState::Blank => FindingSeverity::Error,
-                FieldState::Placeholder => FindingSeverity::Error,
-                FieldState::Pending => FindingSeverity::Warning,
-            };
+            // `Pending` is `field.pending`'s subject, not this rule's: it means
+            // someone declared the work unfinished, where Blank and Placeholder
+            // mean someone forgot. One rule carries one declared level, so
+            // keeping both here left no setting that was correct (BUG-38).
+            match state {
+                FieldState::Blank | FieldState::Placeholder => {}
+                FieldState::Present | FieldState::Pending => continue,
+            }
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity,
+                severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: None,
                 waived: None,
@@ -876,6 +1032,7 @@ pub fn field_quality(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -888,7 +1045,7 @@ pub fn filename_title_consistency(
     records: &[Record],
     full_text: &HashMap<std::path::PathBuf, String>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "filename.title-consistency";
+    const RULE_ID: &str = RULE_FILENAME_TITLE_CONSISTENCY;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -950,6 +1107,7 @@ pub fn filename_title_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -1064,7 +1222,7 @@ pub fn revision_log_change_class(
     records: &[Record],
     full_text: &HashMap<std::path::PathBuf, String>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "revision-log.change-class-required";
+    const RULE_ID: &str = RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -1099,6 +1257,7 @@ pub fn revision_log_change_class(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -1238,7 +1397,7 @@ pub fn embodiment_consistency(
     records: &[Record],
     drifted: &HashSet<PathBuf>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "embodiment.consistency";
+    const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -1274,6 +1433,7 @@ pub fn embodiment_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -1285,7 +1445,7 @@ pub fn embodiment_consistency(
 /// ADR-0072/0073/0074 shape RFC-0005 names). Reports only; a human runs the
 /// actual promotion into a `claim` record, never this rule.
 pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "embodiment.locator-promotion-candidate";
+    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -1341,6 +1501,7 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -1351,7 +1512,7 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
 /// supersede something that doesn't reciprocally point back, sending a
 /// reader of the *target* to a record that denies the relation.
 pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = "relation.supersession-reciprocity";
+    const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
     let mut findings = Vec::new();
     let mut examined = 0;
 
@@ -1413,6 +1574,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            status: RuleStatus::Ran,
         },
         findings,
     )
@@ -1458,7 +1620,8 @@ mod tests {
     /// via `fields_with_capability` rather than a precomputed map (MILE-90).
     fn config_with_types(entries: Vec<(&str, crate::config::RecordTypeConfig)>) -> Config {
         Config {
-            schema_version: 1,
+            schema_version: 2,
+            rules: HashMap::new(),
             record_types: entries
                 .into_iter()
                 .map(|(type_name, type_config)| (type_name.to_string(), type_config))
@@ -1697,7 +1860,8 @@ mod tests {
         let mut record_types = HashMap::new();
         record_types.insert("milestone".to_string(), type_config(None));
         let config = Config {
-            schema_version: 1,
+            schema_version: 2,
+            rules: HashMap::new(),
             record_types,
         };
 
@@ -1713,7 +1877,8 @@ mod tests {
         let mut record_types = HashMap::new();
         record_types.insert("milestone".to_string(), type_config(Some("SPEC-6")));
         let config = Config {
-            schema_version: 1,
+            schema_version: 2,
+            rules: HashMap::new(),
             record_types,
         };
 
@@ -1731,7 +1896,8 @@ mod tests {
             type_config_with_shape(crate::header::HeaderShape::Blockquote),
         );
         let config = Config {
-            schema_version: 1,
+            schema_version: 2,
+            rules: HashMap::new(),
             record_types,
         };
 
@@ -1750,7 +1916,8 @@ mod tests {
             type_config_with_shape(crate::header::HeaderShape::YamlFrontmatter),
         );
         let config = Config {
-            schema_version: 1,
+            schema_version: 2,
+            rules: HashMap::new(),
             record_types,
         };
 
@@ -1860,17 +2027,39 @@ mod tests {
     }
 
     #[test]
-    fn a_resolving_pointer_surfaces_target_status_without_judging_it() {
+    fn target_status_judges_only_the_statuses_a_repository_declared() {
+        // Replaces a_resolving_pointer_surfaces_target_status_without_judging_it,
+        // whose name was the defect: surfacing a status without judging it
+        // produced 172 of 213 findings on this repo's own corpus.
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
         let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
+        let records = [target, source];
 
-        let (exec, findings) =
-            pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
+        let (exec, findings) = pointer_target_status(
+            &records,
+            &pointer_fields,
+            &HashMap::new(),
+            &["Draft".to_string()],
+        );
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Warning);
         assert!(findings[0].message.contains("Draft"));
+
+        // Nothing declared unacceptable means nothing reported -- never a
+        // built-in fallback list, which is how a rule silently stops applying.
+        let (_, none_declared) =
+            pointer_target_status(&records, &pointer_fields, &HashMap::new(), &[]);
+        assert!(none_declared.is_empty(), "{none_declared:?}");
+
+        // A status outside the declared set is not this rule's business.
+        let (_, other) = pointer_target_status(
+            &records,
+            &pointer_fields,
+            &HashMap::new(),
+            &["Superseded".to_string()],
+        );
+        assert!(other.is_empty(), "{other:?}");
     }
 
     #[test]
@@ -1895,9 +2084,7 @@ mod tests {
         );
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
         let (_, findings) = pointer_resolution(&[parent, child], &pointer_fields, &HashMap::new());
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Warning);
-        assert!(findings[0].message.contains("Parent: SPEC-1 resolves"));
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -2138,8 +2325,9 @@ mod tests {
         );
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
         let (_, findings) = pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
+        // is the control that keeps this from passing on a rule that never fires.
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -2150,8 +2338,9 @@ mod tests {
         let source = record("docs/specs/SPEC-1-y.md", "spec", "> Implements: ADR-34\n");
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
         let (_, findings) = pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
+        // is the control that keeps this from passing on a rule that never fires.
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -2193,8 +2382,7 @@ mod tests {
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
         let (_, findings) =
             pointer_resolution(&[milestone, source], &pointer_fields, &HashMap::new());
-        assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
-        assert!(findings[0].message.contains("resolves"));
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -2372,14 +2560,30 @@ mod tests {
     }
 
     #[test]
-    fn field_quality_treats_pending_as_a_warning_not_an_error() {
+    fn a_pending_field_belongs_to_field_pending_not_field_quality() {
+        // BUG-38, observed on this repo's own corpus: `field.quality` held both
+        // states, so a repository declaring it `error` had a deliberate
+        // `Pending` marker block CI, and declaring it `warn` stopped a genuinely
+        // blank required field from blocking. No setting was correct.
         let r = record("docs/adr/0001-x.md", "adr", "> Deciders: Pending\n");
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Deciders".to_string()]);
 
-        let (_, findings) = field_quality(&[r], &required);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        let (_, quality) = field_quality(std::slice::from_ref(&r), &required);
+        assert!(quality.is_empty(), "{quality:?}");
+
+        let (_, pending) = field_pending(std::slice::from_ref(&r), &required);
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].message.contains("pending"));
+
+        // The forgotten case stays with field.quality, and field.pending
+        // must not claim it.
+        let blank = record("docs/adr/0002-y.md", "adr", "> Deciders:\n");
+        let (_, q2) = field_quality(std::slice::from_ref(&blank), &required);
+        assert_eq!(q2.len(), 1);
+        assert_eq!(q2[0].severity, FindingSeverity::Error);
+        let (_, p2) = field_pending(&[blank], &required);
+        assert!(p2.is_empty(), "{p2:?}");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 record_types:
   adr:
     dir: "docs/adr"
@@ -101,3 +101,32 @@ record_types:
     spec: "SPEC-10"
     pointer_fields: []
     narrative_fields: []
+
+# Every rule this repository has turned on, and at what level. A rule that is
+# not named here does not run (ADR-53) and is reported as not-enabled rather
+# than omitted (ADR-7).
+rules:
+  header.required-fields: error
+  header.layout-consistency: warn
+  header.field-set-consistency: warn
+  header.deprecated-shape: warn
+  header.pointer-field-clean: warn
+  type.no-declared-spec: warn
+  config.pointer-declaration-missing: error
+  config.pointer-field-not-known: error
+  config.pointer-narrative-overlap: error
+  pointer.resolution: error
+  field.quality: error
+  field.pending: warn
+  filename.title-consistency: error
+  relation.supersession-reciprocity: error
+  revision-log.change-class-required: error
+  narrative-field.stale: warn
+  embodiment.consistency: warn
+  embodiment.locator-promotion-candidate: warn
+  # Superseded only, for now. Draft is available and deliberately not enabled:
+  # 28 records point at a Draft target today, and turning it on before deciding
+  # whether that is acceptable here would be adopting a policy by accident.
+  pointer.target-status:
+    level: warn
+    not_in: ["Superseded"]

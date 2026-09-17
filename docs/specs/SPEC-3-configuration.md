@@ -131,6 +131,30 @@ false.
 - RFC-11 §1 and §6 — boundaries and scope.
 - ADR-4 — the layout this config sits at the root of.
 
+## Rules
+
+A repository declares which rules run and at what level. A rule that is not named does not run
+(`ADR-53`), and appears in `rules_executed` as `not-enabled` rather than being omitted (`ADR-7`) --
+"off" and "ran clean" must stay distinguishable.
+
+```yaml
+rules:
+  header.required-fields: error
+  embodiment.consistency: warn
+  pointer.target-status:
+    level: warn
+    not_in: ["Superseded"]
+```
+
+A level is `off`, `warn` or `error`, written bare or as a table when the rule takes options. The
+declared level **replaces** whatever severity the rule body chose: one rule, one level.
+
+Two things are load-time errors rather than silent no-ops, because a check that never runs is
+indistinguishable in the report from one that ran clean:
+
+- a rule name this build does not ship -- the error names the valid set
+- an option on a rule that does not take it
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -141,3 +165,4 @@ false.
 > | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-09-17 | Documented the `rules` table: per-rule `level`, opt-in, and the two load-time errors. **Why:** `SPEC-1` listed "which checks are errors vs. warnings" as a v0 configuration surface and it was never built -- severity lived as 34 hardcoded literals in `rules.rs` with no config key at all (`MILE-80`). | **substantive** |

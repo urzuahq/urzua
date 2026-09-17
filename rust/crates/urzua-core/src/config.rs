@@ -8,13 +8,103 @@ use std::collections::HashMap;
 
 /// The only schema version defined so far (ADR-0012). A config declaring any
 /// other value is a parse-time error, not a silent best-effort read.
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub schema_version: u32,
     pub record_types: HashMap<String, RecordTypeConfig>,
+    /// Every rule a repository has turned on, and at what level. Absent or
+    /// empty means no rule runs: governance is declared, never inherited
+    /// (ADR-53).
+    #[serde(default)]
+    pub rules: HashMap<String, RuleSetting>,
+}
+
+/// What a repository declared about one rule. Written either as a bare level
+/// (`field.quality: error`) or as a table when a rule takes options.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleSetting {
+    pub level: RuleLevel,
+    /// Statuses a reference's target may not be in. Only meaningful to
+    /// `pointer.target-status`; declaring it on any other rule is a load-time
+    /// error, because a silently-ignored option is a check that never fires.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_in: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleLevel {
+    Off,
+    Warn,
+    Error,
+}
+
+impl RuleLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RuleLevel::Off => "off",
+            RuleLevel::Warn => "warn",
+            RuleLevel::Error => "error",
+        }
+    }
+}
+
+impl Serialize for RuleLevel {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for RuleLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "off" => Ok(RuleLevel::Off),
+            "warn" => Ok(RuleLevel::Warn),
+            "error" => Ok(RuleLevel::Error),
+            other => Err(serde::de::Error::custom(format!(
+                "unrecognized rule level '{other}' -- expected \"off\", \"warn\", or \"error\""
+            ))),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for RuleSetting {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Table {
+            level: RuleLevel,
+            #[serde(default)]
+            not_in: Option<Vec<String>>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Either {
+            Bare(RuleLevel),
+            Table(Table),
+        }
+
+        Ok(match Either::deserialize(deserializer)? {
+            Either::Bare(level) => RuleSetting {
+                level,
+                not_in: None,
+            },
+            Either::Table(t) => RuleSetting {
+                level: t.level,
+                not_in: t.not_in,
+            },
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -148,6 +238,10 @@ pub enum ConfigError {
     Parse(#[from] yaml_serde::Error),
     #[error("unrecognized schema_version {found} -- this build of urzua understands version {CURRENT_SCHEMA_VERSION}")]
     UnrecognizedSchemaVersion { found: u32 },
+    #[error("unknown rule '{found}' in [rules] -- this build ships: {}", known.join(", "))]
+    UnknownRule { found: String, known: Vec<String> },
+    #[error("rule '{rule}' does not take the option '{option}'")]
+    OptionNotApplicable { rule: String, option: String },
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
@@ -156,6 +250,30 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
         return Err(ConfigError::UnrecognizedSchemaVersion {
             found: config.schema_version,
         });
+    }
+    // A misspelled rule name would otherwise be a check that silently never
+    // runs, which is the failure direction this project treats as the worse
+    // one (ADR-53).
+    for name in config.rules.keys() {
+        if !crate::rules::ALL_RULES.contains(&name.as_str()) {
+            let mut known: Vec<String> = crate::rules::ALL_RULES
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            known.sort();
+            return Err(ConfigError::UnknownRule {
+                found: name.clone(),
+                known,
+            });
+        }
+    }
+    for (name, setting) in &config.rules {
+        if setting.not_in.is_some() && name != crate::rules::RULE_POINTER_TARGET_STATUS {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "not_in".to_string(),
+            });
+        }
     }
     Ok(config)
 }
@@ -184,9 +302,77 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_level_is_written_bare_or_as_a_table() {
+        let yaml = r#"
+schema_version: 2
+record_types:
+  adr:
+    dir: "docs/adr"
+rules:
+  field.quality: error
+  pointer.target-status:
+    level: warn
+    not_in: ["Superseded"]
+"#;
+        let c = parse(yaml).unwrap();
+        assert_eq!(c.rules["field.quality"].level, RuleLevel::Error);
+        assert_eq!(c.rules["field.quality"].not_in, None);
+        assert_eq!(c.rules["pointer.target-status"].level, RuleLevel::Warn);
+        assert_eq!(
+            c.rules["pointer.target-status"].not_in.as_deref(),
+            Some(["Superseded".to_string()].as_slice())
+        );
+    }
+
+    /// A misspelled rule name would otherwise be a check that silently never
+    /// runs -- indistinguishable, in the report, from one that ran clean.
+    #[test]
+    fn an_unknown_rule_name_is_rejected_and_names_the_valid_set() {
+        let yaml = r#"
+schema_version: 2
+record_types:
+  adr:
+    dir: "docs/adr"
+rules:
+  field.qualty: error
+"#;
+        let err = parse(yaml).unwrap_err().to_string();
+        assert!(err.contains("field.qualty"), "{err}");
+        assert!(err.contains("field.quality"), "{err}");
+    }
+
+    #[test]
+    fn an_option_on_a_rule_that_does_not_take_it_is_rejected() {
+        let yaml = r#"
+schema_version: 2
+record_types:
+  adr:
+    dir: "docs/adr"
+rules:
+  field.quality:
+    level: error
+    not_in: ["Draft"]
+"#;
+        let err = parse(yaml).unwrap_err().to_string();
+        assert!(err.contains("field.quality"), "{err}");
+        assert!(err.contains("not_in"), "{err}");
+    }
+
+    #[test]
+    fn omitting_rules_entirely_means_no_rule_runs() {
+        let yaml = r#"
+schema_version: 2
+record_types:
+  adr:
+    dir: "docs/adr"
+"#;
+        assert!(parse(yaml).unwrap().rules.is_empty());
+    }
+
+    #[test]
     fn parses_record_types() {
         let yaml = r#"
-schema_version: 1
+schema_version: 2
 record_types:
   adr:
     dir: "docs/adr"
@@ -201,7 +387,7 @@ record_types:
     #[test]
     fn spec_pointer_is_optional_and_parses_when_present() {
         let yaml = r#"
-schema_version: 1
+schema_version: 2
 record_types:
   milestone:
     dir: "docs/milestones"
@@ -220,7 +406,7 @@ record_types:
     #[test]
     fn pointer_and_narrative_fields_round_trip() {
         let yaml = r#"
-schema_version: 1
+schema_version: 2
 record_types:
   rfc:
     dir: "docs/rfc"
@@ -253,7 +439,7 @@ record_types:
         // tolerance -- an invented config key that no rule reads and every
         // author trusts is exactly the failure this guards against.
         let yaml = r#"
-schema_version: 1
+schema_version: 2
 record_types:
   adr:
     dir: "docs/adr"
