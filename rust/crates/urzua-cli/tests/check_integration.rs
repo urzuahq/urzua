@@ -47,8 +47,8 @@ fn scope_source_is_the_declared_contract_value_not_a_debug_rendering() {
     let dir = fixture_repo("scope-source");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = [\"Status\"]\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(
@@ -70,8 +70,8 @@ fn check_exits_0_on_a_clean_corpus() {
     let dir = fixture_repo("clean");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = [\"Status\"]\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(
@@ -97,8 +97,8 @@ fn check_exits_1_on_a_missing_required_field() {
     let dir = fixture_repo("findings");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = [\"Status\", \"Deciders\"]\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Deciders\"]\n",
     )
     .unwrap();
     std::fs::write(
@@ -135,8 +135,8 @@ fn an_untracked_scratch_file_is_never_examined() {
     let dir = fixture_repo("scratch");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(
@@ -164,12 +164,13 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n\
-         [record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n\
-         known_fields = [\"Implements\"]\npointer_fields = [\"Implements\"]\nnarrative_fields = []\n\n\
-         [record_types.waiver]\ndir = \"docs/waiver\"\nrequired_fields = []\n\
-         pointer_fields = []\nnarrative_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
+         \x20   known_fields: [\"Implements\"]\n    pointer_fields: [\"Implements\"]\n    narrative_fields: []\n\
+         \x20 waiver:\n    dir: \"docs/waiver\"\n    required_fields: []\n\
+         \x20   pointer_fields: []\n    narrative_fields: []\n",
     )
     .unwrap();
     // A dangling pointer -- pointer.resolution's one error case, and not
@@ -226,8 +227,8 @@ fn doctor_emits_json_not_plain_text_lines() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -269,10 +270,11 @@ fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n\
-         [record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n\n\
-         [record_types.rfc]\ndir = \"docs/rfc\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
+         \x20 rfc:\n    dir: \"docs/rfc\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(
@@ -309,8 +311,8 @@ fn audit_exits_0_on_reciprocated_supersession() {
     let dir = fixture_repo("audit-clean");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(
@@ -341,8 +343,8 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
     let dir = fixture_repo("audit-violation");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // ADR-0001 claims to supersede ADR-0002, but ADR-0002 never points back --
@@ -399,7 +401,7 @@ fn init_then_check_flags_a_pre_existing_blockquote_record() {
         "stderr: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
-    assert!(dir.join(".urzua/config.toml").exists());
+    assert!(dir.join(".urzua/config.yaml").exists());
 
     let check_output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&check_output.stdout);
@@ -452,8 +454,8 @@ fn fix_apply_on_an_empty_corpus_still_exits_0() {
     let dir = fixture_repo("fix-apply-empty");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -555,8 +557,8 @@ fn a_bad_flag_emits_json_not_a_panic() {
 }
 
 /// `urzua init`'s real report shape (BUG-20): `proposed`/`written`/
-/// `config_toml`, not plain-text prose. `--dry-run` must include
-/// `config_toml` (nothing else to read the preview from); a real write must
+/// `config_yaml`, not plain-text prose. `--dry-run` must include
+/// `config_yaml` (nothing else to read the preview from); a real write must
 /// not (`new`'s own established convention -- the caller reads the file).
 #[test]
 fn init_dry_run_reports_the_proposed_config_as_structured_json() {
@@ -576,14 +578,14 @@ fn init_dry_run_reports_the_proposed_config_as_structured_json() {
     assert_eq!(parsed["written"], false, "stdout: {stdout}");
     assert_eq!(parsed["proposed"][0]["name"], "adr", "stdout: {stdout}");
     assert!(
-        parsed["config_toml"]
+        parsed["config_yaml"]
             .as_str()
             .unwrap()
-            .contains("[record_types.adr]"),
+            .contains("record_types:\n  adr:"),
         "stdout: {stdout}"
     );
     assert!(
-        !dir.join(".urzua/config.toml").exists(),
+        !dir.join(".urzua/config.yaml").exists(),
         "--dry-run must not write"
     );
 
@@ -591,7 +593,7 @@ fn init_dry_run_reports_the_proposed_config_as_structured_json() {
 }
 
 #[test]
-fn init_real_write_omits_config_toml_from_the_report() {
+fn init_real_write_omits_config_yaml_from_the_report() {
     let dir = fixture_repo("init-write");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
@@ -606,10 +608,10 @@ fn init_real_write_omits_config_toml_from_the_report() {
     let parsed = assert_valid_json_object(&stdout);
     assert_eq!(parsed["written"], true, "stdout: {stdout}");
     assert!(
-        parsed.get("config_toml").is_none(),
+        parsed.get("config_yaml").is_none(),
         "a real write must not echo the content back, matching `new`'s convention: {stdout}"
     );
-    assert!(dir.join(".urzua/config.toml").exists());
+    assert!(dir.join(".urzua/config.yaml").exists());
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -622,8 +624,8 @@ fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
     let dir = fixture_repo("migrate-ids");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // No header-shaped region -- deliberately exercises the `skipped`
@@ -660,8 +662,8 @@ fn migrate_ids_exits_1_on_a_real_write_failure() {
     let dir = fixture_repo("migrate-ids-write-fail");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = []\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // A real header-shaped region (a blockquote line) so the backfill

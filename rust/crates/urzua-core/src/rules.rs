@@ -1702,7 +1702,7 @@ mod tests {
         };
 
         let (exec, findings) =
-            type_no_declared_spec(&config, std::path::Path::new(".urzua/config.toml"));
+            type_no_declared_spec(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("milestone"));
@@ -1718,7 +1718,7 @@ mod tests {
         };
 
         let (exec, findings) =
-            type_no_declared_spec(&config, std::path::Path::new(".urzua/config.toml"));
+            type_no_declared_spec(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
@@ -1736,7 +1736,7 @@ mod tests {
         };
 
         let (exec, findings) =
-            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.toml"));
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("adr"));
@@ -1755,7 +1755,7 @@ mod tests {
         };
 
         let (exec, findings) =
-            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.toml"));
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
@@ -1767,7 +1767,7 @@ mod tests {
             type_config_pointer(&["Implements"], None, Some(&["Implements"]), None),
         )]);
         let (exec, findings) =
-            config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("spec"));
@@ -1780,7 +1780,7 @@ mod tests {
             type_config_pointer(&[], None, Some(&[]), Some(&[])),
         )]);
         let (exec, findings) =
-            config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
@@ -1789,7 +1789,7 @@ mod tests {
     fn a_type_declaring_neither_list_is_not_missing() {
         let config = config_with_types(vec![("adr", type_config_pointer(&[], None, None, None))]);
         let (exec, findings) =
-            config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
@@ -1801,7 +1801,7 @@ mod tests {
             type_config_pointer(&["Status"], None, Some(&["Feeds-into"]), Some(&[])),
         )]);
         let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Feeds-into"));
@@ -1819,7 +1819,7 @@ mod tests {
             ),
         )]);
         let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
@@ -1836,7 +1836,7 @@ mod tests {
             ),
         )]);
         let (exec, findings) =
-            config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Blocked-on"));
@@ -1854,7 +1854,7 @@ mod tests {
             ),
         )]);
         let (exec, findings) =
-            config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.toml"));
+            config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }

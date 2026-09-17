@@ -1,23 +1,23 @@
-//! Minimal `.urzua/config.toml` parsing (SPEC-0003): record types, their
+//! Minimal `.urzua/config.yaml` parsing (SPEC-0003): record types, their
 //! directories, and required header fields. Phased -- this is the slice
 //! Phase A of `urzua check` needs, not the full spec.
 
 use crate::header::{HeaderLayout, HeaderShape};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// The only schema version defined so far (ADR-0012). A config declaring any
 /// other value is a parse-time error, not a silent best-effort read.
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub schema_version: u32,
     pub record_types: HashMap<String, RecordTypeConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordTypeConfig {
     pub dir: String,
@@ -107,6 +107,25 @@ impl<'de> Deserialize<'de> for HeaderShape {
     }
 }
 
+impl Serialize for HeaderShape {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(match self {
+            HeaderShape::Blockquote => "blockquote",
+            HeaderShape::BoldList => "bold-list",
+            HeaderShape::YamlFrontmatter => "yaml-frontmatter",
+        })
+    }
+}
+
+impl Serialize for HeaderLayout {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(match self {
+            HeaderLayout::OnePerLine => "one-per-line",
+            HeaderLayout::PipeDelimited => "pipe-delimited",
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for HeaderLayout {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -126,13 +145,13 @@ impl<'de> Deserialize<'de> for HeaderLayout {
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("could not parse config: {0}")]
-    Parse(#[from] toml::de::Error),
+    Parse(#[from] yaml_serde::Error),
     #[error("unrecognized schema_version {found} -- this build of urzua understands version {CURRENT_SCHEMA_VERSION}")]
     UnrecognizedSchemaVersion { found: u32 },
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
-    let config: Config = toml::from_str(content)?;
+    let config: Config = yaml_serde::from_str(content)?;
     if config.schema_version != CURRENT_SCHEMA_VERSION {
         return Err(ConfigError::UnrecognizedSchemaVersion {
             found: config.schema_version,
@@ -145,16 +164,35 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
 mod tests {
     use super::*;
 
+    /// A hand-written `Serialize` that disagrees with its `Deserialize` twin
+    /// would write configs this build cannot read back, and nothing else would
+    /// notice.
+    #[test]
+    fn header_shape_and_layout_survive_a_serialize_deserialize_round_trip() {
+        for shape in [
+            HeaderShape::Blockquote,
+            HeaderShape::BoldList,
+            HeaderShape::YamlFrontmatter,
+        ] {
+            let s = yaml_serde::to_string(&shape).unwrap();
+            assert_eq!(shape, yaml_serde::from_str::<HeaderShape>(&s).unwrap());
+        }
+        for layout in [HeaderLayout::OnePerLine, HeaderLayout::PipeDelimited] {
+            let s = yaml_serde::to_string(&layout).unwrap();
+            assert_eq!(layout, yaml_serde::from_str::<HeaderLayout>(&s).unwrap());
+        }
+    }
+
     #[test]
     fn parses_record_types() {
-        let toml = r#"
-schema_version = 1
-
-[record_types.adr]
-dir = "docs/adr"
-required_fields = ["Status", "Date"]
+        let yaml = r#"
+schema_version: 1
+record_types:
+  adr:
+    dir: "docs/adr"
+    required_fields: ["Status", "Date"]
 "#;
-        let config = parse(toml).unwrap();
+        let config = parse(yaml).unwrap();
         let adr = config.record_types.get("adr").unwrap();
         assert_eq!(adr.dir, "docs/adr");
         assert_eq!(adr.required_fields, vec!["Status", "Date"]);
@@ -162,17 +200,16 @@ required_fields = ["Status", "Date"]
 
     #[test]
     fn spec_pointer_is_optional_and_parses_when_present() {
-        let toml = r#"
-schema_version = 1
-
-[record_types.milestone]
-dir = "docs/milestones"
-spec = "SPEC-6"
-
-[record_types.bug]
-dir = "docs/bugs"
+        let yaml = r#"
+schema_version: 1
+record_types:
+  milestone:
+    dir: "docs/milestones"
+    spec: "SPEC-6"
+  bug:
+    dir: "docs/bugs"
 "#;
-        let config = parse(toml).unwrap();
+        let config = parse(yaml).unwrap();
         assert_eq!(
             config.record_types.get("milestone").unwrap().spec,
             Some("SPEC-6".to_string())
@@ -182,18 +219,17 @@ dir = "docs/bugs"
 
     #[test]
     fn pointer_and_narrative_fields_round_trip() {
-        let toml = r#"
-schema_version = 1
-
-[record_types.rfc]
-dir = "docs/rfc"
-pointer_fields = ["Implements", "Amends"]
-narrative_fields = []
-
-[record_types.bug]
-dir = "docs/bugs"
+        let yaml = r#"
+schema_version: 1
+record_types:
+  rfc:
+    dir: "docs/rfc"
+    pointer_fields: ["Implements", "Amends"]
+    narrative_fields: []
+  bug:
+    dir: "docs/bugs"
 "#;
-        let config = parse(toml).unwrap();
+        let config = parse(yaml).unwrap();
         assert_eq!(
             config.record_types.get("rfc").unwrap().pointer_fields,
             Some(vec!["Implements".to_string(), "Amends".to_string()])
@@ -216,34 +252,35 @@ dir = "docs/bugs"
         // deny_unknown_fields makes this a hard error rather than silent
         // tolerance -- an invented config key that no rule reads and every
         // author trusts is exactly the failure this guards against.
-        let toml = r#"
-schema_version = 1
-
-[record_types.adr]
-dir = "docs/adr"
-required_fielsd = ["Status"]
+        let yaml = r#"
+schema_version: 1
+record_types:
+  adr:
+    dir: "docs/adr"
+    required_fielsd: ["Status"]
 "#;
-        assert!(parse(toml).is_err());
+        assert!(parse(yaml).is_err());
     }
 
     #[test]
     fn missing_schema_version_is_a_parse_error() {
-        let toml = r#"
-[record_types.adr]
-dir = "docs/adr"
+        let yaml = r#"
+record_types:
+  adr:
+    dir: "docs/adr"
 "#;
-        assert!(parse(toml).is_err());
+        assert!(parse(yaml).is_err());
     }
 
     #[test]
     fn an_unrecognized_schema_version_is_rejected() {
-        let toml = r#"
-schema_version = 99
-
-[record_types.adr]
-dir = "docs/adr"
+        let yaml = r#"
+schema_version: 99
+record_types:
+  adr:
+    dir: "docs/adr"
 "#;
-        let err = parse(toml).unwrap_err();
+        let err = parse(yaml).unwrap_err();
         assert!(matches!(
             err,
             ConfigError::UnrecognizedSchemaVersion { found: 99 }
