@@ -35,9 +35,9 @@ and a fact about where a file keeps its fields is not an opinion. There is nothi
 
 ## Proposal
 
-**What ships is a primitive, not a format name.** `fields.from = "yaml-frontmatter"`,
-`"prefix-lines"`, `"rfc-822"` -- each is real parsing work that cannot be expressed in configuration
-at all, which is precisely why it belongs in the binary.
+**What ships is a primitive, not a format name.** `fields.from = "yaml-frontmatter"` and `"prefix-lines"` -- real parsing
+work that cannot be expressed in configuration at all, which is precisely why it belongs in the
+binary. Both exist because a record in *this* repository needed reading; see the admission rule below.
 
 **A format is a composition of primitives, and compositions are not named in the binary.** MADR is
 "YAML frontmatter, `##` sections, `NNNN-slug.md`" -- three declarations that travel together. A
@@ -60,9 +60,15 @@ format?**
 - *"Fields live in YAML frontmatter"* -- no. Disagreeing means it is a different format.
 - *"Status must be Accepted before a spec may implement it"* -- yes, easily. Policy.
 
-**A shape earns a name from a corpus, never from anticipation.** `AGENTS.md` prohibits speculative
-capability; a built-in shape nobody has tested against real records is exactly that. Each named shape
-cites the corpus it was derived from and the date it was checked.
+**A primitive is admitted when this project needs it, and not before.** `AGENTS.md` prohibits
+speculative capability, and a parser written for a corpus nobody here uses is exactly that -- it
+cannot be exercised, so it cannot be known to work. The primitives that exist were each written
+because a record in this repository needed reading. Support for other flows arrives the other way
+round: someone brings a corpus, the gap is real and demonstrated, and the primitive follows.
+
+This is deliberately a slower rule than "we can imagine a format that needs this". A primitive with no
+user is untested surface that still has to be maintained, versioned and reasoned about every time the
+document model changes.
 
 ### The failure mode this exists to prevent
 
@@ -80,9 +86,16 @@ a feature. Shapes locate. Rules judge.
 
 ## Open questions
 
-- **What is the minimum evidence for a new primitive?** `rfc-822` would be the third `fields.from`
-  value and is currently justified by one corpus (Python PEPs, untested). One corpus is thin, and the
-  same standard the third-corpus test applies to the function vocabulary should apply here.
+- ~~**What is the minimum evidence for a new primitive?**~~ **Answered:** a primitive is admitted when
+  this project needs one, and otherwise when a contributor brings a corpus that demonstrates the gap.
+
+  **Consequence, recorded because it reverses an earlier assumption in this RFC: `rfc-822` is not
+  admitted.** It was sketched here as the third `fields.from` value on the strength of Python PEPs --
+  a corpus this project does not use and has not read. Under the rule above that is precisely the
+  speculative capability the rule exists to refuse. It becomes a roadmap item, not a design gap.
+
+  The third-corpus test is narrowed accordingly. It remains worth running to falsify the **function
+  vocabulary** on paper, which needs no new parser. It is no longer a justification for building one.
 - **Does `identity` belong to shape or policy?** `^(?P<number>\d+)-(?P<slug>.+)$` is descriptive. *"A
   record must be numbered"* is not. They are currently the same declaration.
 
@@ -106,3 +119,4 @@ built-ins; it argues against them. Names the principle by which a primitive woul
 > |---|---|---|
 > | 2026-09-17 | Filed, `Status: Draft`. **Why:** `ADR-53` read without qualification forbids shipping anything, which would make every adopter write a parser before the tool reads a file. Raised while discussing a third reference corpus: supporting many formats with built-ins needs a rule for what may ship, and "descriptive may, normative may not" is the line that keeps `ADR-53` intact. | **substantive** |
 > | 2026-09-17 | Named format built-ins withdrawn: what ships is a *primitive* parser, never a format's name. **Why:** `fields.from = "madr"` bundles three independent declarations under a third party's brand and makes this project the owner of that brand's evolution -- MADR changes, the binary changes, and an adopter pinned to the name inherits a decision nobody in their repo made. A format is a composition of primitives, and a configuration file already is a composition, so the composition is generated at `init` time (`MILE-95`) and nothing at `check` time has heard of MADR. This also answers this RFC's own open question about whether shapes compose: they do, and that is exactly why the composition needs no name. | **substantive** |
+> | 2026-09-17 | Admission rule answered, and `rfc-822` withdrawn as a consequence. **Why:** a primitive is admitted when this project needs one, or when a contributor brings a corpus demonstrating the gap -- a parser for a corpus nobody here uses cannot be exercised, so it cannot be known to work, and it still has to be maintained every time the document model changes. `rfc-822` was sketched in this RFC on the strength of Python PEPs, a corpus this project does not use and has not read, which is exactly what the rule refuses. The third-corpus test narrows with it: still worth running to falsify the function vocabulary on paper, no longer a justification for building a parser. | **substantive** |
