@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M2Q4SRD96G32D4S66VNA3X9S
 Status: Planned
-Phase: '1'
+Phase: '3'
 Track: schema-governance
 Implements: —
 Blocked-on: —
@@ -50,3 +50,4 @@ can delete lines from, and the engine never sees where it came from.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Filed. **Why:** `ADR-53`'s opt-in decision leaves every adopter writing the full rule list, and `MILE-80` shipped `init`-proposes-all-at-`warn` as a stand-in rather than leaving that unaddressed. Naming the stand-in as a stand-in, so it is not mistaken for the answer. | **substantive** |
+> | 2026-09-17 | `Phase: '1'` → `'3'`. **Why:** filed against Phase 1 on the assumption that opt-in without presets is urgent debt. It is not: `urzua init` already writes every rule at `warn`, so an adopter gets a working config without hand-writing one. What remains is the convenience of choosing *which* starting set, which is the same distance out as the rest of Phase 3. | **structural** |
