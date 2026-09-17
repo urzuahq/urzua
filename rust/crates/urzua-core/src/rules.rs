@@ -934,10 +934,24 @@ pub(crate) fn normalize_id(id: &str) -> String {
 /// nothing: it reads the first whitespace token of each comma-separated entry,
 /// which in *"…which also closes BUG-36, where a…"* is `"…which"`. Correct for
 /// a header value, empty for a sentence.
+/// `RFC-9's` is a reference to `RFC-9`; `RFC-9a` is not (BUG-39). Only a
+/// possessive is stripped, because it is the one suffix that attaches to a
+/// reference without changing which record is meant -- anything else is a
+/// different identifier.
+fn strip_possessive(token: &str) -> &str {
+    token
+        .strip_suffix("'s")
+        .or_else(|| token.strip_suffix("\u{2019}s"))
+        .unwrap_or(token)
+}
+
 pub(crate) fn scan_references(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     for token in line.split(|c: char| c.is_whitespace() || c == '(' || c == '[') {
-        let token = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-');
+        let token = strip_possessive(token.trim_matches(|c: char| {
+            !c.is_ascii_alphanumeric() && c != '-' && c != '\'' && c != '\u{2019}'
+        }));
+        let token = token.trim_end_matches(['\'', '\u{2019}']);
         let Some((prefix, num)) = token.split_once('-') else {
             continue;
         };
@@ -958,7 +972,7 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
         .filter_map(|entry| {
             let entry = entry.trim();
             let token = entry.split_whitespace().next()?;
-            let token = token.trim_end_matches(['.', ':']);
+            let token = strip_possessive(token.trim_end_matches(['.', ':']));
             let is_reference = token
                 .split_once('-')
                 .map(|(prefix, num)| {
@@ -2700,6 +2714,28 @@ mod tests {
 
     /// `extract_references` reads the first token of each comma-separated entry,
     /// which is correct for a header value and silently empty on a sentence.
+    /// BUG-39, live in this corpus: `MILE-13` declares
+    /// `Blocked-on: RFC-9's own Q2`, and neither extractor could see `RFC-9`.
+    #[test]
+    fn a_possessive_does_not_hide_a_reference_observed_failing() {
+        let value = "RFC-9's own Q2";
+        assert_eq!(extract_references(value), vec!["RFC-9".to_string()]);
+        assert_eq!(scan_references(value), vec!["RFC-9".to_string()]);
+
+        // Narrow deliberately: a suffixed identifier is a different record, not
+        // a possessive, and must stay unrecognised.
+        assert!(scan_references("RFC-9a is unrelated").is_empty());
+        assert!(scan_references("RFC-9s covers nine").is_empty());
+
+        // Ordinary trailing punctuation was already handled; keep it asserted
+        // so a narrower possessive rule cannot regress it.
+        assert_eq!(
+            scan_references("see RFC-9, then stop"),
+            vec!["RFC-9".to_string()]
+        );
+        assert_eq!(scan_references("see RFC-9."), vec!["RFC-9".to_string()]);
+    }
+
     #[test]
     fn scanning_prose_finds_references_that_extract_references_misses() {
         let line = "concatenation -- which also closes BUG-36, where a directory name escaped";

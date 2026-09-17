@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2QB6R7QKVP0DTWETQAG7ZFR
-Status: Open
+Status: Fixed
 Found-in: 'MILE-13 -- `Blocked-on: "RFC-9''s own Q2"`, a real dependency in this repository that no rule can see'
 Regression-test: 'not yet written -- a narrative field reading "RFC-9''s own Q2" must resolve RFC-9, with a paired case asserting a bare "RFC-9" still does'
 ---
@@ -44,3 +44,4 @@ reference looks like, and a third notion of it is how they drift further apart.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Filed. **Why:** found while deciding whether `MILE-13` needed its `Blocked-on` prose converted by hand. Converting it would have hidden the defect -- the record is one instance, and the rule under-reports for every reference written with punctuation attached. | **substantive** |
+> | 2026-09-17 | `Status: Open` → `Fixed`. **Why:** both extractors now strip a possessive before deciding whether a token is a reference, and only a possessive -- `RFC-9a` and `RFC-9s` stay unrecognised, because a suffixed identifier is a different record. Observed failing first (`left: []`). Verified against the live instance rather than a fixture: `narrative-field.stale` went from examining 7 narrative fields to 8, and flipping `RFC-9` to `Accepted` produces the finding on `MILE-13` that this record predicted would never arrive. | **substantive** |
