@@ -65,6 +65,11 @@ mode `AGENTS.md` names directly: *"don't widen a config list, an enum, or an ign
 diff come up clean."* A green run over a corpus the tool understands nothing about is not the claim
 this milestone tests.
 
+**The five gaps share one cause, named after the fact in `RFC-33`.** Each was filed here as a missing
+config *key*; that framing was too small. The engine ships governance opinions an adopter cannot
+decline — `type.no-declared-spec` fires on the existence of a record type, reading zero records — and
+the gaps are symptoms. `RFC-33` proposes the general form and is a Phase 0 requirement.
+
 **The useful output is the five gaps, each now measured rather than predicted.** Closing them is
 downstream work this milestone informs; re-running this validation is how it eventually closes.
 
