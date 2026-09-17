@@ -128,19 +128,17 @@ selects and `then` names a function. The name carries no structure; the function
 This is what `MILE-51` measured as missing, and it comes before any rule work. The engine cannot
 express a foreign corpus's rules while it cannot express the corpus's *shape*:
 
-```toml
-[record_types.adr]
-dir = "doc/adr"
-
-[record_types.adr.identity]
-from    = "filename"
-pattern = '^(?P<number>\d+)-(?P<slug>.+)$'
-
-[record_types.adr.fields]
-from = "prefix-lines"              # a bare `Date: 2016-02-12` line, not a header block
-
-[record_types.adr.sections]
-from = "h2"
+```yaml
+record_types:
+  adr:
+    dir: doc/adr
+    identity:
+      from: filename
+      pattern: '^(?P<number>\d+)-(?P<slug>.+)$'
+    fields:
+      from: prefix-lines        # a bare `Date: 2016-02-12` line, not a header block
+    sections:
+      from: h2
 ```
 
 Consequences, all of them subtractive:
@@ -288,16 +286,28 @@ clean" stay distinguishable.
 
 **2. Syntax: a scalar shorthand, widening to an inline table when a rule takes options.**
 
-```toml
-[rules]
-"header.conforms"         = "error"
-"reference.target-status" = "off"
-"config.key-required"     = { level = "warn", keys = ["spec"] }
+```yaml
+rules:
+  reference-resolves: error
+  reference-target-status: "off"
+  spec-declared:
+    level: warn
+    function: defined
 ```
 
-The shape Cargo's `[lints]` uses — but chosen on ergonomics, not familiarity. Urzua ships as a binary
-and its users are not Rust developers. The common case is one word; the named `level` key says what it
-means, where ESLint's positional `["warn", {...}]` requires knowing that the first slot is severity.
+Cargo's `[lints]` shape, chosen on ergonomics rather than familiarity: urzua ships as a binary and its
+users are not Rust developers. The common case is one word; the named `level` key says what it means,
+where ESLint's positional `["warn", {...}]` requires knowing the first slot is severity.
+
+Two corrections, both from decisions taken after this section was written:
+
+- **The keys are rule *names*, not derived `noun.verb` cells.** Section 2 withdrew the grid, and this
+  section's own original example was part of the evidence -- `"header.conforms"` and
+  `"config.key-required"` are not cells in it.
+- **`"off"` must be quoted.** `ADR-52` makes this file YAML, and YAML 1.1 reads a bare `off` as boolean
+  `false`. The parser this project uses follows the 1.2 core schema and would read it as a string, but
+  a rule level whose correctness depends on which YAML version a reader has in mind is exactly the
+  class of defect `BUG-12` records. Quote it, and let the options schema reject the boolean.
 
 **3. `schema_version` bumps to 2.** `ADR-12` added the field from day one *"in the context of a config
 format about to exist in repos this project doesn't control."* This is the first real breaking change
@@ -413,3 +423,4 @@ header, or `ADR-44`'s declared-fields model — this generalizes `ADR-44`, it do
 > |---|---|---|
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** `MILE-51`'s five gaps were each filed as a missing config key, which was the wrong size -- they share a cause, and the cause is that the engine holds governance opinions an adopter cannot decline. Filed as a Phase 0 requirement because the root blocker is scheduled in Phase 1 while Phase 0 depends on it, which is why this work keeps producing blockers behind blockers. | **structural** |
 > | 2026-09-17 | Section 2's noun x verb grid withdrawn and replaced by a declared document model plus nine named functions over `given`/`then`/`level`. **Why:** the grid failed this RFC's own falsification test #2, on this RFC's own examples -- four of the six rule keys it wrote are not legal cells. The failure is kept in the section rather than deleted, because the residuals are ordinary checks the engine already performs, not edge cases. `MILE-51` measured the document model, not the rule vocabulary, as the blocker, so it moves to step 0. Adds two requirements the surveyed prior art makes non-optional: no general escape hatch ever (four engines shipped one and retreated), and rules fail closed (`CUE` silently exits 0 on a dangling reference without `close()`). Measured while writing: 172 of 213 findings on this repo's own corpus are `pointer.resolution` success reports, all of which the `resolves`/`target-status` split deletes. | **substantive** |
+> | 2026-09-17 | Config examples converted to YAML per `ADR-52`, and the `[rules]` example's keys corrected. **Why:** this RFC describes config that does not exist yet, so unlike the specs -- which describe shipped TOML and deliberately stay as they are until the implementing change -- it should show the decided format. The same block still carried two withdrawn grid keys, and its `off` was unquoted: YAML 1.1 reads a bare `off` as boolean `false`, and a rule level whose meaning depends on which YAML version a reader assumes is the class of defect `BUG-12` records. | **substantive** |
