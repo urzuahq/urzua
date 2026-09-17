@@ -76,14 +76,16 @@ pub struct RecordTypeConfig {
     /// same as deliberately declaring zero fields of that kind.
     #[serde(default)]
     pub narrative_fields: Option<Vec<String>>,
-    /// Which spec (if any) documents this type's schema as a coherent
-    /// feature area (MILE-0077/ADR-0041 -- "does this type need a spec"
-    /// stays editorial, never inferred). Declared, not voted, same
-    /// principle as `header_layout`/`known_fields`: omitted means no spec
-    /// currently covers this type, which `type.no-declared-spec` (MILE-0077
-    /// follow-up) surfaces as an inventory signal, not a mandate -- a type
-    /// can permanently have none declared if that's the right editorial
-    /// call.
+    /// Which spec documents this type's schema as a coherent feature area
+    /// (MILE-0077/ADR-0041 -- "does this type need a spec" stays editorial,
+    /// never inferred). Omitted means none currently covers this type, which
+    /// `type.no-declared-spec` surfaces every run.
+    ///
+    /// Unlike `header_layout`, omission is not a way to opt out: there is no
+    /// value meaning "decided, none needed", so the signal cannot be answered
+    /// -- only silenced per-repo once rule severity is configurable
+    /// (MILE-0080). An earlier version of this comment claimed a type "can
+    /// permanently have none declared"; nothing implemented that (ADR-0051).
     #[serde(default)]
     pub spec: Option<String>,
 }

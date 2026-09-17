@@ -78,4 +78,6 @@ about, and stops once someone has.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | Back to `Draft`. `ADR-51` accepted this and was rejected the same day: the remedy was disproportionate to one non-blocking warning, `MILE-80` covers it generically, and the per-type argument for a sentinel describes no real repository. The false doc comment that motivated it is corrected instead. **Why:** worth keeping open rather than rejecting outright -- the problem is real, only the proposed shape was wrong. | **substantive** |
+> | 2026-09-16 | `Draft` -> `Accepted`, decided by `ADR-51`, since reversed. **Why:** decided before building, rather than patching around the gap -- the open questions this proposal listed are answered in the decision, including one it did not anticipate. | **substantive** |
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** this is the finding an adopted corpus cannot clear by any configuration, which makes it the sharpest counterexample to "one config, not a fork per repo" that `MILE-51` produced -- a rule with no expressible answer. | **structural** |
