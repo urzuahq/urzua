@@ -32,6 +32,14 @@ pub struct RuleSetting {
     /// error, because a silently-ignored option is a check that never fires.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub not_in: Option<Vec<String>>,
+    /// Path prefixes to scan for claims about records. Only meaningful to
+    /// `claim.status-agreement`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_paths: Option<Vec<String>>,
+    /// Statuses that make a record legitimately claimable as closed. Declared,
+    /// never inferred: a built-in list is how a rule silently stops applying.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_statuses: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +93,10 @@ impl<'de> Deserialize<'de> for RuleSetting {
             level: RuleLevel,
             #[serde(default)]
             not_in: Option<Vec<String>>,
+            #[serde(default)]
+            claim_paths: Option<Vec<String>>,
+            #[serde(default)]
+            closed_statuses: Option<Vec<String>>,
         }
 
         #[derive(Deserialize)]
@@ -98,10 +110,14 @@ impl<'de> Deserialize<'de> for RuleSetting {
             Either::Bare(level) => RuleSetting {
                 level,
                 not_in: None,
+                claim_paths: None,
+                closed_statuses: None,
             },
             Either::Table(t) => RuleSetting {
                 level: t.level,
                 not_in: t.not_in,
+                claim_paths: t.claim_paths,
+                closed_statuses: t.closed_statuses,
             },
         })
     }
@@ -268,11 +284,30 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
         }
     }
     for (name, setting) in &config.rules {
-        if setting.not_in.is_some() && name != crate::rules::RULE_POINTER_TARGET_STATUS {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "not_in".to_string(),
-            });
+        let misplaced = [
+            (
+                setting.not_in.is_some(),
+                "not_in",
+                crate::rules::RULE_POINTER_TARGET_STATUS,
+            ),
+            (
+                setting.claim_paths.is_some(),
+                "claim_paths",
+                crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+            ),
+            (
+                setting.closed_statuses.is_some(),
+                "closed_statuses",
+                crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+            ),
+        ];
+        for (present, option, owner) in misplaced {
+            if present && name != owner {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
         }
     }
     Ok(config)

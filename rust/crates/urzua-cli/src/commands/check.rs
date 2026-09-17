@@ -52,6 +52,37 @@ fn gated(
     }
 }
 
+/// Reads the files a repository pointed `claim.status-agreement` at. Kept in
+/// the CLI because `urzua-core` is pure (ADR-5) -- the rule is given file
+/// contents, never a path to open.
+fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for prefix in prefixes {
+        let dir = repo_root.join(prefix);
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        let mut paths: Vec<_> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "md"))
+            .collect();
+        // Sorted so a finding's order does not depend on the filesystem.
+        paths.sort();
+        for path in paths {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let shown = path
+                    .strip_prefix(repo_root)
+                    .unwrap_or(&path)
+                    .display()
+                    .to_string();
+                out.push((shown, content));
+            }
+        }
+    }
+    out
+}
+
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
@@ -134,6 +165,17 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }),
         gated(&config, rules::RULE_FIELD_PENDING, || {
             rules::field_pending(&records, &required_by_type)
+        }),
+        gated(&config, rules::RULE_CLAIM_STATUS_AGREEMENT, || {
+            let setting = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT);
+            let paths = setting
+                .and_then(|s| s.claim_paths.clone())
+                .unwrap_or_default();
+            let closed = setting
+                .and_then(|s| s.closed_statuses.clone())
+                .unwrap_or_default();
+            let claims = read_claim_files(&repo_root, &paths);
+            rules::claim_status_agreement(&records, &claims, &closed)
         }),
         gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
             rules::filename_title_consistency(&records, &full_text)

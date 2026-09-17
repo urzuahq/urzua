@@ -127,6 +127,14 @@ rules:
   # Superseded only, for now. Draft is available and deliberately not enabled:
   # 28 records point at a Draft target today, and turning it on before deciding
   # whether that is acceptable here would be adopting a policy by accident.
+  # Catches a changeset announcing it closed a record the record itself says
+  # is still open -- exactly what shipped and had to be corrected on
+  # 2026-09-17. Statuses are declared: a built-in list would stop applying the
+  # moment a type used one it did not know.
+  claim.status-agreement:
+    level: error
+    claim_paths: [".changeset"]
+    closed_statuses: ["Fixed", "Done", "Accepted", "Rejected", "Superseded", "Withdrawn"]
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]
