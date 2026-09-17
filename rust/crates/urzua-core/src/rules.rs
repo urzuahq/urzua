@@ -32,6 +32,7 @@ pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
 pub const RULE_NARRATIVE_FIELD_STALE: &str = "narrative-field.stale";
 pub const RULE_FIELD_QUALITY: &str = "field.quality";
 pub const RULE_FIELD_PENDING: &str = "field.pending";
+pub const RULE_CLAIM_STATUS_AGREEMENT: &str = "claim.status-agreement";
 pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
 pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";
 pub const RULE_EMBODIMENT_CONSISTENCY: &str = "embodiment.consistency";
@@ -54,6 +55,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_NARRATIVE_FIELD_STALE,
     RULE_FIELD_QUALITY,
     RULE_FIELD_PENDING,
+    RULE_CLAIM_STATUS_AGREEMENT,
     RULE_FILENAME_TITLE_CONSISTENCY,
     RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
     RULE_EMBODIMENT_CONSISTENCY,
@@ -927,6 +929,29 @@ pub(crate) fn normalize_id(id: &str) -> String {
 /// several, comma-separated, with trailing annotation in parentheses (e.g.
 /// `RFC-0001 (Draft)`). A claim is the reference that begins an entry;
 /// everything after it up to the next comma is annotation.
+/// Find reference tokens anywhere in a line of prose, not only where an entry
+/// begins. [`extract_references`] is the wrong tool here and silently returns
+/// nothing: it reads the first whitespace token of each comma-separated entry,
+/// which in *"…which also closes BUG-36, where a…"* is `"…which"`. Correct for
+/// a header value, empty for a sentence.
+pub(crate) fn scan_references(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for token in line.split(|c: char| c.is_whitespace() || c == '(' || c == '[') {
+        let token = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-');
+        let Some((prefix, num)) = token.split_once('-') else {
+            continue;
+        };
+        if !prefix.is_empty()
+            && prefix.chars().all(|c| c.is_ascii_uppercase())
+            && !num.is_empty()
+            && num.chars().all(|c| c.is_ascii_digit())
+        {
+            out.push(token.to_string());
+        }
+    }
+    out
+}
+
 pub(crate) fn extract_references(value: &str) -> Vec<String> {
     value
         .split(',')
@@ -981,6 +1006,69 @@ pub fn field_pending(
                 waived: None,
                 message: format!("field '{field}' is marked pending -- work declared unfinished"),
             });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
+/// A file outside the corpus claiming a record is closed, while the record
+/// itself says otherwise.
+///
+/// Written after a changeset in this repository announced that it closed
+/// `BUG-36`. It did not -- it fixed a hazard recorded *beside* that bug -- and
+/// nothing noticed, because the claim and the record it contradicted live in
+/// different files and only one of them was ever read.
+///
+/// `closed_statuses` is declared, never inferred. A built-in list would make
+/// this rule stop applying the moment a repository used a status the list did
+/// not know, which is the failure direction this project treats as the worse
+/// one.
+pub fn claim_status_agreement(
+    records: &[Record],
+    claims: &[(String, String)],
+    closed_statuses: &[String],
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let index = build_normalized_index(records);
+    let verb = ["closes", "closed", "fixes", "fixed", "resolves", "resolved"];
+
+    for (path, content) in claims {
+        examined += 1;
+        for (idx, line) in content.lines().enumerate() {
+            let lower = line.to_lowercase();
+            if !verb.iter().any(|v| lower.contains(v)) {
+                continue;
+            }
+            for reference in scan_references(line) {
+                let Some(target) = index.get(&normalize_id(&reference)) else {
+                    continue;
+                };
+                let status = target.header.get("Status").unwrap_or("(no Status field)");
+                if closed_statuses.iter().any(|s| s == status) {
+                    continue;
+                }
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: PathBuf::from(path),
+                    line: Some(idx + 1),
+                    waived: None,
+                    message: format!(
+                        "claims to close {reference}, but {reference} has Status {status}"
+                    ),
+                });
+            }
         }
     }
 
@@ -2557,6 +2645,54 @@ mod tests {
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Placeholder"));
+    }
+
+    /// Observed failing against the real defect: a changeset in this repository
+    /// announced it closed `BUG-36` while `BUG-36` said `Open`, and shipped.
+    #[test]
+    fn a_claim_to_close_an_open_record_is_an_error_observed_failing() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let claims = vec![(
+            ".changeset/x.md".to_string(),
+            "rendered through a real serializer -- which also closes BUG-36, where a directory\nname escaped its value.\n".to_string(),
+        )];
+        let closed = vec!["Fixed".to_string()];
+
+        let (exec, findings) = claim_status_agreement(&[bug], &claims, &closed);
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert_eq!(findings[0].line, Some(1));
+        assert!(findings[0].message.contains("Status Open"), "{findings:?}");
+    }
+
+    #[test]
+    fn a_claim_to_close_an_already_closed_record_is_silent() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Fixed\n");
+        let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36\n".to_string())];
+        let (_, findings) = claim_status_agreement(&[bug], &claims, &["Fixed".to_string()]);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// Mentioning a record is not claiming to close it.
+    #[test]
+    fn a_reference_without_a_closing_verb_is_not_a_claim() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let claims = vec![(
+            ".changeset/x.md".to_string(),
+            "see BUG-36 for the four hardcoded paths\n".to_string(),
+        )];
+        let (_, findings) = claim_status_agreement(&[bug], &claims, &["Fixed".to_string()]);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// `extract_references` reads the first token of each comma-separated entry,
+    /// which is correct for a header value and silently empty on a sentence.
+    #[test]
+    fn scanning_prose_finds_references_that_extract_references_misses() {
+        let line = "concatenation -- which also closes BUG-36, where a directory name escaped";
+        assert!(extract_references(line).is_empty());
+        assert_eq!(scan_references(line), vec!["BUG-36".to_string()]);
     }
 
     #[test]
