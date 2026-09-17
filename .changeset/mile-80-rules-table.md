@@ -27,3 +27,9 @@ these could never be levelled apart while they shared one.
 
 A rule name this build does not ship, or an option on a rule that does not take
 it, is a load-time error naming the valid alternatives.
+
+`field.quality` is split the same way (`BUG-38`). `Blank` and `Placeholder`
+mean a required field was forgotten; `Pending` means someone declared the work
+unfinished. Sharing one rule id left no correct setting -- `error` blocked CI on
+a deliberate marker, `warn` stopped a genuinely empty field from blocking.
+`field.pending` is now its own opt-in rule.

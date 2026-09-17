@@ -5,13 +5,12 @@ Phase: '1'
 Track: schema-governance
 Implements: —
 Blocked-on: —
-Date: 2026-09-17
-Author: beauwilliams
-Derives-from: ADR-53
 ---
 # 95 — Rule presets: `init --preset`, so an adopter does not hand-write every rule
 
 ## What
+
+Follows `ADR-53`.
 
 A named starting set `urzua init` can **generate a config from** -- `urzua init --preset recommended`
 -- instead of an adopter naming every rule by hand.

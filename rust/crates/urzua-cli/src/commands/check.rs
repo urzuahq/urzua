@@ -132,6 +132,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         gated(&config, rules::RULE_FIELD_QUALITY, || {
             rules::field_quality(&records, &required_by_type)
         }),
+        gated(&config, rules::RULE_FIELD_PENDING, || {
+            rules::field_pending(&records, &required_by_type)
+        }),
         gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
             rules::filename_title_consistency(&records, &full_text)
         }),

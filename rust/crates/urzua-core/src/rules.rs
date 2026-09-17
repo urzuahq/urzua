@@ -31,6 +31,7 @@ pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
 pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
 pub const RULE_NARRATIVE_FIELD_STALE: &str = "narrative-field.stale";
 pub const RULE_FIELD_QUALITY: &str = "field.quality";
+pub const RULE_FIELD_PENDING: &str = "field.pending";
 pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
 pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";
 pub const RULE_EMBODIMENT_CONSISTENCY: &str = "embodiment.consistency";
@@ -52,6 +53,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_POINTER_FIELD_CLEAN,
     RULE_NARRATIVE_FIELD_STALE,
     RULE_FIELD_QUALITY,
+    RULE_FIELD_PENDING,
     RULE_FILENAME_TITLE_CONSISTENCY,
     RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
     RULE_EMBODIMENT_CONSISTENCY,
@@ -950,6 +952,48 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
 /// unedited template text or an explicit pending marker passes that check
 /// and still isn't a real value. Blank is reported here too (redundantly
 /// with Rule 1) so this rule's own report is self-contained.
+/// Split out of `field.quality` (BUG-38). A required field marked `Pending`
+/// says someone decided the work is unfinished; a `Blank` one says someone
+/// forgot. A repository that does not declare this rule is not told about its
+/// own deliberate markers, which is the right default -- it wrote them.
+pub fn field_pending(
+    records: &[Record],
+    required_by_type: &HashMap<String, Vec<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_FIELD_PENDING;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(required) = required_by_type.get(&record.record_type) else {
+            continue;
+        };
+        for field in required {
+            examined += 1;
+            if classify(record.header.get(field)) != FieldState::Pending {
+                continue;
+            }
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Warning,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!("field '{field}' is marked pending -- work declared unfinished"),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
 pub fn field_quality(
     records: &[Record],
     required_by_type: &HashMap<String, Vec<String>>,
@@ -965,15 +1009,17 @@ pub fn field_quality(
         for field in required {
             let state = classify(record.header.get(field));
             examined += 1;
-            let severity = match state {
-                FieldState::Present => continue,
-                FieldState::Blank => FindingSeverity::Error,
-                FieldState::Placeholder => FindingSeverity::Error,
-                FieldState::Pending => FindingSeverity::Warning,
-            };
+            // `Pending` is `field.pending`'s subject, not this rule's: it means
+            // someone declared the work unfinished, where Blank and Placeholder
+            // mean someone forgot. One rule carries one declared level, so
+            // keeping both here left no setting that was correct (BUG-38).
+            match state {
+                FieldState::Blank | FieldState::Placeholder => {}
+                FieldState::Present | FieldState::Pending => continue,
+            }
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
-                severity,
+                severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: None,
                 waived: None,
@@ -2514,14 +2560,30 @@ mod tests {
     }
 
     #[test]
-    fn field_quality_treats_pending_as_a_warning_not_an_error() {
+    fn a_pending_field_belongs_to_field_pending_not_field_quality() {
+        // BUG-38, observed on this repo's own corpus: `field.quality` held both
+        // states, so a repository declaring it `error` had a deliberate
+        // `Pending` marker block CI, and declaring it `warn` stopped a genuinely
+        // blank required field from blocking. No setting was correct.
         let r = record("docs/adr/0001-x.md", "adr", "> Deciders: Pending\n");
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Deciders".to_string()]);
 
-        let (_, findings) = field_quality(&[r], &required);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        let (_, quality) = field_quality(std::slice::from_ref(&r), &required);
+        assert!(quality.is_empty(), "{quality:?}");
+
+        let (_, pending) = field_pending(std::slice::from_ref(&r), &required);
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].message.contains("pending"));
+
+        // The forgotten case stays with field.quality, and field.pending
+        // must not claim it.
+        let blank = record("docs/adr/0002-y.md", "adr", "> Deciders:\n");
+        let (_, q2) = field_quality(std::slice::from_ref(&blank), &required);
+        assert_eq!(q2.len(), 1);
+        assert_eq!(q2[0].severity, FindingSeverity::Error);
+        let (_, p2) = field_pending(&[blank], &required);
+        assert!(p2.is_empty(), "{p2:?}");
     }
 
     #[test]

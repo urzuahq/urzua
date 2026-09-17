@@ -117,6 +117,7 @@ rules:
   config.pointer-narrative-overlap: error
   pointer.resolution: error
   field.quality: error
+  field.pending: warn
   filename.title-consistency: error
   relation.supersession-reciprocity: error
   revision-log.change-class-required: error
