@@ -43,3 +43,15 @@ already named.
 
 - SPEC-3 — the open question this decides.
 - `.urzua/config.toml` — this repository's own config, updated to carry the field.
+
+## Amendment (2026-09-17): the format changes, this decision does not
+
+`ADR-52` moves the config from TOML to YAML, making one format for everything urzua reads and writes
+as data. This decision's Context described *"a config format about to exist in repos this project
+doesn't control"* — and that is precisely why the move is survivable rather than breaking.
+
+`schema_version` is unchanged: a required key in the document, not a property of the format. A config
+written for the old format fails loudly with a version it does not recognise rather than being
+best-effort read, which is what this decision exists to guarantee.
+
+Nothing here is reversed. Only the file extension and the parser change.
