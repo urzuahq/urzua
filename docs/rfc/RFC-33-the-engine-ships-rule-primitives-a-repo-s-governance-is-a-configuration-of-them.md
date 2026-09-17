@@ -268,6 +268,42 @@ same practices, instead of being implied by the binary.
 - **What `urzua init` writes.** It must produce a starter `[rules]` table, but which rules? Writing
   everything reintroduces the flood; writing nothing reintroduces the silent no-op.
 
+## Confidence, and what would falsify this
+
+Recorded deliberately: this stays `Draft` because the evidence under it is uneven, and the parts are
+not equally strong.
+
+**Measured, and true regardless of what is decided here:**
+
+- Two rules produce findings against a corpus of **zero records** (`type.no-declared-spec`,
+  `header.deprecated-shape`) — run directly, not reasoned.
+- Five config-level rules share a byte-identical preamble; `RFC-28` proposes two more copies.
+- A `[rules]` table is a hard parse error under `deny_unknown_fields`, so `RFC-28` is unbuildable as
+  written — verified by running it.
+- `MILE-80` sat in Phase 1 while two Phase 0 milestones depended on it.
+- `ADR-40` → `ADR-44`/`MILE-90`/`BUG-8` already ran the named-specifically → declared-per-type
+  migration once, and reversed the position this RFC also argues against.
+
+**Proposed, and resting on a single corpus:** the noun/verb grid, the 17 → 11 consolidation, and
+opt-in as the posture. `MILE-51` ran against one foreign corpus. The ontology is derived from *today's
+seventeen rules*, which is circular — a grid derived from what corpora actually need could differ.
+
+**What would falsify it, cheaply and before any rewrite:**
+
+- **Express a second foreign corpus in the proposed config, on paper.** MADR is the obvious candidate:
+  YAML frontmatter, `decision-makers`, `consulted`/`informed` fields, a different section set. If a
+  noun or verb is missing, the grid is wrong and one afternoon found it.
+- **Try to place every one of today's seventeen rules in the grid without a residual.** One already
+  does not fit (`locator-promotion-candidate`, an aggregate). A second residual would suggest the
+  verbs are the wrong axis.
+- **Check whether the consolidation makes a rule harder to explain.** `field.conforms` with
+  `shape = "reference-list"` should be *more* legible than `header.pointer-field-clean`, not less. If
+  reviewers find the parameterized form harder to reason about, the abstraction is not paying.
+
+**The cost of being wrong is high**, which is why this is not queued for implementation: thirteen rules
+are a rewrite, and a migration begun on one corpus's evidence and abandoned halfway leaves the engine
+worse than either endpoint.
+
 ## What this does not propose
 
 No implementation. No `schema_version` bump. No change to `ADR-5`'s purity boundary, `ADR-8`'s closed
