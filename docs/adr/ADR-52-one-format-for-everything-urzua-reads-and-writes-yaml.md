@@ -46,6 +46,24 @@ before that one.
 | Everything JSON | One format; JSON Schema native | **No comments.** In a tool whose subject is recording *why*, a config that cannot say why a rule is enabled is disqualifying |
 | Keep TOML, express schemas in TOML | One format | JSON Schema is deeply nested and JSON-native; TOML is at its worst there |
 
+### The strongest counter-argument, tested
+
+An adversarial review of `RFC-33`'s rule model closed with *"do it in TOML with named functions and
+named keys -- because agents are the primary authors."* It argued from `OPA` issue #8426: 26% of Rego
+users learn the language from an LLM, and maintainers collected reports that *"LLMs are not as helpful
+for Rego coding, they seem to hallucinate more"* -- low corpus volume plus a syntax break poisoning the
+training data for a language whose onramp is now a chatbot.
+
+The argument is right and does not reach this decision. What it indicts is a **bespoke vocabulary with
+no corpus** -- a hand-rolled DSL, or a noun x verb grid. Between TOML and YAML the corpus argument runs
+the other way: YAML is the config language of GitHub Actions, Kubernetes, Docker Compose, OpenAPI,
+Ansible, and of `Vale` and `Spectral` specifically. A model has read far more YAML config than TOML
+config.
+
+So the review's load-bearing requirement -- named functions, named keys, a declared options schema, and
+a hard error listing valid keys when one is wrong -- is preserved exactly, and is if anything easier to
+satisfy here.
+
 ## Decision
 
 In the context of a tool that already reads YAML in every record and was about to acquire a third
@@ -74,14 +92,28 @@ migration detectable rather than silent.
 - **A flat config gets slightly worse to write.** `dir: docs/adr` under indentation is less pleasant
   than `dir = "docs/adr"`. Accepted knowingly: the cost is paid in one file, the benefit in every
   file an adopter touches.
-- **Eight specs describe a TOML config and must follow** — `SPEC-1`, `SPEC-2`, `SPEC-3`, `SPEC-5`,
-  `SPEC-10`, `SPEC-15`, `SPEC-18`, `SPEC-19`, with `SPEC-3` being the configuration spec itself.
+- **Thirteen specs carry a TOML surface and must follow**, in three groups:
 
-  **They are deliberately not updated by this decision.** They describe what ships today, and today
-  that is TOML. Rewriting them now would make eight specs assert something the code contradicts —
+  | Group | Specs | What carries TOML |
+  |---|---|---|
+  | Config prose | `SPEC-1`, `SPEC-2`, `SPEC-3`, `SPEC-5`, `SPEC-10`, `SPEC-15`, `SPEC-18`, `SPEC-19` | Describe `.urzua/config.toml` by name and shape. `SPEC-3` is the configuration spec itself. |
+  | Type schemas | `SPEC-6`, `SPEC-9`, `SPEC-16`, `SPEC-17` | A ```toml block showing that type's `[record_types.*]` declaration. |
+  | Fixture format | `SPEC-4` | Defines `manifest.toml` and a per-case `<case-id>.toml` -- a **second urzua-owned TOML surface**, unbuilt, and one this decision reaches before it is written. |
+
+  `SPEC-20` is **out of scope and stays TOML**: its references are `Cargo.toml`, `knope.toml` and
+  `rust-toolchain.toml`, third-party files whose format this project does not choose. Named here so
+  the follow-up change does not "fix" them.
+
+  **None of these are updated by this decision.** They describe what ships today, and today that is
+  TOML. Rewriting them now would make thirteen specs assert something the code contradicts --
   precisely the failure `MILE-94` records and this project spent a session repairing. They follow in
   the implementing change, and `Embodiment: Not started` on this record is the honest marker until
   then.
+
+  Each one takes a **revision-log entry**, and the class differs by group: config prose and the
+  fixture format are **substantive** (the described mechanism changes), type schemas are
+  **structural** (the same declaration, re-rendered).
+
 - **`urzua init` writes `config.yaml`**, and the adopt path (`SPEC-5`) changes with it.
 - **An existing `config.toml` needs a migration path** — read-both-write-one, or a `migrate config`
   step. Undecided here; it affects exactly one repository today, which is the cheapest this will ever
@@ -95,7 +127,7 @@ migration detectable rather than silent.
 - BUG-6, BUG-12 -- YAML's real costs, both incurred through records rather than config.
 - RFC-33 -- the exploration that surfaced the third format; this decision is independent of which
   rule model it lands on.
-- MILE-94 -- why the eight specs are not rewritten ahead of the code.
+- MILE-94 -- why the thirteen specs are not rewritten ahead of the code.
 
 > **Revision log**
 >
