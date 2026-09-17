@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M1Z2T44DHPRE5C4DVENWXY58
-Phase: '1'
+Phase: '0'
 Track: schema-governance
 Implements: —
 Blocked-on: —
@@ -53,4 +53,5 @@ since drift is usually a signal to review. What is missing is any way for this r
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | Phase `1` -> `0`. **Why:** this is the root blocker for Phase 0, not work that follows it. A `[rules]` table is a parse error today (`deny_unknown_fields`, verified by running it), so nothing can be made opt-in and `RFC-28` is unbuildable as written. `MILE-4` and `MILE-51` both depend on it. Phase 0 could not close while its prerequisite was scheduled after it -- the mechanical reason this work kept producing blockers behind blockers (`RFC-33`). | **structural** |
 > | 2026-09-16 | Added a worked instance: `ADR-45`'s false `Embodiment: Verified`, reported correctly and non-blockingly for six days among 204 warnings. **Why:** this milestone's motivation was a principle ("rules only distinguish two severities"); it now has a dated case where the missing configurability let an untrue claim survive in the corpus, which is a stronger argument for building it than the principle was. | **substantive** |
