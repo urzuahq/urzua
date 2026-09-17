@@ -8,8 +8,8 @@ Author: beauwilliams
 
 ## Summary
 
-`check` ships seventeen rules. Five encode governance choices *this project* made, always-on, with no
-way for an adopter to decline. Propose one organising principle: **the engine ships general-purpose
+`check` ships seventeen rules, all of them always-on and none declinable. Several encode governance
+choices *this project* made — two fire against a corpus of zero records. Propose one organising principle: **the engine ships general-purpose
 primitives, and a repository's governance is a configuration of them.** Under it the seventeen become
 eleven, five of today's rules collapse into one, and the corpus `MILE-51` could not express becomes
 expressible with no code path of its own.
@@ -92,11 +92,51 @@ Forcing everything into primitive-vs-policy distorts two real things:
 `(records, drifted: &HashSet<PathBuf>)` — the git work is already outside the rule. So the drift
 *input* is irreducible; the *rule* is not.
 
-### 2. Seventeen rules become eleven primitives
+### 2. An ontology, not a list
 
-`record.header-parses`, `header.conforms`, `field.required`, `field.value-shape`,
-`reference.resolves`, `reference.target-status`, `relation.reciprocal`, `identity.agrees`,
-`section.required`, `field.derived-agrees`, `field.value-shared`.
+An earlier draft named eleven primitives. They were *invented*, and an invented list is one someone
+has to remember. The rules operate over a small set of nouns, asking a small set of questions, so the
+list should be **derived** from that grid instead.
+
+**Nouns** — everything the engine can see: `record` (a file the config's `dir` claims), `field` (a
+key/value in its header), `reference` (a field value naming another record), `relation` (a reference
+with direction), `section` (a `##` block), `identity` (filename, number, title — how a record says
+which one it is).
+
+**Verbs** — everything a check can ask:
+
+| verb | asks | today |
+|---|---|---|
+| **exists** | a declared thing is present — *nothing missing* | `header.required-fields` |
+| **closed** | no undeclared things present — *nothing extra* | `header.field-set-consistency` |
+| **conforms** | a value matches a declared **shape** | `field.quality`, `header.pointer-field-clean` |
+| **resolves** | a reference points at something real | `pointer.resolution` |
+| **agrees** | two derivable things match | `embodiment.consistency`, `filename.title-consistency`, `relation.supersession-reciprocity` |
+
+`exists` and `closed` are duals, and `closed` is not invented here — `ADR-8` already names it: *"treat
+the header as a closed structure."*
+
+**`conforms` is parameterized by a declared shape, not split per rule.** `field.quality` and
+`header.pointer-field-clean` are the same verb over different shapes (`non-empty`,
+`reference-list`), which is why they collapse:
+
+```toml
+"field.conforms"   = { level = "error", shape = "reference-list" }
+"section.conforms" = { level = "error", shape = "classified-table" }
+```
+
+That vocabulary *is* the leaf-predicate category named above. A new kind of content check is then
+usually **a new shape, not a new rule** — `y-statement`, `classified-table`, `iso-date` become entries
+in one list rather than functions in `rules.rs`.
+
+The value of the grid is that a rule name becomes predictable rather than remembered, and a gap
+becomes visible: `section.*` barely exists today (one hardcoded scan for the literal
+`**Revision log**`), and `identity.*` is a single rule with `ADR-36`'s scheme baked in.
+
+**One thing does not fit, and is named rather than forced.**
+`embodiment.locator-promotion-candidate` asks *"is this value cited by two or more records?"* — an
+aggregate over the corpus, not a property of one record. Either a sixth verb (`shared`) or an honest
+admission that it is a different kind of thing.
 
 Consolidations, in order of value:
 
@@ -182,23 +222,37 @@ format about to exist in repos this project doesn't control."* This is the first
 and the mechanism exists for it. An old binary then reports "schema_version 2 not supported" rather
 than "unknown field `rules`" — the same failure, a better error.
 
-**4. Default when `[rules]` is absent: structural rules on, policy rules off.**
+**4. Every rule is a policy, and every policy is opt-in. Nothing runs undeclared.**
 
-The classification becomes the default, which makes the distinction load-bearing rather than
-descriptive. The test that separates them: *can an adopter disagree with this rule and still be
-right?*
+An earlier draft of this decision split the rules into "structural" (on by default) and "policy" (off),
+with the test *can an adopter disagree and still be right?* **That split does not survive inspection.**
+At least two of the eight rules it called structural carry this project's content: `field.quality`'s
+placeholder list is ours (`TBD`, and two of *this repo's own retired conventions*,
+`(project lead)`/`(session author)`), and `filename.title-consistency` assumes `ADR-36`'s numbering
+scheme. The line was not where the draft drew it, and a line that has to be argued per rule is a line
+someone must maintain and relitigate.
 
-- **Structural** — no. These check your corpus against **your own declarations**: you said records
-  need a `Status` field, do they have one; this reference names `ADR-7`, does `ADR-7` exist. They hold
-  no opinion about what you should declare.
-- **Policy** — yes, and many teams would. These check your corpus against **ours**: record types
-  should have specs, records should carry classified revision logs, evidence tiers should be claimed
-  via `Realized-by`, supersession should be bidirectional.
+So: **there is one kind of rule, and it is opt-in.** A rule runs because a repository declared it,
+never because the binary preferred it. That removes a classification entirely rather than getting it
+right.
 
-An adopter's first run then checks only what they themselves declared. This repo opts its five policy
-rules back on explicitly — which has a second benefit worth stating: **our governance stops being
-implied by the binary and becomes visible in our own config**, where a reader can see it and copy it.
-`MILE-51` measured the alternative: nine errors and an unanswerable warning against a valid corpus.
+Measured, not asserted. Against a config declaring almost nothing and a corpus of **zero records**,
+two rules still produced findings — `type.no-declared-spec` and `header.deprecated-shape`, both with
+opinions about a corpus that does not exist. Every other rule was silent. Those two are the ones this
+RFC already proposes deleting.
+
+**`ADR-7`'s no-silent-no-op rule is the real constraint here, and it is satisfiable.** If nothing runs
+undeclared, a corpus with no `[rules]` gets a green run that checked nothing — precisely the failure
+this project exists to prevent. Three things keep that honest:
+
+- `rules_executed` is empty and visibly so, which is what that field is for.
+- A run with no rules enabled emits a `Notice` saying exactly that, rather than passing quietly.
+- `urzua init` writes a starter `[rules]` table, so a fresh adoption is never empty by accident.
+
+**"The Urzua way" becomes a named preset, not a hidden default.** Deferred, and the shape is the
+industry's: `eslint:recommended` is opt-in, not implicit. This repo's five policy rules then live in
+its own config or in a preset it publishes — visible, readable, and copyable by someone who wants the
+same practices, instead of being implied by the binary.
 
 ## Still open
 
@@ -208,6 +262,11 @@ implied by the binary and becomes visible in our own config**, where a reader ca
   this proposal that rule does not exist. The others become configurations rather than new keys.
 - **Rule-family selection.** With eleven primitives a flat list is readable; Ruff's `select`/`ignore`
   over code prefixes is the prior art if it ever isn't. Not needed at this size.
+- **Presets.** Named, shareable rule sets — the `eslint:recommended` shape — are how "the Urzua way"
+  ships once rules are opt-in. Deliberately deferred: opt-in works without them, and a preset
+  mechanism designed before anyone has asked for a second preset would be speculative.
+- **What `urzua init` writes.** It must produce a starter `[rules]` table, but which rules? Writing
+  everything reintroduces the flood; writing nothing reintroduces the silent no-op.
 
 ## What this does not propose
 
