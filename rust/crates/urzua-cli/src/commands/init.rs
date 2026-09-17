@@ -18,59 +18,97 @@ pub struct ProposedRecordType {
     pub record_count: usize,
 }
 
-/// Scan `docs/`'s direct subdirectories for record-shaped files
-/// (`NNNN-slug.md`) and propose one record type per subdirectory that has
-/// at least one. Adopt mode: this only reads, it never writes or moves.
+/// Group the tracked set by each record's own parent directory and propose one
+/// record type per directory holding at least one record-shaped file. Adopt
+/// mode: this only reads, it never writes or moves.
+///
+/// Derived from the corpus rather than from `docs/` (BUG-36). A hardcoded root
+/// meant `init` could not adopt `npryce/adr-tools`, whose records live under
+/// `doc/adr/`, and proposing `docs/<dir>` regardless would have been worse than
+/// refusing: `check` would then examine zero files and report success.
 pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
-    let docs_dir = PathBuf::from("docs");
-    let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut counts: std::collections::BTreeMap<PathBuf, usize> = std::collections::BTreeMap::new();
 
     for rel_path in discovered {
-        let Ok(under_docs) = rel_path.strip_prefix(&docs_dir) else {
-            continue;
-        };
-        let mut components = under_docs.components();
-        let Some(subdir) = components.next() else {
-            continue;
-        };
-        // Must be at least one more component (a file inside the subdir),
-        // not a file directly under docs/.
-        if components.next().is_none() {
-            continue;
-        }
         let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
         if !is_record_shaped(file_name) {
             continue;
         }
-        let subdir_name = subdir.as_os_str().to_string_lossy().to_string();
-        *counts.entry(subdir_name).or_insert(0) += 1;
+        let Some(parent) = rel_path.parent() else {
+            continue;
+        };
+        // A record at the repository root has no directory that identifies its
+        // type, and proposing "" would claim every file in the repository.
+        if parent.as_os_str().is_empty() {
+            continue;
+        }
+        *counts.entry(parent.to_path_buf()).or_insert(0) += 1;
     }
 
-    let _ = repo_root; // reserved: adopt mode may need repo_root for future classification passes
+    // Discovery matches a type's `dir` by path prefix, so a proposed directory
+    // that contains another proposed directory would claim that one's records
+    // too. Dropping the outer one is the conservative choice: a type whose
+    // records are a superset of another's is never what an adopter meant.
+    let dirs: Vec<PathBuf> = counts.keys().cloned().collect();
+    let contained: Vec<PathBuf> = dirs
+        .iter()
+        .filter(|outer| {
+            dirs.iter()
+                .any(|inner| inner != *outer && inner.starts_with(outer))
+        })
+        .cloned()
+        .collect();
+    for dir in &contained {
+        counts.remove(dir);
+    }
+
+    let mut names: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for dir in counts.keys() {
+        *names.entry(proposed_name(dir)).or_insert(0) += 1;
+    }
+
+    let _ = repo_root;
     counts
         .into_iter()
-        .map(|(dir, record_count)| ProposedRecordType {
-            name: singular_type_name(&dir),
-            dir: format!("docs/{dir}"),
-            record_count,
+        .map(|(dir, record_count)| {
+            let base = proposed_name(&dir);
+            // Two directories can end in the same component (`doc/adr` and
+            // `docs/adr`). A duplicated type name is a config that cannot load,
+            // so qualify it rather than emit one.
+            let name = if names.get(&base).copied().unwrap_or(0) > 1 {
+                dir.components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join("-")
+            } else {
+                base
+            };
+            ProposedRecordType {
+                name,
+                dir: dir.to_string_lossy().to_string(),
+                record_count,
+            }
         })
         .collect()
 }
 
-/// `NNNN-slug.md`, never a leading underscore (a template, per SPEC-0005 --
-/// though templates are expected to have already moved to `.urzua/templates/`
-/// by the time adopt runs against a corpus this tool itself governs).
+fn proposed_name(dir: &Path) -> String {
+    let last = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    singular_type_name(&last)
+}
+
+/// A leading underscore is a template (`SPEC-5`), never a record. Everything
+/// else defers to `urzua_core`'s recogniser, so adopt mode and `urzua new`'s
+/// numbering cannot drift apart again -- carrying one each is what let them
+/// accept disjoint sets (BUG-37).
 fn is_record_shaped(file_name: &str) -> bool {
-    if !file_name.ends_with(".md") || file_name.starts_with('_') {
-        return false;
-    }
-    let stem = &file_name[..file_name.len() - 3];
-    let Some((number, _rest)) = stem.split_once('-') else {
-        return false;
-    };
-    number.len() == 4 && number.chars().all(|c| c.is_ascii_digit())
+    !file_name.starts_with('_')
+        && urzua_core::new_record::parse_record_filename(file_name).is_some()
 }
 
 /// `adr` -> `adr`, `rfc` -> `rfc`, `specs` -> `spec` -- adopt proposes the
@@ -169,7 +207,7 @@ pub fn run(dry_run: bool) -> ExitCode {
     let proposed = detect_record_types(&repo_root, &discovered.paths);
     if proposed.is_empty() {
         return emit(&CouldNotRun::from(
-            "no record-shaped files found under docs/ -- nothing to adopt",
+            "no record-shaped files found in the tracked set -- nothing to adopt",
         ));
     }
 
