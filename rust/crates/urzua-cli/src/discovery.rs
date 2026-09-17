@@ -43,9 +43,27 @@ pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
     }
 }
 
+/// One place that names the config file, so a format change is one edit
+/// rather than fourteen (ADR-52).
+pub(crate) fn default_config_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(".urzua/config.yaml")
+}
+
 pub(crate) fn load_config(path: &PathBuf) -> Result<Config, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        // A pre-ADR-52 config is the likeliest reason this file is missing, and
+        // "no such file" would send the reader looking for the wrong problem.
+        let legacy = path.with_extension("toml");
+        if !path.exists() && legacy.exists() {
+            return format!(
+                "config at {} not found, but {} exists -- urzua reads YAML since ADR-52; \
+                 rename it and convert the TOML syntax to YAML",
+                path.display(),
+                legacy.display()
+            );
+        }
+        format!("could not read config at {}: {e}", path.display())
+    })?;
     urzua_core::config::parse(&content).map_err(|e| e.to_string())
 }
 

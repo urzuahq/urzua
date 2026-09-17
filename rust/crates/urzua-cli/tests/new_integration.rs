@@ -46,8 +46,8 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
 fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present() {
     let dir = fixture_repo("yaml-with-template");
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = [\"Status\"]\nheader_shape = \"yaml-frontmatter\"\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     // A template that still uses the old blockquote shape -- this is
@@ -93,8 +93,8 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
 fn new_still_uses_the_template_verbatim_for_the_default_blockquote_shape() {
     let dir = fixture_repo("blockquote-default");
     std::fs::write(
-        dir.join(".urzua/config.toml"),
-        "schema_version = 1\n\n[record_types.adr]\ndir = \"docs/adr\"\nrequired_fields = [\"Status\"]\n",
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(

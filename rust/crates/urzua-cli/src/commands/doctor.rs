@@ -61,7 +61,7 @@ pub fn run() -> ExitCode {
     };
 
     let mut checks = Vec::new();
-    let config_path = repo_root.join(".urzua/config.toml");
+    let config_path = crate::discovery::default_config_path(&repo_root);
 
     if !config_path.exists() {
         checks.push(DoctorCheck {
