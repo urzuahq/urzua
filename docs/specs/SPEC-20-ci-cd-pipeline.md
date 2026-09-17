@@ -104,9 +104,12 @@ error. `release.yml` previously held the last three jobs and is deleted.
 - GitHub Release binaries only (`ADR-13`) — not published to crates.io; `Cargo.lock` is committed for
   this reason (a binary, not a library other crates depend on).
 
-**Known manual step:** the release PR's `ci` run is held at `action_required` until a human approves
-it, because `GITHUB_TOKEN` created the PR — the same cause as `BUG-28`. `RFC-30` proposes removing it
-by acting as a GitHub App.
+**No manual step remains** beyond merging the release PR, which is `ADR-45`'s deliberate act. The
+release PR's own `ci` run never executes — `GITHUB_TOKEN` created the PR, so GitHub declines to run
+it — and reports as **`failure` with zero jobs**. That is cosmetic: `publish-release.yml`'s `verify`
+job checks the exact commit being tagged, and nothing reads the PR's run. It is also unavoidable
+today; `RFC-30` (reopened `Draft`) is the only mitigation that would make the check honest rather
+than explained.
 
 This was two steps until `BUG-34`: approving the run replayed the **stale `opened` payload**, taken
 before knope's own labelling step, so the changeset job ran when it should have skipped. The gate now
