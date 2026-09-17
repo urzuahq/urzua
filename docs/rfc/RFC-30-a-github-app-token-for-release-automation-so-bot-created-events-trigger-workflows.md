@@ -1,19 +1,15 @@
 ---
 Stable-Id: 01M2MMFZ5XEV4R5BX3DFGZ5PZM
-Status: Rejected
+Status: Draft
 Date: 2026-09-16
 Author: beauwilliams
 ---
 # 30 — A GitHub App token for release automation, so bot-created events trigger workflows
 
-> **Rejected (2026-09-16) by ADR-47.** Not because the approach was wrong — it would have worked —
-> but because every motivation below is now covered without a new external identity or a private key
-> to hold: the tag trigger by `BUG-28`, the stale label payload by `BUG-34`, and the held `ci` run by
-> `ADR-47`, which runs the checks inside `publish-release.yml` instead of asking whether another
-> workflow ran. `ADR-47` also verifies the exact released commit, which this proposal would not have.
->
-> Kept rather than deleted: "why didn't we just use an App token?" is the obvious question to ask in
-> six months, and the answer is below.
+> **Rejected (2026-09-16) by `ADR-47`, then reopened the same day.** The rejection reasoning stands
+> and is kept below: `ADR-47` removed the *need* for the release PR's own `ci` run, so an App token
+> was no longer buying a capability. What the first real release under `ADR-47` showed is that it was
+> still buying something — see "Residual cost" immediately below.
 
 ## Summary
 
@@ -21,6 +17,45 @@ Every automated step in the release flow acts as `GITHUB_TOKEN`, and GitHub deli
 trigger workflows from `GITHUB_TOKEN` events. Three separate defects follow from that one fact.
 Propose minting a short-lived installation token from a GitHub App for the push, PR-creation, and
 labelling steps, so those events behave like a real actor's.
+
+## Residual cost that reopened this (2026-09-16)
+
+`v0.3.0` was the first release under `ADR-47`. It published correctly: three attested archives, two
+minutes, no manual step. And the release PR's own `ci` check was **red**, as it is on every release
+PR, because GitHub does not execute a workflow run on a PR that `GITHUB_TOKEN` created.
+
+Every `ci` run on the `release` branch, one day's worth:
+
+| run | conclusion | triggered by |
+|---|---|---|
+| 35071226718 | failure | bot |
+| 35072271054 | cancelled | a human, removing a label |
+| **35072279374** | **success** | **a human, re-adding it** |
+| 35077097004 | failure | bot |
+| 35163583796 | failure | bot |
+
+The only green run was triggered by a person. The state is reported as `action_required` on the run
+object and as `failure` in listings — the same held run, described two ways.
+
+`ADR-47` makes this cosmetic: nothing reads that check, and `publish-release.yml`'s own `verify` job
+checks the exact commit being tagged. But cosmetic is not free. It was mistaken for a real failure
+within minutes of the first release — *"there was a failure in the CI and it still got released"* —
+and a permanently-red check on a routine event is what trains a reader to stop reading red checks.
+That is `BUG-33`'s lesson, arriving by a different route on the same day it was fixed elsewhere.
+
+**Neither available mitigation removes the red mark.** `pull_request.branches:` filters by *base*
+branch, so the release PR cannot be excluded at the trigger; a job-level `if:` never evaluates,
+because the hold precedes job selection; approving it each release restores the manual step
+`ADR-47` deleted; and posting a synthetic passing check would be asserting a verification that did
+not happen, in a repository whose entire subject is not doing that.
+
+An App-token-created PR triggers workflows normally, so the run would execute and pass. That is the
+only option that makes the check honest rather than explained.
+
+**What would make this urgent rather than annoying:** branch protection on `main` requiring `ci`.
+`main` has none today, which is why a red check blocks nothing. Add it, and the release PR becomes
+unmergeable without either this proposal or a per-release manual approval. The two decisions should
+be made together.
 
 ## Motivation
 

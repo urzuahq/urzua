@@ -106,3 +106,29 @@ than merely tedious.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** shipping `v0.2.1` showed `verify-ci` could only ever report whether a human clicked approve, and that it checked a commit other than the one being tagged. Both were invisible until the flow ran end to end without a defect consuming the run. | **structural** |
+
+## Amendment (2026-09-16): two Consequences corrected by the first real release
+
+`v0.3.0` was the first release published under this decision, and it worked — `verify` ran the full
+gate against `merge_commit_sha`, `release`/`build`/`upload` followed, three attested archives in two
+minutes, no manual step. Two of the Consequences above describe it wrongly.
+
+**"The release PR's own `ci` run stays held at `action_required`."** It does not run, correctly — but
+it reports as **`failure` with zero jobs**, not as a pending hold. The distinction matters because a
+red ✗ reads as "something broke" where a pending ⏸ reads as "waiting on you." It was mistaken for a
+real failure within minutes of the release, by exactly the question the shape invites: *there was a
+failure in the CI and it still got released.* Nothing was wrong — but the check's appearance argues
+otherwise on every release, which is `BUG-33`'s "a gate nobody reads" arriving by another route.
+
+**"The checks now run twice for a release (once on the PR if approved, once here)."** They ran
+**once**. The "if approved" condition does not hold by default and, after this decision, there is no
+reason for anyone to approve it. The doubled runtime this Consequence accepted as a cost is not being
+paid.
+
+`RFC-30` is reopened as `Draft` on the strength of the first point: an App-token-created PR would
+execute its run and pass, which is the only mitigation that makes the check honest rather than merely
+explained. Filtering it away is impossible (`pull_request.branches:` filters the base branch, and a
+job-level `if:` never evaluates because the hold precedes job selection), and a synthetic passing
+check would assert a verification that did not occur.
+
+The decision itself is unchanged and is working. Only its description of the aftermath was wrong.
