@@ -30,7 +30,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | Spec | Covers | Status |
 > |---|---|---|
 > | **SPEC-2** | `urzua check` — discovery, rules, output contract | **the Phase 0 deliverable** |
-> | **SPEC-3** | `.urzua/config.toml` | needed by SPEC-2 |
+> | **SPEC-3** | `.urzua/config.yaml` | needed by SPEC-2 |
 > | **SPEC-4** | the corpus acceptance suite | needed by SPEC-2 criterion 3 |
 > | **SPEC-5** | `urzua init` — type selection, `.urzua/` layout, the adopt path | the bootstrap surface |
 > | **SPEC-6** | the `milestone` record type | Accepted |
@@ -76,7 +76,7 @@ failed, whatever its test coverage says.
 ### `urzua init`
 **Specified in full by SPEC-5** (still `Draft`: only adopt mode, with `--dry-run`, is built).
 Adopts an existing corpus in place without moving files, inferring record types from what's already
-on disk and writing `.urzua/config.toml`. Type *selection* (`--types`/`--dir`, built-in profiles)
+on disk and writing `.urzua/config.yaml`. Type *selection* (`--types`/`--dir`, built-in profiles)
 and template creation are SPEC-5's target design, not current behavior. Absent from this spec's
 original command surface — the gap surfaced when the bootstrap plan needed it.
 
@@ -153,7 +153,7 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 
 ## Configuration
 
-**Specified in full by SPEC-3**, which moved it to `.urzua/config.toml`. **Config-driven is the whole thesis** — the same binary must serve a
+**Specified in full by SPEC-3**, which moved it to `.urzua/config.yaml`. **Config-driven is the whole thesis** — the same binary must serve a
 Python repo and a TypeScript monorepo with different directory layouts, different record types, and
 different role requirements, without either forking it. If v0 needs code changes to work in the
 second codebase, the founding claim is falsified and that's worth discovering in week two rather
@@ -200,7 +200,7 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > |---|---|---|
 > | 2026-07-29 | Initial spec. | **structural** |
 > | 2026-07-29 | Layout changed from a root Cargo workspace to a polyglot layout with language directories at the root, per ADR-4. The original assumed Urzua was a Rust project; it is a product with a Rust component, and the integrations, dashboard, and infrastructure on the roadmap are not Rust-shaped. Crate names and responsibilities are unchanged. | **substantive** |
-> | 2026-08-20 | Added `urzua init` to the command surface (SPEC-5). It was absent from the original surface entirely; the gap surfaced only when a bootstrap plan needed the command. Config moves to `.urzua/config.toml`. | **substantive** |
+> | 2026-08-20 | Added `urzua init` to the command surface (SPEC-5). It was absent from the original surface entirely; the gap surfaced only when a bootstrap plan needed the command. Config moves to `.urzua/config.yaml`. | **substantive** |
 > | 2026-08-20 | Split into a sequential set. `check` → SPEC-2, configuration → SPEC-3, acceptance suite → SPEC-4. This spec keeps its number and the cross-cutting rules that ~35 records and source files cite; the child specs restate nothing except where they narrow it. | **substantive** |
 > | 2026-07-29 | Added a second set of five acceptance-test bug classes to §"Acceptance test: the three-corpus suite": enum completeness against corpus prose, check-exists-vs-check-wired, git-tracked discovery scoping, pre-retrofit reverse-reference scanning, and the permanent structural-vs-content-scope ceiling. Added a paired open question on `urzua doctor`. | **substantive** |
 > | 2026-09-05 | Moved Embodiment computation out of `audit` and into `check` (as a rule) plus a new `urzua fix` command (ADR-18/19), since it turned out to be a per-record consistency check, not a cross-record reconciliation. `audit` narrows to supersession reciprocity and dangling references. | **substantive** |
@@ -288,3 +288,4 @@ stronger validation set than a greenfield tool normally gets.
 - RFC-1 — core+profile schema, Embodiment, revision log
 - SPEC-4 — the corpus acceptance suite that specifies the bug histories in full
 - SPEC-2 (`check`), SPEC-3 (configuration), SPEC-4 (acceptance suite), SPEC-5 (`init`) — the children
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |

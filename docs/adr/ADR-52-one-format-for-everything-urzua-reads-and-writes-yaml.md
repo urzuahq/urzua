@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2PZJBP3TGY087GAFSNQ3F53
 Status: Accepted
-Embodiment: Not started
-Realized-by: —
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/src/commands/init.rs
 Date: 2026-09-17
 Author: beauwilliams
 Deciders: beauwilliams
@@ -134,3 +134,4 @@ migration detectable rather than silent.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Initial decision. **Why:** asked why TOML at all, rather than what good TOML syntax would be -- and the answer was that nothing chose it against YAML, while records had already chosen YAML. The deciding evidence was mechanical: `urzua-core` carries both parsers already, YAML at ten call sites to TOML's two, so consolidating removes a dependency rather than adding one. | **structural** |
+> | 2026-09-17 | `Embodiment: Not started` → `Verified`, with `Realized-by` naming the code and the test. **Why:** the parser, `urzua init`'s renderer, the fourteen call sites and this repo's own config all moved to YAML, `toml` left both crates and the purity allowlist, and the thirteen specs this record named were updated in the same change -- so nothing here asserts what the code contradicts any more. | **substantive** |
