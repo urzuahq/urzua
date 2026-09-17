@@ -35,9 +35,19 @@ and a fact about where a file keeps its fields is not an opinion. There is nothi
 
 ## Proposal
 
-**A shape may ship as a named built-in.** `fields.from = "madr"` is shorthand for a declaration the
-adopter could have written by hand, and can still override field by field. It is a parser under a
-name, and names are how a parser becomes discoverable.
+**What ships is a primitive, not a format name.** `fields.from = "yaml-frontmatter"`,
+`"prefix-lines"`, `"rfc-822"` -- each is real parsing work that cannot be expressed in configuration
+at all, which is precisely why it belongs in the binary.
+
+**A format is a composition of primitives, and compositions are not named in the binary.** MADR is
+"YAML frontmatter, `##` sections, `NNNN-slug.md`" -- three declarations that travel together. A
+`fields.from = "madr"` built-in would bundle them under a third party's brand and make this project
+the owner of that brand's evolution: MADR changes, the binary changes, and every adopter pinned to the
+name inherits a decision nobody in their repo made.
+
+A composition is what a **configuration file already is**. So MADR support arrives as a
+preset/scaffold that *generates* those three declarations at `init` time (`MILE-95`) -- plain config
+the adopter owns, edits and can walk away from. Nothing at `check` time has ever heard of MADR.
 
 **A policy may never ship.** Not as a default, not as a category, not as an always-on rule. `MILE-80`
 already established the mechanism -- a rule not named in `rules` does not run -- and `MILE-95`'s
@@ -56,9 +66,13 @@ cites the corpus it was derived from and the date it was checked.
 
 ### The failure mode this exists to prevent
 
-A shape that smuggles policy. If `fields.from = "madr"` also quietly required `decision-makers`, it
-would be `ADR-53`'s defect wearing a parser's clothes -- an undeclared opinion arriving with something
-an adopter had no choice but to accept. **A named shape may declare where things are. It may never
+A primitive that smuggles policy. If `fields.from = "yaml-frontmatter"` also quietly required a
+particular key, it would be `ADR-53`'s defect wearing a parser's clothes -- an undeclared opinion
+arriving with something an adopter had no choice but to accept.
+
+Withdrawing format names removes the larger version of this risk rather than managing it. A
+`"madr"` built-in would have been a standing invitation to fold "what MADR records usually contain"
+in beside "where MADR keeps its fields", and the two are indistinguishable once they share a name. **A named shape may declare where things are. It may never
 declare that something must be there.**
 
 The distinction is checkable, which is the point: a built-in shape that emits a finding is a bug, not
@@ -66,20 +80,17 @@ a feature. Shapes locate. Rules judge.
 
 ## Open questions
 
-- **Does a shape compose?** MADR is "YAML frontmatter, `##` sections, `NNNN-slug.md`" -- three
-  declarations that happen together. Whether `madr` is one name or sugar for three is unsettled, and
-  the answer probably follows from whether any real corpus wants two of the three.
-- **What is the minimum evidence for a name?** One corpus is thin. This RFC's own claim -- that a
-  small vocabulary covers decision records generally -- is what the third-corpus test is meant to
-  falsify, and the same standard should apply here.
+- **What is the minimum evidence for a new primitive?** `rfc-822` would be the third `fields.from`
+  value and is currently justified by one corpus (Python PEPs, untested). One corpus is thin, and the
+  same standard the third-corpus test applies to the function vocabulary should apply here.
 - **Does `identity` belong to shape or policy?** `^(?P<number>\d+)-(?P<slug>.+)$` is descriptive. *"A
   record must be numbered"* is not. They are currently the same declaration.
 
 ## Non-goals
 
 Does not decide the function vocabulary -- that is `RFC-33`, and `ADR-53` deliberately left it open
-pending a third corpus. Does not propose any specific built-in shape. Names the principle by which one
-would be admitted.
+pending a third corpus. Does not propose any specific primitive. Does not propose named format
+built-ins; it argues against them. Names the principle by which a primitive would be admitted.
 
 ## References
 
@@ -94,3 +105,4 @@ would be admitted.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Filed, `Status: Draft`. **Why:** `ADR-53` read without qualification forbids shipping anything, which would make every adopter write a parser before the tool reads a file. Raised while discussing a third reference corpus: supporting many formats with built-ins needs a rule for what may ship, and "descriptive may, normative may not" is the line that keeps `ADR-53` intact. | **substantive** |
+> | 2026-09-17 | Named format built-ins withdrawn: what ships is a *primitive* parser, never a format's name. **Why:** `fields.from = "madr"` bundles three independent declarations under a third party's brand and makes this project the owner of that brand's evolution -- MADR changes, the binary changes, and an adopter pinned to the name inherits a decision nobody in their repo made. A format is a composition of primitives, and a configuration file already is a composition, so the composition is generated at `init` time (`MILE-95`) and nothing at `check` time has heard of MADR. This also answers this RFC's own open question about whether shapes compose: they do, and that is exactly why the composition needs no name. | **substantive** |
