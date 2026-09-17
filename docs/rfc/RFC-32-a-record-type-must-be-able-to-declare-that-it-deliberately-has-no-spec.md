@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2P88HWDE7A083501VRYXPZ1
-Status: Draft
+Status: Accepted
 Date: 2026-09-16
 Author: beauwilliams
 ---
@@ -78,4 +78,5 @@ about, and stops once someone has.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-16 | `Draft` -> `Accepted`, decided by `ADR-51`. **Why:** decided before building, rather than patching around the gap -- the open questions this proposal listed are answered in the decision, including one it did not anticipate. | **substantive** |
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** this is the finding an adopted corpus cannot clear by any configuration, which makes it the sharpest counterexample to "one config, not a fork per repo" that `MILE-51` produced -- a rule with no expressible answer. | **structural** |
