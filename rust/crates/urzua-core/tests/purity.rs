@@ -6,7 +6,7 @@
 // yaml_serde (RFC-0016/ADR-0017): verified pure Rust before adding -- a
 // libyaml transpilation via c2rust, not a binding to it, so no C toolchain
 // dependency reaches this crate's build.
-const ALLOWED_DEPENDENCIES: &[&str] = &["serde", "thiserror", "toml", "yaml_serde"];
+const ALLOWED_DEPENDENCIES: &[&str] = &["serde", "thiserror", "yaml_serde"];
 
 /// The actual assertion, extracted as a pure function over a dependency list
 /// so it can be exercised both against real `cargo metadata` output and

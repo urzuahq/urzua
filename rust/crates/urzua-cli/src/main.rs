@@ -42,7 +42,7 @@ pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
     version
 )]
 struct Cli {
-    /// Path to .urzua/config.toml. Defaults to the nearest one at or above the cwd.
+    /// Path to .urzua/config.yaml. Defaults to the nearest one at or above the cwd.
     #[arg(long, global = true)]
     config: Option<PathBuf>,
 
@@ -54,7 +54,7 @@ struct Cli {
 enum Command {
     /// Create a record with a stable ID assigned. Never asks you to pick a number.
     New {
-        /// Record type, as configured in .urzua/config.toml (e.g. adr, rfc, spec).
+        /// Record type, as configured in .urzua/config.yaml (e.g. adr, rfc, spec).
         record_type: String,
         title: Option<String>,
         #[arg(long)]
@@ -105,7 +105,7 @@ enum Command {
         paths: Vec<PathBuf>,
     },
 
-    /// Adopt an existing corpus: propose and write `.urzua/config.toml` from
+    /// Adopt an existing corpus: propose and write `.urzua/config.yaml` from
     /// what's already there. Never clobbers, always idempotent, `--dry-run`
     /// byte-identical to the real run. Stable-ID backfill is a separate
     /// step: `migrate ids`.

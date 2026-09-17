@@ -15,7 +15,8 @@ pub fn run(config_path: Option<PathBuf>, path: String) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let config_path = config_path.unwrap_or_else(|| repo_root.join(".urzua/config.toml"));
+    let config_path =
+        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
     let config = match load_config(&config_path) {
         Ok(c) => c,
         Err(e) => return emit(&CouldNotRun::from(e)),
