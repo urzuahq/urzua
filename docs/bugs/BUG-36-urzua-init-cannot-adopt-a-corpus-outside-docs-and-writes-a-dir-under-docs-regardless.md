@@ -64,3 +64,4 @@ not sufficient on its own:
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** filed rather than fixed -- the obvious two-line fix proposes a wrong `dir` and opens three further hazards, so this needs a real `init` rework rather than riding along with a validation result. | **structural** |
+> | 2026-09-17 | Still `Open`. **Why:** the `ADR-52` changeset claimed this was closed by rendering the config through a real serializer. It was not. That change fixed a neighbouring hazard -- a directory name carrying the format's metacharacters escaping its value -- which `MILE-51` noted *beside* this bug rather than as part of it. The four hardcoded `docs/` paths are untouched, and `init` still cannot adopt a corpus rooted anywhere else. | **substantive** |

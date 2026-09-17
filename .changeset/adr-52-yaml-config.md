@@ -14,5 +14,5 @@ allowlist.
 rather than reporting the YAML file as merely missing.
 
 `urzua init` writes `config.yaml`, rendered through the real serializer instead
-of string concatenation -- which also closes BUG-36, where a directory name
-carrying the format's metacharacters escaped its value.
+of string concatenation, so a directory name carrying the format's
+metacharacters can no longer escape its value.
