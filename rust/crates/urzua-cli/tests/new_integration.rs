@@ -47,7 +47,7 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
     let dir = fixture_repo("yaml-with-template");
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     // A template that still uses the old blockquote shape -- this is
@@ -94,7 +94,7 @@ fn new_still_uses_the_template_verbatim_for_the_default_blockquote_shape() {
     let dir = fixture_repo("blockquote-default");
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 1\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, narrative-field.stale: warn, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(

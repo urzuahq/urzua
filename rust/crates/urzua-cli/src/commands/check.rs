@@ -14,6 +14,44 @@ use crate::discovery::{
 };
 use crate::emit;
 
+/// A rule a repository has not declared does not run at all -- it is not run
+/// and then filtered, because an opt-in rule that still costs its own
+/// execution is opt-in in name only. The declared `level` replaces whatever
+/// severity the rule body chose, which is the whole point of MILE-80: the
+/// severity is the repository's call, not `rules.rs`'s.
+fn gated(
+    config: &urzua_core::config::Config,
+    id: &str,
+    run: impl FnOnce() -> (RuleExecution, Vec<Finding>),
+) -> (RuleExecution, Vec<Finding>) {
+    use urzua_core::config::RuleLevel;
+    use urzua_core::report::{FindingSeverity, RuleStatus};
+
+    let level = config.rules.get(id).map(|s| s.level);
+    match level {
+        None | Some(RuleLevel::Off) => (
+            RuleExecution {
+                rule: id.to_string(),
+                records_examined: 0,
+                status: RuleStatus::NotEnabled,
+            },
+            Vec::new(),
+        ),
+        Some(level) => {
+            let severity = match level {
+                RuleLevel::Error => FindingSeverity::Error,
+                RuleLevel::Warn => FindingSeverity::Warning,
+                RuleLevel::Off => unreachable!("handled above"),
+            };
+            let (exec, mut findings) = run();
+            for f in &mut findings {
+                f.severity = severity;
+            }
+            (exec, findings)
+        }
+    }
+}
+
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
@@ -72,23 +110,80 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // rules_executed/findings both derive from it below, so there's no
     // second hand-written list that has to be kept in sync by hand.
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
-        rules::header_required_fields(&records, &required_by_type),
-        rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type),
-        rules::field_quality(&records, &required_by_type),
-        rules::filename_title_consistency(&records, &full_text),
-        rules::supersession_reciprocity(&records),
-        rules::revision_log_change_class(&records, &full_text),
-        rules::embodiment_consistency(&records, &drifted),
-        rules::embodiment_locator_promotion_candidate(&records),
-        rules::header_layout_consistency(&records, &header_layout_by_type),
-        rules::header_field_set_consistency(&records, &known_fields_by_type),
-        rules::narrative_field_stale(&records, &config),
-        rules::type_no_declared_spec(&config, &config_path),
-        rules::header_deprecated_shape(&config, &config_path),
-        rules::header_pointer_field_clean(&records, &config),
-        rules::config_pointer_declaration_missing(&config, &config_path),
-        rules::config_pointer_field_not_known(&config, &config_path),
-        rules::config_pointer_narrative_overlap(&config, &config_path),
+        gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
+            rules::header_required_fields(&records, &required_by_type)
+        }),
+        gated(&config, rules::RULE_POINTER_RESOLUTION, || {
+            rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type)
+        }),
+        gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
+            let not_in = config
+                .rules
+                .get(rules::RULE_POINTER_TARGET_STATUS)
+                .and_then(|s| s.not_in.clone())
+                .unwrap_or_default();
+            rules::pointer_target_status(
+                &records,
+                &pointer_fields_by_type,
+                &narrative_fields_by_type,
+                &not_in,
+            )
+        }),
+        gated(&config, rules::RULE_FIELD_QUALITY, || {
+            rules::field_quality(&records, &required_by_type)
+        }),
+        gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
+            rules::filename_title_consistency(&records, &full_text)
+        }),
+        gated(
+            &config,
+            rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
+            || rules::supersession_reciprocity(&records),
+        ),
+        gated(
+            &config,
+            rules::RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+            || rules::revision_log_change_class(&records, &full_text),
+        ),
+        gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
+            rules::embodiment_consistency(&records, &drifted)
+        }),
+        gated(
+            &config,
+            rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+            || rules::embodiment_locator_promotion_candidate(&records),
+        ),
+        gated(&config, rules::RULE_HEADER_LAYOUT_CONSISTENCY, || {
+            rules::header_layout_consistency(&records, &header_layout_by_type)
+        }),
+        gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
+            rules::header_field_set_consistency(&records, &known_fields_by_type)
+        }),
+        gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
+            rules::narrative_field_stale(&records, &config)
+        }),
+        gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
+            rules::type_no_declared_spec(&config, &config_path)
+        }),
+        gated(&config, rules::RULE_HEADER_DEPRECATED_SHAPE, || {
+            rules::header_deprecated_shape(&config, &config_path)
+        }),
+        gated(&config, rules::RULE_HEADER_POINTER_FIELD_CLEAN, || {
+            rules::header_pointer_field_clean(&records, &config)
+        }),
+        gated(
+            &config,
+            rules::RULE_CONFIG_POINTER_DECLARATION_MISSING,
+            || rules::config_pointer_declaration_missing(&config, &config_path),
+        ),
+        gated(&config, rules::RULE_CONFIG_POINTER_FIELD_NOT_KNOWN, || {
+            rules::config_pointer_field_not_known(&config, &config_path)
+        }),
+        gated(
+            &config,
+            rules::RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
+            || rules::config_pointer_narrative_overlap(&config, &config_path),
+        ),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());
