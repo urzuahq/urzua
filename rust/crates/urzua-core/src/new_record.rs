@@ -18,20 +18,47 @@
 /// slug -- a directory entry like `ADR-999` (no `.md`) or `-999-slug.md`
 /// (empty prefix) is real, once a stray non-record file sits in a type's
 /// directory, and must not silently affect the computed max.
+/// The number and slug of a record filename, in either convention this project
+/// has to read: `0001-slug.md` (Nygard-style, and this project's own history)
+/// and `ADR-1-slug.md` (`ADR-36`). Returns `None` for anything else.
+///
+/// One definition, used by both `urzua new`'s numbering and `urzua init`'s
+/// adopt scan. They previously carried a recogniser each and accepted disjoint
+/// sets, so each was blind to exactly what the other required (BUG-37).
+pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
+    let stem = file_name.strip_suffix(".md")?;
+    let (first, rest) = stem.split_once('-')?;
+    let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
+
+    // `0001-slug` / `1-slug`. Padding is not load-bearing (BUG-2).
+    if digits(first) {
+        if rest.is_empty() {
+            return None;
+        }
+        return first.parse().ok().map(|n| (None, n));
+    }
+    // `ADR-1-slug`.
+    if !first.is_empty() && first.chars().all(|c| c.is_ascii_uppercase()) {
+        let (number, slug) = rest.split_once('-')?;
+        if digits(number) && !slug.is_empty() {
+            return number.parse().ok().map(|n| (Some(first), n));
+        }
+    }
+    None
+}
+
+/// The next unclaimed number for a type, across **both** filename conventions.
+///
+/// `BUG-9` excluded `NNNN-slug.md` from this count, arguing it "was never a
+/// real external-adopter case". `MILE-51` is that case: in a corpus adopted
+/// from `npryce/adr-tools`, every filename is `0001-`..`0009-`, the exclusion
+/// found nothing to count, and `urzua new` wrote a second record numbered 1
+/// (BUG-37). Miscounting from a stale legacy file is recoverable; writing a
+/// duplicate number into someone else's corpus is not.
 pub fn next_display_number(filenames: &[String]) -> u32 {
     filenames
         .iter()
-        .filter_map(|name| {
-            let stem = name.strip_suffix(".md")?;
-            let mut parts = stem.splitn(3, '-');
-            let prefix = parts.next()?;
-            let number = parts.next()?;
-            let slug = parts.next()?;
-            if prefix.is_empty() || slug.is_empty() {
-                return None;
-            }
-            number.parse::<u32>().ok()
-        })
+        .filter_map(|name| parse_record_filename(name).map(|(_, number)| number))
         .max()
         .map_or(1, |highest| highest + 1)
 }
@@ -233,12 +260,39 @@ mod tests {
     }
 
     #[test]
-    fn next_display_number_ignores_a_legacy_pre_type_prefix_filename() {
-        // ADR-36's amendment (BUG-9): a legacy `NNNN-slug.md` filename no
-        // longer contributes to the max -- it has no type-prefix segment to
-        // read a number from, so it's silently excluded, not miscounted.
-        let filenames = vec!["0001-legacy.md".to_string(), "ADR-9-ninth.md".to_string()];
-        assert_eq!(next_display_number(&filenames), 10);
+    fn next_display_number_counts_both_filename_conventions() {
+        // Replaces next_display_number_ignores_a_legacy_pre_type_prefix_filename,
+        // which asserted BUG-9's exclusion using 0001 + ADR-9 -- a pair that
+        // yields 10 whether legacy filenames are counted or ignored. It could
+        // not fail, so it was never evidence for the behaviour it named.
+        //
+        // The exclusion itself is reversed (BUG-37): every filename in a corpus
+        // adopted from a Nygard-style repository is `NNNN-slug.md`, so ignoring
+        // them found nothing to count and `urzua new` wrote a duplicate.
+        let mixed = vec!["0012-legacy.md".to_string(), "ADR-9-ninth.md".to_string()];
+        assert_eq!(next_display_number(&mixed), 13);
+
+        let nygard_only = vec![
+            "0001-record-architecture-decisions.md".to_string(),
+            "0009-help-scripts.md".to_string(),
+        ];
+        assert_eq!(next_display_number(&nygard_only), 10);
+    }
+
+    #[test]
+    fn parse_record_filename_reads_both_conventions_and_rejects_neither_shape() {
+        assert_eq!(parse_record_filename("0001-slug.md"), Some((None, 1)));
+        assert_eq!(parse_record_filename("7-slug.md"), Some((None, 7)));
+        assert_eq!(
+            parse_record_filename("ADR-12-slug.md"),
+            Some((Some("ADR"), 12))
+        );
+        // A number with no slug behind it is a fragment, not a record.
+        assert_eq!(parse_record_filename("0001.md"), None);
+        assert_eq!(parse_record_filename("ADR-12.md"), None);
+        assert_eq!(parse_record_filename("-999-slug.md"), None);
+        assert_eq!(parse_record_filename("ADR-999"), None);
+        assert_eq!(parse_record_filename("notes.md"), None);
     }
 
     #[test]

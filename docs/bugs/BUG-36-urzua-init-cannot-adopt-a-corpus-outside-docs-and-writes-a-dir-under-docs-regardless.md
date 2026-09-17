@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2P88GH66BQFHARXA411NZVM
-Status: Open
+Status: Fixed
 Found-in: 'MILE-51 -- running `urzua init` against npryce/adr-tools, a real Nygard corpus whose records live under `doc/adr/`'
 Regression-test: 'not yet written -- needs a fixture corpus rooted somewhere other than `docs/`, asserting `init` proposes a type whose `dir` is the real parent path and that `check` then examines a non-zero count with the config `init` wrote'
 ---
@@ -66,3 +66,4 @@ not sufficient on its own:
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** filed rather than fixed -- the obvious two-line fix proposes a wrong `dir` and opens three further hazards, so this needs a real `init` rework rather than riding along with a validation result. | **structural** |
 > | 2026-09-17 | Still `Open`. **Why:** the `ADR-52` changeset claimed this was closed by rendering the config through a real serializer. It was not. That change fixed a neighbouring hazard -- a directory name carrying the format's metacharacters escaping its value -- which `MILE-51` noted *beside* this bug rather than as part of it. The four hardcoded `docs/` paths are untouched, and `init` still cannot adopt a corpus rooted anywhere else. | **substantive** |
 > | 2026-09-17 | Still `Open`, and now mechanically protected. **Why:** the false close claim that named this bug is the reason `claim.status-agreement` exists -- a changeset announcing it closed this record while the record read `Open`, in a file nothing cross-checked. The rule was observed failing against that exact line before the fix landed. | **substantive** |
+> | 2026-09-17 | `Status: Open` → `Fixed`. **Why:** `detect_record_types` groups by each record's own parent directory from the tracked set, so `doc/adr/` adopts as `dir: doc/adr` rather than being invisible. All four hardcodes are gone, including `:56`'s `format!("docs/{dir}")`, which was the one that mattered -- fixing only the scan root would have proposed `docs/adr` for a corpus at `doc/adr` and left `check` examining zero files while reporting success. Two hazards `MILE-51` named are handled explicitly: a proposed directory containing another is dropped, because discovery matches by path prefix and the outer one would claim the inner one's records; and two directories ending in the same component are qualified rather than emitted as a duplicate type name. Verified end to end on a three-record corpus at `doc/adr/`: `init` ok, `check` examines 3, non-blocking. | **substantive** |

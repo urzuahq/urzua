@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2P88H1C0KADMN3TRJ0BQSYZ
-Status: Open
+Status: Fixed
 Found-in: 'MILE-51 -- `urzua init` refused this repo''s own corpus, and `urzua new` in an adopted Nygard corpus wrote a record numbered 1 alongside an existing 0001'
 Regression-test: 'not yet written -- two planted cases, observed failing: `init` proposing a type for a `TYPE-N-slug.md` corpus, and `next_display_number` returning 10 rather than 1 for a directory of `0001-`..`0009-` records'
 ---
@@ -73,3 +73,6 @@ read.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** found by running adoption end to end against a foreign corpus and then against this repo's own -- both fail, in opposite directions, and the writing half silently produces a duplicate number rather than refusing. `BUG-9` argued the external-adopter case was hypothetical; it is now measured. | **structural** |
+> | 2026-09-17 | `Status: Open` → `Fixed`. **Why:** `parse_record_filename` in `urzua-core` is now the single recogniser, and both halves defer to it -- `init`'s adopt scan and `urzua new`'s numbering carried one each, which is what let them accept disjoint sets. It reads `0001-slug.md` and `ADR-1-slug.md`, so adopt mode can finally read the records this project itself writes. `BUG-9`'s exclusion of legacy filenames is reversed: it argued the case 'was never a real external-adopter case', and `MILE-51` is that case -- every filename in an adopted Nygard corpus is `NNNN-`, so the exclusion found nothing to count and `new` returned 1. Verified: in a `0001`-`0003` corpus, `new` now writes number 4.
+
+**Not fixed here, and worth naming:** `new` still writes `ADR-4-slug.md` into a corpus whose own convention is `0004-slug.md`. Recognising both shapes is not the same as *writing* the one a corpus uses, and choosing that per type is `identity.pattern` -- `RFC-33`'s declared document model, not this bug. | **substantive** |
