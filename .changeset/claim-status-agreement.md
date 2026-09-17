@@ -22,3 +22,11 @@ rules:
 
 A built-in status list would make the rule stop applying the moment a
 repository used a status it did not know.
+
+It matches on verb and proximity, not meaning, so it can be wrong in both
+directions: a present-tense sentence *discussing* a claim will match, and a
+claim phrased without one of the verbs will not. Only the present tense is
+matched -- "closes X" is how a claim is written, while "announced it closed X"
+is prose about one, and including the past tense made the rule fire on its own
+changeset. A waiver (`ADR-11`) is the intended escape, deliberately a record so
+an exception is visible rather than a silent pattern tweak.

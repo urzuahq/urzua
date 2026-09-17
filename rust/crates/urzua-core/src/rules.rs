@@ -1031,6 +1031,12 @@ pub fn field_pending(
 /// this rule stop applying the moment a repository used a status the list did
 /// not know, which is the failure direction this project treats as the worse
 /// one.
+///
+/// Matches on verb and proximity, not meaning, so it can be wrong in both
+/// directions: a present-tense sentence discussing someone else's claim will
+/// match, and a claim phrased without one of the verbs will not. A waiver
+/// (`ADR-11`) is the intended escape for the former -- deliberately a record,
+/// so an exception is visible rather than a silent pattern tweak.
 pub fn claim_status_agreement(
     records: &[Record],
     claims: &[(String, String)],
@@ -1041,7 +1047,13 @@ pub fn claim_status_agreement(
     let mut examined = 0;
 
     let index = build_normalized_index(records);
-    let verb = ["closes", "closed", "fixes", "fixed", "resolves", "resolved"];
+    // Present tense only. A claim is written in the present -- "closes BUG-36",
+    // the convention every forge uses -- while prose *about* a past claim is
+    // written in the past: "announced it closed BUG-36". Including the past
+    // tense made this rule fire on its own changeset, which describes the
+    // defect it was written for. A narrowing, not a fix: a sentence in the
+    // present tense that merely discusses a claim still matches.
+    let verb = ["closes", "fixes", "resolves"];
 
     for (path, content) in claims {
         examined += 1;
