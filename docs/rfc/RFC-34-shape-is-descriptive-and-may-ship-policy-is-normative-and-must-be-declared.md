@@ -94,8 +94,9 @@ a feature. Shapes locate. Rules judge.
   a corpus this project does not use and has not read. Under the rule above that is precisely the
   speculative capability the rule exists to refuse. It becomes a roadmap item, not a design gap.
 
-  The third-corpus test is narrowed accordingly. It remains worth running to falsify the **function
-  vocabulary** on paper, which needs no new parser. It is no longer a justification for building one.
+  The corpus work is `MILE-96`, filed as an exercise rather than a gate: reading Python PEPs end to
+  end is how the gap for a third `fields.from` value would be *demonstrated*, which is the admission
+  rule applied rather than circumvented.
 - **Does `identity` belong to shape or policy?** `^(?P<number>\d+)-(?P<slug>.+)$` is descriptive. *"A
   record must be numbered"* is not. They are currently the same declaration.
 
