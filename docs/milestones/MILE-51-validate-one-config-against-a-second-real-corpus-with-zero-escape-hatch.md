@@ -73,9 +73,48 @@ the gaps are symptoms. `RFC-33` proposes the general form and is a Phase 0 requi
 **The useful output is the five gaps, each now measured rather than predicted.** Closing them is
 downstream work this milestone informs; re-running this validation is how it eventually closes.
 
+## Re-run, 2026-09-17, against `npryce/adr-tools` at HEAD
+
+`BUG-36` and `BUG-37` -- the two defects that made the original run fail before it reached a single
+record -- were fixed the same day. Re-run to find out what the verdict is once adoption mechanically
+works.
+
+| | original run | re-run |
+|---|---|---|
+| `urzua init` | refused: `docs/` hardcoded, corpus is at `doc/adr/` | **ok** -- adopts `doc/adr`, 9 records |
+| `check` files examined | **0** | **9** |
+| findings | **9 blocking errors** | 10 warnings, `blocking: false` |
+| `urzua new` | returned 1, beside an existing `0001-` | correct next number |
+| rules examining zero records | 10 of 17 | **14 of 20** |
+
+**The blockers are gone. The verdict is unchanged.** Adoption now runs end to end and does not hand an
+adopter errors they never asked for, which is this milestone's own standard. But the two findings they
+*do* receive are the original verdict's gaps 1 and 2, word for word:
+
+```
+[warning] header.required-fields: no header-shaped region found -- required fields [] cannot be checked
+[warning] type.no-declared-spec:  record type 'adr' has no declared spec
+```
+
+Nothing was required, and it still fails anyway -- because the engine cannot be told that this type's
+metadata is not in a header at all. A Nygard record carries a bare `Date:` line between the H1 and the
+first `##`. `init` proposes `header_shape: yaml-frontmatter` regardless (`ADR-33`, deliberate), so the
+engine asks nine records for a shape their convention does not have.
+
+That is the declared document model, `RFC-33`'s layer 1, and it is the remaining blocker for this
+milestone's founding claim. Gap 2 is `ADR-51`, which rejected `spec = "none"` the day it was proposed
+and left the rule with no way to be silenced by configuration.
+
+**14 of 20 rules examined zero records**, a worse proportion than the original 10 of 17 -- partly
+because three rules shipped today (`pointer.target-status`, `field.pending`,
+`claim.status-agreement`) legitimately have nothing to check here. `BUG-40` is what makes that number
+unreadable: every one of the fourteen reports `status: "ran"`, indistinguishable from a rule that
+examined records and found them clean.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Recorded the first run's result. `Status` stays `Planned` -- the claim fails and five schema gaps are now named with measurements behind each. **Why:** this is a validation milestone whose own Why calls it *"the cheapest, most informative validation available before building anything else on top of the current schema"* -- so the deliverable is the verdict, not a patch. Two drafted fixes were rejected under adversarial review for making the run quiet rather than the schema expressive; that reasoning is recorded above because it is the more durable half. | **substantive** |
 > | 2026-09-17 | `Status: Planned` → `Done`. **Why:** this milestone's deliverable is a verdict, not a fix, and the verdict exists: run against `npryce/adr-tools`, the founding claim **failed** -- `init` could not run, a hand-written config produced 9 blocking errors, and 10 of 17 rules examined zero records. That result produced `RFC-33` and `ADR-53`. Leaving it `Planned` claimed the validation had not happened when it is the single most consequential thing this project has run. | **substantive** |
+> | 2026-09-17 | Re-run against the real corpus after `BUG-36`/`BUG-37` landed, result recorded above. **Why:** the original verdict failed at step one -- `init` could not run -- so it could not say whether anything *past* step one worked. It now does: adoption is end to end and non-blocking, and the founding claim still fails, on the same two gaps, for the same reason. Status stays `Done`: this milestone's deliverable is a verdict, and a second verdict does not reopen it. | **substantive** |
