@@ -30,10 +30,10 @@ the slowest one. This is Phase D.
 corpora/
   <corpus-id>/
     records/          synthetic record files, engineered to exhibit specific variance
-    manifest.toml     what irregularity each record was built to exhibit
+    manifest.yaml     what irregularity each record was built to exhibit
     .urzua/           the config this corpus is validated under
     expectations/
-      <case-id>.toml  one per acceptance case
+      <case-id>.yaml  one per acceptance case
 ```
 
 Corpus ids are opaque (`corpus-a`, `corpus-b`, `corpus-c`). Nothing in `corpora/` may name an
@@ -58,19 +58,22 @@ Rules:
   Whitespace, wrapping, and punctuation are the material under test.
 - Prefer relative date intervals over absolute ones where a case tests a grace window or claim age —
   relative intervals are load-bearing for that class of test; absolute dates rarely are.
-- `manifest.toml` records what irregularity each fixture was built to exhibit, so a failing case can
+- `manifest.yaml` records what irregularity each fixture was built to exhibit, so a failing case can
   be reasoned about without guessing at intent.
 
 ## Acceptance cases
 
 Each case is a corpus, a config, an invocation, and an expected result:
 
-```toml
-id = "blank-field-misdetection"
-corpus = "corpus-a"
-invocation = ["check", "records/"]
-expect_exit = 1
-expect_findings = [{ rule = "field.blank-vs-placeholder", file = "...", line = 12 }]
+```yaml
+id: "blank-field-misdetection"
+corpus: "corpus-a"
+invocation: ["check", "records/"]
+expect_exit: 1
+expect_findings:
+  - rule: "field.blank-vs-placeholder"
+    file: "..."
+    line: 12
 ```
 
 The suite is red before the rule exists and green after. A case that passes against a build with the
@@ -206,3 +209,4 @@ applied to the copy that never ran, which is exactly the false confidence this g
 > | 2026-08-20 | Split out of SPEC-1 §"Acceptance test". | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |

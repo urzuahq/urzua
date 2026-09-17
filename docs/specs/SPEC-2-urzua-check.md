@@ -64,7 +64,7 @@ Scope:
 
 - Git-tracked discovery, with `scope.source` reported.
 - Header parsing for the record types in `docs/`.
-- A minimal `.urzua/config.toml` — record types and directories only. Not the full configuration surface,
+- A minimal `.urzua/config.yaml` — record types and directories only. Not the full configuration surface,
   but a real file rather than a hardcoded layout, so the config thesis is exercised from day one
   rather than retrofitted.
 - **Exactly two rules**, chosen because both fire on this corpus today (see below).
@@ -315,3 +315,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-08 | Bumped to `0.5`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Noted `notices` as a real, shipped addition to the output shape (ADR-46), and named -- rather than silently compounded -- the pre-existing drift between §Output contract's illustrative RFC-3-era JSON block and the real shipped shape (camelCase vs. `snake_case`, stderr rendering that no longer exists, a `status` enum that doesn't match `ReportStatus`). Filed as its own bug rather than fixed in this revision. | **substantive** |
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |

@@ -19,15 +19,16 @@ had never gotten this treatment despite being the oldest and most-used types in 
 
 ## Schema
 
-```toml
-[record_types.adr]
-dir = "docs/adr"
-required_fields = ["Status", "Date", "Author", "Deciders"]
-header_shape = "yaml-frontmatter"
-known_fields = ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
-spec = "SPEC-16"
-pointer_fields = ["Derives-from"]
-narrative_fields = []
+```yaml
+record_types:
+  adr:
+    dir: "docs/adr"
+    required_fields: ["Status", "Date", "Author", "Deciders"]
+    header_shape: "yaml-frontmatter"
+    known_fields: ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
+    spec: "SPEC-16"
+    pointer_fields: ["Derives-from"]
+    narrative_fields: []
 ```
 
 | Field | Values | Notes |
@@ -83,3 +84,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = ["Derives-from"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing `pointer.resolution`'s prior hardcoded field list. Noted `Supersedes / Superseded-by`'s `urzua graph` `kind: pointer` labeling stays a separate, unchanged mechanism outside this axis. | **substantive** |
 > | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`/`Deciders` now state the no-`@` form explicitly (BUG-18). The `@` prefix nearly every hand-typed value in this corpus carried was decorative -- nothing in any crate read, stripped, or validated it -- while being a reserved YAML indicator, so it forced the quoting its own presence necessitated, and disagreed with what `resolve_identity()` emits at every tier. 132 of the corpus's 134 `Author`/`Deciders` values were backfilled to match in the same change; the other two (ADR-37's) were already unprefixed. | **substantive** |
+> | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |

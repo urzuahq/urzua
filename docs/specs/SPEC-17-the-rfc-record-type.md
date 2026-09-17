@@ -19,15 +19,16 @@ schema-spec treatment `milestone`/`bug`/`waiver` already had (ADR-41).
 
 ## Schema
 
-```toml
-[record_types.rfc]
-dir = "docs/rfc"
-required_fields = ["Status", "Date", "Author"]
-header_shape = "yaml-frontmatter"
-known_fields = ["Stable-Id", "Supersedes / Superseded-by", "Amends", "Implements"]
-spec = "SPEC-17"
-pointer_fields = ["Implements", "Amends"]
-narrative_fields = []
+```yaml
+record_types:
+  rfc:
+    dir: "docs/rfc"
+    required_fields: ["Status", "Date", "Author"]
+    header_shape: "yaml-frontmatter"
+    known_fields: ["Stable-Id", "Supersedes / Superseded-by", "Amends", "Implements"]
+    spec: "SPEC-17"
+    pointer_fields: ["Implements", "Amends"]
+    narrative_fields: []
 ```
 
 | Field | Values | Notes |
@@ -70,3 +71,4 @@ ADR's own `Deciders` field records.
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Added `Implements` to `known_fields`, declared `pointer_fields = ["Implements", "Amends"]`/`narrative_fields = []` in config (MILE-90/ADR-44). **Why:** `RFC-23`'s own header (`Implements: BUG-8`) had been silently tripping `header.field-set-consistency` since it was written -- `rfc` never declared `Implements` as known despite already using it in practice. `Amends` had also never been resolved by anything; declaring it a `pointer_fields` entry makes it real. | **substantive** |
 > | 2026-09-11 | Bumped to `0.8`. **Why:** `Author`'s row stated the resolution mechanism ("same as `adr`") but not the written form, so BUG-18's no-`@` convention wasn't actually inherited by a reader of this spec alone -- it only looked like it was. Stated explicitly; this type's own `Author` values were backfilled in the same change. | **substantive** |
+> | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |

@@ -19,16 +19,17 @@ built for three types doesn't hold for a fourth, that's real evidence, not a hyp
 
 ## Schema
 
-```toml
-[record_types.milestone]
-dir = "docs/milestones"
-prefix = "MILE"
-required_fields = ["Status", "Phase", "Track"]
-header_shape = "yaml-frontmatter"
-known_fields = ["Stable-Id", "Implements", "Blocked-on"]
-spec = "SPEC-6"
-pointer_fields = ["Implements"]
-narrative_fields = ["Blocked-on"]
+```yaml
+record_types:
+  milestone:
+    dir: "docs/milestones"
+    prefix: "MILE"
+    required_fields: ["Status", "Phase", "Track"]
+    header_shape: "yaml-frontmatter"
+    known_fields: ["Stable-Id", "Implements", "Blocked-on"]
+    spec: "SPEC-6"
+    pointer_fields: ["Implements"]
+    narrative_fields: ["Blocked-on"]
 ```
 
 `prefix` (2026-09-07 addition) decouples the type's own name — used for the `urzua new milestone
@@ -99,3 +100,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-08 | Bumped to `0.5`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = ["Implements"]`/`narrative_fields = ["Blocked-on"]` in config (MILE-90/ADR-44), replacing the two rules' prior hardcoded field list; `blocked-on.stale` renamed `narrative-field.stale`. **Why:** `BUG-8` named this exact type's schema as an example of the genericity `pointer.resolution` claimed but didn't have. | **substantive** |
+> | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |

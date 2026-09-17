@@ -19,15 +19,16 @@ invisible, only non-blocking.
 
 ## Schema
 
-```toml
-[record_types.waiver]
-dir = "docs/waiver"
-required_fields = ["Rule", "Scope", "Reason"]
-header_shape = "yaml-frontmatter"
-known_fields = ["Stable-Id", "Expires"]
-spec = "SPEC-10"
-pointer_fields = []
-narrative_fields = []
+```yaml
+record_types:
+  waiver:
+    dir: "docs/waiver"
+    required_fields: ["Rule", "Scope", "Reason"]
+    header_shape: "yaml-frontmatter"
+    known_fields: ["Stable-Id", "Expires"]
+    spec: "SPEC-10"
+    pointer_fields: []
+    narrative_fields: []
 ```
 
 | Field | Values | Notes |
@@ -75,7 +76,7 @@ computed from non-waived findings only.
 - RFC-15 — the original proposal, including the waiver-as-record shape and `Expires`'s wall-clock
   read as this schema's first.
 - MILE-59 — shipped the parsing/matching logic (`waiver.rs`) but never actually registered the type
-  in `.urzua/config.toml`, so `urzua new waiver` failed outright until that gap was found and fixed
+  in `.urzua/config.yaml`, so `urzua new waiver` failed outright until that gap was found and fixed
   the same day this spec was written.
 
 > **Revision log**
@@ -87,3 +88,4 @@ computed from non-waived findings only.
 > | 2026-09-08 | Bumped to `0.3`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = []`/`narrative_fields = []` in config (MILE-90/ADR-44) — explicit zero, not omitted, since `waiver` is the one type with no relationship fields to declare. **Why:** MILE-90's new `config.pointer-declaration-missing` rule requires every type to make this choice explicit. | **structural** |
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |

@@ -48,7 +48,7 @@ Everything the tool owns lives under `.urzua/`:
 
 ```
 .urzua/
-  config.toml           tracked — the one config
+  config.yaml           tracked — the one config
   templates/            tracked — one per selected type
     adr.md
     rfc.md
@@ -56,7 +56,7 @@ Everything the tool owns lives under `.urzua/`:
 .gitignore              gains .urzua/cache/
 ```
 
-**Why a directory rather than a root `urzua.toml`.** Config alone would not need one; config plus
+**Why a directory rather than a root `urzua.yaml`.** Config alone would not need one; config plus
 templates plus derived state does, and scattering those three across the root, the corpus, and a
 cache directory is how each ends up governed by a different rule.
 
@@ -92,7 +92,7 @@ a status enum, required fields per status, and role requirements — the per-typ
 core+profile model, with the core fixed across all of them.
 
 A profile is a **starting point that is written out, not a hidden default.** `init` materializes the
-profile's rules into `config.toml` rather than referencing a built-in by name. A user who disagrees
+profile's rules into `config.yaml` rather than referencing a built-in by name. A user who disagrees
 with a required field edits a visible line; a built-in referenced by name is a rule nobody can see
 and nobody reviewed, which is the failure this project exists to remove.
 
@@ -102,7 +102,7 @@ for.
 
 ## Safety
 
-- **Never clobber.** (Built.) An existing `.urzua/config.toml` is not overwritten. `init` reports
+- **Never clobber.** (Built.) An existing `.urzua/config.yaml` is not overwritten. `init` reports
   what exists and exits 2.
 - **Idempotent.** (Built, via the never-clobber refusal above -- a re-run exits 2, not 0.) A
   re-run against an initialized repository changes nothing.
@@ -120,13 +120,13 @@ The real, shipped shape (`InitReport`/ADR-46):
 {
   "status": "ok",
   "dry_run": false,
-  "config_path": ".urzua/config.toml",
+  "config_path": ".urzua/config.yaml",
   "proposed": [{ "name": "adr", "dir": "docs/adr", "record_count": 5 }],
   "written": true
 }
 ```
 
-`config_toml` (the full rendered config) is present only when `dry_run: true` -- there's nothing
+`config_yaml` (the full rendered config) is present only when `dry_run: true` -- there's nothing
 else to read the preview from, since nothing was written. A real write omits it, matching `new`'s own
 established convention (SPEC-12): the caller reads the file at `config_path` if it needs the content.
 
@@ -172,7 +172,7 @@ migration without a reverse-reference scan is the documented data-loss shape.
 ## References
 
 - SPEC-2 — `check`, the consumer of what this writes.
-- SPEC-3 — configuration; amended by this spec to live at `.urzua/config.toml`.
+- SPEC-3 — configuration; amended by this spec to live at `.urzua/config.yaml`.
 - RFC-1 — core+profile, which type selection instantiates.
 - RFC-11 — why an ignore list is the wrong answer to the template problem.
 - ADR-3 — identifiers; the unsettled encoding behind open question 2.
@@ -185,3 +185,4 @@ migration without a reverse-reference scan is the documented data-loss shape.
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Added `## Output (shipped)`/`## Exit codes (shipped)` documenting the real, narrower `InitReport` shape (BUG-20, ADR-46), separated from the Draft's own richer aspirational design (greenfield mode, `--types`/`--dir`, `unclassified` tracking, exit 1) so a reader can tell which parts are built. | **substantive** |
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |

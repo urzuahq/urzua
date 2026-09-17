@@ -20,15 +20,16 @@ closing the last of the three founding types' schema-spec gap (ADR-41, ADR-43).
 
 ## Schema
 
-```toml
-[record_types.spec]
-dir = "docs/specs"
-required_fields = ["Status", "Date", "Version", "Author", "Subject"]
-header_shape = "yaml-frontmatter"
-known_fields = ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
-spec = "SPEC-18"
-pointer_fields = ["Derives-from", "Implements", "Parent"]
-narrative_fields = []
+```yaml
+record_types:
+  spec:
+    dir: "docs/specs"
+    required_fields: ["Status", "Date", "Version", "Author", "Subject"]
+    header_shape: "yaml-frontmatter"
+    known_fields: ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
+    spec: "SPEC-18"
+    pointer_fields: ["Derives-from", "Implements", "Parent"]
+    narrative_fields: []
 ```
 
 | Field | Values | Notes |
@@ -76,8 +77,9 @@ than `SPEC-1`-specific, `Implements`/`Parent` declared since every spec already 
 > |---|---|---|
 > | 2026-09-08 | Initial spec. **Why:** `spec` — one of the three founding record types, and the type this very document is an instance of — never got a schema spec; found live via `type.no-declared-spec`'s own inventory check (ADR-43), alongside the same gap for `adr`/`rfc`. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
-> | 2026-09-08 | Corrected: the previous bump changed `config.toml` and this spec's own header but left the Schema section, field table, and "what's deliberately not built" describing the old, undecided state -- rewrote them to match the actual decided schema (`known_fields` declared, `known_fields`-is-undeclared section removed). Added `Implements: ADR-10` -- the actual decision record for `adr`/`rfc`/`spec` as configured profiles, missed in favor of a `Derives-from: RFC-1` pointer that skipped past it. | **substantive** |
+> | 2026-09-08 | Corrected: the previous bump changed `config.yaml` and this spec's own header but left the Schema section, field table, and "what's deliberately not built" describing the old, undecided state -- rewrote them to match the actual decided schema (`known_fields` declared, `known_fields`-is-undeclared section removed). Added `Implements: ADR-10` -- the actual decision record for `adr`/`rfc`/`spec` as configured profiles, missed in favor of a `Derives-from: RFC-1` pointer that skipped past it. | **substantive** |
 > | 2026-09-08 | Added `Stable-Id` to `known_fields`. **Why:** found live creating the first-ever tool-generated spec (`SPEC-19`) -- `render_synthetic_yaml` assigns every type a `Stable-Id` unconditionally (ADR-21), but no `spec` had ever been created through `urzua new` before MILE-74 made that possible, so this gap sat unexercised until now. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = ["Derives-from", "Implements", "Parent"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing the "resolved regardless of per-type declaration" text above -- that was accurate before this version but became false the moment `pointer.resolution` became config-driven. | **substantive** |
 > | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`'s row stated the resolution mechanism but not the written form, and cited MILE-78 as precedent -- MILE-78 being the record that established the `'@handle'` form BUG-18 has now retired, so the citation pointed at the superseded convention. Both corrected. Also fixed "required as of this version", which was written when this spec was at `0.2` and silently re-pointed at every later version. | **substantive** |
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |

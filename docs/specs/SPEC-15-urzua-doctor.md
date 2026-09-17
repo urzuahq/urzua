@@ -41,7 +41,7 @@ command's output contract.
 when there's a real observation to report.)
 
 `status` is the worst severity across `checks` (`error` beats `warn` beats `ok`). Exit codes: `2` if
-`.urzua/config.toml` doesn't exist at all (run `urzua init` first); `1` if the config fails to parse,
+`.urzua/config.yaml` doesn't exist at all (run `urzua init` first); `1` if the config fails to parse,
 or any check reports `error`; `0` otherwise — a `warn`-only report still exits `0`, since only an
 error blocks. That 2/1/0 split is carried on an explicit, non-serialized field (ADR-46) precisely
 *because* the first two cases both report the same `status: error` -- `status` alone can't tell them
@@ -52,7 +52,7 @@ empty, same as every other command's report.
 
 | `check` id | Meaning |
 |---|---|
-| `config-exists` | `.urzua/config.toml` is present. `error` if missing (short-circuits, exit 2). |
+| `config-exists` | `.urzua/config.yaml` is present. `error` if missing (short-circuits, exit 2). |
 | `config-parses` | The config parses with no unrecognized keys (`deny_unknown_fields` — a typo'd key is a hard parse error, not a silently-ignored one). `error` if not (short-circuits, exit 1). |
 | `record-types-declared` | At least one `[record_types.*]` entry exists. `error` if the map is empty — `check` would never examine anything. |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
@@ -65,7 +65,7 @@ SPEC-3's original doctor language named more than what exists today; the gap is 
 than compounded:
 
 - **Which config resolved and from where** — today's `doctor` only checks the default
-  `.urzua/config.toml` path; it doesn't report whether a `--config` override was in play or surface
+  `.urzua/config.yaml` path; it doesn't report whether a `--config` override was in play or surface
   the resolution path explicitly.
 - **Which rules are off** — there is no per-rule enable/disable or severity config yet at all
   (MILE-80 tracks configurable severity); `doctor` can't list what doesn't exist as a config surface.
@@ -89,3 +89,4 @@ than compounded:
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Added `notices` to the documented shape and explained why the 2/1/0 exit-code split lives on a separate field rather than being derived from `status` (ADR-46). | **substantive** |
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
