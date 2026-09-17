@@ -92,65 +92,183 @@ Forcing everything into primitive-vs-policy distorts two real things:
 `(records, drifted: &HashSet<PathBuf>)` — the git work is already outside the rule. So the drift
 *input* is irreducible; the *rule* is not.
 
-### 2. An ontology, not a list
+### 2. A declared document model, then rules as data
 
-An earlier draft named eleven primitives. They were *invented*, and an invented list is one someone
-has to remember. The rules operate over a small set of nouns, asking a small set of questions, so the
-list should be **derived** from that grid instead.
+An earlier draft of this section proposed a **grid**: six nouns (`record`, `field`, `reference`,
+`relation`, `section`, `identity`) crossed with five verbs (`exists`, `closed`, `conforms`, `resolves`,
+`agrees`), so a rule name like `field.conforms` would be *derived* rather than remembered.
 
-**Nouns** — everything the engine can see: `record` (a file the config's `dir` claims), `field` (a
-key/value in its header), `reference` (a field value naming another record), `relation` (a reference
-with direction), `section` (a `##` block), `identity` (filename, number, title — how a record says
-which one it is).
+**The grid is withdrawn. It fails this RFC's own falsification test, on this RFC's own examples.**
 
-**Verbs** — everything a check can ask:
+Test #2 below asks to *"place every one of today's seventeen rules in the grid without a residual."* It
+does not survive the six rule keys the draft itself wrote:
 
-| verb | asks | today |
-|---|---|---|
-| **exists** | a declared thing is present — *nothing missing* | `header.required-fields` |
-| **closed** | no undeclared things present — *nothing extra* | `header.field-set-consistency` |
-| **conforms** | a value matches a declared **shape** | `field.quality`, `header.pointer-field-clean` |
-| **resolves** | a reference points at something real | `pointer.resolution` |
-| **agrees** | two derivable things match | `embodiment.consistency`, `filename.title-consistency`, `relation.supersession-reciprocity` |
+| key the draft wrote | legal cell? |
+|---|---|
+| `field.conforms` | yes |
+| `section.conforms` | yes |
+| `reference.target-status` | noun yes -- but `target-status` is not one of the five verbs |
+| `header.conforms` | no: `header` is not one of the six nouns |
+| `config.key-required` | no: neither half |
+| `implements.target-not-settled` | no: neither half |
 
-`exists` and `closed` are duals, and `closed` is not invented here — `ADR-8` already names it: *"treat
-the header as a closed structure."*
+Two of six. A naming scheme whose own worked examples are 67% illegal is not making names predictable,
+it is adding a second thing to remember. Recorded rather than deleted, because the failure is the
+finding: the residuals are not exotic edge cases, they are ordinary checks the engine already performs.
+The nouns were not the wrong nouns -- the premise that a rule's *name* should encode its *structure*
+was wrong.
 
-**`conforms` is parameterized by a declared shape, not split per rule.** `field.quality` and
-`header.pointer-field-clean` are the same verb over different shapes (`non-empty`,
-`reference-list`), which is why they collapse:
+**What replaces it is not invented either.** `Spectral` -- a mature linter for a superficially
+different subject (OpenAPI/JSON documents) but structurally the same problem (validate a declared
+document model against user-configurable rules) -- uses `given` / `then` / `severity`, where `given`
+selects and `then` names a function. The name carries no structure; the function does.
 
-```toml
-"field.conforms"   = { level = "error", shape = "reference-list" }
-"section.conforms" = { level = "error", shape = "classified-table" }
+#### Layer 1: a declared document model
+
+This is what `MILE-51` measured as missing, and it comes before any rule work. The engine cannot
+express a foreign corpus's rules while it cannot express the corpus's *shape*:
+
+```yaml
+record_types:
+  adr:
+    dir: doc/adr
+    identity:
+      from: filename
+      pattern: '^(?P<number>\d+)-(?P<slug>.+)$'
+    fields:
+      from: prefix-lines        # a bare `Date: 2016-02-12` line, not a header block
+    sections:
+      from: headings
+      depth: 2                  # `##` and `###`
+      items: true               # bullet lists within a section are addressable
 ```
 
-That vocabulary *is* the leaf-predicate category named above. A new kind of content check is then
-usually **a new shape, not a new rule** — `y-statement`, `classified-table`, `iso-date` become entries
-in one list rather than functions in `rules.rs`.
+Consequences, all of them subtractive:
 
-The value of the grid is that a rule name becomes predictable rather than remembered, and a gap
-becomes visible: `section.*` barely exists today (one hardcoded scan for the literal
-`**Revision log**`), and `identity.*` is a single rule with `ADR-36`'s scheme baked in.
+- `header_shape`'s three-value enum becomes **one case** of `fields.from`.
+- `ADR-50`'s `header_shape = "none"` -- Accepted and unbuilt -- becomes another case rather than a
+  fourth enum variant.
+- **`header.deprecated-shape` becomes unwritable**, because no value is blessed to deprecate against.
+- `RFC-29` (filename/numbering convention) and `RFC-31` dissolve into `identity`.
+- `RFC-17`'s section parser and `MILE-4`'s section checks get a home to attach to.
 
-**One thing does not fit, and is named rather than forced.**
-`embodiment.locator-promotion-candidate` asks *"is this value cited by two or more records?"* — an
-aggregate over the corpus, not a property of one record. Either a sixth verb (`shared`) or an honest
-admission that it is a different kind of thing.
+Without this layer, rule authors re-implement the document parser once per rule. That is not
+speculative: it is what `Vale`'s Tengo scripting produced in the wild.
 
-Consolidations, in order of value:
+#### `sections` carries depth, because rules must be able to address the whole document
+
+A record *is* a markdown file, and its `##`/`###` structure is content the rules are meant to reach --
+"this type must carry a Consequences section", "these bullets must be classified". Whatever the model
+cannot name, no rule can ever address, and no configuration can recover. So the model's reach is the
+ceiling on extensibility, independent of how good the function vocabulary is. That is the general
+claim; MADR is only what exposed the limit.
+
+Falsification test #1 -- express a second foreign corpus on paper -- was **run against MADR**
+(`adr.github.io/madr`, the main alternative to the Nygard shape) before any of this was built.
+
+**The nine functions survived.** Every rule a MADR adopter would want maps onto one already listed:
+`status` against its vocabulary is `enumeration`, *superseded by X* is `resolves` then `target-status`,
+`decision-makers` is `pattern` with `split`/`each`, number uniqueness is `occurrence`. No tenth
+function was needed, which is the vocabulary clearing its second corpus.
+
+MADR's frontmatter is also **entirely optional**, which under all-opt-in means simply no rule -- the
+first independent corroboration of that decision from outside this repo.
+
+**Layer 1 did not survive, and `sections.from = "h2"` is why.** Two MADR rules cannot be written
+against a flat section list:
+
+1. *Every option in `## Considered Options` has a matching `### {option}` under `## Pros and Cons of
+   the Options`.* The function is `agrees`; what is missing is that **`###` is not in the document
+   model**, so the right-hand extractor cannot be named.
+2. *Every consequence bullet reads `Good, because` / `Bad, because` / `Neutral, because`.* Needs list
+   items inside a section to be addressable. They are not.
+
+Both are expressible by regexing raw content -- which is a rule author re-implementing the parser, the
+precise failure this layer exists to prevent. So `sections` gains `depth` and `items`, above -- not as
+an accommodation for one template, but because a rule that cannot name a subsection cannot be written
+by anyone, for any corpus.
+
+**This gap is not only an adopter's.** Measured on this repo, 2026-09-17: **18 of 84 records use `###`
+headings**, this RFC among them. A fifth of the corpus has structure `check` is blind to, which is why
+no rule has ever fired on any of it.
+
+Depth was invisible at n=1 by construction: neither this repo's checked structure nor the `adr-tools`
+corpus nests, so nothing exercised it until a corpus that nests was tried.
+
+#### Layers 2 and 3: rules as data
+
+A rule is a selector, a named function, and a level. Nine functions, closed and versioned:
+
+| function | asserts | options |
+|---|---|---|
+| `defined` / `undefined` | present / absent | -- |
+| `closed` | the set is a subset of a declared list | `allowed` |
+| `pattern` | the value matches a shape | `match`, `not_match`, `split`, `each`, `shape` |
+| `enumeration` | the value is in a list | `values` |
+| `resolves` | names a record that exists | -- |
+| `target-status` | the resolved target's `Status` | `one_of` / `none_of` |
+| `reciprocal` | A→B implies B→A | `inverse_field` |
+| `agrees` | two extractors are equal | `left`, `right` |
+| `occurrence` | a count across the corpus | `min`, `max` |
+
+`occurrence` absorbs `embodiment.locator-promotion-candidate`, which the grid could not place without
+inventing a sixth verb. It is an aggregate, and aggregates are a function, not a noun.
+
+**Growth is one named function at a time, and there is never a general escape hatch.** Four surveyed
+systems each tried one and retreated: `Semgrep` shipped arbitrary Python behind a flag named
+`--dangerously-allow-arbitrary-code-execution-from-rules`, deprecated it, and deleted it -- its
+replacement is a *closed* mini-grammar that a core maintainer describes as covering 95% of what the
+hatch was used for. `Vale` removed external-executable rules in 2017 and returned them in 2021
+sandboxed to near-uselessness. `JSON Schema` reserved the space in Core §7.9 and shipped nothing. `CUE`
+never had one, deliberately.
+
+**Rules must fail closed.** `resolves` against a missing target is a finding, never an absence, and a
+selector matching zero records reports that it matched none. This is not a preference: `CUE` -- the
+most mature system that solves this problem declaratively -- silently exits 0 on a dangling reference
+if the schema omits `close()`, which is the most natural way to write it, and the behaviour is
+undocumented. That is `is_terminal_status`'s `_ => &[]` reproduced in a mature tool, which is the exact
+failure direction this RFC names as the quieter and worse one.
+
+#### What today's noisiest rule becomes
+
+`pointer.resolution` is one function doing two jobs (`rules.rs:548-620`). Run against this repo's own
+corpus today:
+
+```
+total findings: 213
+   172  pointer.resolution      <- 81% of the report
+    26  embodiment.consistency
+    15  embodiment.locator-promotion-candidate
+```
+
+**All 172 are success reports** -- `Implements: ADR-27 resolves; target Status = Accepted`. Four fifths
+of what `check` prints is the tool announcing that a reference worked.
+
+It splits into `resolves` (an error) and `target-status` (a query), and the second half is **deleted
+rather than ported**. "This reference resolved and its target is Accepted" is a graph query, not a
+finding. `urzua graph` already exists and is where it belongs.
+
+#### Options take a declared schema, and an unknown key is a hard error
+
+Every function's options are schema-declared, and a key that is not in the schema fails at load time
+with the valid set named. This is `ESLint`'s `meta.schema` discipline, and it is worth more here than
+there: this project is positioned as agent-native (`RFC-3`, `ADR-7`, `RFC-27`), so agents will be the
+primary rule authors. `OPA`'s maintainers collected the failure mode -- 26% of Rego users learn the
+language from an LLM, and the reports are that *"LLMs are not as helpful for Rego coding, they seem to
+hallucinate more."* A wrong guess must be a load-time error listing the alternatives, never a silently
+skipped check.
+
+#### Consolidations, in order of value
 
 - **5 → 1.** The five config-level rules become one `config.integrity`, parameterized over the
   `FieldKindSpec` table that already exists (`rules.rs:318-335`). `type.no-declared-spec` is *deleted*,
-  not rewritten — this repo keeps today's behaviour with a declared key list. `RFC-28`'s two proposed
-  additions then come free.
-- **3 → 1.** `narrative-field.stale`, `pointer.resolution`'s success-report half, and `RFC-28`'s
-  proposed `implements.target-not-settled` are one predicate — *is this reference's target terminal* —
-  over a declared `terminal_statuses`. `RFC-28` already concedes this.
-- **2 → 1.** `header.pointer-field-clean` and `field.quality` both ask "does this value match a
-  declared shape," with the shapes inlined as Rust constants today.
-- **1 → 0 new functions.** `relation.supersession-reciprocity` becomes a capability flag on the
-  existing table.
+  not rewritten. `RFC-28`'s two proposed additions then come free.
+- **3 → 1.** `narrative-field.stale`, `pointer.resolution`'s success half, and `RFC-28`'s proposed
+  `implements.target-not-settled` are one function -- `target-status` -- with the terminal set written
+  at the rule site. That finally kills `is_terminal_status`'s `_ => &[]`, because there is no central
+  function left to fall through.
+- **2 → 1.** `header.pointer-field-clean` and `field.quality` are both `pattern` over a declared shape.
+- **1 → 0 new functions.** `relation.supersession-reciprocity` is `reciprocal`.
 
 **Two rules need no work at all**: `header.layout-consistency` and `header.field-set-consistency`
 already skip an undeclared type before incrementing `examined`. They are the model the other fifteen
@@ -170,6 +288,10 @@ So `RFC-28` — which specifies a `[rules."implements.target-not-settled"]` bloc
 
 Proposed order, each step unblocking the next:
 
+0. **Layer 1: the declared document model.** Moved to the front. `MILE-51` measured this as the
+   blocker, not the rule vocabulary -- the engine could not read the foreign corpus at all, so no
+   amount of rule configurability would have helped. It also subtracts before it adds: `ADR-50`'s
+   unbuilt `"none"` and `header.deprecated-shape` both resolve into it rather than being built.
 1. **`MILE-80`: the `[rules]` table.** Nothing else can switch itself on without it. A
    `schema_version` question under `ADR-12`.
 2. **The 5 → 1 consolidation.** Deletes `type.no-declared-spec` and defuses `header.deprecated-shape`
@@ -206,16 +328,22 @@ clean" stay distinguishable.
 
 **2. Syntax: a scalar shorthand, widening to an inline table when a rule takes options.**
 
-```toml
-[rules]
-"header.conforms"         = "error"
-"reference.target-status" = "off"
-"config.key-required"     = { level = "warn", keys = ["spec"] }
+```yaml
+rules:
+  reference-resolves: error
+  reference-target-status: off
+  spec-declared:
+    level: warn
+    function: defined
 ```
 
-The shape Cargo's `[lints]` uses — but chosen on ergonomics, not familiarity. Urzua ships as a binary
-and its users are not Rust developers. The common case is one word; the named `level` key says what it
-means, where ESLint's positional `["warn", {...}]` requires knowing that the first slot is severity.
+Cargo's `[lints]` shape, chosen on ergonomics rather than familiarity: urzua ships as a binary and its
+users are not Rust developers. The common case is one word; the named `level` key says what it means,
+where ESLint's positional `["warn", {...}]` requires knowing the first slot is severity.
+
+One correction, from a decision taken after this section was written: **the keys are rule *names*, not derived `noun.verb` cells.** Section 2 withdrew the grid, and this
+section's own original example was part of the evidence -- `"header.conforms"` and
+`"config.key-required"` are not cells in it.
 
 **3. `schema_version` bumps to 2.** `ADR-12` added the field from day one *"in the context of a config
 format about to exist in repos this project doesn't control."* This is the first real breaking change
@@ -290,12 +418,17 @@ seventeen rules*, which is circular — a grid derived from what corpora actuall
 
 **What would falsify it, cheaply and before any rewrite:**
 
-- **Express a second foreign corpus in the proposed config, on paper.** MADR is the obvious candidate:
-  YAML frontmatter, `decision-makers`, `consulted`/`informed` fields, a different section set. If a
-  noun or verb is missing, the grid is wrong and one afternoon found it.
-- **Try to place every one of today's seventeen rules in the grid without a residual.** One already
-  does not fit (`locator-promotion-candidate`, an aggregate). A second residual would suggest the
-  verbs are the wrong axis.
+- ~~**Express a second foreign corpus in the proposed config, on paper.**~~ **RUN against MADR**
+  (2026-09-17), with a split result recorded in section 2: the nine functions passed and needed no
+  tenth; `sections.from = "h2"` failed and gained `depth`/`items`. The test cost an afternoon and
+  changed a primitive in an unimplemented proposal rather than in shipped Rust, which is what it was
+  for. **A third corpus is now the open question** -- two is enough to catch overfitting to one, not
+  enough to call the vocabulary closed.
+- ~~**Try to place every one of today's seventeen rules in the grid without a residual.**~~ **RUN, and
+  the grid failed it** (2026-09-17). It was not necessary to reach the seventeen: four of the six rule
+  keys *this RFC itself wrote* are not legal cells. Section 2 records the table and withdraws the grid.
+  The test cost one `grep` and was available from the day the section was written -- which is the
+  argument for writing falsification tests concrete enough to actually run.
 - **Check whether the consolidation makes a rule harder to explain.** `field.conforms` with
   `shape = "reference-list"` should be *more* legible than `header.pointer-field-clean`, not less. If
   reviewers find the parameterized form harder to reason about, the abstraction is not paying.
@@ -326,3 +459,6 @@ header, or `ADR-44`'s declared-fields model — this generalizes `ADR-44`, it do
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** `MILE-51`'s five gaps were each filed as a missing config key, which was the wrong size -- they share a cause, and the cause is that the engine holds governance opinions an adopter cannot decline. Filed as a Phase 0 requirement because the root blocker is scheduled in Phase 1 while Phase 0 depends on it, which is why this work keeps producing blockers behind blockers. | **structural** |
+> | 2026-09-17 | Section 2's noun x verb grid withdrawn and replaced by a declared document model plus nine named functions over `given`/`then`/`level`. **Why:** the grid failed this RFC's own falsification test #2, on this RFC's own examples -- four of the six rule keys it wrote are not legal cells. The failure is kept in the section rather than deleted, because the residuals are ordinary checks the engine already performs, not edge cases. `MILE-51` measured the document model, not the rule vocabulary, as the blocker, so it moves to step 0. Adds two requirements the surveyed prior art makes non-optional: no general escape hatch ever (four engines shipped one and retreated), and rules fail closed (`CUE` silently exits 0 on a dangling reference without `close()`). Measured while writing: 172 of 213 findings on this repo's own corpus are `pointer.resolution` success reports, all of which the `resolves`/`target-status` split deletes. | **substantive** |
+> | 2026-09-17 | Config examples converted to YAML per `ADR-52`, and the `[rules]` example's keys corrected. **Why:** this RFC describes config that does not exist yet, so unlike the specs -- which describe shipped TOML and deliberately stay as they are until the implementing change -- it should show the decided format. The same block still carried two withdrawn grid keys. A draft of this entry also proposed quoting a bare `off` against YAML 1.1's boolean reading; that was dropped after testing the parser, which follows the 1.2 core schema and returns `String("off")` -- nothing but urzua reads this file, so there is no 1.1 reader to defend against. | **substantive** |
+> | 2026-09-17 | `sections` gains `depth` and `items`; falsification test #1 run against MADR and its result recorded. **Why:** the nine functions cleared a second foreign corpus without needing a tenth, but `sections.from = "h2"` could not express two ordinary MADR rules, because `###` and list items are not in the document model at all. The model's reach is the ceiling on extensibility -- what it cannot name, no rule can address and no configuration can recover -- so this is a general limit rather than one template's accommodation. Measured the same day: 18 of this repo's own 84 records use `###`, this RFC among them, and `check` is blind to all of it. | **substantive** |
