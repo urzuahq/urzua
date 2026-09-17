@@ -138,7 +138,9 @@ record_types:
     fields:
       from: prefix-lines        # a bare `Date: 2016-02-12` line, not a header block
     sections:
-      from: h2
+      from: headings
+      depth: 2                  # `##` and `###`
+      items: true               # bullet lists within a section are addressable
 ```
 
 Consequences, all of them subtractive:
@@ -152,6 +154,46 @@ Consequences, all of them subtractive:
 
 Without this layer, rule authors re-implement the document parser once per rule. That is not
 speculative: it is what `Vale`'s Tengo scripting produced in the wild.
+
+#### `sections` carries depth, because rules must be able to address the whole document
+
+A record *is* a markdown file, and its `##`/`###` structure is content the rules are meant to reach --
+"this type must carry a Consequences section", "these bullets must be classified". Whatever the model
+cannot name, no rule can ever address, and no configuration can recover. So the model's reach is the
+ceiling on extensibility, independent of how good the function vocabulary is. That is the general
+claim; MADR is only what exposed the limit.
+
+Falsification test #1 -- express a second foreign corpus on paper -- was **run against MADR**
+(`adr.github.io/madr`, the main alternative to the Nygard shape) before any of this was built.
+
+**The nine functions survived.** Every rule a MADR adopter would want maps onto one already listed:
+`status` against its vocabulary is `enumeration`, *superseded by X* is `resolves` then `target-status`,
+`decision-makers` is `pattern` with `split`/`each`, number uniqueness is `occurrence`. No tenth
+function was needed, which is the vocabulary clearing its second corpus.
+
+MADR's frontmatter is also **entirely optional**, which under all-opt-in means simply no rule -- the
+first independent corroboration of that decision from outside this repo.
+
+**Layer 1 did not survive, and `sections.from = "h2"` is why.** Two MADR rules cannot be written
+against a flat section list:
+
+1. *Every option in `## Considered Options` has a matching `### {option}` under `## Pros and Cons of
+   the Options`.* The function is `agrees`; what is missing is that **`###` is not in the document
+   model**, so the right-hand extractor cannot be named.
+2. *Every consequence bullet reads `Good, because` / `Bad, because` / `Neutral, because`.* Needs list
+   items inside a section to be addressable. They are not.
+
+Both are expressible by regexing raw content -- which is a rule author re-implementing the parser, the
+precise failure this layer exists to prevent. So `sections` gains `depth` and `items`, above -- not as
+an accommodation for one template, but because a rule that cannot name a subsection cannot be written
+by anyone, for any corpus.
+
+**This gap is not only an adopter's.** Measured on this repo, 2026-09-17: **18 of 84 records use `###`
+headings**, this RFC among them. A fifth of the corpus has structure `check` is blind to, which is why
+no rule has ever fired on any of it.
+
+Depth was invisible at n=1 by construction: neither this repo's checked structure nor the `adr-tools`
+corpus nests, so nothing exercised it until a corpus that nests was tried.
 
 #### Layers 2 and 3: rules as data
 
@@ -376,11 +418,12 @@ seventeen rules*, which is circular — a grid derived from what corpora actuall
 
 **What would falsify it, cheaply and before any rewrite:**
 
-- **Express a second foreign corpus in the proposed config, on paper.** MADR is the obvious candidate:
-  YAML frontmatter, `decision-makers`, `consulted`/`informed` fields, a different section set. Now
-  aimed at layer 1 plus the nine functions rather than at the grid: **if either corpus needs a tenth
-  function, the vocabulary is wrong and one afternoon found it.** This remains the cheapest test
-  available and is the one to run before any Rust is written.
+- ~~**Express a second foreign corpus in the proposed config, on paper.**~~ **RUN against MADR**
+  (2026-09-17), with a split result recorded in section 2: the nine functions passed and needed no
+  tenth; `sections.from = "h2"` failed and gained `depth`/`items`. The test cost an afternoon and
+  changed a primitive in an unimplemented proposal rather than in shipped Rust, which is what it was
+  for. **A third corpus is now the open question** -- two is enough to catch overfitting to one, not
+  enough to call the vocabulary closed.
 - ~~**Try to place every one of today's seventeen rules in the grid without a residual.**~~ **RUN, and
   the grid failed it** (2026-09-17). It was not necessary to reach the seventeen: four of the six rule
   keys *this RFC itself wrote* are not legal cells. Section 2 records the table and withdraws the grid.
@@ -418,3 +461,4 @@ header, or `ADR-44`'s declared-fields model — this generalizes `ADR-44`, it do
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** `MILE-51`'s five gaps were each filed as a missing config key, which was the wrong size -- they share a cause, and the cause is that the engine holds governance opinions an adopter cannot decline. Filed as a Phase 0 requirement because the root blocker is scheduled in Phase 1 while Phase 0 depends on it, which is why this work keeps producing blockers behind blockers. | **structural** |
 > | 2026-09-17 | Section 2's noun x verb grid withdrawn and replaced by a declared document model plus nine named functions over `given`/`then`/`level`. **Why:** the grid failed this RFC's own falsification test #2, on this RFC's own examples -- four of the six rule keys it wrote are not legal cells. The failure is kept in the section rather than deleted, because the residuals are ordinary checks the engine already performs, not edge cases. `MILE-51` measured the document model, not the rule vocabulary, as the blocker, so it moves to step 0. Adds two requirements the surveyed prior art makes non-optional: no general escape hatch ever (four engines shipped one and retreated), and rules fail closed (`CUE` silently exits 0 on a dangling reference without `close()`). Measured while writing: 172 of 213 findings on this repo's own corpus are `pointer.resolution` success reports, all of which the `resolves`/`target-status` split deletes. | **substantive** |
 > | 2026-09-17 | Config examples converted to YAML per `ADR-52`, and the `[rules]` example's keys corrected. **Why:** this RFC describes config that does not exist yet, so unlike the specs -- which describe shipped TOML and deliberately stay as they are until the implementing change -- it should show the decided format. The same block still carried two withdrawn grid keys. A draft of this entry also proposed quoting a bare `off` against YAML 1.1's boolean reading; that was dropped after testing the parser, which follows the 1.2 core schema and returns `String("off")` -- nothing but urzua reads this file, so there is no 1.1 reader to defend against. | **substantive** |
+> | 2026-09-17 | `sections` gains `depth` and `items`; falsification test #1 run against MADR and its result recorded. **Why:** the nine functions cleared a second foreign corpus without needing a tenth, but `sections.from = "h2"` could not express two ordinary MADR rules, because `###` and list items are not in the document model at all. The model's reach is the ceiling on extensibility -- what it cannot name, no rule can address and no configuration can recover -- so this is a general limit rather than one template's accommodation. Measured the same day: 18 of this repo's own 84 records use `###`, this RFC among them, and `check` is blind to all of it. | **substantive** |
