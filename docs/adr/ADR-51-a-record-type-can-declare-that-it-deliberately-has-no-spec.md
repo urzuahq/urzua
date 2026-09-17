@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2PCCCM8EJDJH9GCN2J8T257
-Status: Accepted
+Status: Rejected
 Embodiment: Not started
 Realized-by: —
 Date: 2026-09-16
@@ -10,6 +10,10 @@ Supersedes / Superseded-by: —
 Derives-from: RFC-32
 ---
 # 51 — A record type can declare that it deliberately has no spec
+
+> **Rejected on the day it was written.** The reasoning below is kept because the *problem* is real
+> and will recur; the proposed remedy was disproportionate to it. See "Why this was rejected" at the
+> end.
 
 ## Context
 
@@ -102,3 +106,38 @@ visible and loud, not silent. No data format change.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** the deciding evidence turned out to be in the code, not the corpus -- `config.rs`'s own doc comment already promises "a type can permanently have none declared" and nothing implements it, while the `header_layout` it cites as the same principle behaves oppositely. | **structural** |
+
+## Why this was rejected (2026-09-16)
+
+Reviewed against `ADR-50`, decided the same day from the same validation run, and the two are not
+comparable:
+
+| | ADR-50 (headerless) | this decision |
+|---|---|---|
+| What it addresses | 9 errors, `blocking: true` | **1 warning**, exit 0 |
+| Corpus usable without it | **no** — CI red, nothing in config expresses it | **yes** — non-blocking |
+
+Three arguments against, none of which the Decision above weighed properly:
+
+**`MILE-80` already covers it.** Configurable rule severity is `Planned`, and an adopter would set
+`type.no-declared-spec` to off or info. That solves this and every other unwanted rule without adding
+vocabulary to the schema.
+
+**The argument used against `MILE-80` is hypothetical.** *"`MILE-80` silences the rule for all types;
+a sentinel answers it per type"* is true and does not describe any real repository. This repo declares
+six types and **all six carry a spec** — `adr`→`SPEC-16`, `rfc`→`SPEC-17`, `spec`→`SPEC-18`,
+`milestone`→`SPEC-6`, `bug`→`SPEC-9`, `waiver`→`SPEC-10`. An adopted corpus typically has one type.
+The mixed case the sentinel exists to serve has no instance.
+
+**A magic string in a typed field is the pattern being removed elsewhere.** `spec` holds record IDs;
+`"none"` is a sentinel smuggled into that space. `BUG-25`, fixed the same day, was precisely this —
+a `String` carrying a value outside its declared vocabulary.
+
+**And the strongest argument *for* was better answered by deletion.** `config.rs` promised *"a type
+can permanently have none declared if that's the right editorial call"* and nothing implemented it.
+The honest repair for a false doc comment is to correct the comment, which this change does, rather
+than to build machinery making it retroactively true.
+
+`RFC-32` returns to `Draft`. If a repository appears with types that genuinely differ on this — some
+warranting a spec, some not — that is the evidence to revisit, and this reasoning is the starting
+point rather than a blank page.
