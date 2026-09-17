@@ -2,17 +2,24 @@
 Stable-Id: 01M2Q4SRD96G32D4S66VNA3X9S
 Status: Planned
 Phase: '1'
+Track: schema-governance
+Implements: —
+Blocked-on: —
 Date: 2026-09-17
 Author: beauwilliams
 Derives-from: ADR-53
 ---
-# 95 — Rule presets: `extends`, so an adopter does not hand-write every rule
+# 95 — Rule presets: `init --preset`, so an adopter does not hand-write every rule
 
 ## What
 
-A named starting set a config can inherit -- `extends: recommended` -- instead of naming every rule
-individually. `ESLint` and `Spectral` both settled on this shape, with `off`/`all`/`recommended`
-modifiers layered over it.
+A named starting set `urzua init` can **generate a config from** -- `urzua init --preset recommended`
+-- instead of an adopter naming every rule by hand.
+
+**A preset is an init-time generator, not a runtime inheritance.** `ESLint` and `Spectral` both resolve
+an `extends` chain while linting; this deliberately does not. The preset's only job is to write a
+config file, and once written that file is ordinary editable text with no upstream. Nothing reads a
+preset at `check` time, and `check` has no notion that one was ever used.
 
 ## Why
 
@@ -34,9 +41,10 @@ research behind `ADR-53` argued presets should land *in the same release as* opt
 opt-in without them pushes the full list onto every adopter. They did not, and this milestone is that
 debt, named rather than left implicit.
 
-Note the failure mode a preset reintroduces: a named set is governance the engine ships. It stays
-honest only while `extends` is a *starting point a config can override*, never a floor it cannot get
-below -- `off` has to be reachable for every rule in any preset.
+Generating rather than inheriting is what keeps this consistent with `ADR-53`. A runtime `extends`
+would be governance the engine supplies on every run, and would need care to stay a starting point
+rather than a floor. A generator has no such problem: the output is a file the adopter owns, edits and
+can delete lines from, and the engine never sees where it came from.
 
 > **Revision log**
 >
