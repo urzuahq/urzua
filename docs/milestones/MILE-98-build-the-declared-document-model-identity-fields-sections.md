@@ -13,13 +13,21 @@ Blocked-on: —
 The layer `RFC-33` calls layer 1, and `ADR-53` decided: a record type declares **how its parts are
 found**, instead of the engine assuming.
 
+Expressing the `npryce/adr-tools` corpus -- the one `MILE-51` could not read -- rather than this
+repository's own, since being able to write someone else's conventions is the point:
+
 ```yaml
 record_types:
   adr:
+    dir: doc/adr
     identity: {from: filename, pattern: '^(?P<number>\d+)-(?P<slug>.+)$'}
-    fields:   {from: yaml-frontmatter}      # or prefix-lines
+    fields:   {from: prefix-lines}
     sections: {from: headings, depth: 2, items: true}
 ```
+
+This repository's own would differ in exactly two values -- `identity.pattern` reads
+`^ADR-(?P<number>\d+)-(?P<slug>.+)$` and `fields.from` is `yaml-frontmatter` -- which is the claim
+being tested: one config mechanism, two corpora, no code change.
 
 ## Why it is filed now
 
