@@ -1,7 +1,9 @@
 ---
 Version: '0.4'
 Date: 2026-08-20
-Status: Draft
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
 Implements: RFC-1, RFC-11
@@ -106,8 +108,9 @@ config is structured.
 2. Their two configs are diffable against each other, and the diff is a readable statement of how
    the corpora genuinely differ.
 3. Every rule in SPEC-2 is reachable from config, and `doctor` (SPEC-15) lists the ones that are
-   off — not yet true today, since no per-rule enable/disable or severity config exists yet
-   (MILE-80).
+   off. The first half holds: `MILE-80` shipped the `rules` table, every rule is opt-in, and each
+   carries a declared level. The second does not — `doctor` emits no rule information at all, so a
+   corpus cannot learn from it which checks are not running (`BUG-40`).
 4. If (1) fails, the failure is recorded as a schema finding with the specific rule that could not
    be expressed — not patched around with a code path for one repo.
 
@@ -166,3 +169,5 @@ indistinguishable in the report from one that ran clean:
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-17 | Documented the `rules` table: per-rule `level`, opt-in, and the two load-time errors. **Why:** `SPEC-1` listed "which checks are errors vs. warnings" as a v0 configuration surface and it was never built -- severity lived as 34 hardcoded literals in `rules.rs` with no config key at all (`MILE-80`). | **substantive** |
+> | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command reads `.urzua/config.yaml` on every invocation, and this spec was revised again today to document the `rules` table `MILE-80` shipped. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
+> | 2026-09-18 | Criterion 3 corrected. **Why:** it still read *"not yet true today, since no per-rule enable/disable or severity config exists yet"* on the day after `MILE-80` shipped exactly that — and this record was marked `Accepted`/`Verified` in the same change, which is `BUG-26`'s own defect committed while fixing `BUG-26`. Caught by review. The `doctor` half is genuinely still unbuilt and now says so rather than being swept up with the half that shipped. | **substantive** |

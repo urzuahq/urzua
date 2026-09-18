@@ -1,7 +1,9 @@
 ---
 Version: '0.8'
 Date: 2026-08-20
-Status: Draft
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
 Implements: RFC-1, RFC-3, RFC-10, RFC-11
@@ -316,3 +318,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Noted `notices` as a real, shipped addition to the output shape (ADR-46), and named -- rather than silently compounded -- the pre-existing drift between §Output contract's illustrative RFC-3-era JSON block and the real shipped shape (camelCase vs. `snake_case`, stderr rendering that no longer exists, a `status` enum that doesn't match `ReportStatus`). Filed as its own bug rather than fixed in this revision. | **substantive** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** `check` is the most-built command in the tool and has its own integration-test file. This spec reached `Version: 0.8` -- eight revisions -- while still marked as a draft of something unbuilt. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |

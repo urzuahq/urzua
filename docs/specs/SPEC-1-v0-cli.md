@@ -1,8 +1,9 @@
 ---
 Version: '0.3'
 Date: 2026-07-29
-Status: Draft
-Embodiment: Not started
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
 Subject: 'The v0 CLI''s cross-cutting rules and success criteria -- the parent of the sequential command/type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -289,3 +290,4 @@ stronger validation set than a greenfield tool normally gets.
 - SPEC-4 — the corpus acceptance suite that specifies the bug histories in full
 - SPEC-2 (`check`), SPEC-3 (configuration), SPEC-4 (acceptance suite), SPEC-5 (`init`) — the children
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
