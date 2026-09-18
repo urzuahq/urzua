@@ -6,11 +6,16 @@ Track: section-checks
 Implements: RFC-17
 Blocked-on: RFC-33, MILE-98
 ---
-# 4 — Build the closed section-parser and required_sections config schema
+# 4 — Require sections per type, as a rule over the declared document model
 
 ## What
 
-A shared, closed function locating every ## section's body, mirroring header.rs's closed-header model, plus a required_sections config schema with a composable content shape per section.
+A rule that a record type's declared sections are present, and that each carries the content shape
+its type expects.
+
+**Locating sections is no longer part of this.** That is `MILE-98`'s `sections.from`, with `depth` and
+`items`. This milestone is the policy half only: *which* sections a type must have, and *what* must be
+true of their contents.
 
 ## Why
 
@@ -40,3 +45,4 @@ closes gap 4.
 > |---|---|---|
 > | 2026-09-17 | Absorbed into `RFC-33`'s declared document model. **Why:** this was scoped as a standalone section parser plus a `required_sections` schema. Under `ADR-53` those are two different layers: locating sections is `sections.from` in the document model (shape, `RFC-34`), and requiring them is a rule (policy). Building it as one thing would rebuild the conflation `ADR-53` exists to remove. The MADR paper test also already moved the target -- `sections.from: h2` is too flat, and `depth`/`items` are needed. | **substantive** |
 > | 2026-09-18 | `Blocked-on` now names `MILE-98`. **Why:** the declared document model had no milestone -- `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so six records were blocked on something the plan did not track. Naming it makes the dependency resolvable, and `narrative-field.stale` can report when it moves. | **structural** |
+> | 2026-09-19 | Re-scoped: the section *parser* moves to `MILE-98`, and this keeps `required_sections` as a rule. **Why:** filed as one deliverable -- a parser plus a schema -- which `ADR-53` splits in two. Locating a `##` block is shape and may ship as a primitive (`RFC-34`); requiring one is governance and must be declared. Marked *absorbed into `RFC-33`* on 2026-09-17, which was half right and left this record a duplicate of one third of `MILE-98`. Narrowed instead of closed, because the policy half is real work that nothing else owns. | **substantive** |
