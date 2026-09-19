@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2W610G6NZXPRWHDZHG1HDPH
-Status: Draft
+Status: Accepted
 Date: 2026-09-19
 Author: beauwilliams
 Supersedes / Superseded-by: —
@@ -69,11 +69,11 @@ them is how four heuristics ended up inside a matching rule.
 
 Two things are unresearched:
 
-- **Whether any real corpus wants recursion.** `npryce/adr-tools` does not. MADR does not. `archive/`
-  and `superseded/` subdirectories are asserted to be common and have not been counted.
-- **What `init` should do with a stray record-shaped file in a parent directory.** Propose nothing and
-  say so, propose a type and let the adopter delete it, or refuse to adopt until the corpus is
-  unambiguous. The third is the most honest and the least usable.
+- **Whether `recursive: true` is wanted at all.** Not implemented: no corpus examined needs it --
+  `npryce/adr-tools` does not, MADR does not, and this repository's six types have identical direct and
+  recursive counts. Added when a corpus asks, not before (`RFC-34`'s admission rule).
+- ~~**What `init` should do with a stray record-shaped file in a parent directory.**~~ Answered by the
+  model: it proposes a type for that directory like any other, and the adopter deletes the line.
 
 ## Non-goals
 
@@ -96,3 +96,4 @@ heuristics rather than carry them into the new model.
 > |---|---|---|
 > | 2026-09-19 | Filed, `Status: Draft`. **Why:** four heuristics have accreted inside `init` and `check` to guess which records belong to a type, each patching the last one's edge case, and the question underneath them -- whether `dir` means a directory or a subtree -- has never been decided. Raised while asking why `init` proposed `docs/` as a type when the config named `docs/adr`. | **substantive** |
 > | 2026-09-19 | Restored to the `rfc` template's section set. **Why:** this record was written by replacing the scaffold `urzua new` produced, which deleted `Motivation`, `Proposal`, `Open questions` and `Non-goals` and substituted invented headings -- changing the RFC format for this corpus in a single record. `RFC-34`, filed the day before, keeps the template exactly. Measured while fixing it: **79 of 269 records are missing at least one of their type's template sections**, and no rule examines sections at all, so `check` has been green throughout. | **structural** |
+> | 2026-09-19 | `Status: Draft` → `Accepted`, and implemented. **Why:** a fourth review round found the third heuristic re-entering `BUG-43`'s own failure -- `docs/adr` holding three records plus two record-bearing subdirectories proposed only the subdirectories, and the three records matched no `dir` prefix, so `check` reported success over them. Three consecutive rounds each produced a fresh HIGH in `detect_record_types`, which is the evidence that the question underneath had to be decided rather than patched around. `dir` now means this directory; `init` proposes one type per directory holding records. Verified: this repository's six types have identical direct and recursive counts, so strict matching costs it nothing. | **substantive** |

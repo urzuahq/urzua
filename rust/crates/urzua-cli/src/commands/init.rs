@@ -52,50 +52,12 @@ pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<Prop
     // outer one wins: dropping it instead adopts an `archive/` subdirectory and
     // leaves its parent's records ungoverned, with `check` reporting success
     // over them (BUG-43).
-    // A container is not a type. Proposing `dir: docs` beside `docs/adr` makes
-    // discovery -- which matches by path prefix -- count every nested record
-    // twice: measured 8 files_examined on a four-record fixture. Removed first,
-    // so the fold below sees only real types.
-    let all: Vec<PathBuf> = counts.keys().cloned().collect();
-    let distinct_children = |outer: &PathBuf| {
-        all.iter()
-            .filter(|d| *d != outer && d.starts_with(outer))
-            .filter_map(|d| d.strip_prefix(outer).ok())
-            .filter_map(|r| r.components().next())
-            .collect::<std::collections::HashSet<_>>()
-            .len()
-    };
-    for dir in all.iter().filter(|d| distinct_children(d) > 1) {
-        counts.remove(dir);
-    }
-
-    // Of what remains, a directory nested inside another folds into it: an
-    // `archive/` subdirectory belongs to its parent type (BUG-43). Dropping the
-    // outer one instead left three records ungoverned.
-    let dirs: Vec<PathBuf> = counts.keys().cloned().collect();
-    let nested: Vec<PathBuf> = dirs
-        .iter()
-        .filter(|inner| {
-            dirs.iter()
-                .any(|outer| outer != *inner && inner.starts_with(outer))
-        })
-        .cloned()
-        .collect();
-    for dir in &nested {
-        let Some(n) = counts.remove(dir) else {
-            continue;
-        };
-        // Folded into the nearest enclosing type, so the count an adopter is
-        // shown matches what `check` will examine.
-        if let Some(outer) = counts
-            .keys()
-            .filter(|o| dir.starts_with(o))
-            .max_by_key(|o| o.components().count())
-            .cloned()
-        {
-            *counts.entry(outer).or_insert(0) += n;
-        }
-    }
+    // One type per directory holding records. No folding, no containers, no
+    // inference: a directory is a type, and `docs/adr/archive` is its own type
+    // an adopter keeps, deletes or merges. Four heuristics used to guess at the
+    // overlap that prefix matching created, and each re-entered the last one's
+    // failure -- the third of them silently dropped every record in a directory
+    // that had two record-bearing subdirectories (RFC-35).
 
     let mut names: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for dir in counts.keys() {
@@ -343,68 +305,45 @@ mod tests {
         assert_eq!(parsed.record_types.get("adr").unwrap().dir, hostile);
     }
 
-    /// BUG-43: the containment filter dropped the *outer* directory, so a
-    /// corpus with an `archive/` subdirectory adopted one record and left three
-    /// ungoverned, with `check` then reporting success over them.
+    /// RFC-35: one type per directory holding records. No folding, no
+    /// containers, no inference -- four heuristics guessed at the overlap
+    /// prefix matching created, and each re-entered the last one's failure.
+    /// The third silently dropped every record in a directory that had two
+    /// record-bearing subdirectories (`BUG-43`'s own failure, re-entered).
     #[test]
-    fn a_nested_record_directory_does_not_displace_its_parent_observed_failing() {
-        let discovered: Vec<PathBuf> = [
-            "doc/adr/0001-a.md",
-            "doc/adr/0002-b.md",
-            "doc/adr/0003-c.md",
-            "doc/adr/archive/0009-old.md",
-        ]
-        .iter()
-        .map(PathBuf::from)
-        .collect();
-
-        let proposed = detect_record_types(Path::new("/repo"), &discovered);
-        assert_eq!(proposed.len(), 1, "{proposed:?}");
-        assert_eq!(proposed[0].dir, "doc/adr");
-        assert_eq!(proposed[0].name, "adr");
-        // The nested record is folded in, so the count an adopter is shown
-        // matches what `check` will examine.
-        assert_eq!(proposed[0].record_count, 4);
-    }
-
-    /// BUG-54: one stray record-shaped file in a parent directory collapsed
-    /// every sibling type into it, and pulled non-records into the corpus.
-    #[test]
-    fn a_container_directory_does_not_absorb_the_types_beneath_it_observed_failing() {
+    fn every_directory_holding_records_becomes_its_own_type() {
         let discovered: Vec<PathBuf> = [
             "docs/adr/0001-a.md",
             "docs/adr/0002-b.md",
+            "docs/adr/0003-c.md",
+            "docs/adr/archive/0009-old.md",
+            "docs/adr/drafts/0010-new.md",
             "docs/rfc/0001-r.md",
-            "docs/0099-index.md",
         ]
         .iter()
         .map(PathBuf::from)
         .collect();
 
         let proposed = detect_record_types(Path::new("/repo"), &discovered);
-        let names: Vec<&str> = proposed.iter().map(|p| p.name.as_str()).collect();
-        assert!(names.contains(&"adr"), "{proposed:?}");
-        assert!(names.contains(&"rfc"), "{proposed:?}");
-        // `docs/` itself must not be proposed: discovery matches `dir` by path
-        // prefix, so a container type counts every nested record a second time.
-        assert!(!names.contains(&"doc"), "{proposed:?}");
-        let adr = proposed.iter().find(|p| p.name == "adr").unwrap();
-        assert_eq!(adr.dir, "docs/adr");
-        assert_eq!(adr.record_count, 2);
+        let mut got: Vec<(String, usize)> = proposed
+            .iter()
+            .map(|p| (p.dir.clone(), p.record_count))
+            .collect();
+        got.sort();
 
-        // BUG-43 must still hold: a genuine subdirectory folds into its home.
-        let nested: Vec<PathBuf> = [
-            "doc/adr/0001-a.md",
-            "doc/adr/0002-b.md",
-            "doc/adr/archive/0009-old.md",
-        ]
-        .iter()
-        .map(PathBuf::from)
-        .collect();
-        let proposed = detect_record_types(Path::new("/repo"), &nested);
-        assert_eq!(proposed.len(), 1, "{proposed:?}");
-        assert_eq!(proposed[0].dir, "doc/adr");
-        assert_eq!(proposed[0].record_count, 3);
+        assert_eq!(
+            got,
+            vec![
+                ("docs/adr".to_string(), 3),
+                ("docs/adr/archive".to_string(), 1),
+                ("docs/adr/drafts".to_string(), 1),
+                ("docs/rfc".to_string(), 1),
+            ]
+        );
+
+        // Every record is accounted for exactly once. The old fold lost three
+        // of these entirely and `check` reported success over them.
+        assert_eq!(got.iter().map(|(_, n)| n).sum::<usize>(), discovered.len());
     }
 
     /// BUG-44: a rule that cannot be declared without options must not be
