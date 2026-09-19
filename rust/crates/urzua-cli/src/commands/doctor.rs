@@ -67,10 +67,13 @@ pub fn run() -> ExitCode {
         checks.push(DoctorCheck {
             check: "config-exists".to_string(),
             status: DoctorStatus::Error,
-            message: format!(
-                "{} does not exist -- run `urzua init` to adopt this corpus",
-                config_path.display()
-            ),
+            message: match crate::discovery::legacy_config(&config_path) {
+                Some(legacy) => crate::discovery::legacy_config_message(&config_path, &legacy),
+                None => format!(
+                    "{} does not exist -- run `urzua init` to adopt this corpus",
+                    config_path.display()
+                ),
+            },
         });
         return emit(&DoctorReport {
             status: DoctorStatus::Error,

@@ -49,18 +49,27 @@ pub(crate) fn default_config_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".urzua/config.yaml")
 }
 
+/// A pre-ADR-52 config sitting where the YAML one should be. Three commands
+/// need to say this and said it in one place, so `init` overwrote such a repo
+/// and `doctor` told the reader to run the command that would (BUG-47).
+pub(crate) fn legacy_config(path: &Path) -> Option<PathBuf> {
+    let legacy = path.with_extension("toml");
+    (!path.exists() && legacy.exists()).then_some(legacy)
+}
+
+pub(crate) fn legacy_config_message(path: &Path, legacy: &Path) -> String {
+    format!(
+        "{} not found, but {} exists -- urzua reads YAML since ADR-52; \
+         rename it and convert the TOML syntax to YAML",
+        path.display(),
+        legacy.display()
+    )
+}
+
 pub(crate) fn load_config(path: &PathBuf) -> Result<Config, String> {
     let content = std::fs::read_to_string(path).map_err(|e| {
-        // A pre-ADR-52 config is the likeliest reason this file is missing, and
-        // "no such file" would send the reader looking for the wrong problem.
-        let legacy = path.with_extension("toml");
-        if !path.exists() && legacy.exists() {
-            return format!(
-                "config at {} not found, but {} exists -- urzua reads YAML since ADR-52; \
-                 rename it and convert the TOML syntax to YAML",
-                path.display(),
-                legacy.display()
-            );
+        if let Some(legacy) = legacy_config(path) {
+            return legacy_config_message(path, &legacy);
         }
         format!("could not read config at {}: {e}", path.display())
     })?;

@@ -1,0 +1,23 @@
+---
+"urzua": patch
+---
+
+Four more defects from the same pre-release review.
+
+`claim.status-agreement` matched a verb as a substring and claimed every
+reference on the line (`BUG-45`), so `prefixes` read as `fixes` and
+*"Fixes BUG-39, which RFC-9 predicted"* raised a blocking error about `RFC-9`.
+Verbs now match on word boundaries, and a claim binds to the references the
+verb governs.
+
+A malformed rule setting said only that data did not match an untagged enum
+(`BUG-46`). `RuleSetting` now dispatches on the parsed value, so the messages
+naming the valid levels and keys are reachable again.
+
+`urzua init` and `urzua doctor` had no legacy-TOML guard (`BUG-47`). On a
+repository upgrading from v0.3.0, `doctor` advised running `init`, and `init`
+wrote a fresh config beside the existing `config.toml`, orphaning it. `init`
+now refuses and `doctor` reports the rename.
+
+A quoted reference in prose (`'RFC-9'`) is recognised, and the unused `toml`
+workspace dependency is removed.

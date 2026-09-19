@@ -212,6 +212,15 @@ pub fn run(dry_run: bool) -> ExitCode {
     };
 
     let config_path = crate::discovery::default_config_path(&repo_root);
+    // Refusing beats adopting: a v0.3.0 repo following `doctor`'s advice would
+    // otherwise get a freshly auto-detected config written beside its
+    // hand-tuned one, which is then orphaned (BUG-47).
+    if let Some(legacy) = crate::discovery::legacy_config(&config_path) {
+        return emit(&CouldNotRun::from(crate::discovery::legacy_config_message(
+            &config_path,
+            &legacy,
+        )));
+    }
     if config_path.exists() {
         return emit(&CouldNotRun::from(format!(
             "{} already exists -- refusing to overwrite. Edit it directly, or remove it to re-run adopt.",
