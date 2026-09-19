@@ -3,6 +3,7 @@ Stable-Id: 01M2RTYR78PWE69G8116MWWPSH
 Status: Open
 Found-in: 'BUG-26 -- the `spec` type declared `Embodiment` without `Realized-by`, and nothing said so'
 Regression-test: 'not yet written -- a type declaring one half of a companion pair and not the other must be a finding, for every pair, not only `pointer_fields`/`narrative_fields`'
+Blocked-on: MILE-98
 ---
 # 41 — Companion-field pairs are checked for one pair and hardcoded to it
 
@@ -49,3 +50,4 @@ implementation side.
 > |---|---|---|
 > | 2026-09-18 | Filed. **Why:** found while fixing `BUG-26`, and separated from that record because it is specific to neither specs nor `Embodiment`. The rule for this shape already exists and was written for one pair; a second pair with the same semantics went unchecked for as long as it has existed. | **substantive** |
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
+> | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |

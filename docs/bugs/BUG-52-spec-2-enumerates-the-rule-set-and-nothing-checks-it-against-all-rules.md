@@ -3,6 +3,7 @@ Stable-Id: 01M2W0QAD0PBVS3XD05RQQTJ4W
 Status: Open
 Found-in: 'A code review of PR #74 -- SPEC-2 called itself the complete, current rule set while understating it by four'
 Regression-test: 'not yet written -- a rule in `ALL_RULES` absent from the spec that enumerates them must be a finding, and the reverse must be too'
+Blocked-on: MILE-98
 ---
 # 52 — `SPEC-2` enumerates the rule set and nothing checks it against `ALL_RULES`
 
@@ -45,3 +46,4 @@ the corpus says about it.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-2` called itself the complete current rule set while understating it by four, across two days and four separate changes to `rules.rs`. The claim maps exactly onto `ALL_RULES`, so it is checkable, and nothing checks it. | **substantive** |
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
+> | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |

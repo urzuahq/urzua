@@ -3,6 +3,7 @@ Stable-Id: 01M2W0QA0YMGXD5V5XBXN80PKB
 Status: Open
 Found-in: 'A code review of PR #74 -- SPEC-1 was rewritten by roughly 60%% with two substantive entries and its Version left at 0.3'
 Regression-test: 'not yet written -- a spec gaining a `substantive` revision entry without a `Version` change must be a finding; a `structural` entry, or an unchanged spec, must not'
+Blocked-on: MILE-98
 ---
 # 51 — A substantive revision-log entry does not require the `Version` bump `SPEC-18` mandates
 
@@ -40,3 +41,4 @@ shape, not new I/O in `urzua-core`.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-18` requires a `Version` bump alongside every substantive revision entry and only the entry half is checked. `SPEC-1` was rewritten by ~60% with two substantive entries and `Version` left at `0.3`; review caught it, the engine did not. | **substantive** |
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
+> | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |

@@ -85,10 +85,12 @@ record_types:
       - "Realized-by"
       - "Stable-Id"
       - "Implements"
+      - "Blocked-on"
     spec: "SPEC-9"
     pointer_fields:
       - "Implements"
-    narrative_fields: []
+    narrative_fields:
+      - "Blocked-on"
   waiver:
     dir: "docs/waiver"
     required_fields:
