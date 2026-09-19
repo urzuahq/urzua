@@ -1060,10 +1060,13 @@ fn claimed_closed(line: &str) -> Vec<String> {
             continue;
         }
         let mut expecting = true;
+        let mut seen_one = false;
         while let Some(next) = tokens.peek() {
-            // A conjunction bridges two references in one claim ("X and Y") but
-            // never starts one.
-            if !expecting && next.eq_ignore_ascii_case("and") {
+            // A conjunction bridges two references in one claim ("X and Y",
+            // "X, and Y") but never starts one -- "Fixes and BUG-40" claims
+            // nothing. Bridgeable from either state once a reference has been
+            // seen, because an Oxford comma leaves the run open.
+            if seen_one && next.eq_ignore_ascii_case("and") {
                 tokens.next();
                 expecting = true;
                 continue;
@@ -1076,6 +1079,7 @@ fn claimed_closed(line: &str) -> Vec<String> {
                 break;
             }
             expecting = next.ends_with(',');
+            seen_one = true;
             out.extend(refs);
             tokens.next();
         }
@@ -2753,6 +2757,13 @@ mod tests {
             vec!["BUG-39".to_string()]
         );
         // A comma-separated run after the verb is all claimed.
+        // An Oxford comma leaves the run open, so `and` must be bridgeable
+        // from either state -- but never directly after the verb.
+        assert_eq!(
+            claimed_closed("Fixes BUG-39, and BUG-40."),
+            vec!["BUG-39".to_string(), "BUG-40".to_string()]
+        );
+        assert!(claimed_closed("Fixes and BUG-40 are unrelated.").is_empty());
         assert_eq!(
             claimed_closed("Closes BUG-39, BUG-40 and BUG-41 in one change."),
             vec![

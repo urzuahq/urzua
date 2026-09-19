@@ -16,7 +16,7 @@ they fail in opposite ways.
 `unwrap_or_default()`, and the rule treats "not in the closed set" as a violation. Every claim becomes
 a finding, including correct ones:
 
-```
+```text
 claims to close BUG-36, but BUG-36 has Status Fixed
 ```
 
