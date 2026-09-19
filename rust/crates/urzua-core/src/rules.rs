@@ -23,6 +23,7 @@ pub const RULE_HEADER_LAYOUT_CONSISTENCY: &str = "header.layout-consistency";
 pub const RULE_HEADER_FIELD_SET_CONSISTENCY: &str = "header.field-set-consistency";
 pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
 pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
+pub const RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR: &str = "type.record-outside-declared-dir";
 pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
@@ -48,6 +49,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_FIELD_SET_CONSISTENCY,
     RULE_TYPE_NO_DECLARED_SPEC,
     RULE_TYPE_DIR_MATCHES_NOTHING,
+    RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
     RULE_HEADER_DEPRECATED_SHAPE,
     RULE_CONFIG_POINTER_DECLARATION_MISSING,
     RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
@@ -236,6 +238,74 @@ pub fn header_field_set_consistency(
                 });
             }
         }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
+/// A `dir` selects that directory and not its subtree (RFC-35). A
+/// record-shaped file one level below a declared `dir` is therefore owned by no
+/// type and drops out of the corpus entirely -- `check` reports a smaller
+/// `files_examined` and says nothing, so a configuration written before RFC-35
+/// loses coverage on upgrade with no diagnostic (BUG-62).
+///
+/// `candidates` is every tracked path the caller considered; `claimed` is the
+/// subset some type took.
+pub fn type_record_outside_declared_dir(
+    config: &Config,
+    candidates: &[std::path::PathBuf],
+    claimed: &dyn Fn(&std::path::Path) -> bool,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let dirs: Vec<std::path::PathBuf> = config
+        .record_types
+        .values()
+        .map(|t| std::path::PathBuf::from(&t.dir))
+        .collect();
+
+    let mut unowned: Vec<&std::path::PathBuf> = Vec::new();
+    for path in candidates {
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if file_name.starts_with('_') || !file_name.ends_with(".md") {
+            continue;
+        }
+        // Only below a declared dir. A markdown file elsewhere in the repo is a
+        // document, not an ungoverned record, and saying otherwise would flag
+        // every README.
+        if !dirs.iter().any(|d| path.starts_with(d)) {
+            continue;
+        }
+        examined += 1;
+        if claimed(path) {
+            continue;
+        }
+        unowned.push(path);
+    }
+
+    unowned.sort();
+    for path in unowned {
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Warning,
+            file: path.clone(),
+            line: None,
+            message: "sits below a declared record type's dir but not directly in it, so no type \
+                      owns it and no rule examines it"
+                .to_string(),
+            waived: None,
+        });
     }
 
     (
@@ -1394,8 +1464,11 @@ fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'
         }
 
         let text = line[2..].trim();
+        // Skip, never abandon: a bare `#` is not a title, but a real one may
+        // follow it, and reporting "no H1 found" over it hides the mismatch
+        // this rule exists to find (BUG-64).
         if text.is_empty() {
-            return None;
+            continue;
         }
         let digits: String = text
             .split_whitespace()
@@ -2826,6 +2899,21 @@ mod tests {
         let (_, findings) = filename_title_consistency(&[r], &full_text);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("no H1 title found"));
+    }
+
+    #[test]
+    fn an_empty_h1_skips_that_line_and_keeps_looking() {
+        let (r, full_text) = yaml_record(
+            "docs/adr/ADR-7-x.md",
+            "---\nStatus: Accepted\n---\n# \n\n# ADR-9 — Wrong number\n",
+        );
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            !findings[0].message.contains("no H1 title found"),
+            "a real H1 follows the empty one: {}",
+            findings[0].message
+        );
     }
 
     #[test]

@@ -116,6 +116,7 @@ rules:
   header.pointer-field-clean: warn
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn
+  type.record-outside-declared-dir: warn
   config.pointer-declaration-missing: error
   config.pointer-field-not-known: error
   config.pointer-narrative-overlap: error

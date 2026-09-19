@@ -827,3 +827,170 @@ fn a_locator_naming_a_staged_deletion_is_reported_observed_failing() {
     assert_eq!(hits(&parsed), 1, "{parsed}");
     assert_eq!(parsed["blocking"], true);
 }
+
+#[test]
+fn a_path_scope_narrows_what_is_reported_on_not_what_a_pointer_resolves_against() {
+    let dir = fixture_repo("scope-pointer");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {pointer.resolution: error}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n    known_fields: [\"Derives-from\"]\n    pointer_fields: [\"Derives-from\"]\n\
+         \x20 rfc:\n    dir: \"docs/rfc\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nDerives-from: RFC-1\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/rfc/RFC-1-y.md"), "---\n---\n# 1 — Y\n").unwrap();
+    commit_all(&dir);
+
+    let scoped = run_urzua(&dir, &["check", "docs/adr/"]);
+    let stdout = String::from_utf8_lossy(&scoped.stdout);
+    assert!(
+        !stdout.contains("does not resolve"),
+        "RFC-1 exists outside the scope; scoping must not make it dangle: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"files_examined\": 1"),
+        "only the in-scope record is reported on: {stdout}"
+    );
+    let examined = stdout
+        .split("\"rule\": \"pointer.resolution\"")
+        .nth(1)
+        .and_then(|s| s.split("\"records_examined\": ").nth(1))
+        .and_then(|s| s.split(&[',', '\n'][..]).next())
+        .unwrap_or("0");
+    assert_eq!(
+        examined.trim(),
+        "1",
+        "the assertion above is vacuous unless the rule actually read the record: {stdout}"
+    );
+}
+
+#[test]
+fn a_claim_path_prefix_is_read_to_any_depth() {
+    let dir = fixture_repo("claim-nested");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join("changes/2026-09")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("changes/2026-09/0042-fix.md"),
+        "---\ndefault: patch\n---\n\nFixes BUG-1.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("claim.status-agreement"),
+        "rule must appear: {stdout}"
+    );
+    assert!(
+        !stdout.contains("\"rule\": \"claim.status-agreement\",\n      \"records_examined\": 0"),
+        "a nested claim layout must not report a clean run over zero claims: {stdout}"
+    );
+    assert!(
+        stdout.contains("BUG-1"),
+        "the nested changeset claims a bug that is still Open: {stdout}"
+    );
+}
+
+#[test]
+fn a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped() {
+    let dir = fixture_repo("unowned");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr/archive")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {type.record-outside-declared-dir: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/archive/ADR-9-old.md"),
+        "---\nStatus: Superseded\n---\n# 9 — Old\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\"files_examined\": 1"),
+        "RFC-35: the subdirectory record is not owned by the type: {stdout}"
+    );
+    assert!(
+        stdout.contains("docs/adr/archive/ADR-9-old.md"),
+        "and the tool must say so rather than drop it silently: {stdout}"
+    );
+    assert!(
+        stdout.contains("no type \\nowns it") || stdout.contains("no type"),
+        "with a message naming the cause: {stdout}"
+    );
+}
+
+#[test]
+fn a_scope_excludes_a_finding_about_a_file_that_is_not_a_record() {
+    let dir = fixture_repo("scope-nonrecord");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs/archive")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {type.record-outside-declared-dir: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/archive/BUG-1-old.md"),
+        "---\nStatus: Open\n---\n# 1 — Old\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let whole = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
+    assert!(
+        whole.contains("docs/bugs/archive/BUG-1-old.md"),
+        "unscoped, the unowned file is reported: {whole}"
+    );
+
+    let scoped =
+        String::from_utf8_lossy(&run_urzua(&dir, &["check", "docs/adr/"]).stdout).to_string();
+    assert!(
+        !scoped.contains("docs/bugs/archive/BUG-1-old.md"),
+        "scoping to docs/adr/ must exclude it, though it is not a record: {scoped}"
+    );
+}
