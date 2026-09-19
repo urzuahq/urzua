@@ -36,6 +36,7 @@ pub const RULE_CLAIM_STATUS_AGREEMENT: &str = "claim.status-agreement";
 pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
 pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";
 pub const RULE_EMBODIMENT_CONSISTENCY: &str = "embodiment.consistency";
+pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
@@ -59,6 +60,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_FILENAME_TITLE_CONSISTENCY,
     RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
     RULE_EMBODIMENT_CONSISTENCY,
+    RULE_EMBODIMENT_LOCATOR_EXISTS,
     RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
 ];
@@ -1555,6 +1557,61 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
 /// hasn't adopted the field, not a defect in the rule. `drifted` is
 /// precomputed by the caller (git history is I/O, this function isn't --
 /// same shape as `full_text` elsewhere in this module).
+/// A `Realized-by` locator naming a path that is not in the working tree.
+///
+/// `embodiment.consistency` asks whether a locator's *content* changed since
+/// the claim was written, so a locator naming nothing has no history to compare
+/// and drifts past the one rule built to notice (BUG-49). The whole `Embodiment`
+/// model rests on these paths: `Verified` and `Implemented` are computed from
+/// them, so a record can claim verified work while naming a deleted file, and
+/// the claim reads as stronger than `Not started` rather than weaker.
+///
+/// `present` is supplied by the caller -- `urzua-core` is pure (ADR-5) and does
+/// not touch the filesystem.
+pub fn embodiment_locator_exists(
+    records: &[Record],
+    present: &dyn Fn(&str) -> bool,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(value) = record.header.get("Realized-by") else {
+            continue;
+        };
+        let realized = parse_realized_by(value);
+        for locator in realized
+            .spec
+            .iter()
+            .chain(&realized.code)
+            .chain(&realized.test)
+        {
+            examined += 1;
+            if present(locator) {
+                continue;
+            }
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!("Realized-by names '{locator}', which is not in the working tree"),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
 pub fn embodiment_consistency(
     records: &[Record],
     drifted: &HashSet<PathBuf>,
@@ -2828,6 +2885,29 @@ mod tests {
         let line = "concatenation -- which also closes BUG-36, where a directory name escaped";
         assert!(extract_references(line).is_empty());
         assert_eq!(scan_references(line), vec!["BUG-36".to_string()]);
+    }
+
+    /// BUG-49, found live: `ADR-42` named `.urzua/config.toml` for two days
+    /// after `ADR-52` deleted it, and nothing reported it.
+    #[test]
+    fn a_locator_naming_a_missing_path_is_an_error_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Realized-by: code:src/real.rs, code:src/gone.rs\n",
+        );
+        let present = |p: &str| p == "src/real.rs";
+
+        let (exec, findings) = embodiment_locator_exists(std::slice::from_ref(&r), &present);
+        assert_eq!(exec.records_examined, 2, "both locators are examined");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
+
+        // Every locator present means silence, not a rule that cannot fire.
+        let all_there = |_: &str| true;
+        let (_, none) = embodiment_locator_exists(&[r], &all_there);
+        assert!(none.is_empty(), "{none:?}");
     }
 
     #[test]

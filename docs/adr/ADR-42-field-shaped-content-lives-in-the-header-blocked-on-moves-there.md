@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1ZAERYDAF7ANT3GPFAH2HFW
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, code:.urzua/templates/milestone.md, code:.urzua/config.toml, code:scripts/generate-dashboard.py, test:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, code:.urzua/templates/milestone.md, code:.urzua/config.yaml, code:scripts/generate-dashboard.py, test:rust/crates/urzua-core/src/rules.rs
 Date: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -92,3 +92,4 @@ lives physically in the file.
   (a claim staying trustworthy only if a rule watches it) this rule solves for `Blocked-on`.
 - ADR-37 — the dashboard generator this decision's migration required updating.
 - MILE-83 — the milestone this ADR resolves.
+> | 2026-09-19 | `Realized-by` locator updated from `.urzua/config.toml` to `.urzua/config.yaml`. **Why:** `ADR-52` renamed the file on 2026-09-17 and this record kept naming the old path, so its embodiment claim pointed at nothing for two days. Found by `embodiment.locator-exists`, the rule written because nothing had noticed (`BUG-49`). | **substantive** |

@@ -739,7 +739,7 @@ fn an_undeclared_rule_is_reported_as_not_enabled_never_omitted() {
 
     // Every rule this build ships is accounted for, so a reader can tell
     // "not configured" from "does not exist".
-    assert_eq!(executed.len(), 20, "{executed:?}");
+    assert_eq!(executed.len(), 21, "{executed:?}");
 }
 
 /// The declared level replaces whatever severity the rule body chose -- that is

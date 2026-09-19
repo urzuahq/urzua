@@ -124,6 +124,7 @@ rules:
   revision-log.change-class-required: error
   narrative-field.stale: warn
   embodiment.consistency: warn
+  embodiment.locator-exists: error
   embodiment.locator-promotion-candidate: warn
   # Superseded only, for now. Draft is available and deliberately not enabled:
   # 28 records point at a Draft target today, and turning it on before deciding

@@ -155,6 +155,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
             rules::embodiment_consistency(&records, &drifted)
         }),
+        crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
+            let present = |p: &str| repo_root.join(p).exists();
+            rules::embodiment_locator_exists(&records, &present)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
