@@ -22,6 +22,7 @@ pub const RULE_HEADER_REQUIRED_FIELDS: &str = "header.required-fields";
 pub const RULE_HEADER_LAYOUT_CONSISTENCY: &str = "header.layout-consistency";
 pub const RULE_HEADER_FIELD_SET_CONSISTENCY: &str = "header.field-set-consistency";
 pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
+pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
 pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
@@ -46,6 +47,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_LAYOUT_CONSISTENCY,
     RULE_HEADER_FIELD_SET_CONSISTENCY,
     RULE_TYPE_NO_DECLARED_SPEC,
+    RULE_TYPE_DIR_MATCHES_NOTHING,
     RULE_HEADER_DEPRECATED_SHAPE,
     RULE_CONFIG_POINTER_DECLARATION_MISSING,
     RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
@@ -255,6 +257,65 @@ pub fn header_field_set_consistency(
 /// `header_layout`/`known_fields`. A type with none declared is a real,
 /// permanently valid state under ADR-0041 -- this is a signal to review,
 /// never a mandate to write one.
+/// A declared record type whose `dir` matches no record.
+///
+/// `RFC-35` made `dir` mean *that directory* rather than that subtree, which is
+/// unambiguous but unforgiving: a `dir` one level off now matches nothing at
+/// all. Alone that degrades to `not-run`, which is visible; mixed with any
+/// working type it was silent -- `check` reported `ok` and exit 0 over a corpus
+/// it never examined. `claim_paths` got a load-time guard for the same hazard
+/// this release (BUG-56); `dir` had none.
+///
+/// `matched` is supplied by the caller, which is where discovery happens.
+pub fn type_dir_matches_nothing(
+    config: &Config,
+    config_path: &std::path::Path,
+    matched: &HashMap<String, usize>,
+    dir_exists: &dyn Fn(&str) -> bool,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut names: Vec<&String> = config.record_types.keys().collect();
+    names.sort();
+    for name in names {
+        examined += 1;
+        if matched.get(name).copied().unwrap_or(0) > 0 {
+            continue;
+        }
+        let dir = &config.record_types[name].dir;
+        // A directory that exists and is empty is a type declared and not yet
+        // used, which is a legitimate state -- some types are expected to hold
+        // nothing most of the time. An *absent* directory is the misdeclaration
+        // this rule exists for. Git does not track empty directories, so
+        // declaring a type means committing a placeholder alongside it.
+        if dir_exists(dir) {
+            continue;
+        }
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Warning,
+            file: config_path.to_path_buf(),
+            line: None,
+            waived: None,
+            message: format!(
+                "record type '{name}' declares dir '{dir}', which does not exist -- \
+                 every rule for this type examines nothing"
+            ),
+        });
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
 pub fn type_no_declared_spec(
     config: &Config,
     config_path: &std::path::Path,
@@ -931,11 +992,11 @@ pub(crate) fn normalize_id(id: &str) -> String {
 /// several, comma-separated, with trailing annotation in parentheses (e.g.
 /// `RFC-0001 (Draft)`). A claim is the reference that begins an entry;
 /// everything after it up to the next comma is annotation.
-/// Find reference tokens anywhere in a line of prose, not only where an entry
-/// begins. [`extract_references`] is the wrong tool here and silently returns
-/// nothing: it reads the first whitespace token of each comma-separated entry,
-/// which in *"…which also closes BUG-36, where a…"* is `"…which"`. Correct for
-/// a header value, empty for a sentence.
+/// Find reference tokens anywhere in a line of prose.
+///
+/// [`extract_references`] reads the first whitespace token of each
+/// comma-separated entry, which is correct for a header value and silently
+/// empty for a sentence.
 /// `RFC-9's` is a reference to `RFC-9`; `RFC-9a` is not (BUG-39). Only a
 /// possessive is stripped, because it is the one suffix that attaches to a
 /// reference without changing which record is meant -- anything else is a
@@ -1037,17 +1098,11 @@ pub fn field_pending(
     )
 }
 
-/// The references a line actually claims to close.
+/// The references a line actually claims to close: the run immediately
+/// following a closing verb, ending at the first token that is neither a
+/// reference nor a separator.
 ///
-/// Two defects this replaces, both producing blocking errors on correct prose
-/// (BUG-45). The verb was matched as a bare substring, so `prefixes` contained
-/// `fixes` and `discloses` contained `closes`. And the verb test was
-/// line-granular while the reference scan was not, so *"Fixes BUG-39, which
-/// RFC-9 predicted"* claimed `RFC-9` as well.
-///
-/// A claim is now the run of references immediately following a closing verb,
-/// ending at the first token that is neither a reference nor a separator.
-/// Deliberately narrow: a missed claim is recoverable, while a false error on a
+/// Deliberately narrow. A missed claim is recoverable; a false error on a
 /// correct sentence teaches people to stop reading the output.
 fn claimed_closed(line: &str) -> Vec<String> {
     const VERBS: [&str; 3] = ["closes", "fixes", "resolves"];
@@ -1117,12 +1172,9 @@ pub fn claim_status_agreement(
     let mut examined = 0;
 
     let index = build_normalized_index(records);
-    // Present tense only. A claim is written in the present -- "closes BUG-36",
-    // the convention every forge uses -- while prose *about* a past claim is
-    // written in the past: "announced it closed BUG-36". Including the past
-    // tense made this rule fire on its own changeset, which describes the
-    // defect it was written for. A narrowing, not a fix: a sentence in the
-    // present tense that merely discusses a claim still matches.
+    // Present tense only: a claim is written in the present, while prose
+    // *about* a past claim is written in the past. A narrowing, not a fix --
+    // a present-tense sentence discussing a claim still matches.
     for (path, content) in claims {
         examined += 1;
         for (idx, line) in content.lines().enumerate() {
@@ -1550,15 +1602,12 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
 
 /// A `Realized-by` locator naming a path that is not in the working tree.
 ///
-/// `embodiment.consistency` asks whether a locator's *content* changed since
-/// the claim was written, so a locator naming nothing has no history to compare
-/// and drifts past the one rule built to notice (BUG-49). The whole `Embodiment`
-/// model rests on these paths: `Verified` and `Implemented` are computed from
-/// them, so a record can claim verified work while naming a deleted file, and
-/// the claim reads as stronger than `Not started` rather than weaker.
+/// `Embodiment` is computed from these paths, so a locator naming nothing lets
+/// a record claim verified work against a file that is not there -- and the
+/// claim reads as stronger than `Not started`, not weaker.
 ///
-/// `present` is supplied by the caller -- `urzua-core` is pure (ADR-5) and does
-/// not touch the filesystem.
+/// `present` is supplied by the caller: this crate does not touch the
+/// filesystem.
 pub fn embodiment_locator_exists(
     records: &[Record],
     present: &dyn Fn(&str) -> bool,
@@ -1571,11 +1620,8 @@ pub fn embodiment_locator_exists(
         let Some(value) = record.header.get("Realized-by") else {
             continue;
         };
-        // One per record, not per locator: `records_examined` is each rule's
-        // input population (SPEC-2), and counting locators reported 129 against
-        // 55 records. It stays higher than `embodiment.consistency`'s count,
-        // which needs both `Embodiment` and `Realized-by` where this needs only
-        // the latter -- a different population, not a disagreement.
+        // One per record, not per locator: `records_examined` is the rule's
+        // input population, not its work count.
         examined += 1;
         let realized = parse_realized_by(value);
         for locator in realized
@@ -1584,9 +1630,8 @@ pub fn embodiment_locator_exists(
             .chain(&realized.code)
             .chain(&realized.test)
         {
-            // An empty locator names nothing, and `join("")` is the repository
-            // root, which exists -- so it would pass while `compute_embodiment`
-            // still reports `Implemented` off the back of it.
+            // An empty locator joins to the repository root, which exists --
+            // so it would pass while still computing to `Implemented`.
             if locator.trim().is_empty() {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -2908,6 +2953,24 @@ mod tests {
 
     /// BUG-49, found live: `ADR-42` named `.urzua/config.toml` for two days
     /// after `ADR-52` deleted it, and nothing reported it.
+    /// A declared type with no records may be exactly right, so the finding is
+    /// an *absent* directory rather than an empty one.
+    #[test]
+    fn an_empty_declared_directory_is_not_a_finding() {
+        let yaml = "schema_version: 2\nrecord_types:\n  present:\n    dir: \"docs/present\"\n  absent:\n    dir: \"docs/absent\"\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let path = PathBuf::from(".urzua/config.yaml");
+
+        // docs/present exists and is empty; docs/absent does not exist.
+        let exists = |d: &str| d == "docs/present";
+        let (exec, findings) = type_dir_matches_nothing(&config, &path, &HashMap::new(), &exists);
+
+        assert_eq!(exec.records_examined, 2, "both types are examined");
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("docs/absent"), "{findings:?}");
+        assert!(!findings[0].message.contains("present"), "{findings:?}");
+    }
+
     #[test]
     fn a_locator_naming_a_missing_path_is_an_error_observed_failing() {
         let r = record(

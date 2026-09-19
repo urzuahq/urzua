@@ -256,7 +256,7 @@ pub enum ConfigError {
     Parse(#[from] yaml_serde::Error),
     #[error("unrecognized schema_version {found} -- this build of urzua understands version {CURRENT_SCHEMA_VERSION}")]
     UnrecognizedSchemaVersion { found: u32 },
-    #[error("unknown rule '{found}' in [rules] -- this build ships: {}", known.join(", "))]
+    #[error("unknown rule '{found}' under `rules:` -- this build ships: {}", known.join(", "))]
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
     OptionNotApplicable { rule: String, option: String },
