@@ -1,5 +1,5 @@
 ---
-"urzua": minor
+default: minor
 ---
 
 `urzua init` can adopt a corpus that does not live under `docs/` (`BUG-36`), and

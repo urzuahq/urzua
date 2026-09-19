@@ -1,5 +1,5 @@
 ---
-"urzua": patch
+default: patch
 ---
 
 A reference with a possessive attached is no longer invisible (`BUG-39`).

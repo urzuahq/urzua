@@ -1,5 +1,5 @@
 ---
-"urzua": major
+default: major
 ---
 
 Config is now YAML: `.urzua/config.yaml` replaces `.urzua/config.toml` (ADR-52).

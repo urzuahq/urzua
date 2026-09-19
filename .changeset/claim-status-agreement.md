@@ -1,5 +1,5 @@
 ---
-"urzua": minor
+default: minor
 ---
 
 New rule `claim.status-agreement`: a file outside the corpus that claims to
