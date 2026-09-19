@@ -57,7 +57,9 @@ the speculative reservation this spec exists to stop accumulating.
 
 ## Success criteria
 
-1. This table matches `ls` at the repository root. A directory present and unlisted, or listed and
+1. This table matches `ls -A` at the repository root -- `-A`, because half the entries it
+   lists are dot-directories that plain `ls` hides, which is how the first version of this table
+   shipped omitting three of them. A directory present and unlisted, or listed and
    absent, is a finding against this spec.
 2. `ADR-4` is not edited to track layout changes. It records why the layout is language-first; this
    spec records what the layout is.
@@ -76,3 +78,4 @@ the speculative reservation this spec exists to stop accumulating.
 > |---|---|---|
 > | 2026-09-19 | Filed at `Version: 0.1`. **Why:** `ADR-4` carried a reserved-names table that had drifted in both directions -- `corpora/` reserved and absent, `scripts/` present and unlisted -- because a frozen decision cannot track a living inventory. Split out when `SPEC-1` was narrowed to the CLI and its restatement of the layout needed a home that was not a second copy. | **substantive** |
 > | 2026-09-19 | Table corrected against `ls` on the day it landed. **Why:** it failed its own success criterion 1 immediately -- `.urzua/`, `.changeset/` and `.git-hooks/` existed and were unlisted, `ts/` was called empty while holding a README, and rule 1 named a `CLAUDE.md` that is not in this repository. Caught by review, which is the second time a record has been filed asserting something the working tree contradicts; the criterion is now checkable rather than aspirational. | **substantive** |
+> | 2026-09-19 | Success criterion 1 names `ls -A`, not `ls`. **Why:** plain `ls` hides `.urzua/`, `.changeset/`, `.github/` and `.git-hooks/` -- four of the nine entries this table lists -- so the criterion could not have detected the omission it was written to prevent, and did not. | **substantive** |
