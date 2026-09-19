@@ -58,6 +58,14 @@ anything. v0 is mechanical, offline, and deterministic.
 
 ## Success criteria
 
+Each criterion below states **the standard**, which is current truth and belongs here. Reaching it is
+backlog, which does not: `MILE-99` (pre-push hook), `MILE-100` (second codebase), `MILE-101`
+(acceptance suite) track the work.
+
+That split is not bookkeeping. These criteria sat here unmet and untracked, because a spec has no
+`Status` and no `Blocked-on` -- nothing that surfaces an unmet condition -- so two of the three were
+absent from Phase 0 entirely while Phase 0 read as eleven milestones from done.
+
 v0 is done when, and only when:
 
 1. It runs green in **at least two** real target codebases, with different primary languages, via
@@ -291,3 +299,4 @@ stronger validation set than a greenfield tool normally gets.
 - SPEC-2 (`check`), SPEC-3 (configuration), SPEC-4 (acceptance suite), SPEC-5 (`init`) — the children
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
+> | 2026-09-19 | Success criteria now name the milestones that track reaching them. **Why:** `SPEC-18` defines a spec as a living current-truth document and `SPEC-6` defines a milestone as decided-but-unbuilt work. *"Runs green in at least two real target codebases"* is the second, stored as the first -- and a spec surfaces no unmet condition, so criteria 1 and 2 were unmet and untracked at once. The standard stays here; the work moved to `MILE-99`/`MILE-100`/`MILE-101`. | **substantive** |
