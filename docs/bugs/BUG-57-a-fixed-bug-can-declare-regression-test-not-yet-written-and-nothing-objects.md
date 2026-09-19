@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M2W6DTP0TWNCMETZ3YM0G9H5
 Status: Open
-Found-in: 'Auditing which of this session's failure modes are checkable rather than only discipline'
+Found-in: 'Auditing which of this session''s failure modes are checkable rather than only discipline'
 Regression-test: 'not yet written -- a `Fixed` bug whose `Regression-test` is a "not yet written" placeholder must be a finding; one naming a real test must not. This record is deliberately its own first case.'
 Blocked-on: MILE-98
 ---

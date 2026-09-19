@@ -14,8 +14,16 @@ Rules about a record's section *structure*, as opposed to its section *contents*
 
 - **A section heading appears twice.** Two `## Open questions` in one record is malformed under every
   convention; there is no corpus where it is intended.
-- **Sections appear out of a declared order**, where a type declares one.
-- **A heading level is skipped** -- an `###` with no `##` above it.
+- **Sections appear out of a declared order.** No type declares one today, and nothing in the schema
+  can express it -- `required_fields` is a set, not a sequence. So this needs a source first: either
+  the type's template, whose section order is already the de facto convention every record follows, or
+  a new ordered declaration. The template is the better candidate, because it is what an author is
+  looking at while writing.
+- **A heading level is skipped** -- an `###` with no `##` above it. Defined relative to
+  `sections.depth` (`MILE-98`), not absolutely: at `depth: 2` the top level is `##` and a skip is an
+  `###` with no `##` above it, while at `depth: 3` the same `###` is an ordinary section. A type that
+  declares a depth is stating where its section tree starts, and this rule reads the tree from there
+  rather than assuming `##`.
 
 ## Not `MILE-4`
 
@@ -60,3 +68,4 @@ which no rule can enforce.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** none of the twenty-one shipping rules examines section structure, so `SPEC-1` shipped with two `## Open questions` giving contradictory answers and `check` stayed green. Separated from `MILE-4` deliberately: a missing required section is a governance finding, a duplicated one is a broken document, and no configuration makes the second acceptable. | **substantive** |
+> | 2026-09-19 | Order and skipped-level cases specified against their sources. **Why:** both were stated absolutely. *Out of a declared order* had no declaration to read -- `required_fields` is a set, not a sequence -- and *a skipped level* assumed `##` is always the top, which `MILE-98`'s `sections.depth` makes configurable. A milestone that cannot say where its rule reads from is a direction, not a deliverable. | **substantive** |
