@@ -298,6 +298,9 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
             });
         }
     }
+    // A list of blanks is an empty list wearing a value.
+    let declared = |v: &Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
+
     for (name, setting) in &config.rules {
         let misplaced = [
             (
@@ -333,26 +336,25 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
         let required: &[(bool, &str, &'static str)] =
             if name == crate::rules::RULE_CLAIM_STATUS_AGREEMENT {
                 &[
-                    // Non-empty, not merely present: an empty list is the harm
-                    // these messages describe. `closed_statuses: []` makes every
-                    // claim a violation, and `claim_paths: []` scans nothing.
+                    // Non-empty *and* no blank entries, not merely present. An
+                    // empty list is the harm these messages describe --
+                    // `closed_statuses: []` makes every claim a violation,
+                    // `claim_paths: []` scans nothing -- and a list of blanks is
+                    // the same list wearing a value.
                     (
-                        setting.claim_paths.as_ref().is_some_and(|v| !v.is_empty()),
+                        setting.claim_paths.as_ref().is_some_and(declared),
                         "claim_paths",
                         "scans nothing and can never report",
                     ),
                     (
-                        setting
-                            .closed_statuses
-                            .as_ref()
-                            .is_some_and(|v| !v.is_empty()),
+                        setting.closed_statuses.as_ref().is_some_and(declared),
                         "closed_statuses",
                         "treats every claim as a violation, including correct ones",
                     ),
                 ]
             } else if name == crate::rules::RULE_POINTER_TARGET_STATUS {
                 &[(
-                    setting.not_in.as_ref().is_some_and(|v| !v.is_empty()),
+                    setting.not_in.as_ref().is_some_and(declared),
                     "not_in",
                     "examines every reference and can never report",
                 )]
@@ -450,6 +452,17 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("not_in"));
+
+        // An empty list, and a list of blanks, are both the harm the message
+        // describes rather than a declaration of it.
+        for bad in ["[]", "[\"\"]", "[\"  \"]"] {
+            let cfg =
+                format!("{base}  pointer.target-status:\n    level: warn\n    not_in: {bad}\n");
+            assert!(
+                parse(&cfg).unwrap_err().to_string().contains("not_in"),
+                "{bad} should be rejected"
+            );
+        }
 
         // `off` needs no options: a declined rule never reads them.
         assert!(parse(&format!("{base}  pointer.target-status: off\n")).is_ok());
