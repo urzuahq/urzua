@@ -2,7 +2,7 @@
 Stable-Id: 01M2VJYJPSGXWM7YB2E0T53DEN
 Status: Fixed
 Found-in: 'Cutting 0.4.0 -- the release branch was three days stale while `prepare release` reported success on every push'
-Regression-test: 'the workflow guard itself: a run with fragments present and none applied now fails; verified by the seven that accumulated behind the notice'
+Regression-test: '.github/scripts/release-guard.test.sh -- plants an unmatched-package fragment and asserts a nonzero exit, with the empty and successful cases asserted alongside it. Observed failing: neutering the guard makes the planted case report `want exit 1, got 0`.'
 ---
 # 48 — Seven changesets named a package that does not exist, and the release guard reported it as nothing to release
 
@@ -47,6 +47,9 @@ Both halves:
 - The guard counts `.changeset/*.md` before excusing a `no_release` exit. Fragments present and none
   applied is now a **hard failure** naming the likely cause, because that combination is never
   legitimate.
+- The guard is **extracted from the workflow into a script**, so it can be run. A check that lives only
+  in a YAML `run:` block cannot be observed failing, and `AGENTS.md` requires that it can be --
+  `make ci` now exercises it.
 
 `ADR-48` records that a Conventional Commit alone must not cut a release; this is the mirror -- a
 changeset that cannot cut one must not pass silently.

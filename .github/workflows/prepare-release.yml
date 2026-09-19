@@ -78,19 +78,11 @@ jobs:
           if [ "$rc" -eq 0 ]; then
             exit 0
           fi
-          if printf '%s' "$out" | grep -q 'releases::no_release'; then
-            # "Nothing to release" is normal with no fragments waiting, and a
-            # defect when fragments exist but none applied -- a changeset
-            # naming a package that is not declared is silently inert, and
-            # seven of them accumulated behind this notice (BUG-48).
-            pending=$(ls .changeset/*.md 2>/dev/null | wc -l | tr -d ' ')
-            if [ "$pending" -gt 0 ]; then
-              echo "::error::$pending changeset fragment(s) are present but none applied -- check the package key against knope.toml's [package]"
-              printf '%s\n' "$out"
-              exit 1
-            fi
-            echo "::notice::nothing to release -- no changeset fragment and no releasable commit since the last tag"
-            exit 0
-          fi
-          echo "::error::knope prepare-release failed (exit $rc)"
-          exit "$rc"
+          # Extracted so it can be exercised: .github/scripts/release-guard.test.sh
+          # plants an unmatched-package fragment and asserts a nonzero exit.
+          .github/scripts/release-guard.sh .changeset "$out"
+          case $? in
+            0) exit 0 ;;
+            1) exit 1 ;;
+            *) echo "::error::knope prepare-release failed (exit $rc)"; exit "$rc" ;;
+          esac
