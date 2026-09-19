@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M2WAHT989S733NTEAKQ3Y3Q8
-Status: Open
+Status: Fixed
 Found-in: 'Reviewing a comment that named `waiver` inside a core rule, which surfaced that the engine names the type in its behaviour too'
-Regression-test: 'not yet written -- a corpus whose types are named anything else must get the same status handling and the same suppression mechanism as one using this repository''s names'
-Blocked-on: MILE-98
+Regression-test: "rust/crates/urzua-core/src/rules.rs::narrative_field_stale_judges_a_type_the_engine_has_never_heard_of"
 ---
 # 59 — The engine hardcodes this repository's record types and status vocabulary
 
@@ -50,7 +49,18 @@ This corpus does not currently reach it. `narrative_field_stale` returns early w
 `Status`, and the only type here outside the five -- `waiver` -- declares none, so a `Blocked-on`
 pointing at a waiver stops before the fallback rather than falling through it. The exposure is an
 adopter's: a type named anything else that does carry a `Status`, which is the ordinary case, and
-`init` proposes type names straight from directory names.
+`init` proposes type names straight from directory names. Round 7 built that adopter -- a `dec` type
+whose target is `Ratified` -- and measured `records_examined: 1`, zero findings, `status: ok`.
+
+## What was fixed
+
+The status half. `narrative-field.stale` now takes a declared `terminal_statuses`, required like
+`pointer.target-status`'s `not_in`, so an undeclared vocabulary fails to load rather than going
+inert. It was the only caller, so `is_terminal_status` is deleted rather than corrected -- the
+archetype is gone from the codebase, not merely routed around.
+
+The suppression half stays open: `waiver.rs` still requires the type to be named `waiver`. Filed
+separately rather than held here, since the status vocabulary no longer blocks on `MILE-98`.
 
 ## Also: `waiver.rs` is a record type as a module
 

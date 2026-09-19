@@ -37,9 +37,16 @@ fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(St
                 continue;
             };
             for path in entries.flatten().map(|e| e.path()) {
-                if path.is_dir() {
+                // `symlink_metadata`, so a link is never descended into: a link
+                // to an ancestor gives an unbounded walk that leaves the
+                // declared prefix and reports findings against paths that do
+                // not exist (BUG-69).
+                let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                    continue;
+                };
+                if meta.is_dir() {
                     pending.push(path);
-                } else if path.extension().is_some_and(|e| e == "md") {
+                } else if meta.is_file() && path.extension().is_some_and(|e| e == "md") {
                     paths.push(path);
                 }
             }
@@ -78,6 +85,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
+    let requested_scopes = match crate::discovery::relative_scopes(&repo_root, &paths) {
+        Ok(s) => s,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     let scoped = match scope_to_requested_paths(&repo_root, &discovered.paths, &paths) {
         Ok(p) => p,
         Err(e) => return emit(&CouldNotRun::from(e)),
@@ -136,7 +147,8 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // following the documented `claim_paths: [".changeset"]` pattern
                 // would otherwise lose `check` entirely the moment a release
                 // consumes the last fragment.
-                if !repo_root.join(prefix).exists() {
+                let declared = repo_root.join(prefix);
+                if !declared.exists() || !declared.is_dir() {
                     return emit(&CouldNotRun::from(format!(
                         "claim.status-agreement: claim_paths entry '{prefix}' is not a readable directory"
                     )));
@@ -235,7 +247,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::header_field_set_consistency(&records, &known_fields_by_type)
         }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
-            rules::narrative_field_stale(&records, &config)
+            let terminal = config
+                .rules
+                .get(rules::RULE_NARRATIVE_FIELD_STALE)
+                .and_then(|s| s.terminal_statuses.clone())
+                .unwrap_or_default();
+            rules::narrative_field_stale(&records, &config, &terminal)
         }),
         crate::gate::gated(&config, rules::RULE_TYPE_DIR_MATCHES_NOTHING, || {
             let mut matched: HashMap<String, usize> = HashMap::new();
@@ -248,13 +265,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(
             &config,
             rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
-            || {
-                let claimed: std::collections::HashSet<&std::path::Path> =
-                    records.iter().map(|r| r.path.as_path()).collect();
-                rules::type_record_outside_declared_dir(&config, &discovered.paths, &|p| {
-                    claimed.contains(p)
-                })
-            },
+            || rules::type_record_outside_declared_dir(&config, &discovered.paths),
         ),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)
@@ -287,12 +298,17 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         findings.extend(rule_findings);
     }
 
-    // A finding about the config names the config file, which is outside every
-    // record scope and must survive a path argument. Everything else is scoped
-    // by the path it names -- including findings about files that are
-    // deliberately not records, which "not a record" would have exempted.
-    if !paths.is_empty() {
-        findings.retain(|f| in_scope.contains(f.file.as_path()) || f.file == config_path.as_path());
+    // Scoped against the requested prefixes themselves, never against the
+    // discovered set: that set holds the *tracked* files under the scope, and a
+    // rule may report on a file git does not track -- a claim file is read
+    // straight off disk -- whose finding then belonged to no scope at all and
+    // was dropped, so `check .` passed a corpus `check` blocked (BUG-67).
+    // A finding about the config survives every scope, being outside all of them.
+    if !requested_scopes.is_empty() {
+        findings.retain(|f| {
+            f.file == config_path.as_path()
+                || requested_scopes.iter().any(|s| f.file.starts_with(s))
+        });
     }
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.
