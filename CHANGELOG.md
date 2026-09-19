@@ -4,6 +4,228 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.0 (2026-09-19)
+
+### Breaking Changes
+
+#### Config is now YAML: `.urzua/config.yaml` replaces `.urzua/config.toml` (ADR-52).
+
+Records were already YAML and the config was TOML, so an adopter met two formats
+on day one. They are now one. `urzua-core` carried both parsers; dropping TOML
+removes a dependency rather than adding one, and `toml` leaves the purity
+allowlist.
+
+**Breaking.** An existing `.urzua/config.toml` is not read, and nothing reports
+that it is there: `ADR-54` decided against carrying migration diagnostics for a
+format the tool no longer parses. Convert it to `.urzua/config.yaml` before
+upgrading; a leftover TOML file is ignored, not removed.
+
+`urzua init` writes `config.yaml`, rendered through the real serializer instead
+of string concatenation, so a directory name carrying the format's
+metacharacters can no longer escape its value.
+
+#### Every rule is opt-in and carries a declared severity (`MILE-80`, implementing `ADR-53`).
+
+`.urzua/config.yaml` gains a `rules` table. A rule that is not named there does
+not run, and appears in `rules_executed` as `not-enabled` rather than being
+omitted -- "off" and "ran clean" stay distinguishable. The declared `level`
+(`off`/`warn`/`error`) replaces whatever severity the rule body chose: severity
+was 34 hardcoded literals with no config key, despite `SPEC-1` listing it as a
+v0 configuration surface.
+
+`schema_version` is now 2. An older config fails with "schema_version 2 not
+supported" rather than an unknown-field error.
+
+**Breaking.** A config with no `rules` table runs no rules. `urzua init` writes
+every rule at `warn`, so an adopted corpus is told what is irregular without
+being blocked on day one.
+
+`pointer.resolution` is split. It emitted a finding for every reference that
+*resolved* -- 172 of 213 findings on this project's own corpus were the tool
+announcing a reference worked. Resolution success now reports nothing; the
+target's status is `pointer.target-status`, which fires only on statuses a
+repository declares via `not_in`. One rule id cannot carry two severities, so
+these could never be levelled apart while they shared one.
+
+A rule name this build does not ship, or an option on a rule that does not take
+it, is a load-time error naming the valid alternatives.
+
+`field.quality` is split the same way (`BUG-38`). `Blank` and `Placeholder`
+mean a required field was forgotten; `Pending` means someone declared the work
+unfinished. Sharing one rule id left no correct setting -- `error` blocked CI on
+a deliberate marker, `warn` stopped a genuinely empty field from blocking.
+`field.pending` is now its own opt-in rule.
+
+#### A record type's `dir` means **that directory**, not that subtree (`RFC-35`).
+
+Prefix matching let two types claim the same record whenever their directories
+nested, and nothing in the schema resolved the overlap. Four heuristics accreted
+in `urzua init` guessing what an adopter meant by it, and each re-entered the
+previous one's failure -- the last silently dropped every record held directly
+in a directory that also had two record-bearing subdirectories, while `check`
+reported success over them.
+
+`urzua init` now proposes **one type per directory holding records**: no
+folding, no containers, no inference. `docs/adr/archive` is proposed as its own
+type, which an adopter keeps, deletes or merges. Every record is accounted for
+exactly once.
+
+**Breaking** for a config whose `dir` relied on matching a subtree. Recursion is
+not implemented: no corpus examined needs it, and it is added when one asks.
+
+An empty option value is also now rejected rather than accepted:
+`closed_statuses: []` made every claim a violation, and `claim_paths: []`
+scanned nothing.
+
+### Features
+
+#### `urzua init` can adopt a corpus that does not live under `docs/` (`BUG-36`), and
+
+both halves of adoption now recognise the same filenames (`BUG-37`).
+
+`detect_record_types` groups by each record's own parent directory from the
+tracked set. A corpus at `doc/adr/` adopts as `dir: doc/adr`; previously `init`
+refused, and proposing `docs/<dir>` regardless would have been worse -- `check`
+would then examine zero files and report success.
+
+`parse_record_filename` is one recogniser for both conventions, `0001-slug.md`
+and `ADR-1-slug.md`, used by the adopt scan and by `urzua new`'s numbering.
+They carried one each and accepted disjoint sets, so adopt mode could not read
+the records this tool itself writes, and in an adopted Nygard corpus `new`
+returned 1 beside an existing `0001-`.
+
+Two hazards are handled explicitly: a proposed directory that contains another
+is dropped, since discovery matches by path prefix and the outer one would
+claim the inner one's records; and two directories ending in the same component
+are qualified rather than emitted as a duplicate type name.
+
+`urzua new` still writes `ADR-4-slug.md` into a corpus whose own convention is
+`0004-slug.md`. Recognising both shapes is not the same as writing the one a
+corpus uses; that is `identity.pattern`, in `RFC-33`'s document model.
+
+#### New rule `claim.status-agreement`: a file outside the corpus that claims to
+
+close a record, while the record itself says otherwise.
+
+Written after a changeset in this repository announced it closed `BUG-36`. It
+had not -- it fixed a hazard recorded *beside* that bug -- and nothing noticed,
+because the claim and the record it contradicted live in different files and
+only one of them was ever read.
+
+Opt-in like every rule, with both options declared rather than inferred:
+
+```yaml
+rules:
+  claim.status-agreement:
+    level: error
+    claim_paths: [".changeset"]
+    closed_statuses: ["Fixed", "Done", "Accepted"]
+```
+
+A built-in status list would make the rule stop applying the moment a
+repository used a status it did not know.
+
+It matches on verb and proximity, not meaning, so it can be wrong in both
+directions: a present-tense sentence *discussing* a claim will match, and a
+claim phrased without one of the verbs will not. Only the present tense is
+matched -- "closes X" is how a claim is written, while "announced it closed X"
+is prose about one, and including the past tense made the rule fire on its own
+changeset. A waiver (`ADR-11`) is the intended escape, deliberately a record so
+an exception is visible rather than a silent pattern tweak.
+
+#### New rule `embodiment.locator-exists`: a `Realized-by` locator naming a path that
+
+is not in the working tree (`BUG-49`).
+
+Nothing checked this. `embodiment.consistency` asks whether a locator's content
+changed since the claim was written, so a locator naming nothing has no history
+to compare and drifts past the one rule built to notice. The whole `Embodiment`
+model rests on these paths -- `Verified` and `Implemented` are computed from
+them -- so a record could claim verified work while naming a deleted file, and
+the claim read as stronger than `Not started` rather than weaker.
+
+Found live: one of this project's own records had named a file deleted two days
+earlier, in a corpus the tool gates on every push.
+
+Opt-in and levelled like every rule. The CLI supplies path existence, so
+`urzua-core` stays pure.
+
+#### `urzua audit` now honours the `rules` table, `urzua init` no longer drops a
+
+record type, and an incomplete rule declaration fails at load.
+
+`urzua audit` bypassed the rules table entirely (`BUG-42`). `MILE-80` routed
+every rule in `check` through the opt-in gate and left `audit` calling two rules
+directly, so a repository declaring `pointer.resolution: off` was still blocked
+by `audit`, and a declared level was ignored. The gate is now shared rather than
+owned by one command.
+
+`urzua init` dropped the outer record type when a subdirectory also held
+records (`BUG-43`). A corpus with three records in `doc/adr/` and one in
+`doc/adr/archive/` adopted only the archive, leaving three records ungoverned
+with `check` reporting success over them. The outer directory now wins and
+nested records are folded into it.
+
+A rule declared without an option it requires is now a load-time error
+(`BUG-44`). `claim.status-agreement` without `closed_statuses` treated every
+claim as a violation, including correct ones; without `claim_paths` it scanned
+nothing and reported success forever. `init` no longer proposes rules it cannot
+declare completely.
+
+### Fixes
+
+#### A reference with a possessive attached is no longer invisible (`BUG-39`).
+
+`MILE-13` in this repository declares `Blocked-on: RFC-9's own Q2`. Both
+extractors returned nothing -- `extract_references` rejected `9's` as
+non-digits, and `scan_references` trims only non-alphanumerics from each end,
+so the `s` kept the apostrophe attached. A real dependency was invisible, and
+`narrative-field.stale` reported success on a field it could not read.
+
+Narrowed deliberately: only a possessive is stripped. `RFC-9a` and `RFC-9s` are
+different identifiers and stay unrecognised.
+
+#### Four defects found by reviewing the release diff as a whole, two of them
+
+regressions introduced by this release's own fixes.
+
+A date-named file no longer hijacks `urzua new`'s numbering (`BUG-53`). Sharing
+one filename recogniser between `init` and `new` dropped a length constraint, so
+`2026-09-19-notes.md` parsed as record 2026 and the corpus was stuck above it
+permanently, since numbers are never reused.
+
+One stray record-shaped file no longer collapses every sibling record type into
+its parent (`BUG-54`). A corpus with `docs/adr/`, `docs/rfc/` and a single
+`docs/0099-index.md` proposed one meaningless `doc` type and ingested
+`docs/README.md`, which is not a record.
+
+`embodiment.locator-exists` says "is not a git-tracked file" rather than "is not
+in the working tree" (`BUG-55`), which was false of a gitignored file.
+
+A `claim_paths` entry that is not a readable directory now fails at startup
+instead of silently disabling the rule (`BUG-56`).
+
+`README.md` and `AGENTS.md` no longer instruct readers to edit
+`.urzua/config.toml`, which this release stops reading.
+
+#### `claim.status-agreement` no longer raises false errors on ordinary prose, a
+
+malformed rule setting says what is wrong with it, and `off` is declarable on a
+rule that takes options.
+
+`claim.status-agreement` matched a verb as a substring and claimed every
+reference on the line (`BUG-45`), so `prefixes` read as `fixes` and
+*"Fixes BUG-39, which RFC-9 predicted"* raised a blocking error about `RFC-9`.
+Verbs now match on word boundaries, and a claim binds to the references the
+verb governs.
+
+A malformed rule setting said only that data did not match an untagged enum
+(`BUG-46`). `RuleSetting` now dispatches on the parsed value, so the messages
+naming the valid levels and keys are reachable again.
+
+A quoted reference in prose (`'RFC-9'`) is recognised, and the unused `toml`
+workspace dependency is removed.
+
 ## 0.3.0 (2026-09-16)
 
 ### Breaking Changes
