@@ -258,6 +258,19 @@ pub enum ConfigError {
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
     OptionNotApplicable { rule: String, option: String },
+    #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
+    OptionRequired {
+        rule: String,
+        option: String,
+        consequence: &'static str,
+    },
+}
+
+/// Rules that cannot be declared without their options. Adopt mode skips these
+/// rather than proposing a declaration that will not load (BUG-44).
+pub fn rule_requires_options(rule: &str) -> bool {
+    rule == crate::rules::RULE_CLAIM_STATUS_AGREEMENT
+        || rule == crate::rules::RULE_POINTER_TARGET_STATUS
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
@@ -306,6 +319,47 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: option.to_string(),
+                });
+            }
+        }
+
+        // An option-taking rule given no option does not fall back to a sane
+        // default -- it inverts or goes inert, and both report success
+        // (BUG-44). `claim.status-agreement` with an empty `closed_statuses`
+        // treats every claim as a violation; with no `claim_paths` it scans
+        // nothing forever.
+        let required: &[(bool, &str, &'static str)] =
+            if name == crate::rules::RULE_CLAIM_STATUS_AGREEMENT {
+                &[
+                    (
+                        setting.claim_paths.is_some(),
+                        "claim_paths",
+                        "scans nothing and can never report",
+                    ),
+                    (
+                        setting.closed_statuses.is_some(),
+                        "closed_statuses",
+                        "treats every claim as a violation, including correct ones",
+                    ),
+                ]
+            } else if name == crate::rules::RULE_POINTER_TARGET_STATUS {
+                &[(
+                    setting.not_in.is_some(),
+                    "not_in",
+                    "examines every reference and can never report",
+                )]
+            } else {
+                &[]
+            };
+        for (present, option, consequence) in required {
+            // A declined rule never runs, so `gated` never reads its options.
+            // Requiring them anyway would mean a rule could not be turned off
+            // without supplying values it will not use.
+            if setting.level != RuleLevel::Off && !present {
+                return Err(ConfigError::OptionRequired {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                    consequence,
                 });
             }
         }
@@ -361,6 +415,48 @@ rules:
 
     /// A misspelled rule name would otherwise be a check that silently never
     /// runs -- indistinguishable, in the report, from one that ran clean.
+    /// BUG-44: an option-taking rule given no option does not fall back to a
+    /// sane default -- `claim.status-agreement` with an empty `closed_statuses`
+    /// treats every claim as a violation, including correct ones.
+    #[test]
+    fn a_rule_missing_an_option_it_requires_is_rejected_observed_failing() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+
+        let no_statuses = format!(
+            "{base}  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n"
+        );
+        let err = parse(&no_statuses).unwrap_err().to_string();
+        assert!(err.contains("closed_statuses"), "{err}");
+        assert!(err.contains("every claim"), "{err}");
+
+        let no_paths = format!(
+            "{base}  claim.status-agreement:\n    level: error\n    closed_statuses: [\"Fixed\"]\n"
+        );
+        assert!(parse(&no_paths)
+            .unwrap_err()
+            .to_string()
+            .contains("claim_paths"));
+
+        let no_not_in = format!("{base}  pointer.target-status: warn\n");
+        assert!(parse(&no_not_in)
+            .unwrap_err()
+            .to_string()
+            .contains("not_in"));
+
+        // `off` needs no options: a declined rule never reads them.
+        assert!(parse(&format!("{base}  pointer.target-status: off\n")).is_ok());
+        assert!(parse(&format!(
+            "{base}  claim.status-agreement:\n    level: off\n"
+        ))
+        .is_ok());
+
+        // Complete declarations still load.
+        let complete = format!(
+            "{base}  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n    closed_statuses: [\"Fixed\"]\n"
+        );
+        assert!(parse(&complete).is_ok());
+    }
+
     #[test]
     fn an_unknown_rule_name_is_rejected_and_names_the_valid_set() {
         let yaml = r#"
