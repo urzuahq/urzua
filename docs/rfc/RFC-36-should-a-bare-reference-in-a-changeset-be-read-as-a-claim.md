@@ -37,8 +37,17 @@ Treating a bare reference as a claim would report a false disagreement for each 
 the records cited most often.
 
 ## Proposal
-A bare reference remains a citation. Add a rule -- provisionally `claim.unphrased` -- that reports
-when a changeset names a record and **all** of the following hold:
+Keep the closing verb as the only thing that makes a claim -- a bare reference remains a citation --
+**and** report the case where a bare reference was probably meant as one, so the author is told to
+rewrite it rather than left to discover the silence later.
+
+The two halves are not alternatives. The verb requirement is what keeps `claim.status-agreement`
+precise enough to be worth having; the report is what stops a change routing around it by accident.
+Neither works alone: the verb alone failed in `BUG-66`, and reading bare references as claims would
+misread 44 of 49.
+
+Add a rule -- provisionally `claim.unphrased` -- that reports when a changeset names a record and
+**all** of the following hold:
 
 1. the reference is bare (no closing verb introduces it);
 2. the record's type is *closable* -- declared per type in config, so the engine names no type itself
@@ -55,7 +64,10 @@ The three conditions are what keep it quiet. A citation of an accepted ADR fails
 reference to a bug that is already `Fixed` fails it too. What remains is the case where a change
 plausibly closes something and said so in a form nothing can check -- which is exactly the incident.
 
-Declared opt-in at `warn` like every other rule (`ADR-53`).
+Declared opt-in like every other rule (`ADR-53`), and the level is the adopter's call: `warn` reads
+as a prompt to rewrite, `error` makes the rewrite mandatory before the change can merge. This
+repository should take `error` -- the whole point is that a warning in a long report is what went
+unread in `BUG-66`, and the fix is a four-character edit the author is already positioned to make.
 
 ## Open questions
 - **Is "open record of a closable type" a good enough discriminator, or does it flag ordinary
@@ -67,7 +79,8 @@ Declared opt-in at `warn` like every other rule (`ADR-53`).
   that closes a record is as likely to be written there, and neither is currently read.
 - **Does this belong as its own rule or as a second finding from `claim.status-agreement`?** One rule
   reporting both "you claimed something false" and "you may have meant to claim something" is
-  cohesive, but the two have different severities and an adopter may want only one.
+  cohesive, but the two want different levels -- the first is always an error, the second is a
+  prompt -- and a declared level applies per rule, so two rules may be the only way to express that.
 - **Should a bare reference in a changeset be required to resolve at all?** Two entries above name
   `ADR-0034` and `ADR-34` in the same file, and `BUG-0002`/`ADR-0036` in another -- the pre-`ADR-36`
   identifier shape, which no longer resolves against the corpus. Nothing reports those.
