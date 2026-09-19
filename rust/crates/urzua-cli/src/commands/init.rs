@@ -18,14 +18,8 @@ pub struct ProposedRecordType {
     pub record_count: usize,
 }
 
-/// Group the tracked set by each record's own parent directory and propose one
-/// record type per directory holding at least one record-shaped file. Adopt
+/// Propose one record type per directory holding record-shaped files. Adopt
 /// mode: this only reads, it never writes or moves.
-///
-/// Derived from the corpus rather than from `docs/` (BUG-36). A hardcoded root
-/// meant `init` could not adopt `npryce/adr-tools`, whose records live under
-/// `doc/adr/`, and proposing `docs/<dir>` regardless would have been worse than
-/// refusing: `check` would then examine zero files and report success.
 pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
     let mut counts: std::collections::BTreeMap<PathBuf, usize> = std::collections::BTreeMap::new();
 
@@ -52,12 +46,9 @@ pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<Prop
     // outer one wins: dropping it instead adopts an `archive/` subdirectory and
     // leaves its parent's records ungoverned, with `check` reporting success
     // over them (BUG-43).
-    // One type per directory holding records. No folding, no containers, no
-    // inference: a directory is a type, and `docs/adr/archive` is its own type
-    // an adopter keeps, deletes or merges. Four heuristics used to guess at the
-    // overlap that prefix matching created, and each re-entered the last one's
-    // failure -- the third of them silently dropped every record in a directory
-    // that had two record-bearing subdirectories (RFC-35).
+    // One type per directory. Inferring which directories belong together
+    // loses records whenever the inference is wrong, and an adopter can merge
+    // two proposed types far more easily than they can notice a missing one.
 
     let mut names: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for dir in counts.keys() {
@@ -97,10 +88,9 @@ fn proposed_name(dir: &Path) -> String {
     singular_type_name(&last)
 }
 
-/// A leading underscore is a template (`SPEC-5`), never a record. Everything
-/// else defers to `urzua_core`'s recogniser, so adopt mode and `urzua new`'s
-/// numbering cannot drift apart again -- carrying one each is what let them
-/// accept disjoint sets (BUG-37).
+/// A leading underscore is a template, never a record. Everything else defers
+/// to the shared recogniser, so adopt mode and `new`'s numbering cannot accept
+/// disjoint sets.
 fn is_record_shaped(file_name: &str) -> bool {
     !file_name.starts_with('_')
         && urzua_core::new_record::parse_record_filename(file_name).is_some()
@@ -132,17 +122,12 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         types.insert(Value::from(rt.name.as_str()), Value::Mapping(entry));
     }
 
-    // Every rule, proposed at `warn`. Adopt mode must not hand a corpus
-    // blocking errors it never asked for -- MILE-51 measured exactly that:
-    // nine of them, on a foreign corpus, from a config `init` itself wrote.
-    // The diagnostics still appear; promoting one to `error` is the adopter's
-    // decision to make once they have read it.
+    // Proposed at `warn`: an adopted corpus should be told what is irregular
+    // without being blocked on it, and promoting a rule is the adopter's call.
     let mut rules = Mapping::new();
     for id in urzua_core::rules::ALL_RULES {
-        // A rule that requires options cannot be proposed bare: it would either
-        // be rejected at load time or, worse, run inert (BUG-44). Adopt mode
-        // has nothing to say about which statuses a corpus considers closed,
-        // so it declines to guess and leaves the rule undeclared.
+        // Adopt mode has nothing to say about a rule's options, and a rule
+        // declared without the options it requires will not load.
         if urzua_core::config::rule_requires_options(id) {
             continue;
         }

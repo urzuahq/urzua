@@ -188,12 +188,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::embodiment_consistency(&records, &drifted)
         }),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
-            // Tracked *and* on disk, because neither alone is enough. Tracked
-            // alone passes a staged deletion: `git rm` drops the path from
-            // `ls-files` but leaves it in `diff --cached`, and discovery unions
-            // the two -- so the rule would stay silent on exactly the case it
-            // exists for. On disk alone passes a gitignored file, which would
-            // then fail in CI. A directory satisfies neither.
+            // Tracked *and* on disk: tracked alone passes a staged deletion,
+            // since discovery unions `ls-files` with the cached diff, and on
+            // disk alone passes a gitignored file that then fails in CI.
             let tracked: std::collections::HashSet<&std::path::Path> =
                 discovered.paths.iter().map(|p| p.as_path()).collect();
             let present = |p: &str| {
@@ -229,7 +226,8 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             for r in &records {
                 *matched.entry(r.record_type.clone()).or_insert(0) += 1;
             }
-            rules::type_dir_matches_nothing(&config, &config_path, &matched)
+            let dir_exists = |d: &str| repo_root.join(d).is_dir();
+            rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists)
         }),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)

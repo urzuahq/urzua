@@ -30,10 +30,8 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
 
     let segments: Vec<&str> = stem.split('-').collect();
-    // The number is the first all-digit segment, wherever it sits. Assuming
-    // position broke `DOC-ADR-2-slug`, which `init` emits when two directories
-    // share a last component -- `new` then wrote files it could not read back,
-    // handing out the same number forever (BUG-37's failure, via a new door).
+    // The number is the first all-digit segment, wherever it sits: a type
+    // prefix may contain hyphens, so its position is not fixed.
     let at = segments.iter().position(|s| digits(s))?;
     // Something must follow the number: a bare `ADR-2.md` is a fragment.
     if at + 1 >= segments.len() || segments[at + 1..].iter().all(|s| s.is_empty()) {
@@ -41,11 +39,10 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     }
 
     if at == 0 {
-        // `0001-slug` / `1-slug`. Padding is not load-bearing (BUG-2), but a
-        // date is not a number: `2026-09-19-notes.md` would parse as record
-        // 2026 and `next_display_number` never comes back below it (BUG-53).
-        // Checked as a real date -- a four-digit year with a plausible month
-        // and day -- so `0013-80-20-rule.md` stays a record.
+        // Padding is not load-bearing, but a date is not a number: a
+        // `YYYY-MM-DD-` filename would parse as record YYYY and numbering
+        // never comes back below it. Checked as a real date, so a slug that
+        // merely starts with two 2-digit segments stays a record.
         let looks_dated = segments.len() >= 3
             && segments[0].len() == 4
             && [1, 2]
