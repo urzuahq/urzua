@@ -79,9 +79,18 @@ reference to a bug already `Fixed` fails it too. What remains is the case where 
 closes something and said so in a form nothing can check -- which is exactly the incident.
 
 Declared opt-in like every other rule (`ADR-53`), and the level is the adopter's call: `warn` reads as
-a prompt to rewrite, `error` makes the rewrite mandatory before the change can merge. This repository
-should take `error` -- the whole point is that a warning in a long report is what went unread in
-`BUG-66`, and the correction is a four-character edit the author is already positioned to make.
+a prompt to rewrite, `error` makes the rewrite mandatory before the change can merge.
+
+`error` is where this should end up -- a warning in a long report is what went unread in `BUG-66`, and
+the correction is a four-character edit the author is already positioned to make. It should not start
+there. The first open question below is whether "bare reference to an open record" flags ordinary
+citations of open work, and it is unmeasured. At `error` every such false positive blocks CI, and the
+only relief is a waiver record (`ADR-11`, `SPEC-10`) -- a reviewed record per citation, which is the
+wrong instrument for a phrasing nit and would make waivers routine, devaluing the ones that matter.
+
+So: ship at `warn`, measure the false-positive rate against the 44 references already in hand, and
+promote to `error` if the discriminator holds. Promoting a rule is a config edit, which is the point
+of `ADR-53`; shipping at a level the evidence does not support is not.
 
 ## Open questions
 - **Is "open record of a closable type" a good enough discriminator, or does it flag ordinary
