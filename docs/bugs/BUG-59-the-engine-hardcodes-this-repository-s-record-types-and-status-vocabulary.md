@@ -2,7 +2,7 @@
 Stable-Id: 01M2WAHT989S733NTEAKQ3Y3Q8
 Status: Open
 Found-in: 'Reviewing a comment that named `waiver` inside a core rule, which surfaced that the engine names the type in its behaviour too'
-Regression-test: 'not yet written -- a corpus whose types are named anything else must get the same status handling and the same suppression mechanism as one using this repository's names'
+Regression-test: 'not yet written -- a corpus whose types are named anything else must get the same status handling and the same suppression mechanism as one using this repository''s names'
 Blocked-on: MILE-98
 ---
 # 59 — The engine hardcodes this repository's record types and status vocabulary
