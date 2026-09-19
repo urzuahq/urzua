@@ -92,4 +92,9 @@ lives physically in the file.
   (a claim staying trustworthy only if a rule watches it) this rule solves for `Blocked-on`.
 - ADR-37 — the dashboard generator this decision's migration required updating.
 - MILE-83 — the milestone this ADR resolves.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
 > | 2026-09-19 | `Realized-by` locator updated from `.urzua/config.toml` to `.urzua/config.yaml`. **Why:** `ADR-52` renamed the file on 2026-09-17 and this record kept naming the old path, so its embodiment claim pointed at nothing for two days. Found by `embodiment.locator-exists`, the rule written because nothing had noticed (`BUG-49`). | **substantive** |

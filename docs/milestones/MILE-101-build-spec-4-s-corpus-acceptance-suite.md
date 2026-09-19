@@ -30,7 +30,7 @@ Phase 0 has no work item for it, so the criterion has been unmet and untracked s
 ## The evidence that it is needed
 
 Two days of defects argue for it more sharply than the spec does. A review of one unreleased diff found
-**eight defects, none covered by a test**, and `cargo test` passed on `main` with all eight present:
+**eight defects, none covered by a test**, and `cargo test` passed on `main` with all eight present. Four of them:
 
 - `audit` bypassing the rules table entirely (`BUG-42`)
 - `init` adopting an `archive/` subdirectory and leaving three records ungoverned (`BUG-43`)

@@ -1548,15 +1548,6 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
     }
 }
 
-/// Rule (ADR-0018/ADR-0032): a record's stated `Embodiment` must agree with
-/// what its own `Realized-by` locators compute to, including drift -- a
-/// locator that changed, per git history, since the `Realized-by` line was
-/// last touched. Both `Embodiment` and `Realized-by` have to be present --
-/// a record with no `Realized-by` at all has nothing for this rule to check
-/// yet, which is a real, expected `records_examined: 0` on a corpus that
-/// hasn't adopted the field, not a defect in the rule. `drifted` is
-/// precomputed by the caller (git history is I/O, this function isn't --
-/// same shape as `full_text` elsewhere in this module).
 /// A `Realized-by` locator naming a path that is not in the working tree.
 ///
 /// `embodiment.consistency` asks whether a locator's *content* changed since
@@ -1580,6 +1571,11 @@ pub fn embodiment_locator_exists(
         let Some(value) = record.header.get("Realized-by") else {
             continue;
         };
+        // One per record, not per locator: `records_examined` is each rule's
+        // input population (SPEC-2), and counting locators made this rule
+        // report 129 against `embodiment.consistency`'s 38 over the same 38
+        // records.
+        examined += 1;
         let realized = parse_realized_by(value);
         for locator in realized
             .spec
@@ -1587,7 +1583,20 @@ pub fn embodiment_locator_exists(
             .chain(&realized.code)
             .chain(&realized.test)
         {
-            examined += 1;
+            // An empty locator names nothing, and `join("")` is the repository
+            // root, which exists -- so it would pass while `compute_embodiment`
+            // still reports `Implemented` off the back of it.
+            if locator.trim().is_empty() {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: "Realized-by has an empty locator".to_string(),
+                });
+                continue;
+            }
             if present(locator) {
                 continue;
             }
@@ -1612,6 +1621,15 @@ pub fn embodiment_locator_exists(
     )
 }
 
+/// Rule (ADR-0018/ADR-0032): a record's stated `Embodiment` must agree with
+/// what its own `Realized-by` locators compute to, including drift -- a
+/// locator that changed, per git history, since the `Realized-by` line was
+/// last touched. Both `Embodiment` and `Realized-by` have to be present --
+/// a record with no `Realized-by` at all has nothing for this rule to check
+/// yet, which is a real, expected `records_examined: 0` on a corpus that
+/// hasn't adopted the field, not a defect in the rule. `drifted` is
+/// precomputed by the caller (git history is I/O, this function isn't --
+/// same shape as `full_text` elsewhere in this module).
 pub fn embodiment_consistency(
     records: &[Record],
     drifted: &HashSet<PathBuf>,
@@ -2899,15 +2917,27 @@ mod tests {
         let present = |p: &str| p == "src/real.rs";
 
         let (exec, findings) = embodiment_locator_exists(std::slice::from_ref(&r), &present);
-        assert_eq!(exec.records_examined, 2, "both locators are examined");
+        // One record, whatever its locator count -- `records_examined` is the
+        // rule's input population, not its work count.
+        assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
 
         // Every locator present means silence, not a rule that cannot fire.
         let all_there = |_: &str| true;
-        let (_, none) = embodiment_locator_exists(&[r], &all_there);
+        let (_, none) = embodiment_locator_exists(std::slice::from_ref(&r), &all_there);
         assert!(none.is_empty(), "{none:?}");
+
+        // An empty locator names nothing, and the repo root exists -- so it
+        // passed a raw existence check while still computing to `Implemented`.
+        let empty = record("docs/adr/ADR-2-y.md", "adr", "> Realized-by: code:\n");
+        let (_, findings) = embodiment_locator_exists(&[empty], &all_there);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("empty locator"),
+            "{findings:?}"
+        );
     }
 
     #[test]
