@@ -99,27 +99,29 @@ impl<'de> Deserialize<'de> for RuleSetting {
             closed_statuses: Option<Vec<String>>,
         }
 
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum Either {
-            Bare(RuleLevel),
-            Table(Table),
-        }
-
-        Ok(match Either::deserialize(deserializer)? {
-            Either::Bare(level) => RuleSetting {
+        // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
+        // Untagged discards each variant's error, so every malformed setting --
+        // a bad level, a bad level in table form, an unknown key -- collapsed
+        // into "data did not match any variant of untagged enum Either", and the
+        // messages naming the valid levels and keys were unreachable (BUG-46).
+        let value = yaml_serde::Value::deserialize(deserializer)?;
+        if value.is_mapping() {
+            let table = Table::deserialize(value).map_err(serde::de::Error::custom)?;
+            Ok(RuleSetting {
+                level: table.level,
+                not_in: table.not_in,
+                claim_paths: table.claim_paths,
+                closed_statuses: table.closed_statuses,
+            })
+        } else {
+            let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
+            Ok(RuleSetting {
                 level,
                 not_in: None,
                 claim_paths: None,
                 closed_statuses: None,
-            },
-            Either::Table(t) => RuleSetting {
-                level: t.level,
-                not_in: t.not_in,
-                claim_paths: t.claim_paths,
-                closed_statuses: t.closed_statuses,
-            },
-        })
+            })
+        }
     }
 }
 
@@ -487,6 +489,35 @@ rules:
         let err = parse(yaml).unwrap_err().to_string();
         assert!(err.contains("field.quality"), "{err}");
         assert!(err.contains("not_in"), "{err}");
+    }
+
+    /// BUG-46: `#[serde(untagged)]` discarded each variant's error, so all
+    /// three of these produced "data did not match any variant of untagged enum
+    /// Either" and the messages naming the valid levels and keys were dead.
+    #[test]
+    fn a_malformed_rule_setting_names_what_was_wrong_observed_failing() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+
+        let bad_bare = parse(&format!("{base}  field.quality: eror\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(bad_bare.contains("eror"), "{bad_bare}");
+        assert!(bad_bare.contains("\"warn\""), "{bad_bare}");
+
+        let bad_table = parse(&format!("{base}  field.quality:\n    level: eror\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(bad_table.contains("eror"), "{bad_table}");
+        assert!(bad_table.contains("\"warn\""), "{bad_table}");
+
+        let bad_key = parse(&format!("{base}  field.quality:\n    levl: error\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(bad_key.contains("levl"), "{bad_key}");
+
+        for msg in [bad_bare, bad_table, bad_key] {
+            assert!(!msg.contains("untagged"), "{msg}");
+        }
     }
 
     #[test]

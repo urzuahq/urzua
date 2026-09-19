@@ -951,7 +951,9 @@ pub(crate) fn scan_references(line: &str) -> Vec<String> {
         let token = strip_possessive(token.trim_matches(|c: char| {
             !c.is_ascii_alphanumeric() && c != '-' && c != '\'' && c != '\u{2019}'
         }));
-        let token = token.trim_end_matches(['\'', '\u{2019}']);
+        // A quoted reference in prose ('RFC-9') keeps its opening mark through
+        // the trim above, which allows quotes so the possessive survives.
+        let token = token.trim_matches(['\'', '\u{2019}']);
         let Some((prefix, num)) = token.split_once('-') else {
             continue;
         };
@@ -1033,6 +1035,58 @@ pub fn field_pending(
     )
 }
 
+/// The references a line actually claims to close.
+///
+/// Two defects this replaces, both producing blocking errors on correct prose
+/// (BUG-45). The verb was matched as a bare substring, so `prefixes` contained
+/// `fixes` and `discloses` contained `closes`. And the verb test was
+/// line-granular while the reference scan was not, so *"Fixes BUG-39, which
+/// RFC-9 predicted"* claimed `RFC-9` as well.
+///
+/// A claim is now the run of references immediately following a closing verb,
+/// ending at the first token that is neither a reference nor a separator.
+/// Deliberately narrow: a missed claim is recoverable, while a false error on a
+/// correct sentence teaches people to stop reading the output.
+fn claimed_closed(line: &str) -> Vec<String> {
+    const VERBS: [&str; 3] = ["closes", "fixes", "resolves"];
+    let mut out = Vec::new();
+    let mut tokens = line.split_whitespace().peekable();
+
+    while let Some(token) = tokens.next() {
+        let word = token
+            .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+            .to_lowercase();
+        if !VERBS.contains(&word.as_str()) {
+            continue;
+        }
+        let mut expecting = true;
+        let mut seen_one = false;
+        while let Some(next) = tokens.peek() {
+            // A conjunction bridges two references in one claim ("X and Y",
+            // "X, and Y") but never starts one -- "Fixes and BUG-40" claims
+            // nothing. Bridgeable from either state once a reference has been
+            // seen, because an Oxford comma leaves the run open.
+            if seen_one && next.eq_ignore_ascii_case("and") {
+                tokens.next();
+                expecting = true;
+                continue;
+            }
+            if !expecting {
+                break;
+            }
+            let refs = scan_references(next);
+            if refs.is_empty() {
+                break;
+            }
+            expecting = next.ends_with(',');
+            seen_one = true;
+            out.extend(refs);
+            tokens.next();
+        }
+    }
+    out
+}
+
 /// A file outside the corpus claiming a record is closed, while the record
 /// itself says otherwise.
 ///
@@ -1067,16 +1121,10 @@ pub fn claim_status_agreement(
     // tense made this rule fire on its own changeset, which describes the
     // defect it was written for. A narrowing, not a fix: a sentence in the
     // present tense that merely discusses a claim still matches.
-    let verb = ["closes", "fixes", "resolves"];
-
     for (path, content) in claims {
         examined += 1;
         for (idx, line) in content.lines().enumerate() {
-            let lower = line.to_lowercase();
-            if !verb.iter().any(|v| lower.contains(v)) {
-                continue;
-            }
-            for reference in scan_references(line) {
+            for reference in claimed_closed(line) {
                 let Some(target) = index.get(&normalize_id(&reference)) else {
                     continue;
                 };
@@ -2690,6 +2738,45 @@ mod tests {
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert_eq!(findings[0].line, Some(1));
         assert!(findings[0].message.contains("Status Open"), "{findings:?}");
+    }
+
+    /// BUG-45, both shapes, each of which produced a blocking error on a
+    /// correct sentence.
+    #[test]
+    fn a_verb_inside_another_word_is_not_a_claim_observed_failing() {
+        assert!(claimed_closed("The path prefixes changed; see RFC-9 for why.").is_empty());
+        assert!(claimed_closed("This discloses RFC-9's reasoning.").is_empty());
+        assert!(claimed_closed("Suffixes and RFC-9 are unrelated.").is_empty());
+    }
+
+    #[test]
+    fn only_the_reference_the_verb_governs_is_claimed_observed_failing() {
+        // "Fixes BUG-39, which RFC-9 predicted" claimed RFC-9 too.
+        assert_eq!(
+            claimed_closed("Fixes BUG-39, which RFC-9 predicted."),
+            vec!["BUG-39".to_string()]
+        );
+        // A comma-separated run after the verb is all claimed.
+        // An Oxford comma leaves the run open, so `and` must be bridgeable
+        // from either state -- but never directly after the verb.
+        assert_eq!(
+            claimed_closed("Fixes BUG-39, and BUG-40."),
+            vec!["BUG-39".to_string(), "BUG-40".to_string()]
+        );
+        assert!(claimed_closed("Fixes and BUG-40 are unrelated.").is_empty());
+        assert_eq!(
+            claimed_closed("Closes BUG-39, BUG-40 and BUG-41 in one change."),
+            vec![
+                "BUG-39".to_string(),
+                "BUG-40".to_string(),
+                "BUG-41".to_string()
+            ]
+        );
+        // The ordinary single case still works.
+        assert_eq!(
+            claimed_closed("which also closes BUG-36, where a directory name"),
+            vec!["BUG-36".to_string()]
+        );
     }
 
     #[test]
