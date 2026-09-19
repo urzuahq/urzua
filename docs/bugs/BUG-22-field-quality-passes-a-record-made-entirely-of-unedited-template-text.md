@@ -96,9 +96,51 @@ independently since BUG-5 last touched either.
   classifies Blank correctly.
 - SPEC-12 / ADR-27 -- `urzua new`'s paths and what it fills versus leaves as placeholder.
 
+## Confirmed live, 2026-09-19
+
+A record whose every field is unedited template text passes clean -- **zero findings, exit 0** -- with
+`field.quality` and `header.required-fields` both declared `error`:
+
+```yaml
+Status: <status>
+Deciders: Your Name Here
+Date: 2026-01-01
+```
+
+None of those three values is in `PLACEHOLDER_TOKENS`, so all three classify as `Present`.
+
+## The list is a transcription of the templates
+
+The whole vocabulary is seven tokens: `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`,
+`(project lead)`, `(session author)`. Every one appears in `.urzua/templates/`:
+
+```text
+> Date: YYYY-MM-DD
+> Author: name
+> Deciders: name(s)
+```
+
+It was copied from this project's own templates by hand, which is why it generalises to nothing. A
+corpus whose template says `<status>` gets no protection at all -- and that corpus is the adopter
+case, since `init` writes a config and the adopter fills in a template.
+
+## The fix does not need a longer list
+
+**A field whose value equals its template's value for that field is unedited.** A comparison, not a
+vocabulary: it holds for any placeholder convention, any type, any corpus, and `urzua new` already
+reads templates (`template_body`), so the machinery exists.
+
+It does not cover a corpus with no template, so the declared-shape form (`RFC-33`'s `pattern`) remains
+the endpoint. This is strictly better than seven tokens and does not wait on `MILE-98`.
+
+Extending the list is explicitly **not** the fix -- widening a config list so a diff comes up clean is
+what `AGENTS.md` prohibits, and a closed list that silently treats everything unrecognised as valid is
+`is_terminal_status`'s `_ => &[]` in a rule that currently blocks CI.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`, filed against `render_synthetic_yaml`'s `null` emission. | **structural** |
 > | 2026-09-11 | Rewritten before merge. The original finding was false and inverted: `classify` reads unedited template text as `Present`, not `Placeholder`, and the `null` emission it indicted is deliberate, asserted by a named test, and correctly caught by `field.quality`. Re-aimed at the real defect the same investigation exposed -- a record of pure template text passing with zero findings. The original claim is preserved above rather than deleted, since how it was wrong is the instructive part. | **substantive** |
+> | 2026-09-19 | Confirmed live with a reproduction, and the fix reframed. **Why:** asked whether this still held before prioritising it. A record of entirely unedited template text passes with zero findings while `field.quality` is declared `error`. The seven-token list turns out to be a hand-copy of this project's own templates, which is why it protects no other corpus -- so the fix is to compare a field against its template's value rather than to lengthen the list. | **substantive** |
