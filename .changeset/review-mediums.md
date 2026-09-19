@@ -2,7 +2,9 @@
 default: patch
 ---
 
-Four more defects from the same pre-release review.
+`claim.status-agreement` no longer raises false errors on ordinary prose, a
+malformed rule setting says what is wrong with it, and `off` is declarable on a
+rule that takes options.
 
 `claim.status-agreement` matched a verb as a substring and claimed every
 reference on the line (`BUG-45`), so `prefixes` read as `fixes` and

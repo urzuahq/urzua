@@ -2,7 +2,8 @@
 default: minor
 ---
 
-Three defects found by reviewing the unreleased diff before cutting a release.
+`urzua audit` now honours the `rules` table, `urzua init` no longer drops a
+record type, and an incomplete rule declaration fails at load.
 
 `urzua audit` bypassed the rules table entirely (`BUG-42`). `MILE-80` routed
 every rule in `check` through the opt-in gate and left `audit` calling two rules
