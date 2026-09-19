@@ -111,6 +111,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     if let Some(setting) = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT) {
         if setting.level != urzua_core::config::RuleLevel::Off {
             for prefix in setting.claim_paths.iter().flatten() {
+                // `is_dir()` folds an unreadable directory into "not a
+                // directory", which is the right verdict here: either way the
+                // rule cannot reach its input, and saying so beats reporting a
+                // clean run over files it never opened.
                 if !repo_root.join(prefix).is_dir() {
                     return emit(&CouldNotRun::from(format!(
                         "claim.status-agreement: claim_paths entry '{prefix}' is not a readable directory"
