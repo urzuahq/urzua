@@ -4,7 +4,7 @@ Stable-Id: 01M2QB6RMF6Z3B5W1X8YCAES8T
 Phase: '2'
 Track: schema-governance
 Implements: —
-Blocked-on: RFC-33
+Blocked-on: RFC-33, MILE-98
 ---
 # 97 — A reference into a record, not only at it
 
@@ -41,3 +41,4 @@ resolvable reference plus prose beats prose alone, and `BUG-39` is the cheaper h
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Filed. **Why:** `MILE-13` wanted to depend on one question inside `RFC-9` and had no way to say so. Recorded as a schema gap rather than a formatting lapse, and blocked on the document model, since an anchor into a record means nothing until sections exist. | **substantive** |
+> | 2026-09-18 | `Blocked-on` now names `MILE-98`. **Why:** the declared document model had no milestone -- `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so six records were blocked on something the plan did not track. Naming it makes the dependency resolvable, and `narrative-field.stale` can report when it moves. | **structural** |
