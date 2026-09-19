@@ -40,6 +40,14 @@ requires one magic name. An adopter calling theirs `exception` gets no suppressi
 quoted in eight records this week as a cautionary example while remaining live in the function that
 gave it the name.
 
+Round 6 of the 0.4.0 review measured the reach. `pointer.target-status` escaped the fallback by
+reading its vocabulary from `not_in`, but `narrative-field.stale` still calls `is_terminal_status`,
+so the arm is live for it against **this repository's own corpus**: a `milestone` whose `Blocked-on`
+names a `waiver` gets `is_terminal_status("waiver", ...) -> false` for every status, including the
+terminal ones. The record is counted as examined and can never produce a finding. Any type name an
+adopter declares -- and `init` proposes type names straight from directory names -- reaches the same
+arm by construction.
+
 ## Also: `waiver.rs` is a record type as a module
 
 Suppressing a finding is a general capability. `waiver` is what **this corpus** calls the record that

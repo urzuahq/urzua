@@ -26,14 +26,24 @@ fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(St
         // indistinguishable from a clean corpus -- and `OptionRequired` exists
         // to stop this rule going inert when `claim_paths` is *missing*, so a
         // misspelled one must not get through the same door (BUG-56).
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        let mut paths: Vec<_> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e == "md"))
-            .collect();
+        // `claim_paths` is a path *prefix*, so the claims may sit any depth
+        // below it. Reading one level deep made a nested layout report a clean
+        // run over an empty claim list -- through the same door BUG-56's guard
+        // was built to close (BUG-63).
+        let mut paths = Vec::new();
+        let mut pending = vec![dir.clone()];
+        while let Some(current) = pending.pop() {
+            let Ok(entries) = std::fs::read_dir(&current) else {
+                continue;
+            };
+            for path in entries.flatten().map(|e| e.path()) {
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.extension().is_some_and(|e| e == "md") {
+                    paths.push(path);
+                }
+            }
+        }
         // Sorted so a finding's order does not depend on the filesystem.
         paths.sort();
         for path in paths {
@@ -73,7 +83,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let (records, full_text) = load_records(&repo_root, &scoped, &config);
+    // A path argument narrows what is *reported on*. It must not narrow the
+    // corpus a pointer resolves against: a target outside the requested path
+    // still exists, and judging it absent turns a clean corpus into a failing
+    // one purely by how the check was invoked (BUG-60).
+    let (records, full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let in_scope: std::collections::HashSet<&std::path::Path> =
+        scoped.iter().map(|p| p.as_path()).collect();
 
     let mut required_by_type = HashMap::new();
     let mut header_layout_by_type = HashMap::new();
@@ -229,6 +245,17 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             let dir_exists = |d: &str| repo_root.join(d).is_dir();
             rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists)
         }),
+        crate::gate::gated(
+            &config,
+            rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+            || {
+                let claimed: std::collections::HashSet<&std::path::Path> =
+                    records.iter().map(|r| r.path.as_path()).collect();
+                rules::type_record_outside_declared_dir(&config, &discovered.paths, &|p| {
+                    claimed.contains(p)
+                })
+            },
+        ),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)
         }),
@@ -260,6 +287,14 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         findings.extend(rule_findings);
     }
 
+    // Only findings about a record are scoped away. A finding about the config
+    // names the config file, which is outside every record scope and would
+    // otherwise disappear the moment a path argument is given.
+    if !paths.is_empty() {
+        let is_record = |p: &std::path::Path| records.iter().any(|r| r.path == p);
+        findings.retain(|f| in_scope.contains(f.file.as_path()) || !is_record(&f.file));
+    }
+
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
     let waivers = urzua_core::waiver::load_waivers(&records);
@@ -269,7 +304,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let blocking =
         active_findings().any(|f| f.severity == urzua_core::report::FindingSeverity::Error);
 
-    let status = if records.is_empty() {
+    let examined: Vec<&urzua_core::record::Record> = records
+        .iter()
+        .filter(|r| in_scope.contains(r.path.as_path()))
+        .collect();
+
+    let status = if examined.is_empty() {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
         ReportStatus::Ok
@@ -279,7 +319,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
 
     let report = CheckReport {
         status,
-        files_examined: records.len(),
+        files_examined: examined.len(),
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),
