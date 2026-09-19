@@ -126,7 +126,9 @@ rules:
   filename.title-consistency: error
   relation.supersession-reciprocity: error
   revision-log.change-class-required: error
-  narrative-field.stale: warn
+  narrative-field.stale:
+    level: warn
+    terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Done", "WontDo"]
   embodiment.consistency: warn
   embodiment.locator-exists: error
   embodiment.locator-promotion-candidate: warn
