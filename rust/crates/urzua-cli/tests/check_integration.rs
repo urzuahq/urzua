@@ -738,8 +738,24 @@ fn an_undeclared_rule_is_reported_as_not_enabled_never_omitted() {
     assert_eq!(required["records_examined"], 0);
 
     // Every rule this build ships is accounted for, so a reader can tell
-    // "not configured" from "does not exist".
-    assert_eq!(executed.len(), 21, "{executed:?}");
+    // "not configured" from "does not exist". Asserted against ALL_RULES
+    // rather than a literal, so a rule added there and not wired into
+    // `check.rs` names itself instead of failing as a count mismatch.
+    let reported: std::collections::HashSet<&str> = executed
+        .iter()
+        .map(|r| r["rule"].as_str().unwrap())
+        .collect();
+    for id in urzua_core::rules::ALL_RULES {
+        assert!(
+            reported.contains(id),
+            "rule {id} is in ALL_RULES but never ran"
+        );
+    }
+    assert_eq!(
+        executed.len(),
+        urzua_core::rules::ALL_RULES.len(),
+        "{executed:?}"
+    );
 }
 
 /// The declared level replaces whatever severity the rule body chose -- that is

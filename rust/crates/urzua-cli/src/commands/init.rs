@@ -61,7 +61,29 @@ pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<Prop
         })
         .cloned()
         .collect();
+    // Fold only where the outer directory is the type's home, not where it
+    // merely contains types. `docs/` holding `adr` and `rfc` is a container:
+    // absorbing them produces one meaningless `doc` type and ingests whatever
+    // else sits beside them (BUG-54). `doc/adr` holding `archive` is a home.
+    let container = |outer: &PathBuf| {
+        dirs.iter()
+            .filter(|d| *d != outer && d.starts_with(outer))
+            .filter_map(|d| d.strip_prefix(outer).ok())
+            .filter_map(|r| r.components().next())
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            > 1
+    };
+
     for dir in &nested {
+        let enclosing = counts
+            .keys()
+            .filter(|o| *o != dir && dir.starts_with(o))
+            .max_by_key(|o| o.components().count())
+            .cloned();
+        if enclosing.as_ref().is_some_and(container) {
+            continue;
+        }
         let Some(n) = counts.remove(dir) else {
             continue;
         };
@@ -345,6 +367,43 @@ mod tests {
         // The nested record is folded in, so the count an adopter is shown
         // matches what `check` will examine.
         assert_eq!(proposed[0].record_count, 4);
+    }
+
+    /// BUG-54: one stray record-shaped file in a parent directory collapsed
+    /// every sibling type into it, and pulled non-records into the corpus.
+    #[test]
+    fn a_container_directory_does_not_absorb_the_types_beneath_it_observed_failing() {
+        let discovered: Vec<PathBuf> = [
+            "docs/adr/0001-a.md",
+            "docs/adr/0002-b.md",
+            "docs/rfc/0001-r.md",
+            "docs/0099-index.md",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+
+        let proposed = detect_record_types(Path::new("/repo"), &discovered);
+        let names: Vec<&str> = proposed.iter().map(|p| p.name.as_str()).collect();
+        assert!(names.contains(&"adr"), "{proposed:?}");
+        assert!(names.contains(&"rfc"), "{proposed:?}");
+        let adr = proposed.iter().find(|p| p.name == "adr").unwrap();
+        assert_eq!(adr.dir, "docs/adr");
+        assert_eq!(adr.record_count, 2);
+
+        // BUG-43 must still hold: a genuine subdirectory folds into its home.
+        let nested: Vec<PathBuf> = [
+            "doc/adr/0001-a.md",
+            "doc/adr/0002-b.md",
+            "doc/adr/archive/0009-old.md",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+        let proposed = detect_record_types(Path::new("/repo"), &nested);
+        assert_eq!(proposed.len(), 1, "{proposed:?}");
+        assert_eq!(proposed[0].dir, "doc/adr");
+        assert_eq!(proposed[0].record_count, 3);
     }
 
     /// BUG-44: a rule that cannot be declared without options must not be

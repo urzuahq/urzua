@@ -24,6 +24,6 @@ dist/
 # Local agent/tooling state
 .claude/settings.local.json
 
-# Urzua's own derived/cache state (SPEC-0005) -- config.toml and templates/
+# Urzua's own derived/cache state (SPEC-0005) -- config.yaml and templates/
 # are tracked; cache/ is derived and never authoritative.
 .urzua/cache/

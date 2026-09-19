@@ -21,6 +21,11 @@ fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(St
     let mut out = Vec::new();
     for prefix in prefixes {
         let dir = repo_root.join(prefix);
+        // A path that does not resolve is a typo, not an empty directory. The
+        // rule reported `ran` with zero findings either way, which is
+        // indistinguishable from a clean corpus -- and `OptionRequired` exists
+        // to stop this rule going inert when `claim_paths` is *missing*, so a
+        // misspelled one must not get through the same door (BUG-56).
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
@@ -94,6 +99,24 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }
         if let Some(narrative_fields) = &cfg.narrative_fields {
             narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
+        }
+    }
+
+    // A `claim_paths` entry that does not resolve is a typo, not an empty
+    // directory, and the rule reports `ran` with zero findings either way --
+    // indistinguishable from a clean corpus. `OptionRequired` stops this rule
+    // going inert when `claim_paths` is missing; a misspelled one must not get
+    // through the same door (BUG-56). Checked here because it is a config
+    // error, not a finding about a record.
+    if let Some(setting) = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT) {
+        if setting.level != urzua_core::config::RuleLevel::Off {
+            for prefix in setting.claim_paths.iter().flatten() {
+                if !repo_root.join(prefix).is_dir() {
+                    return emit(&CouldNotRun::from(format!(
+                        "claim.status-agreement: claim_paths entry '{prefix}' is not a readable directory"
+                    )));
+                }
+            }
         }
     }
 

@@ -30,8 +30,18 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     let (first, rest) = stem.split_once('-')?;
     let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
 
-    // `0001-slug` / `1-slug`. Padding is not load-bearing (BUG-2).
-    if digits(first) {
+    // `0001-slug` / `1-slug`. Padding is not load-bearing (BUG-2), but a
+    // date is not a number: `2026-09-19-notes.md` would otherwise parse as
+    // record 2026 and `next_display_number` never comes back below it, because
+    // numbers are never reused (BUG-53). A four-digit bound does not
+    // discriminate -- a year is four digits -- so the tail is what rules it
+    // out: `NN-NN-` after the first segment is a date, not a slug.
+    let dated = {
+        let mut parts = rest.splitn(3, '-');
+        matches!((parts.next(), parts.next()), (Some(m), Some(d))
+            if m.len() == 2 && d.len() == 2 && digits(m) && digits(d))
+    };
+    if digits(first) && !dated {
         if rest.is_empty() {
             return None;
         }
@@ -277,6 +287,28 @@ mod tests {
             "0009-help-scripts.md".to_string(),
         ];
         assert_eq!(next_display_number(&nygard_only), 10);
+    }
+
+    /// BUG-53: `2026-09-19-notes.md` parsed as record 2026, and since numbers
+    /// are never reused the corpus was stuck above it permanently.
+    #[test]
+    fn a_date_named_file_is_not_a_record_number_observed_failing() {
+        assert_eq!(parse_record_filename("2026-09-19-meeting-notes.md"), None);
+        assert_eq!(parse_record_filename("1999-01-01-x.md"), None);
+
+        // A four-digit bound cannot discriminate -- a year is four digits --
+        // so these must still parse.
+        assert_eq!(parse_record_filename("2026-slug.md"), Some((None, 2026)));
+        assert_eq!(
+            parse_record_filename("0001-record-architecture.md"),
+            Some((None, 1))
+        );
+
+        let mixed = vec![
+            "ADR-1-x.md".to_string(),
+            "2026-09-19-meeting-notes.md".to_string(),
+        ];
+        assert_eq!(next_display_number(&mixed), 2);
     }
 
     #[test]

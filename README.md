@@ -136,7 +136,7 @@ Every applied write touches only the one field's line, byte-for-byte preserving 
 ```sh
 git clone https://github.com/urzuahq/urzua && cd urzua && make build
 cd /path/to/your-repo
-/path/to/urzua/rust/target/release/urzua init --dry-run # preview .urzua/config.toml from what's already there
+/path/to/urzua/rust/target/release/urzua init --dry-run # preview .urzua/config.yaml from what's already there
 /path/to/urzua/rust/target/release/urzua init           # writes it; never moves or rewrites a single record
 /path/to/urzua/rust/target/release/urzua check docs/    # validates against it
 ```
@@ -145,7 +145,7 @@ cd /path/to/your-repo
 
 ## The schema is declared, not assumed
 
-A record type is whatever `.urzua/config.toml` says it is. Urzua ships no hardcoded notion of "an ADR" or "an RFC."
+A record type is whatever `.urzua/config.yaml` says it is. Urzua ships no hardcoded notion of "an ADR" or "an RFC."
 
 ```toml
 [record_types.adr]
@@ -161,7 +161,7 @@ header_shape = "yaml-frontmatter"
 
 Every existing header convention this project has encountered is a declared shape, not a guess: a blockquote (`> Key: Value`), a bold-labelled blockquote, a pipe-delimited single line, a bold markdown list with no blockquote at all, and YAML frontmatter. A misdeclared shape fails loud (`no header-shaped region found`), never a silent match on the wrong lines.
 
-This repo's own `.urzua/config.toml` declares `milestone` and `bug` alongside `adr`/`rfc`/`spec`: two record types added after the fact, with zero changes to `urzua-core`, to track this project's own backlog and defects using the same engine that validates its decisions.
+This repo's own `.urzua/config.yaml` declares `milestone` and `bug` alongside `adr`/`rfc`/`spec`: two record types added after the fact, with zero changes to `urzua-core`, to track this project's own backlog and defects using the same engine that validates its decisions.
 
 ## Lineage between record types is also declared, not assumed
 
