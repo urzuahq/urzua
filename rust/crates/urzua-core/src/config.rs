@@ -352,7 +352,10 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
                 &[]
             };
         for (present, option, consequence) in required {
-            if !present {
+            // A declined rule never runs, so `gated` never reads its options.
+            // Requiring them anyway would mean a rule could not be turned off
+            // without supplying values it will not use.
+            if setting.level != RuleLevel::Off && !present {
                 return Err(ConfigError::OptionRequired {
                     rule: name.clone(),
                     option: option.to_string(),
@@ -439,6 +442,13 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("not_in"));
+
+        // `off` needs no options: a declined rule never reads them.
+        assert!(parse(&format!("{base}  pointer.target-status: off\n")).is_ok());
+        assert!(parse(&format!(
+            "{base}  claim.status-agreement:\n    level: off\n"
+        ))
+        .is_ok());
 
         // Complete declarations still load.
         let complete = format!(

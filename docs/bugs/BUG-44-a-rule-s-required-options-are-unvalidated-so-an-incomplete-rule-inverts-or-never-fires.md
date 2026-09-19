@@ -2,7 +2,7 @@
 Stable-Id: 01M2VGDX8CRYPC8Y8V5Q5J14M4
 Status: Fixed
 Found-in: 'A code review of the unreleased diff since v0.3.0 -- reproduced for both directions, an inverted rule and an inert one'
-Regression-test: 'not yet written -- a rule declared without an option it requires must be a load-time error naming the missing key, for every option-taking rule'
+Regression-test: 'rust/crates/urzua-core/src/config.rs::a_rule_missing_an_option_it_requires_is_rejected_observed_failing -- each required key rejected by name, `off` accepted without options, and a complete declaration still loading'
 ---
 # 44 — A rule's required options are unvalidated, so an incomplete rule inverts or never fires
 
@@ -46,3 +46,4 @@ Worth building once, with `BUG-40` and `BUG-41`, rather than three times.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `MILE-80` validated that an option sits on the right rule and never that a required option is present. A rule missing one either inverts into an all-errors rule or becomes permanently inert, and both shipped unexercised because this repository declared them correctly from the start. | **substantive** |
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** `parse` now rejects a rule declared without an option it requires, naming the key and what the rule would otherwise do -- *"treats every claim as a violation, including correct ones"* for a missing `closed_statuses`, *"scans nothing and can never report"* for a missing `claim_paths`. `init` skips option-requiring rules rather than proposing a declaration that will not load, which `BUG-40`'s review had also flagged from the other side. | **substantive** |
+> | 2026-09-19 | `off` no longer requires a rule's options. **Why:** review found that `pointer.target-status: off` was rejected for a missing `not_in` -- so the rule could not be turned off without supplying values it would never read, since `gated` skips a declined rule before any option is used. Turning a rule off is the one declaration that needs nothing. | **substantive** |

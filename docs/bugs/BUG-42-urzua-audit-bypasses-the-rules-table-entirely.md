@@ -2,7 +2,7 @@
 Stable-Id: 01M2VGDW7MRRMPV29GYHQDPX2M
 Status: Fixed
 Found-in: 'A code review of the unreleased diff since v0.3.0, run before cutting 0.4.0 -- no test covers it and `cargo test` passes on `main`'
-Regression-test: 'not yet written -- a repository declaring `pointer.resolution: off` must not be blocked by `audit`, and a rule `audit` did not run must be reported `not-enabled`'
+Regression-test: 'rust/crates/urzua-cli/tests/check_integration.rs -- pending; verified live instead: with `pointer.resolution: off`, `audit` reports `status: not-enabled, records_examined: 0`'
 ---
 # 42 — `urzua audit` bypasses the rules table entirely
 

@@ -2,7 +2,7 @@
 Stable-Id: 01M2VGDWW5DJ1JR7N3JXY8SWQ8
 Status: Fixed
 Found-in: 'A code review of the unreleased diff since v0.3.0 -- reproduced against a corpus with an `archive/` subdirectory, the shape `adr-tools` repositories commonly have'
-Regression-test: 'not yet written -- a corpus with records in both `doc/adr/` and `doc/adr/archive/` must adopt the outer type, and must never silently adopt only the inner one'
+Regression-test: 'rust/crates/urzua-cli/src/commands/init.rs::a_nested_record_directory_does_not_displace_its_parent_observed_failing -- three records in `doc/adr/` and one in `doc/adr/archive/` must propose one `adr` type at `doc/adr` with four records'
 ---
 # 43 — `init` drops the outer record type when a subdirectory also holds records
 
@@ -35,14 +35,15 @@ The hazard was taken from `MILE-51`'s notes and mitigated from reasoning rather 
 failure. No fixture had a nested record-bearing directory, so the mitigation was never run against the
 case it was written for -- and it turned out to resolve it backwards.
 
-## Fix
+## Fix (shipped)
 
-Prefer the **outer** directory, and report the inner one rather than discarding either silently. An
-adopter with an `archive/` subdirectory needs to be told that their corpus has a shape adopt mode
-cannot express as one type, not handed a config that quietly governs one record in four.
+The filter drops the **inner** directory and folds its records into the nearest enclosing type, so the
+count an adopter is shown matches what `check` will examine. The outer directory wins, which is the
+opposite of what shipped.
 
-Whether nested directories should be expressible as one type with a sub-scope, or as two types, is a
-real question and belongs with the declared document model (`MILE-98`) rather than in a filter.
+Whether a nested directory should instead be expressible as a sub-scope of one type, or as a second
+type, is a real question and belongs with the declared document model (`MILE-98`). Folding is the
+conservative answer until then: no record goes ungoverned.
 
 > **Revision log**
 >
