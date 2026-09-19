@@ -3,6 +3,7 @@ Stable-Id: 01M2WDKB3Y7SCHKRWPN87BXVZ6
 Status: Open
 Found-in: "Five bug records shipped as Status: Open in the same branch that fixed them, with a changeset naming all five; claim.status-agreement ran over the changeset and reported nothing"
 Regression-test: "not yet written -- a changeset naming a record that is still open must not report a clean run"
+Blocked-on: RFC-36
 ---
 # 66 — A changeset that names a record without a closing verb is invisible to claim.status-agreement
 
@@ -41,6 +42,8 @@ claims at all.
 - `BUG-36`, the defect this rule was built for, and the shape it does catch.
 - `BUG-56`, which stopped this same rule going inert when its input was unreachable. This is the same
   rule going inert with its input in hand.
+- `RFC-36`, which takes the open question here as its subject and measures it: 44 of 49 references in
+  this repository's changeset history are bare, and most are citations rather than unstated claims.
 
 > **Revision log**
 >
