@@ -45,6 +45,38 @@ fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(St
     out
 }
 
+/// Each declared type's template header, read as field -> placeholder value.
+/// `field.quality` compares a record's field against this to decide whether it
+/// was ever edited (BUG-22). A type with no template contributes nothing, which
+/// leaves that type on `classify`'s built-in vocabulary rather than silently
+/// passing everything.
+fn template_values(
+    repo_root: &std::path::Path,
+    config: &urzua_core::config::Config,
+) -> HashMap<String, HashMap<String, String>> {
+    let mut out = HashMap::new();
+    for (name, cfg) in &config.record_types {
+        let path = repo_root
+            .join(".urzua/templates")
+            .join(format!("{name}.md"));
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let header = urzua_core::header::parse_with_shape(&content, cfg.header_shape);
+        // Only declared fields: `field.quality` checks `required_fields`, and a
+        // template key nothing declares is not this rule's business.
+        let fields: HashMap<String, String> = cfg
+            .required_fields
+            .iter()
+            .filter_map(|f| header.get(f).map(|v| (f.clone(), v.to_string())))
+            .collect();
+        if !fields.is_empty() {
+            out.insert(name.clone(), fields);
+        }
+    }
+    out
+}
+
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
@@ -98,6 +130,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     }
 
     let drifted = compute_drifted_records(&repo_root, &records);
+    let templates = template_values(&repo_root, &config);
 
     // Each rule's (RuleExecution, Vec<Finding>) collected into one list --
     // rules_executed/findings both derive from it below, so there's no
@@ -123,7 +156,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             )
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_QUALITY, || {
-            rules::field_quality(&records, &required_by_type)
+            rules::field_quality(&records, &required_by_type, &templates)
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_PENDING, || {
             rules::field_pending(&records, &required_by_type)
