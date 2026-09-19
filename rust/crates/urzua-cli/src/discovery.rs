@@ -65,7 +65,12 @@ pub(crate) fn load_records(
     for (type_name, type_config) in &config.record_types {
         let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
-            if !rel_path.starts_with(&type_dir) {
+            // This directory, not this subtree (RFC-35). Prefix matching let
+            // two types claim one record whenever their dirs nested, which no
+            // schema rule resolved -- and four heuristics accreted in `init`
+            // guessing what an adopter meant by the overlap. A directory is a
+            // type; `docs/rfc` holds RFCs.
+            if rel_path.parent() != Some(type_dir.as_path()) {
                 continue;
             }
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {

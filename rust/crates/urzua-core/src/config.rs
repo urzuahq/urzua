@@ -333,20 +333,26 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
         let required: &[(bool, &str, &'static str)] =
             if name == crate::rules::RULE_CLAIM_STATUS_AGREEMENT {
                 &[
+                    // Non-empty, not merely present: an empty list is the harm
+                    // these messages describe. `closed_statuses: []` makes every
+                    // claim a violation, and `claim_paths: []` scans nothing.
                     (
-                        setting.claim_paths.is_some(),
+                        setting.claim_paths.as_ref().is_some_and(|v| !v.is_empty()),
                         "claim_paths",
                         "scans nothing and can never report",
                     ),
                     (
-                        setting.closed_statuses.is_some(),
+                        setting
+                            .closed_statuses
+                            .as_ref()
+                            .is_some_and(|v| !v.is_empty()),
                         "closed_statuses",
                         "treats every claim as a violation, including correct ones",
                     ),
                 ]
             } else if name == crate::rules::RULE_POINTER_TARGET_STATUS {
                 &[(
-                    setting.not_in.is_some(),
+                    setting.not_in.as_ref().is_some_and(|v| !v.is_empty()),
                     "not_in",
                     "examines every reference and can never report",
                 )]
