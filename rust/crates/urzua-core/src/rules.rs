@@ -1572,9 +1572,10 @@ pub fn embodiment_locator_exists(
             continue;
         };
         // One per record, not per locator: `records_examined` is each rule's
-        // input population (SPEC-2), and counting locators made this rule
-        // report 129 against `embodiment.consistency`'s 38 over the same 38
-        // records.
+        // input population (SPEC-2), and counting locators reported 129 against
+        // 55 records. It stays higher than `embodiment.consistency`'s count,
+        // which needs both `Embodiment` and `Realized-by` where this needs only
+        // the latter -- a different population, not a disagreement.
         examined += 1;
         let realized = parse_realized_by(value);
         for locator in realized
@@ -2313,7 +2314,7 @@ mod tests {
         // Every spec's `Parent: SPEC-N` pointer was completely unchecked
         // before Parent was added to this rule's scanned fields -- a typo'd
         // or dangling Parent would never have been caught.
-        let parent = record("docs/specs/SPEC-1-v0-cli.md", "spec", "> Status: Draft\n");
+        let parent = record("docs/specs/SPEC-1-cli.md", "spec", "> Status: Draft\n");
         let child = record(
             "docs/specs/SPEC-2-urzua-check.md",
             "spec",

@@ -176,4 +176,4 @@ directions, and it is cheap to fuzz.
 ## References
 
 - RFC-1 §1a — declared profiles, which this RFC makes binding.
-- `docs/specs/SPEC-1-v0-cli.md` — the no-silent-no-op rule this RFC applies at field granularity.
+- `docs/specs/SPEC-1-cli.md` — the no-silent-no-op rule this RFC applies at field granularity.

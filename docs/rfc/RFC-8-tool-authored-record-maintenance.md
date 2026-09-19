@@ -37,7 +37,7 @@ times across three sessions**, every instance reported-not-repaired:
 | Display numbers / numbering gaps | derivable from the corpus | §26 |
 
 The reflex against auto-writing is well-founded and comes from real damage: the reciprocity-checker
-data-loss incident, which is why `--fix` was explicitly deferred out of `docs/specs/SPEC-1-v0-cli.md`'s
+data-loss incident, which is why `--fix` was explicitly deferred out of `docs/specs/SPEC-1-cli.md`'s
 `audit`. But that incident rewrote **authored** cross-references embedded in prose, in a corpus with
 no revision log to make the rewrite recoverable. Both of those conditions are now addressable, and
 neither describes the table above. Collapsing "may rewrite a derived field" and "may rewrite prose"
@@ -199,5 +199,5 @@ overwrite a field whose derivation is tested against being wrong, not merely aga
 - RFC-5 §1–2 — mechanical-not-inferred computation, and the `realized_by` pointer model whose
   staleness Tier 3 repairs.
 - RFC-6 — the append-only revision log that makes clause 4 (reversibility) true.
-- `docs/specs/SPEC-1-v0-cli.md` — the deferred `--fix` and the reciprocity-checker data-loss incident
+- `docs/specs/SPEC-1-cli.md` — the deferred `--fix` and the reciprocity-checker data-loss incident
   behind that deferral; this RFC is the argument for narrowing that deferral rather than lifting it.

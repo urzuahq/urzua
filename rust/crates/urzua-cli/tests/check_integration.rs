@@ -767,3 +767,47 @@ fn the_declared_level_overrides_the_rule_body_s_own_severity() {
     assert_eq!(parsed["blocking"], false);
     assert_eq!(output.status.code(), Some(0));
 }
+
+/// The rule's correctness lives in the CLI closure, not the pure function: a
+/// stub `present` in a unit test proves nothing about how existence is decided.
+/// BUG-22 shipped inert for exactly this reason -- the pure half was tested and
+/// the wiring was not.
+#[test]
+fn a_locator_naming_a_staged_deletion_is_reported_observed_failing() {
+    let dir = fixture_repo("staged-deletion");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {embodiment.locator-exists: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Realized-by\"]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src.rs"), "fn main() {}\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Status: Accepted\n> Realized-by: code:src.rs\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    // Tracked and on disk: silent.
+    let out = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let hits = |p: &serde_json::Value| {
+        p["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["rule"] == "embodiment.locator-exists")
+            .count()
+    };
+    assert_eq!(hits(&parsed), 0, "{parsed}");
+
+    // `git rm` drops it from ls-files but leaves it in diff --cached, and
+    // discovery unions the two -- so a tracked-set check alone stays silent
+    // here, which is the case the rule exists for.
+    git(&dir, &["rm", "-q", "src.rs"]);
+    let out = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(hits(&parsed), 1, "{parsed}");
+    assert_eq!(parsed["blocking"], true);
+}

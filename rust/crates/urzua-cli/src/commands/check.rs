@@ -156,13 +156,18 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::embodiment_consistency(&records, &drifted)
         }),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
-            // The git-tracked set, not a filesystem probe: a gitignored file
-            // would pass locally and fail in CI, and a deleted-but-still-staged
-            // one the reverse. Discovery is scoped to what the VCS tracks, and
-            // this has to agree with it. A directory is not a locator.
+            // Tracked *and* on disk, because neither alone is enough. Tracked
+            // alone passes a staged deletion: `git rm` drops the path from
+            // `ls-files` but leaves it in `diff --cached`, and discovery unions
+            // the two -- so the rule would stay silent on exactly the case it
+            // exists for. On disk alone passes a gitignored file, which would
+            // then fail in CI. A directory satisfies neither.
             let tracked: std::collections::HashSet<&std::path::Path> =
                 discovered.paths.iter().map(|p| p.as_path()).collect();
-            let present = |p: &str| tracked.contains(std::path::Path::new(p));
+            let present = |p: &str| {
+                let path = std::path::Path::new(p);
+                tracked.contains(path) && repo_root.join(path).is_file()
+            };
             rules::embodiment_locator_exists(&records, &present)
         }),
         crate::gate::gated(

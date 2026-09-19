@@ -105,6 +105,6 @@ decisions before building.
 
 ## References
 
-- `docs/specs/SPEC-1-v0-cli.md` — amended by this ADR
+- `docs/specs/SPEC-1-cli.md` — amended by this ADR
 - ADR-1 — Rust for the CLI, on grounds that don't generalize past the CLI
 - Prior art: a polyglot monorepo layout with root-level language directories
