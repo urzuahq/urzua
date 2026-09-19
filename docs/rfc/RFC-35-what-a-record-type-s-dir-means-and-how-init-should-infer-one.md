@@ -17,7 +17,7 @@ case.
 Propose deciding the question underneath them: **`dir` means *this directory*, and recursion is
 declared.**
 
-## The four heuristics
+## Motivation
 
 | record | heuristic added |
 |---|---|
@@ -30,8 +30,6 @@ Each is correct against the case that produced it. None was declared by anybody.
 inference engine guessing at corpus intent, and the guess is load-bearing: `check` reported
 `files_examined: 8` for four records before the last one landed.
 
-## Where this actually bites
-
 **Not in this repository.** Its six types each live in their own subdirectory, no record sits loose in
 `docs/`, and its config was hand-written and converted rather than generated. Every instance was found
 by a synthetic fixture.
@@ -41,7 +39,7 @@ population `init` exists for, and which `MILE-51` keeps demonstrating this proje
 corpus is too clean to expose it, which is `MILE-101`'s argument for an acceptance suite in one
 sentence.
 
-## The two halves, which are separable
+## Proposal
 
 **1. What `dir` means at `check` time.** Prefix matching is latent, not broken: it only produces
 overlap when a container type is declared, and no hand-written config declares one. But it is
@@ -67,7 +65,7 @@ reads and edits, which is a much weaker thing to get wrong than a matching rule.
 Worth separating because the first is a schema decision and the second is a UX one, and conflating
 them is how four heuristics ended up inside a matching rule.
 
-## Why this is `Draft` and not a decision
+## Open questions
 
 Two things are unresearched:
 
@@ -77,7 +75,7 @@ Two things are unresearched:
   say so, propose a type and let the adopter delete it, or refuse to adopt until the corpus is
   unambiguous. The third is the most honest and the least usable.
 
-## Relationship to `MILE-98`
+## Non-goals
 
 `MILE-98` declares how to find a record's **identity, fields and sections**. *Which records belong to a
 type* is the same class of question and is currently answered by an undeclared prefix rule -- so this
@@ -97,3 +95,4 @@ heuristics rather than carry them into the new model.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed, `Status: Draft`. **Why:** four heuristics have accreted inside `init` and `check` to guess which records belong to a type, each patching the last one's edge case, and the question underneath them -- whether `dir` means a directory or a subtree -- has never been decided. Raised while asking why `init` proposed `docs/` as a type when the config named `docs/adr`. | **substantive** |
+> | 2026-09-19 | Restored to the `rfc` template's section set. **Why:** this record was written by replacing the scaffold `urzua new` produced, which deleted `Motivation`, `Proposal`, `Open questions` and `Non-goals` and substituted invented headings -- changing the RFC format for this corpus in a single record. `RFC-34`, filed the day before, keeps the template exactly. Measured while fixing it: **79 of 269 records are missing at least one of their type's template sections**, and no rule examines sections at all, so `check` has been green throughout. | **structural** |
