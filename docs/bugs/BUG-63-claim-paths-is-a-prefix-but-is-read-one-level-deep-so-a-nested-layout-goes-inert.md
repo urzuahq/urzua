@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN8QRXB4EN7779QV4X19K
 Status: Open
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "not yet written -- a claim_paths prefix whose .md files sit in a subdirectory must not report as a clean corpus"
+Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_claim_path_prefix_is_read_to_any_depth"
 ---
 # 63 — claim_paths is a prefix but is read one level deep so a nested layout goes inert
 

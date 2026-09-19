@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN789ABR543084EZ90ENX
 Status: Open
 Found-in: "Round 6 of the 0.4.0 release review, then reproduced on this repository's own corpus"
-Regression-test: "not yet written -- a fixture with a reference that crosses a type directory, checked with a path scope narrower than the reference's target"
+Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_path_scope_narrows_what_is_reported_on_not_what_a_pointer_resolves_against"
 ---
 # 60 — A path-scoped check resolves pointers against the scoped set so cross-directory references report as dangling
 
@@ -14,7 +14,7 @@ path is indistinguishable from a reference to nothing.
 
 On this repository, with its committed configuration:
 
-```
+```text
 urzua check docs/adr/   ->  36 findings "does not resolve to any discovered record", blocking, exit 1
 urzua check docs/       ->   0
 ```

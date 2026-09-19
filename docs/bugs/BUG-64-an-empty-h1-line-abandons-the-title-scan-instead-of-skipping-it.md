@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN953GF5BXSZB5DFM2AD9
 Status: Open
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "not yet written -- a record with an empty `#` line followed by a real H1 whose number disagrees with the filename must report the disagreement"
+Regression-test: "rust/crates/urzua-core/src/rules.rs::an_empty_h1_skips_that_line_and_keeps_looking"
 ---
 # 64 — An empty H1 line abandons the title scan instead of skipping it
 

@@ -42,11 +42,15 @@ gave it the name.
 
 Round 6 of the 0.4.0 review measured the reach. `pointer.target-status` escaped the fallback by
 reading its vocabulary from `not_in`, but `narrative-field.stale` still calls `is_terminal_status`,
-so the arm is live for it against **this repository's own corpus**: a `milestone` whose `Blocked-on`
-names a `waiver` gets `is_terminal_status("waiver", ...) -> false` for every status, including the
-terminal ones. The record is counted as examined and can never produce a finding. Any type name an
-adopter declares -- and `init` proposes type names straight from directory names -- reaches the same
-arm by construction.
+so the arm is live for it: any declared type outside the five compiled-in names gets `false` for
+every status, including its terminal ones, while the record is counted as examined and can never
+produce a finding.
+
+This corpus does not currently reach it. `narrative_field_stale` returns early when the target has no
+`Status`, and the only type here outside the five -- `waiver` -- declares none, so a `Blocked-on`
+pointing at a waiver stops before the fallback rather than falling through it. The exposure is an
+adopter's: a type named anything else that does carry a `Status`, which is the ordinary case, and
+`init` proposes type names straight from directory names.
 
 ## Also: `waiver.rs` is a record type as a module
 

@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN7XW36XM92HNEQJEBE23
 Status: Open
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "not yet written -- run init against a corpus whose filenames carry no type prefix, then assert the proposed rules examine a non-zero number of records"
+Regression-test: "rust/crates/urzua-cli/src/commands/init.rs::a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity and ::a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire"
 ---
 # 61 — init writes no prefix so the rules it proposes examine zero records on the corpus it adopted
 

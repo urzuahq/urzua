@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN8AQY9N8P4TWZER0GC9D
 Status: Open
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "not yet written -- a record-shaped file in a subdirectory of a declared type dir must produce a diagnostic rather than vanish"
+Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped"
 ---
 # 62 — A record in a subdirectory of a declared type dir is owned by no type and nothing says so
 
