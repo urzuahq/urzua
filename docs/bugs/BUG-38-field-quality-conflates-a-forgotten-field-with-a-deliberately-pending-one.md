@@ -2,7 +2,7 @@
 Stable-Id: 01M2Q5574E1HVXH4TNDGXP8YT5
 Status: Fixed
 Found-in: 'MILE-80 -- reviewing its own recorded consequences before merge; the flattening was written down as intended and `Pending`''s definition contradicts that'
-Regression-test: 'not yet written -- a required field marked `Pending` must not block a repository that declared `field.quality: error`, and a `Blank` one must still block it'
+Regression-test: 'rust/crates/urzua-core/src/rules.rs::a_pending_field_belongs_to_field_pending_not_field_quality -- a Pending field belongs to field.pending, a Blank one stays with field.quality, and neither claims the other'
 ---
 # 38 — `field.quality` conflates a forgotten field with a deliberately pending one
 
@@ -56,3 +56,4 @@ means is what changed the verdict.
 > |---|---|---|
 > | 2026-09-17 | Filed. **Why:** `MILE-80` recorded this flattening as an accepted consequence. It is not acceptable -- `Pending` is a declaration and `Blank` is an omission, so no single declared level is correct for both. | **substantive** |
 > | 2026-09-17 | `Status: Open` → `Fixed` in the same change that filed it. **Why:** this record's own `Regression-test` value is a `Pending` marker, so filing it made `urzua check docs/` exit non-zero on this repo -- the bug reproduced itself in the record describing it, which settled that it was not deferrable. `field.pending` split out; `field.quality` keeps `Blank`/`Placeholder`. | **substantive** |
+> | 2026-09-19 | `Regression-test` now names the test that exists. **Why:** the field still read *"not yet written"* after the test was written and observed failing, so this record claimed the work was undone while the work was done. One of eight such records, found by the audit that filed `BUG-57`. | **structural** |

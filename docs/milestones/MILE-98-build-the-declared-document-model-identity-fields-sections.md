@@ -40,7 +40,7 @@ founding claim -- so the most consequential item in Phase 0 was the one item not
 
 Blocked on this: `MILE-4`, `MILE-5`, `MILE-6`, `MILE-7`, `MILE-55`, `MILE-97`.
 
-**And six bugs, deliberately.** `BUG-22`, `BUG-40`, `BUG-41`, `BUG-50`, `BUG-51`, `BUG-52` are one
+**And seven bugs, deliberately.** `BUG-22`, `BUG-40`, `BUG-41`, `BUG-50`, `BUG-51`, `BUG-52`, `BUG-57` are one
 family: *the engine knows something and never compares it to what the corpus says about it*. Every one
 is fixable today as another hardcoded comparison, and that is precisely the mistake --
 `PLACEHOLDER_TOKENS` was transcribed from this project's own templates by hand, the companion-pair
@@ -98,3 +98,4 @@ question, and does not answer it.
 > | 2026-09-18 | Filed. **Why:** layer 1 had no milestone. `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so the item that blocks six of ten open Phase 0 milestones, and the founding claim, was not on the plan. Filed with the evidence for each primitive rather than as a design sketch, since every part of it is now wanted by something measured. | **substantive** |
 > | 2026-09-19 | Six bugs recorded as deferred behind this. **Why:** `BUG-22`, `40`, `41`, `50`, `51` and `52` are one family and each is cheap to fix today as a hardcoded comparison -- which is the mistake the family consists of. Naming them here because a bug has no `Blocked-on` field, so this is the side of the dependency that can hold it. | **substantive** |
 > | 2026-09-19 | `RFC-35` recorded as adjacent. **Why:** *which records belong to a type* is the same class of question as how to find a record's identity, fields and sections, and is currently inferred rather than declared. Four heuristics have accreted around it; deciding it with this model deletes them instead of porting them. | **substantive** |
+> | 2026-09-19 | `BUG-57` added to the deferred set. **Why:** same family -- the engine holds a `Regression-test` claim and the test itself and never compares them, as with locators (`BUG-49`), companion fields (`BUG-41`) and the rule list (`BUG-52`). | **structural** |

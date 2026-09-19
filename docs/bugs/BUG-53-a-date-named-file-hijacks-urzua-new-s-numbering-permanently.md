@@ -2,7 +2,7 @@
 Stable-Id: 01M2W32794T1K6A3YCY3KE2XXQ
 Status: Fixed
 Found-in: 'A cumulative code review of v0.3.0..release, run before publishing 0.4.0 -- reproduced against the built binary'
-Regression-test: 'not yet written -- a corpus holding a date-named file alongside `ADR-1-x.md` must yield 2, not 2027'
+Regression-test: 'rust/crates/urzua-core/src/new_record.rs::a_date_named_file_is_not_a_record_number_observed_failing -- a date tail is rejected, a bare four-digit number is not, and next_display_number returns 2 on the mixed fixture'
 ---
 # 53 — A date-named file hijacks `urzua new`'s numbering permanently
 
@@ -46,3 +46,4 @@ parsing as a record number. Four digits is not arbitrary: it is what `init` requ
 > | 2026-09-19 | Filed, blocking the 0.4.0 release. **Why:** found by a cumulative review of the release diff, which is the first review of the shipped tree as a whole rather than of the PRs that built it. `BUG-37` shared one recogniser between `init` and `new` and dropped the four-digit constraint doing so; the corruption it causes is permanent because numbers are never reused. | **substantive** |
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** the bare-number branch now rejects a date tail -- `NN-NN-` after the first segment is a date, not a slug. A four-digit bound does not discriminate, because a year is four digits, which the first attempt at this fix got wrong. Verified: the fixture returns 2 where it returned 2027. Observed failing. | **substantive** |
 > | 2026-09-19 | Record corrected: the first fix attempt bounded the first segment to four digits, which does not discriminate -- a year is four digits. The shipped fix rejects a date *tail* instead: `NN-NN-` after the first segment. | **substantive** |
+> | 2026-09-19 | `Regression-test` now names the test that exists. **Why:** the field still read *"not yet written"* after the test was written and observed failing, so this record claimed the work was undone while the work was done. One of eight such records, found by the audit that filed `BUG-57`. | **structural** |
