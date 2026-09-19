@@ -15,7 +15,7 @@ Blocked-on: MILE-98
 > same spec
 
 `revision-log.change-class-required` checks the entry has a real class. **Nothing checks the other
-half.** A spec can be rewritten, gain a `substantive` entry, and keep its `Version`.
+half.** A spec can be rewritten, gain a `substantive` **or `structural`** entry, and keep its `Version`.
 
 It happened in the change that found it: `SPEC-1` was narrowed by roughly 60%, its `Subject` rewritten
 and two `substantive` entries added, with `Version: '0.3'` untouched. Caught by review.
@@ -28,8 +28,8 @@ version at all, because it asserts stability it does not have.
 
 ## Fix
 
-A rule pairing the two halves `ADR-14` and `SPEC-18` already decided: a record gaining a `substantive`
-revision entry in a commit that does not change its `Version` is a finding.
+A rule pairing the two halves `ADR-14` and `SPEC-18` already decided: a record gaining a `substantive` **or
+`structural`** revision entry in a commit that does not change its `Version` is a finding.
 
 Needs the git-history access `embodiment.consistency` already has (`ADR-32`), since "gained an entry
 in this change" is a diff question, not a document question. That is the same precomputed-by-the-caller
@@ -42,3 +42,4 @@ shape, not new I/O in `urzua-core`.
 > | 2026-09-19 | Filed. **Why:** `SPEC-18` requires a `Version` bump alongside every substantive revision entry and only the entry half is checked. `SPEC-1` was rewritten by ~60% with two substantive entries and `Version` left at `0.3`; review caught it, the engine did not. | **substantive** |
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
+> | 2026-09-19 | Scope corrected to include `structural` entries. **Why:** `SPEC-18` reads *"a substantive **or structural** change is a `Version` bump plus a Why-bearing revision-log entry"*, and this record named only the substantive half -- which would have built a rule enforcing half a decision, the same shape as `MILE-7` being filed as an exemption when the requirement runs both ways. | **substantive** |

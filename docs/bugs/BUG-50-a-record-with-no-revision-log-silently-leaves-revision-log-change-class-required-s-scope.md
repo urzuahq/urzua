@@ -25,8 +25,10 @@ was found by review, not by the tool that exists to find it.
 
 ## The scope this hides
 
-Measured 2026-09-19: **68 of 259 records have no revision-log block at all.** The rule reports
-`records_examined: 189`, and nothing says the other 68 were never in scope -- which is `BUG-40`'s
+Measured 2026-09-19, and the three numbers do not agree, which is itself the point: **264 record files
+exist, 68 carry no revision-log block, and the rule reports `records_examined: 196`**. 264 - 68 is 196,
+so the arithmetic holds -- what is missing is any statement of it. The report shows 196 and says
+nothing about the 68 -- which is `BUG-40`'s
 reporting gap made concrete.
 
 Some of those 68 are legitimate: a `waiver` may have nothing to log. That is the point -- the engine
@@ -48,3 +50,4 @@ is how a spec changes, and a spec can drop one without the tool objecting.
 > | 2026-09-19 | Filed. **Why:** narrowing `SPEC-1` destroyed 18 dated revision entries and the rule that governs them stayed green, because it keys on a literal marker and treats its absence as nothing to check. 68 of 259 records are outside its scope and the report does not say so. | **substantive** |
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
+> | 2026-09-19 | Counts reconciled and stated as a subtraction. **Why:** the record quoted 68 of 259 against `records_examined: 189` from different moments, which reads as an inconsistency. Re-measured together: 264 records, 68 without a block, 196 examined -- the arithmetic holds exactly, and the defect is that nothing in the report performs it. | **substantive** |
