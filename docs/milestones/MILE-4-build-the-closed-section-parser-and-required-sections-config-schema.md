@@ -39,6 +39,31 @@ Also worth narrowing when this is picked up: this milestone's *"composable conte
 section"* is `MILE-5`'s y-statement work and is not needed to check a Nygard corpus. Presence alone
 closes gap 4.
 
+## Measured, 2026-09-19
+
+Records missing at least one section their own type's template declares:
+
+| type | deviating | of |
+|---|---|---|
+| `adr` | **31** | 54 |
+| `spec` | **14** | 20 |
+| `bug` | **19** | 56 |
+| `rfc` | 7 | 35 |
+| `milestone` | 8 | 104 |
+| **total** | **79** | **269** |
+
+Nearly a third of the corpus, and `check` is green on all of it -- no rule examines sections at all.
+
+The drift is not historical. `BUG-38`, `BUG-39` and `BUG-40`, filed the same week, are each missing
+`What was wrong`, `Why nothing caught it` and `References`, because they were written with invented
+headings instead of the template's. `MILE-100` through `MILE-102` are missing `Why`. `RFC-35` was
+written by replacing the scaffold `urzua new` produced, deleting four of its six sections and
+substituting different ones -- changing the RFC format for this corpus in a single record, with
+nothing to notice.
+
+That is the case for this milestone stated as a number rather than an intuition: a type's template
+declares what its records look like, and the corpus has been diverging from it a record at a time.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -46,3 +71,4 @@ closes gap 4.
 > | 2026-09-17 | Absorbed into `RFC-33`'s declared document model. **Why:** this was scoped as a standalone section parser plus a `required_sections` schema. Under `ADR-53` those are two different layers: locating sections is `sections.from` in the document model (shape, `RFC-34`), and requiring them is a rule (policy). Building it as one thing would rebuild the conflation `ADR-53` exists to remove. The MADR paper test also already moved the target -- `sections.from: h2` is too flat, and `depth`/`items` are needed. | **substantive** |
 > | 2026-09-18 | `Blocked-on` now names `MILE-98`. **Why:** the declared document model had no milestone -- `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so six records were blocked on something the plan did not track. Naming it makes the dependency resolvable, and `narrative-field.stale` can report when it moves. | **structural** |
 > | 2026-09-19 | Re-scoped: the section *parser* moves to `MILE-98`, and this keeps `required_sections` as a rule. **Why:** filed as one deliverable -- a parser plus a schema -- which `ADR-53` splits in two. Locating a `##` block is shape and may ship as a primitive (`RFC-34`); requiring one is governance and must be declared. Marked *absorbed into `RFC-33`* on 2026-09-17, which was half right and left this record a duplicate of one third of `MILE-98`. Narrowed instead of closed, because the policy half is real work that nothing else owns. | **substantive** |
+> | 2026-09-19 | Measurement added: 79 of 269 records are missing at least one of their type's template sections. **Why:** the case for this milestone had been an intuition. Counted while restoring `RFC-35`, which had been written by replacing its scaffold rather than filling it in -- the same mechanism, visible in records filed the same week. | **substantive** |

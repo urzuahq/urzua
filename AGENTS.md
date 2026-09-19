@@ -64,7 +64,7 @@ conversation history. If you're doing multi-step work worth remembering:
   unbuilt): before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
   — a collision found this way is expected and cheap to rename, not a bug in the tool.
-- **Before hand-writing any record header or field, check `.urzua/config.toml`'s
+- **Before hand-writing any record header or field, check `.urzua/config.yaml`'s
   `header_shape`/`known_fields`/`pointer_fields`/`narrative_fields` for that type.** Declared config
   is the source of truth for header shape, field vocabulary, and relationship-field behavior — never
   freehand an annotation convention (e.g. baking a status or explanation into a pointer field's own
