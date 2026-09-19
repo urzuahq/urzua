@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2WCN8QRXB4EN7779QV4X19K
-Status: Open
+Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
 Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_claim_path_prefix_is_read_to_any_depth"
 ---

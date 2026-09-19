@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2WCN789ABR543084EZ90ENX
-Status: Open
+Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review, then reproduced on this repository's own corpus"
 Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_path_scope_narrows_what_is_reported_on_not_what_a_pointer_resolves_against"
 ---

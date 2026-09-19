@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M2WCN953GF5BXSZB5DFM2AD9
-Status: Open
+Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
 Regression-test: "rust/crates/urzua-core/src/rules.rs::an_empty_h1_skips_that_line_and_keeps_looking"
 ---

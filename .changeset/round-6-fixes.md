@@ -2,14 +2,15 @@
 default: patch
 ---
 
-`check`'s path argument narrows what is reported on, not what a pointer resolves against (BUG-60).
+Fixes BUG-60: `check`'s path argument narrows what is reported on, not what a pointer resolves
+against.
 
-`init` writes the type prefix its corpus actually uses, and declines to propose rules that corpus
-gives no identity to read (BUG-61).
+Fixes BUG-61: `init` writes the type prefix its corpus actually uses, and declines to propose rules
+that corpus gives no identity to read.
 
-A record-shaped file below a declared type dir but not in it is reported by the new opt-in
-`type.record-outside-declared-dir` rule rather than dropped in silence (BUG-62).
+Fixes BUG-62: a record-shaped file below a declared type dir but not in it is reported by the new
+opt-in `type.record-outside-declared-dir` rule rather than dropped in silence.
 
-`claim_paths` is read to any depth, as its own description says (BUG-63).
+Fixes BUG-63: `claim_paths` is read to any depth, as its own description says.
 
-An empty `#` line no longer abandons the H1 scan (BUG-64).
+Fixes BUG-64: an empty `#` line no longer abandons the H1 scan.
