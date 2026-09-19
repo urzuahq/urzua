@@ -3,6 +3,7 @@ Stable-Id: 01M2QC2094ERQXS4CR9J5SEX7D
 Status: Open
 Found-in: 'Asking why five specs could be `Draft` while shipped without CI failing -- the rule that should have spoken had silently examined almost none of them'
 Regression-test: 'not yet written -- a corpus where one enabled rule has nothing in scope must be distinguishable in the report from one where the rule is broken, and the per-rule count must be comparable across rules'
+Blocked-on: MILE-98
 ---
 # 40 — `records_examined` cannot distinguish nothing-to-check from checked-nothing, and is not one unit
 
@@ -73,3 +74,5 @@ caught five shipped `Draft` specs examined 33 records and reported success.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Filed. **Why:** asking why CI never failed on five `Draft`-but-shipped specs. The answer was not a missing rule -- it was that the rule which should have spoken had quietly examined almost none of the records in question, and the report presented that as coverage. Measured across all nineteen rules before filing, which is how the unit problem surfaced. | **substantive** |
+> | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
+> | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |

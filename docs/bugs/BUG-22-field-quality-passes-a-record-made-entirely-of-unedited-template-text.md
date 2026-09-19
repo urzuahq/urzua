@@ -3,6 +3,7 @@ Stable-Id: 01M28H5J42CN3DB4DJGKMQND6B
 Status: Open
 Found-in: 'found by an adversarial review of this record''s own first draft. The draft claimed `field_state::classify` reads unedited template header text as `Placeholder`; checking that against `PLACEHOLDER_TOKENS` rather than assuming it showed the opposite -- it classifies `Present`, and a record built entirely of unedited template text passes `check` with zero findings. The original investigation started from `urzua new` emitting `Status: null`, which turned out to be deliberate and correctly caught.'
 Regression-test: 'not yet written -- needs a planted-violation test asserting that a record whose header is verbatim template text produces `field.quality` findings, observed failing on current code first (it currently produces none). Fix scope undecided: extending PLACEHOLDER_TOKENS reaches only the exact strings this repo''s own templates use, which is the narrow-but-brittle option BUG-5 already took once.'
+Blocked-on: MILE-98
 ---
 # 22 — field.quality passes a record made entirely of unedited template text
 
@@ -96,9 +97,90 @@ independently since BUG-5 last touched either.
   classifies Blank correctly.
 - SPEC-12 / ADR-27 -- `urzua new`'s paths and what it fills versus leaves as placeholder.
 
+## Confirmed live, 2026-09-19
+
+A record whose every field is unedited template text passes clean -- **zero findings, exit 0** -- with
+`field.quality` and `header.required-fields` both declared `error`:
+
+```yaml
+Status: <status>
+Deciders: Your Name Here
+Date: 2026-01-01
+```
+
+None of those three values is in `PLACEHOLDER_TOKENS`, so all three classify as `Present`.
+
+## The list is a transcription of the templates
+
+The whole vocabulary is seven tokens: `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`,
+`(project lead)`, `(session author)`. Every one appears in `.urzua/templates/`:
+
+```text
+> Date: YYYY-MM-DD
+> Author: name
+> Deciders: name(s)
+```
+
+It was copied from this project's own templates by hand, which is why it generalises to nothing. A
+corpus whose template says `<status>` gets no protection at all -- and that corpus is the adopter
+case, since `init` writes a config and the adopter fills in a template.
+
+## The fix does not need a longer list
+
+**A field whose value equals its template's value for that field is unedited.** A comparison, not a
+vocabulary: it holds for any placeholder convention, any type, any corpus, and `urzua new` already
+reads templates (`template_body`), so the machinery exists.
+
+It does not cover a corpus with no template, so the declared-shape form (`RFC-33`'s `pattern`) remains
+the endpoint. This is strictly better than seven tokens and does not wait on `MILE-98`.
+
+Extending the list is explicitly **not** the fix -- widening a config list so a diff comes up clean is
+what `AGENTS.md` prohibits, and a closed list that silently treats everything unrecognised as valid is
+`is_terminal_status`'s `_ => &[]` in a rule that currently blocks CI.
+
+## A template-equality fix was written, shipped and reverted
+
+Two defects, both found by review, and together they rule the approach out rather than needing a
+patch.
+
+**It was inert.** `template_values` parsed `.urzua/templates/<type>.md` with the *type's* declared
+`header_shape`. Templates are shape-agnostic by design (`new_record.rs`: *"whatever this corpus
+already uses"*) -- every template here is blockquote while every type declares `yaml-frontmatter`, so
+`parse_yaml_frontmatter` bailed on line 1 and the map was empty for every type. The fix never ran in
+the repository that filed this bug.
+
+Worse, the evidence was misread: `field.quality` reporting **868 examined, 0 findings** was recorded
+as "this repository's own corpus is unaffected". It means the new code did not execute. That is this
+project's recurring failure -- a check reporting success without looking -- committed inside a fix for
+an instance of it.
+
+**And it would have been wrong if it had run.** `.urzua/templates/milestone.md` declares `Phase: 0`,
+which is a **real value**, and 42 milestones legitimately carry `Phase: '0'`. Equality cannot tell
+*never edited* from *correctly equal to the default*, so migrating templates to the declared shape
+would have turned CI red on 42 correct records.
+
+## What that leaves
+
+The diagnosis stands and is sharper: `PLACEHOLDER_TOKENS` is a transcription of this project's
+templates, and a corpus with any other convention is unprotected.
+
+The fix is not equality against a template. A template may legitimately hold a real default, so
+"matches the template" and "was never edited" are different questions, and nothing in the current
+schema distinguishes them. Candidates, none chosen:
+
+- **A declared shape per field** (`RFC-33`'s `pattern`), so a corpus states what a placeholder looks
+  like instead of the engine guessing. The endpoint, and it needs `MILE-98`.
+- **A template that marks its own placeholders**, so the template says which values are fill-me-in
+  rather than the engine inferring it from equality.
+
+Both are schema work. Neither is a longer token list.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`, filed against `render_synthetic_yaml`'s `null` emission. | **structural** |
 > | 2026-09-11 | Rewritten before merge. The original finding was false and inverted: `classify` reads unedited template text as `Present`, not `Placeholder`, and the `null` emission it indicted is deliberate, asserted by a named test, and correctly caught by `field.quality`. Re-aimed at the real defect the same investigation exposed -- a record of pure template text passing with zero findings. The original claim is preserved above rather than deleted, since how it was wrong is the instructive part. | **substantive** |
+> | 2026-09-19 | Confirmed live with a reproduction, and the fix reframed. **Why:** asked whether this still held before prioritising it. A record of entirely unedited template text passes with zero findings while `field.quality` is declared `error`. The seven-token list turns out to be a hand-copy of this project's own templates, which is why it protects no other corpus -- so the fix is to compare a field against its template's value rather than to lengthen the list. | **substantive** |
+> | 2026-09-19 | `Status: Fixed` → `Open`; the template-equality fix reverted. **Why:** review found it inert here -- templates are blockquote, every type declares `yaml-frontmatter`, so the parse produced nothing and `0 field.quality findings` was misread as a clean corpus rather than as code that never ran. And it would have been wrong had it run: the milestone template's `Phase: 0` is a real value that 42 records legitimately share, so equality cannot separate *unedited* from *equal to the default*. Reverted rather than patched a third time; the approach is ruled out, not the diagnosis. | **substantive** |
+> | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |

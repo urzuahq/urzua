@@ -1,15 +1,15 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
-Subject: 'The v0 CLI''s cross-cutting rules and success criteria -- the parent of the sequential command/type specs split out from it.'
+Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
 Derives-from: RFC-1
 ---
-# SPEC-1 — `urzua` v0 CLI
+# SPEC-1 — The `urzua` CLI
 
 ## Purpose
 
@@ -56,21 +56,26 @@ the escalation model before knowing what teams actually do is guessing at the ha
 backfill (the market wedge, not the dogfood wedge), any dashboard or service, and LLM-assisted
 anything. v0 is mechanical, offline, and deterministic.
 
-## Success criteria
+## Exit bar
+
+The four criteria are **the standard**, which is current truth and belongs here. Reaching them is
+backlog, which does not -- a spec has no `Status` and no `Blocked-on`, so a completion condition
+stored here surfaces nothing, which is how two of them sat unmet and untracked.
 
 v0 is done when, and only when:
 
 1. It runs green in **at least two** real target codebases, with different primary languages, via
-   pre-push hook and CI, with zero host-repo runtime added to either.
-2. It reproduces **every documented bug** in the acceptance suite against real corpora
-   (see §5). Not synthetic tests only — fixtures engineered to exhibit the same variance a real
-   corpus does.
+   pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the hook),
+   `MILE-100` (the second codebase). Self-hosting via CI is met.
+2. It reproduces **every documented bug** in the acceptance suite against real corpora. Not synthetic
+   tests only -- fixtures engineered to exhibit the same variance a real corpus does. -- `MILE-101`.
 3. It replaces the hand-written linter in at least one codebase outright, with that linter deleted.
+   -- `MILE-102`.
 4. `urzua new` is what people and agents actually invoke, because hand-authoring is now the slower
-   path.
+   path. -- `MILE-103`.
 
-Criterion 3 is the real bar. A tool that runs *alongside* the thing it was meant to replace has
-failed, whatever its test coverage says.
+**Criterion 3 is the real bar.** A tool that runs *alongside* the thing it was meant to replace has
+not replaced it.
 
 ## Commands
 
@@ -163,37 +168,36 @@ than year two.
 Configurable: record types and their directories, required fields per type and status, role
 requirements, status enums, back-pointer patterns, and which checks are errors vs. warnings.
 
-## Monorepo layout
+## Repository layout
 
-Polyglot, organized by language at the root (ADR-4). The repo is
-`github.com/urzuahq/urzua`; the Rust workspace is one directory inside it, not the root.
+Specified by `SPEC-21`. `ADR-4` decided the layout is language-first; `SPEC-21` records what it
+currently is, because a frozen decision cannot track a living inventory.
 
-```
-rust/
-  Cargo.toml              workspace
-  crates/
-    urzua-core/           schema, record parsing, validation rules — pure, no I/O
-    urzua-id/             stable ID generation and resolution (ADR-3)
-    urzua-agdr/           AgDR import/export (ADR-2)
-    urzua-cli/            command surface, config loading, output formatting
-                          → builds the `urzua` binary
-ts/                       agent-harness integrations, dashboard (reserved, empty)
-platform/                 deployment targets (reserved, empty — nothing is hosted)
-corpora/                  real-world test corpora, anonymized (see §5)
-docs/                     this repo's own records — the tool validates itself in CI
-Makefile                  root dispatch: make check / test / build
-```
+## Acceptance suite
 
-`urzua-core` stays pure with rules as data rather than code where possible — a design property the
-source implementations converged on independently (shared field-lookup module, pure-function
-signatures) after re-diverging when they didn't.
+Specified in full by `SPEC-4`, and built by `MILE-101`. A validator is only as trustworthy as the
+defects it has been shown to catch.
 
-Release artifacts build from `rust/`, so release automation must not assume a workspace at the repo
-root.
+## Open questions
 
-**CI from day one:** cross-compilation matrix (macOS arm64/x86, Linux) with path filters so a
-docs-only change doesn't trigger a full build, plus `urzua check` running against this repo's own
-`docs/` — the project's governance validated by the tool it's building, in the CI that builds it.
+None. Every question this spec carried has been answered or routed:
+
+| was asked | resolved by |
+|---|---|
+| Stable-ID encoding -- ULID vs UUIDv7 vs a prefix scheme | `ADR-21` -- ULID |
+| Where merge-time display-number assignment runs | `MILE-89` |
+| Whether one config expresses both corpora without an escape hatch | `MILE-51` -- run, verdict recorded |
+| Whether "is this check wired to CI" belongs in `check` or elsewhere | `SPEC-15` -- `doctor` |
+| Whether corpora can be anonymized without destroying their variance | `SPEC-2`, `RFC-19` |
+
+## References
+
+- ADR-1 (Rust), ADR-2 (record format), ADR-3 (identifiers)
+- RFC-1 — core+profile schema, Embodiment, revision log
+- SPEC-4 — the corpus acceptance suite that specifies the bug histories in full
+- SPEC-2 (`check`), SPEC-3 (configuration), SPEC-4 (acceptance suite), SPEC-5 (`init`) — the children
+> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 
 > **Revision log**
 >
@@ -219,75 +223,5 @@ docs-only change doesn't trigger a full build, plus `urzua check` running agains
 > | 2026-09-11 | Added the `## Output contract` section (`ADR-46`, `BUG-19`): one shared `Report`/`Notice`/`emit()` contract every command implements, replacing five independently-hand-rolled JSON shapes. **Why:** `check`, `fix`, `new`/`explain`/`graph`/`doctor` each printed a different, incompatible shape, contradicting `ADR-7`'s own "every future command must emit this same shape" rule; a real duplicate-JSON-key bug was found and killed in an earlier draft of this design (a generic envelope composed in via `#[serde(flatten)]`) before it shipped. | **substantive** |
 > | 2026-09-11 | Corrected this same section's opening sentence, which overclaimed "every command" when `urzua init`/`urzua migrate ids` are named exceptions two sentences later. **Why:** caught by review before merge -- the section contradicted itself within four lines. | **structural** |
 > | 2026-09-11 | "Every command" is now literally true: `init`/`migrate ids` gained real `Report` types (BUG-20), so the exception carved out above is removed rather than left stale. `§urzua init` also corrected -- it claimed type selection and template creation, neither of which is built (SPEC-5 is still `Draft` for exactly that reason). | **substantive** |
-
-## Acceptance test: the three-corpus suite
-
-**Specified in full by SPEC-4.** A validator is only as trustworthy as the defects it has been
-shown to catch. v0 must catch every documented bug class in the acceptance suite:
-
-- blank-field misdetection (corpus-a)
-- provisional-status misclassification (corpus-b)
-- reciprocity-checker data loss (corpus-c)
-- decoy-corpus silent no-op (corpus-a)
-- a regex invalidated by realistic corpus variance (corpus-a)
-- filename/title mismatch (corpus-a)
-
-These run against synthetic fixtures engineered to exhibit realistic corpus variance (irregular
-formatting, wrapped fields, mixed header shapes) rather than only clean, hand-crafted cases — a
-stronger validation set than a greenfield tool normally gets.
-
-**Second set (corpus-a):**
-
-- **Enum values must be checked against corpus *prose*, not just live field values.** A status enum
-  was missing a value zero records used today but that another document's own prose already
-  committed to as a future gate. `check`'s enum-completeness pass must scan referenced-but-unused
-  values across the whole corpus, not just currently-instantiated fields — a value can be "real" a
-  release before anything is set to it.
-- **A rule that exists and a rule that's wired to something are different claims.** One source
-  implementation's spec-level checker ran clean for weeks — not because the corpus was clean, but
-  because it was never actually invoked from a CI job or hook, only chained into a shared local
-  command. `audit`/`check` must report their own invocation context (was this run from CI, a hook,
-  or ad hoc) so "0 errors" from an orphaned check can't be mistaken for "0 errors" from an
-  enforced one. Candidate for `urzua doctor` — see Open questions.
-- **Discovery must be scoped to what the VCS actually tracks, not the filesystem.** One
-  implementation globbed disk directly; an untracked scratch file anywhere under the records
-  directory failed every check run from that checkout, including ones touching zero records. `check`
-  must default to `git ls-files` ∪ staged paths, never a raw directory walk, with an explicit
-  documented fallback only when there's no git repo at all (see `urzua-core`'s discovery module).
-- **A structural change has a blast radius outside the file it's made in.** Stripping heading
-  numbers from one document broke section cross-references living in a completely different
-  document that nobody thought to check. `migrate`/`audit` needs a reverse-reference scan — "what
-  else in the corpus points at the specific thing about to be restructured" — run *before* any
-  retrofit, not discovered after. This is the structural-layer sibling of the reciprocity-checker
-  data-loss bug above: a transformation in place A silently breaking an invariant place B depends on.
-- **Structural presence is not content-scope correctness, and this is a permanent ceiling, not a
-  maturity gap.** A required section existed, had the right shape, passed every check — and still
-  misrepresented the actual decision, because presence-checking cannot verify that a section's
-  *content* covers the *scope* it claims to. `check` should not attempt to close this gap
-  mechanically; RFC-1 should say explicitly that review remains a permanent required step for
-  exactly this class of defect, so v0 is never sold as replacing a human reader, only the mechanical
-  failures above it.
-
-## Open questions
-
-- Exact stable-ID encoding — ULID vs. UUIDv7 vs. a short human-typable prefix scheme (ADR-3
-  deliberately deferred this).
-- Where merge-time display-number assignment runs, and how it stays deterministic under concurrent
-  merges. **Hardest correctness problem in v0.**
-- Whether the config can genuinely express both target codebases' rules without an escape hatch.
-  If it can't, that's a finding about the schema, not a config bug — record it rather than patching
-  around it.
-- Whether "is this check actually wired to CI/a hook" belongs inside `check`'s own output or as a
-  separate `urzua doctor` command. Leaning separate — `check` validates records; whether *itself* is
-  correctly invoked is a different question with a different failure mode, and conflating them risks
-  the same shape of bug as collapsing blank/placeholder/pending into one state.
-- Whether corpora can be anonymized without destroying the variance that makes them a useful test.
-
-## References
-
-- ADR-1 (Rust), ADR-2 (record format), ADR-3 (identifiers)
-- RFC-1 — core+profile schema, Embodiment, revision log
-- SPEC-4 — the corpus acceptance suite that specifies the bug histories in full
-- SPEC-2 (`check`), SPEC-3 (configuration), SPEC-4 (acceptance suite), SPEC-5 (`init`) — the children
-> | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
-> | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
+> | 2026-09-19 | Narrowed to the CLI; `Version` `0.3` → `0.4`; revision log moved to the end of the document. **Why:** carried the repository layout (now `SPEC-21`), a duplicate of the acceptance suite it already said `SPEC-4` specifies in full, and five open questions every one of which had been answered or routed. The four exit criteria stay -- they are the standard, which is current truth -- and each now names the milestone reaching it, because a spec cannot report an unmet condition. The revision log had been sitting *inside* the Monorepo layout section, which is why removing that section destroyed it on the first attempt. | **substantive** |
+> | 2026-09-19 | Retitled from *`urzua` v0 CLI* to *The `urzua` CLI*, and the file renamed to match. **Why:** the subject is the CLI, not one version of it. v0's exit bar is stated here because that is current truth about the standard, but the spec outlives it -- a spec whose number is permanent per subject (`ADR-14`) should not carry a version in its name. | **structural** |

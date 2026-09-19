@@ -13,7 +13,7 @@ Anything about *running* Urzua somewhere, organized by environment or deployment
 
 ## Nothing is hosted yet
 
-v0 is an offline, deterministic CLI ([SPEC-1](../docs/specs/SPEC-1-v0-cli.md)) — it has no server,
+v0 is an offline, deterministic CLI ([SPEC-1](../docs/specs/SPEC-1-cli.md)) — it has no server,
 no service, and no infrastructure. This directory stays empty until something is genuinely deployed.
 
 That's deliberate rather than incidental. The moment Urzua has a hosted component it acquires

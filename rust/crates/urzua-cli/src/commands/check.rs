@@ -155,6 +155,29 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
             rules::embodiment_consistency(&records, &drifted)
         }),
+        crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
+            // Tracked *and* on disk, because neither alone is enough. Tracked
+            // alone passes a staged deletion: `git rm` drops the path from
+            // `ls-files` but leaves it in `diff --cached`, and discovery unions
+            // the two -- so the rule would stay silent on exactly the case it
+            // exists for. On disk alone passes a gitignored file, which would
+            // then fail in CI. A directory satisfies neither.
+            let tracked: std::collections::HashSet<&std::path::Path> =
+                discovered.paths.iter().map(|p| p.as_path()).collect();
+            let present = |p: &str| {
+                let path = std::path::Path::new(p);
+                if !tracked.contains(path) {
+                    return false;
+                }
+                // `is_file()` folds every error into `false`, so an unreadable
+                // path would be reported as missing. This rule is declared
+                // `error` in repositories that enable it, and a blocking
+                // finding the tool cannot substantiate is worse than silence --
+                // so only a definite absence counts.
+                repo_root.join(path).try_exists().unwrap_or(true)
+            };
+            rules::embodiment_locator_exists(&records, &present)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,

@@ -383,7 +383,7 @@ a structured document and the easiest one to write.
 - RFC-5 §2 — the record-side pointer whose introduction can cause the blindness described in the
   Motivation.
 - RFC-10 — the sibling scope assumption, at header granularity.
-- `docs/specs/SPEC-1-v0-cli.md` — no-silent-no-op, which §5 extends from "did it run" to "has it ever
+- `docs/specs/SPEC-1-cli.md` — no-silent-no-op, which §5 extends from "did it run" to "has it ever
   failed."
 - RFC-13 — a vacated identifier treated as a first-class record, the concrete cost §6 declines to
   multiply per package.

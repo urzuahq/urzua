@@ -36,6 +36,7 @@ pub const RULE_CLAIM_STATUS_AGREEMENT: &str = "claim.status-agreement";
 pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
 pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";
 pub const RULE_EMBODIMENT_CONSISTENCY: &str = "embodiment.consistency";
+pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
@@ -59,6 +60,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_FILENAME_TITLE_CONSISTENCY,
     RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
     RULE_EMBODIMENT_CONSISTENCY,
+    RULE_EMBODIMENT_LOCATOR_EXISTS,
     RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
 ];
@@ -1546,6 +1548,80 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
     }
 }
 
+/// A `Realized-by` locator naming a path that is not in the working tree.
+///
+/// `embodiment.consistency` asks whether a locator's *content* changed since
+/// the claim was written, so a locator naming nothing has no history to compare
+/// and drifts past the one rule built to notice (BUG-49). The whole `Embodiment`
+/// model rests on these paths: `Verified` and `Implemented` are computed from
+/// them, so a record can claim verified work while naming a deleted file, and
+/// the claim reads as stronger than `Not started` rather than weaker.
+///
+/// `present` is supplied by the caller -- `urzua-core` is pure (ADR-5) and does
+/// not touch the filesystem.
+pub fn embodiment_locator_exists(
+    records: &[Record],
+    present: &dyn Fn(&str) -> bool,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    for record in records {
+        let Some(value) = record.header.get("Realized-by") else {
+            continue;
+        };
+        // One per record, not per locator: `records_examined` is each rule's
+        // input population (SPEC-2), and counting locators reported 129 against
+        // 55 records. It stays higher than `embodiment.consistency`'s count,
+        // which needs both `Embodiment` and `Realized-by` where this needs only
+        // the latter -- a different population, not a disagreement.
+        examined += 1;
+        let realized = parse_realized_by(value);
+        for locator in realized
+            .spec
+            .iter()
+            .chain(&realized.code)
+            .chain(&realized.test)
+        {
+            // An empty locator names nothing, and `join("")` is the repository
+            // root, which exists -- so it would pass while `compute_embodiment`
+            // still reports `Implemented` off the back of it.
+            if locator.trim().is_empty() {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: "Realized-by has an empty locator".to_string(),
+                });
+                continue;
+            }
+            if present(locator) {
+                continue;
+            }
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!("Realized-by names '{locator}', which is not in the working tree"),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
 /// Rule (ADR-0018/ADR-0032): a record's stated `Embodiment` must agree with
 /// what its own `Realized-by` locators compute to, including drift -- a
 /// locator that changed, per git history, since the `Realized-by` line was
@@ -2238,7 +2314,7 @@ mod tests {
         // Every spec's `Parent: SPEC-N` pointer was completely unchecked
         // before Parent was added to this rule's scanned fields -- a typo'd
         // or dangling Parent would never have been caught.
-        let parent = record("docs/specs/SPEC-1-v0-cli.md", "spec", "> Status: Draft\n");
+        let parent = record("docs/specs/SPEC-1-cli.md", "spec", "> Status: Draft\n");
         let child = record(
             "docs/specs/SPEC-2-urzua-check.md",
             "spec",
@@ -2828,6 +2904,41 @@ mod tests {
         let line = "concatenation -- which also closes BUG-36, where a directory name escaped";
         assert!(extract_references(line).is_empty());
         assert_eq!(scan_references(line), vec!["BUG-36".to_string()]);
+    }
+
+    /// BUG-49, found live: `ADR-42` named `.urzua/config.toml` for two days
+    /// after `ADR-52` deleted it, and nothing reported it.
+    #[test]
+    fn a_locator_naming_a_missing_path_is_an_error_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Realized-by: code:src/real.rs, code:src/gone.rs\n",
+        );
+        let present = |p: &str| p == "src/real.rs";
+
+        let (exec, findings) = embodiment_locator_exists(std::slice::from_ref(&r), &present);
+        // One record, whatever its locator count -- `records_examined` is the
+        // rule's input population, not its work count.
+        assert_eq!(exec.records_examined, 1);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
+
+        // Every locator present means silence, not a rule that cannot fire.
+        let all_there = |_: &str| true;
+        let (_, none) = embodiment_locator_exists(std::slice::from_ref(&r), &all_there);
+        assert!(none.is_empty(), "{none:?}");
+
+        // An empty locator names nothing, and the repo root exists -- so it
+        // passed a raw existence check while still computing to `Implemented`.
+        let empty = record("docs/adr/ADR-2-y.md", "adr", "> Realized-by: code:\n");
+        let (_, findings) = embodiment_locator_exists(&[empty], &all_there);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("empty locator"),
+            "{findings:?}"
+        );
     }
 
     #[test]
