@@ -39,3 +39,4 @@ shape, not new I/O in `urzua-core`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-18` requires a `Version` bump alongside every substantive revision entry and only the entry half is checked. `SPEC-1` was rewritten by ~60% with two substantive entries and `Version` left at `0.3`; review caught it, the engine did not. | **substantive** |
+> | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |

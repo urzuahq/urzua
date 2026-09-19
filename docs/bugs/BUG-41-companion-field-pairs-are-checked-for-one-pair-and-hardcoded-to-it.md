@@ -48,3 +48,4 @@ implementation side.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-18 | Filed. **Why:** found while fixing `BUG-26`, and separated from that record because it is specific to neither specs nor `Embodiment`. The rule for this shape already exists and was written for one pair; a second pair with the same semantics went unchecked for as long as it has existed. | **substantive** |
+> | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |

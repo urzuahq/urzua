@@ -40,6 +40,14 @@ founding claim -- so the most consequential item in Phase 0 was the one item not
 
 Blocked on this: `MILE-4`, `MILE-5`, `MILE-6`, `MILE-7`, `MILE-55`, `MILE-97`.
 
+**And six bugs, deliberately.** `BUG-22`, `BUG-40`, `BUG-41`, `BUG-50`, `BUG-51`, `BUG-52` are one
+family: *the engine knows something and never compares it to what the corpus says about it*. Every one
+is fixable today as another hardcoded comparison, and that is precisely the mistake --
+`PLACEHOLDER_TOKENS` was transcribed from this project's own templates by hand, the companion-pair
+check knows one pair, the revision-log rule keys on a literal string. **Each is a comparison written as
+a constant.** Under a declared model they are declarations, so fixing them first means fixing them
+twice.
+
 It is also subtractive, which is the argument for doing it rather than working around it:
 
 - `header_shape`'s three-value enum becomes one case of `fields.from`.
@@ -81,3 +89,4 @@ question, and does not answer it.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-18 | Filed. **Why:** layer 1 had no milestone. `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so the item that blocks six of ten open Phase 0 milestones, and the founding claim, was not on the plan. Filed with the evidence for each primitive rather than as a design sketch, since every part of it is now wanted by something measured. | **substantive** |
+> | 2026-09-19 | Six bugs recorded as deferred behind this. **Why:** `BUG-22`, `40`, `41`, `50`, `51` and `52` are one family and each is cheap to fix today as a hardcoded comparison -- which is the mistake the family consists of. Naming them here because a bug has no `Blocked-on` field, so this is the side of the dependency that can hold it. | **substantive** |

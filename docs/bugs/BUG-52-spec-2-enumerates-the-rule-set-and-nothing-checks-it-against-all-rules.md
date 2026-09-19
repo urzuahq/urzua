@@ -44,3 +44,4 @@ the corpus says about it.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-2` called itself the complete current rule set while understating it by four, across two days and four separate changes to `rules.rs`. The claim maps exactly onto `ALL_RULES`, so it is checkable, and nothing checks it. | **substantive** |
+> | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
