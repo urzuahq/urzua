@@ -166,7 +166,15 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 discovered.paths.iter().map(|p| p.as_path()).collect();
             let present = |p: &str| {
                 let path = std::path::Path::new(p);
-                tracked.contains(path) && repo_root.join(path).is_file()
+                if !tracked.contains(path) {
+                    return false;
+                }
+                // `is_file()` folds every error into `false`, so an unreadable
+                // path would be reported as missing. This rule is declared
+                // `error` in repositories that enable it, and a blocking
+                // finding the tool cannot substantiate is worse than silence --
+                // so only a definite absence counts.
+                repo_root.join(path).try_exists().unwrap_or(true)
             };
             rules::embodiment_locator_exists(&records, &present)
         }),
