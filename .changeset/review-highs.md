@@ -1,5 +1,5 @@
 ---
-"urzua": minor
+default: minor
 ---
 
 Three defects found by reviewing the unreleased diff before cutting a release.

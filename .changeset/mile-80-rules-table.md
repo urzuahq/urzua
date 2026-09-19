@@ -1,5 +1,5 @@
 ---
-"urzua": major
+default: major
 ---
 
 Every rule is opt-in and carries a declared severity (`MILE-80`, implementing `ADR-53`).

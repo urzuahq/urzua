@@ -1,5 +1,5 @@
 ---
-"urzua": patch
+default: patch
 ---
 
 Four more defects from the same pre-release review.

@@ -29,7 +29,7 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint rust-build test records ## Run exactly what CI runs, locally
+ci: fmt-check lint rust-build test records release-guard ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
 hooks-install: ## Install the pre-push hook (fmt + clippy, not the full suite)
@@ -64,3 +64,6 @@ rust-clean: ## Remove the Rust target directory
 
 records: rust-build ## Validate this repo's own governance records
 	@$(RUST_DIR)/target/release/urzua check docs/
+
+release-guard: ## Exercise the release guard's planted-violation cases
+	@.github/scripts/release-guard.test.sh
