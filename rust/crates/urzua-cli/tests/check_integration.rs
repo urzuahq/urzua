@@ -954,3 +954,43 @@ fn a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped() {
         "with a message naming the cause: {stdout}"
     );
 }
+
+#[test]
+fn a_scope_excludes_a_finding_about_a_file_that_is_not_a_record() {
+    let dir = fixture_repo("scope-nonrecord");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs/archive")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {type.record-outside-declared-dir: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/archive/BUG-1-old.md"),
+        "---\nStatus: Open\n---\n# 1 — Old\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let whole = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
+    assert!(
+        whole.contains("docs/bugs/archive/BUG-1-old.md"),
+        "unscoped, the unowned file is reported: {whole}"
+    );
+
+    let scoped =
+        String::from_utf8_lossy(&run_urzua(&dir, &["check", "docs/adr/"]).stdout).to_string();
+    assert!(
+        !scoped.contains("docs/bugs/archive/BUG-1-old.md"),
+        "scoping to docs/adr/ must exclude it, though it is not a record: {scoped}"
+    );
+}

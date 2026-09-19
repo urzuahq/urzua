@@ -287,12 +287,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         findings.extend(rule_findings);
     }
 
-    // Only findings about a record are scoped away. A finding about the config
-    // names the config file, which is outside every record scope and would
-    // otherwise disappear the moment a path argument is given.
+    // A finding about the config names the config file, which is outside every
+    // record scope and must survive a path argument. Everything else is scoped
+    // by the path it names -- including findings about files that are
+    // deliberately not records, which "not a record" would have exempted.
     if !paths.is_empty() {
-        let is_record = |p: &std::path::Path| records.iter().any(|r| r.path == p);
-        findings.retain(|f| in_scope.contains(f.file.as_path()) || !is_record(&f.file));
+        findings.retain(|f| in_scope.contains(f.file.as_path()) || f.file == config_path.as_path());
     }
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.

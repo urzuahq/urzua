@@ -20,7 +20,8 @@ A changeset that names the record without one is invisible to it. The round-6 ch
 ```
 
 for each of five bugs, all of which were still `Status: Open`. The rule read the changeset, examined
-2 records, and reported no findings.
+2 claim inputs -- `records_examined` counts the claim files it was handed, not corpus records -- and
+reported no findings.
 
 The inverse of `BUG-36`: that was a claim to close an open record, caught. This is the same
 disagreement, stated in a form the rule does not parse, and reported as agreement.
@@ -29,8 +30,8 @@ disagreement, stated in a form the rule does not parse, and reported as agreemen
 
 The rule's tests supply changesets written with a closing verb, because that is the shape the rule
 recognizes -- so they exercise the parser's successes and never its silence. `records_examined: 2` was
-visible in every run on this corpus and read as "there are two changesets" rather than "the claims in
-them were not found".
+visible in every run on this corpus. It counts claim files read, so it was two whether or not a claim
+was found in either, and it read as confirmation the rule had done its job.
 
 Deciding what counts as a claim is the open question, not an oversight to patch: a changeset may
 legitimately name a record it does not close, so treating a bare mention as a claim trades this
