@@ -78,6 +78,13 @@ Not designed in the abstract. Each part is wanted by something already measured:
 3. This repository's own `###` headings are visible to the section rules.
 4. `header.deprecated-shape` is deleted, not ported.
 
+## Sits beside `RFC-35`
+
+`RFC-35` asks what a record type's `dir` means -- *this directory* or *this subtree* -- which is the
+same class of question as `identity`, `fields` and `sections`, and is currently answered by an
+undeclared prefix rule with four heuristics stacked on it. Deciding it before or alongside this
+milestone deletes those heuristics rather than carrying them into the declared model.
+
 ## Deliberately not here
 
 The rule vocabulary. `ADR-53` decided the principle and the document model and **left the nine
@@ -90,3 +97,4 @@ question, and does not answer it.
 > |---|---|---|
 > | 2026-09-18 | Filed. **Why:** layer 1 had no milestone. `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so the item that blocks six of ten open Phase 0 milestones, and the founding claim, was not on the plan. Filed with the evidence for each primitive rather than as a design sketch, since every part of it is now wanted by something measured. | **substantive** |
 > | 2026-09-19 | Six bugs recorded as deferred behind this. **Why:** `BUG-22`, `40`, `41`, `50`, `51` and `52` are one family and each is cheap to fix today as a hardcoded comparison -- which is the mistake the family consists of. Naming them here because a bug has no `Blocked-on` field, so this is the side of the dependency that can hold it. | **substantive** |
+> | 2026-09-19 | `RFC-35` recorded as adjacent. **Why:** *which records belong to a type* is the same class of question as how to find a record's identity, fields and sections, and is currently inferred rather than declared. Four heuristics have accreted around it; deciding it with this model deletes them instead of porting them. | **substantive** |
