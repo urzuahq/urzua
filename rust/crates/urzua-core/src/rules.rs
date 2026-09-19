@@ -1158,17 +1158,9 @@ pub fn claim_status_agreement(
     )
 }
 
-/// `template_values` maps a record type to its template's own value for each
-/// field. A field still holding that value was never edited, whatever the
-/// placeholder convention -- which is what `PLACEHOLDER_TOKENS` was reaching
-/// for and could not express: its seven entries were transcribed from *this*
-/// project's templates, so a corpus whose template reads `<status>` got no
-/// protection at all (BUG-22). Supplied by the caller, since `urzua-core` does
-/// not read files (ADR-5).
 pub fn field_quality(
     records: &[Record],
     required_by_type: &HashMap<String, Vec<String>>,
-    template_values: &HashMap<String, HashMap<String, String>>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_FIELD_QUALITY;
     let mut findings = Vec::new();
@@ -1179,19 +1171,7 @@ pub fn field_quality(
             continue;
         };
         for field in required {
-            let value = record.header.get(field);
-            let unedited = template_values
-                .get(&record.record_type)
-                .and_then(|fields| fields.get(field))
-                .zip(value)
-                .is_some_and(|(template, actual)| {
-                    template.trim().eq_ignore_ascii_case(actual.trim())
-                });
-            let state = if unedited {
-                FieldState::Placeholder
-            } else {
-                classify(value)
-            };
+            let state = classify(record.header.get(field));
             examined += 1;
             // `Pending` is `field.pending`'s subject, not this rule's: it means
             // someone declared the work unfinished, where Blank and Placeholder
@@ -2792,7 +2772,7 @@ mod tests {
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 
-        let (exec, findings) = field_quality(&[r], &required, &HashMap::new());
+        let (exec, findings) = field_quality(&[r], &required);
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Placeholder"));
@@ -2930,45 +2910,6 @@ mod tests {
         assert!(none.is_empty(), "{none:?}");
     }
 
-    /// BUG-22: a record of entirely unedited template text passed with zero
-    /// findings, because `PLACEHOLDER_TOKENS` was transcribed from this
-    /// project's own templates and knew nothing of any other convention.
-    #[test]
-    fn a_field_still_holding_its_template_value_is_a_placeholder_observed_failing() {
-        let mut required = HashMap::new();
-        required.insert("adr".to_string(), vec!["Status".to_string()]);
-
-        let mut templates = HashMap::new();
-        templates.insert(
-            "adr".to_string(),
-            HashMap::from([("Status".to_string(), "<status>".to_string())]),
-        );
-
-        // Not in PLACEHOLDER_TOKENS, and no rule could have known it was one.
-        let unedited = record("docs/adr/ADR-1-x.md", "adr", "> Status: <status>\n");
-        let (_, findings) = field_quality(std::slice::from_ref(&unedited), &required, &templates);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, FindingSeverity::Error);
-
-        // Case and surrounding space do not rescue it.
-        let spaced = record("docs/adr/ADR-2-y.md", "adr", "> Status:  <STATUS> \n");
-        let (_, findings) = field_quality(std::slice::from_ref(&spaced), &required, &templates);
-        assert_eq!(findings.len(), 1, "{findings:?}");
-
-        // A real value is silent.
-        let edited = record("docs/adr/ADR-3-z.md", "adr", "> Status: Accepted\n");
-        let (_, findings) = field_quality(std::slice::from_ref(&edited), &required, &templates);
-        assert!(findings.is_empty(), "{findings:?}");
-
-        // A type with no template falls back to `classify` rather than passing
-        // everything -- absence of a template is not a licence.
-        let (_, findings) = field_quality(&[unedited], &required, &HashMap::new());
-        assert!(
-            findings.is_empty(),
-            "no template, and <status> is not a known token"
-        );
-    }
-
     #[test]
     fn a_pending_field_belongs_to_field_pending_not_field_quality() {
         // BUG-38, observed on this repo's own corpus: `field.quality` held both
@@ -2979,7 +2920,7 @@ mod tests {
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Deciders".to_string()]);
 
-        let (_, quality) = field_quality(std::slice::from_ref(&r), &required, &HashMap::new());
+        let (_, quality) = field_quality(std::slice::from_ref(&r), &required);
         assert!(quality.is_empty(), "{quality:?}");
 
         let (_, pending) = field_pending(std::slice::from_ref(&r), &required);
@@ -2989,7 +2930,7 @@ mod tests {
         // The forgotten case stays with field.quality, and field.pending
         // must not claim it.
         let blank = record("docs/adr/0002-y.md", "adr", "> Deciders:\n");
-        let (_, q2) = field_quality(std::slice::from_ref(&blank), &required, &HashMap::new());
+        let (_, q2) = field_quality(std::slice::from_ref(&blank), &required);
         assert_eq!(q2.len(), 1);
         assert_eq!(q2[0].severity, FindingSeverity::Error);
         let (_, p2) = field_pending(&[blank], &required);
@@ -3002,7 +2943,7 @@ mod tests {
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 
-        let (_, findings) = field_quality(&[r], &required, &HashMap::new());
+        let (_, findings) = field_quality(&[r], &required);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3015,7 +2956,7 @@ mod tests {
         let mut required = HashMap::new();
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 
-        let (_, findings) = field_quality(&[r], &required, &HashMap::new());
+        let (_, findings) = field_quality(&[r], &required);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
