@@ -20,6 +20,7 @@ use urzua_core::report::{CouldNotRun, Report};
 
 mod commands;
 mod discovery;
+mod gate;
 
 /// `Notice.subject` constants, one per emitter, matching `Finding.rule`'s
 /// existing `const RULE_ID` convention (ADR-0046).

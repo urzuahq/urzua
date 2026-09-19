@@ -47,21 +47,34 @@ pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<Prop
         *counts.entry(parent.to_path_buf()).or_insert(0) += 1;
     }
 
-    // Discovery matches a type's `dir` by path prefix, so a proposed directory
-    // that contains another proposed directory would claim that one's records
-    // too. Dropping the outer one is the conservative choice: a type whose
-    // records are a superset of another's is never what an adopter meant.
+    // Discovery matches a type's `dir` by path prefix, so a directory proposed
+    // alongside one that contains it is already covered by the outer type. The
+    // outer one wins: dropping it instead adopts an `archive/` subdirectory and
+    // leaves its parent's records ungoverned, with `check` reporting success
+    // over them (BUG-43).
     let dirs: Vec<PathBuf> = counts.keys().cloned().collect();
-    let contained: Vec<PathBuf> = dirs
+    let nested: Vec<PathBuf> = dirs
         .iter()
-        .filter(|outer| {
+        .filter(|inner| {
             dirs.iter()
-                .any(|inner| inner != *outer && inner.starts_with(outer))
+                .any(|outer| outer != *inner && inner.starts_with(outer))
         })
         .cloned()
         .collect();
-    for dir in &contained {
-        counts.remove(dir);
+    for dir in &nested {
+        let Some(n) = counts.remove(dir) else {
+            continue;
+        };
+        // Folded into the nearest enclosing type rather than discarded, so the
+        // count an adopter is shown matches what `check` will examine.
+        if let Some(outer) = counts
+            .keys()
+            .filter(|o| dir.starts_with(o))
+            .max_by_key(|o| o.components().count())
+            .cloned()
+        {
+            *counts.entry(outer).or_insert(0) += n;
+        }
     }
 
     let mut names: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
@@ -144,6 +157,13 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
     // decision to make once they have read it.
     let mut rules = Mapping::new();
     for id in urzua_core::rules::ALL_RULES {
+        // A rule that requires options cannot be proposed bare: it would either
+        // be rejected at load time or, worse, run inert (BUG-44). Adopt mode
+        // has nothing to say about which statuses a corpus considers closed,
+        // so it declines to guess and leaves the rule undeclared.
+        if urzua_core::config::rule_requires_options(id) {
+            continue;
+        }
         rules.insert(Value::from(*id), Value::from("warn"));
     }
 
@@ -301,6 +321,44 @@ mod tests {
         let parsed = urzua_core::config::parse(&rendered)
             .expect("init must never emit a config it cannot read back");
         assert_eq!(parsed.record_types.get("adr").unwrap().dir, hostile);
+    }
+
+    /// BUG-43: the containment filter dropped the *outer* directory, so a
+    /// corpus with an `archive/` subdirectory adopted one record and left three
+    /// ungoverned, with `check` then reporting success over them.
+    #[test]
+    fn a_nested_record_directory_does_not_displace_its_parent_observed_failing() {
+        let discovered: Vec<PathBuf> = [
+            "doc/adr/0001-a.md",
+            "doc/adr/0002-b.md",
+            "doc/adr/0003-c.md",
+            "doc/adr/archive/0009-old.md",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+
+        let proposed = detect_record_types(Path::new("/repo"), &discovered);
+        assert_eq!(proposed.len(), 1, "{proposed:?}");
+        assert_eq!(proposed[0].dir, "doc/adr");
+        assert_eq!(proposed[0].name, "adr");
+        // The nested record is folded in, so the count an adopter is shown
+        // matches what `check` will examine.
+        assert_eq!(proposed[0].record_count, 4);
+    }
+
+    /// BUG-44: a rule that cannot be declared without options must not be
+    /// proposed bare -- the generated config would not load.
+    #[test]
+    fn the_generated_config_omits_rules_that_require_options() {
+        let rendered = render_config_yaml(&[ProposedRecordType {
+            name: "adr".to_string(),
+            dir: "docs/adr".to_string(),
+            record_count: 1,
+        }]);
+        assert!(!rendered.contains("claim.status-agreement"), "{rendered}");
+        assert!(!rendered.contains("pointer.target-status"), "{rendered}");
+        urzua_core::config::parse(&rendered).expect("init must emit a config that loads");
     }
 
     /// Two runs over the same corpus must produce the same bytes -- a

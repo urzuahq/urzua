@@ -45,9 +45,14 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         }
     }
 
-    let (exec1, findings1) =
-        rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type);
-    let (exec2, findings2) = rules::supersession_reciprocity(&records);
+    let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
+        rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type)
+    });
+    let (exec2, findings2) = crate::gate::gated(
+        &config,
+        rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
+        || rules::supersession_reciprocity(&records),
+    );
     let mut findings = findings1;
     findings.extend(findings2);
 

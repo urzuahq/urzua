@@ -14,44 +14,6 @@ use crate::discovery::{
 };
 use crate::emit;
 
-/// A rule a repository has not declared does not run at all -- it is not run
-/// and then filtered, because an opt-in rule that still costs its own
-/// execution is opt-in in name only. The declared `level` replaces whatever
-/// severity the rule body chose, which is the whole point of MILE-80: the
-/// severity is the repository's call, not `rules.rs`'s.
-fn gated(
-    config: &urzua_core::config::Config,
-    id: &str,
-    run: impl FnOnce() -> (RuleExecution, Vec<Finding>),
-) -> (RuleExecution, Vec<Finding>) {
-    use urzua_core::config::RuleLevel;
-    use urzua_core::report::{FindingSeverity, RuleStatus};
-
-    let level = config.rules.get(id).map(|s| s.level);
-    match level {
-        None | Some(RuleLevel::Off) => (
-            RuleExecution {
-                rule: id.to_string(),
-                records_examined: 0,
-                status: RuleStatus::NotEnabled,
-            },
-            Vec::new(),
-        ),
-        Some(level) => {
-            let severity = match level {
-                RuleLevel::Error => FindingSeverity::Error,
-                RuleLevel::Warn => FindingSeverity::Warning,
-                RuleLevel::Off => unreachable!("handled above"),
-            };
-            let (exec, mut findings) = run();
-            for f in &mut findings {
-                f.severity = severity;
-            }
-            (exec, findings)
-        }
-    }
-}
-
 /// Reads the files a repository pointed `claim.status-agreement` at. Kept in
 /// the CLI because `urzua-core` is pure (ADR-5) -- the rule is given file
 /// contents, never a path to open.
@@ -141,13 +103,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // rules_executed/findings both derive from it below, so there's no
     // second hand-written list that has to be kept in sync by hand.
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
-        gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
+        crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
             rules::header_required_fields(&records, &required_by_type)
         }),
-        gated(&config, rules::RULE_POINTER_RESOLUTION, || {
+        crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
             rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type)
         }),
-        gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
+        crate::gate::gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
             let not_in = config
                 .rules
                 .get(rules::RULE_POINTER_TARGET_STATUS)
@@ -160,13 +122,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 &not_in,
             )
         }),
-        gated(&config, rules::RULE_FIELD_QUALITY, || {
+        crate::gate::gated(&config, rules::RULE_FIELD_QUALITY, || {
             rules::field_quality(&records, &required_by_type)
         }),
-        gated(&config, rules::RULE_FIELD_PENDING, || {
+        crate::gate::gated(&config, rules::RULE_FIELD_PENDING, || {
             rules::field_pending(&records, &required_by_type)
         }),
-        gated(&config, rules::RULE_CLAIM_STATUS_AGREEMENT, || {
+        crate::gate::gated(&config, rules::RULE_CLAIM_STATUS_AGREEMENT, || {
             let setting = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT);
             let paths = setting
                 .and_then(|s| s.claim_paths.clone())
@@ -177,54 +139,54 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             let claims = read_claim_files(&repo_root, &paths);
             rules::claim_status_agreement(&records, &claims, &closed)
         }),
-        gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
+        crate::gate::gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
             rules::filename_title_consistency(&records, &full_text)
         }),
-        gated(
+        crate::gate::gated(
             &config,
             rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
             || rules::supersession_reciprocity(&records),
         ),
-        gated(
+        crate::gate::gated(
             &config,
             rules::RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
             || rules::revision_log_change_class(&records, &full_text),
         ),
-        gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
+        crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
             rules::embodiment_consistency(&records, &drifted)
         }),
-        gated(
+        crate::gate::gated(
             &config,
             rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
             || rules::embodiment_locator_promotion_candidate(&records),
         ),
-        gated(&config, rules::RULE_HEADER_LAYOUT_CONSISTENCY, || {
+        crate::gate::gated(&config, rules::RULE_HEADER_LAYOUT_CONSISTENCY, || {
             rules::header_layout_consistency(&records, &header_layout_by_type)
         }),
-        gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
+        crate::gate::gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
             rules::header_field_set_consistency(&records, &known_fields_by_type)
         }),
-        gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
+        crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             rules::narrative_field_stale(&records, &config)
         }),
-        gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
+        crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)
         }),
-        gated(&config, rules::RULE_HEADER_DEPRECATED_SHAPE, || {
+        crate::gate::gated(&config, rules::RULE_HEADER_DEPRECATED_SHAPE, || {
             rules::header_deprecated_shape(&config, &config_path)
         }),
-        gated(&config, rules::RULE_HEADER_POINTER_FIELD_CLEAN, || {
+        crate::gate::gated(&config, rules::RULE_HEADER_POINTER_FIELD_CLEAN, || {
             rules::header_pointer_field_clean(&records, &config)
         }),
-        gated(
+        crate::gate::gated(
             &config,
             rules::RULE_CONFIG_POINTER_DECLARATION_MISSING,
             || rules::config_pointer_declaration_missing(&config, &config_path),
         ),
-        gated(&config, rules::RULE_CONFIG_POINTER_FIELD_NOT_KNOWN, || {
+        crate::gate::gated(&config, rules::RULE_CONFIG_POINTER_FIELD_NOT_KNOWN, || {
             rules::config_pointer_field_not_known(&config, &config_path)
         }),
-        gated(
+        crate::gate::gated(
             &config,
             rules::RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
             || rules::config_pointer_narrative_overlap(&config, &config_path),
