@@ -22,6 +22,7 @@ pub const RULE_HEADER_REQUIRED_FIELDS: &str = "header.required-fields";
 pub const RULE_HEADER_LAYOUT_CONSISTENCY: &str = "header.layout-consistency";
 pub const RULE_HEADER_FIELD_SET_CONSISTENCY: &str = "header.field-set-consistency";
 pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
+pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
 pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
@@ -46,6 +47,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_LAYOUT_CONSISTENCY,
     RULE_HEADER_FIELD_SET_CONSISTENCY,
     RULE_TYPE_NO_DECLARED_SPEC,
+    RULE_TYPE_DIR_MATCHES_NOTHING,
     RULE_HEADER_DEPRECATED_SHAPE,
     RULE_CONFIG_POINTER_DECLARATION_MISSING,
     RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
@@ -255,6 +257,56 @@ pub fn header_field_set_consistency(
 /// `header_layout`/`known_fields`. A type with none declared is a real,
 /// permanently valid state under ADR-0041 -- this is a signal to review,
 /// never a mandate to write one.
+/// A declared record type whose `dir` matches no record.
+///
+/// `RFC-35` made `dir` mean *that directory* rather than that subtree, which is
+/// unambiguous but unforgiving: a `dir` one level off now matches nothing at
+/// all. Alone that degrades to `not-run`, which is visible; mixed with any
+/// working type it was silent -- `check` reported `ok` and exit 0 over a corpus
+/// it never examined. `claim_paths` got a load-time guard for the same hazard
+/// this release (BUG-56); `dir` had none.
+///
+/// `matched` is supplied by the caller, which is where discovery happens.
+pub fn type_dir_matches_nothing(
+    config: &Config,
+    config_path: &std::path::Path,
+    matched: &HashMap<String, usize>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
+    let mut findings = Vec::new();
+    let mut examined = 0;
+
+    let mut names: Vec<&String> = config.record_types.keys().collect();
+    names.sort();
+    for name in names {
+        examined += 1;
+        if matched.get(name).copied().unwrap_or(0) > 0 {
+            continue;
+        }
+        let dir = &config.record_types[name].dir;
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Warning,
+            file: config_path.to_path_buf(),
+            line: None,
+            waived: None,
+            message: format!(
+                "record type '{name}' declares dir '{dir}', which holds no records -- \
+                 every rule for this type examines nothing"
+            ),
+        });
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
 pub fn type_no_declared_spec(
     config: &Config,
     config_path: &std::path::Path,

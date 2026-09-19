@@ -115,7 +115,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // directory", which is the right verdict here: either way the
                 // rule cannot reach its input, and saying so beats reporting a
                 // clean run over files it never opened.
-                if !repo_root.join(prefix).is_dir() {
+                // `exists()` rather than `is_dir()`, and only a truly absent
+                // path aborts: git does not track empty directories, so a repo
+                // following the documented `claim_paths: [".changeset"]` pattern
+                // would otherwise lose `check` entirely the moment a release
+                // consumes the last fragment.
+                if !repo_root.join(prefix).exists() {
                     return emit(&CouldNotRun::from(format!(
                         "claim.status-agreement: claim_paths entry '{prefix}' is not a readable directory"
                     )));
@@ -218,6 +223,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             rules::narrative_field_stale(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_TYPE_DIR_MATCHES_NOTHING, || {
+            let mut matched: HashMap<String, usize> = HashMap::new();
+            for r in &records {
+                *matched.entry(r.record_type.clone()).or_insert(0) += 1;
+            }
+            rules::type_dir_matches_nothing(&config, &config_path, &matched)
         }),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)

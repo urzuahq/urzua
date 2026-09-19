@@ -27,32 +27,49 @@
 /// sets, so each was blind to exactly what the other required (BUG-37).
 pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     let stem = file_name.strip_suffix(".md")?;
-    let (first, rest) = stem.split_once('-')?;
     let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
 
-    // `0001-slug` / `1-slug`. Padding is not load-bearing (BUG-2), but a
-    // date is not a number: `2026-09-19-notes.md` would otherwise parse as
-    // record 2026 and `next_display_number` never comes back below it, because
-    // numbers are never reused (BUG-53). A four-digit bound does not
-    // discriminate -- a year is four digits -- so the tail is what rules it
-    // out: `NN-NN-` after the first segment is a date, not a slug.
-    let dated = {
-        let mut parts = rest.splitn(3, '-');
-        matches!((parts.next(), parts.next()), (Some(m), Some(d))
-            if m.len() == 2 && d.len() == 2 && digits(m) && digits(d))
-    };
-    if digits(first) && !dated {
-        if rest.is_empty() {
+    let segments: Vec<&str> = stem.split('-').collect();
+    // The number is the first all-digit segment, wherever it sits. Assuming
+    // position broke `DOC-ADR-2-slug`, which `init` emits when two directories
+    // share a last component -- `new` then wrote files it could not read back,
+    // handing out the same number forever (BUG-37's failure, via a new door).
+    let at = segments.iter().position(|s| digits(s))?;
+    // Something must follow the number: a bare `ADR-2.md` is a fragment.
+    if at + 1 >= segments.len() || segments[at + 1..].iter().all(|s| s.is_empty()) {
+        return None;
+    }
+
+    if at == 0 {
+        // `0001-slug` / `1-slug`. Padding is not load-bearing (BUG-2), but a
+        // date is not a number: `2026-09-19-notes.md` would parse as record
+        // 2026 and `next_display_number` never comes back below it (BUG-53).
+        // Checked as a real date -- a four-digit year with a plausible month
+        // and day -- so `0013-80-20-rule.md` stays a record.
+        let looks_dated = segments.len() >= 3
+            && segments[0].len() == 4
+            && [1, 2]
+                .iter()
+                .all(|&i| segments[i].len() == 2 && digits(segments[i]))
+            && matches!(segments[1].parse::<u32>(), Ok(1..=12))
+            && matches!(segments[2].parse::<u32>(), Ok(1..=31));
+        if looks_dated {
             return None;
         }
-        return first.parse().ok().map(|n| (None, n));
+        return segments[0].parse().ok().map(|n| (None, n));
     }
-    // `ADR-1-slug`.
-    if !first.is_empty() && first.chars().all(|c| c.is_ascii_uppercase()) {
-        let (number, slug) = rest.split_once('-')?;
-        if digits(number) && !slug.is_empty() {
-            return number.parse().ok().map(|n| (Some(first), n));
-        }
+
+    // `ADR-2-slug`, and `DOC-ADR-2-slug`: every segment before the number is
+    // the prefix, and each must be upper-case.
+    let prefix_end = stem.len() - (stem.len() - segments[..at].join("-").len());
+    if segments[..at]
+        .iter()
+        .all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_uppercase()))
+    {
+        return segments[at]
+            .parse()
+            .ok()
+            .map(|n| (Some(&stem[..prefix_end]), n));
     }
     None
 }
@@ -291,6 +308,27 @@ mod tests {
 
     /// BUG-53: `2026-09-19-notes.md` parsed as record 2026, and since numbers
     /// are never reused the corpus was stuck above it permanently.
+    /// A hyphenated type prefix is what `init` emits when two directories
+    /// share a last component, and `new` derives the filename from it -- so a
+    /// parser that assumed the prefix was one segment could not read back the
+    /// files the tool itself wrote, and handed out the same number forever.
+    #[test]
+    fn a_hyphenated_type_prefix_parses_observed_failing() {
+        assert_eq!(
+            parse_record_filename("DOC-ADR-2-first-thing.md"),
+            Some((Some("DOC-ADR"), 2))
+        );
+        assert_eq!(parse_record_filename("ADR-2-x.md"), Some((Some("ADR"), 2)));
+
+        // A lower-case segment before the number is not a prefix.
+        assert_eq!(parse_record_filename("doc-ADR-2-x.md"), None);
+        // A number with nothing after it is a fragment.
+        assert_eq!(parse_record_filename("DOC-ADR-2.md"), None);
+
+        let names = vec!["DOC-ADR-1-a.md".to_string(), "DOC-ADR-7-b.md".to_string()];
+        assert_eq!(next_display_number(&names), 8);
+    }
+
     #[test]
     fn a_date_named_file_is_not_a_record_number_observed_failing() {
         assert_eq!(parse_record_filename("2026-09-19-meeting-notes.md"), None);
@@ -299,6 +337,12 @@ mod tests {
         // A four-digit bound cannot discriminate -- a year is four digits --
         // so these must still parse.
         assert_eq!(parse_record_filename("2026-slug.md"), Some((None, 2026)));
+        // Two 2-digit segments are not a date unless they are a plausible
+        // month and day: an ADR titled "80-20 rule" is a record.
+        assert_eq!(
+            parse_record_filename("0013-80-20-rule.md"),
+            Some((None, 13))
+        );
         assert_eq!(
             parse_record_filename("0001-record-architecture.md"),
             Some((None, 1))
