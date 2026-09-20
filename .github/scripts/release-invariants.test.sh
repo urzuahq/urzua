@@ -41,6 +41,12 @@ manifest "0.4.0" "$inflight/Cargo.toml"
 expect 0 "the same bump is legitimate once the fragments are consumed" \
   "$guard" "$inflight/.changeset" "$inflight/Cargo.toml" "v0.3.0"
 
+notag=$tmp/notag; mkdir -p "$notag/.changeset"
+printf -- '---\ndefault: patch\n---\n\nA fix.\n' > "$notag/.changeset/a.md"
+manifest "0.3.0" "$notag/Cargo.toml"
+expect 1 "an undeterminable tag is not agreement" \
+  "$guard" "$notag/.changeset" "$notag/Cargo.toml" ""
+
 # --- 2. a fragment's declared level against its own prose
 
 major=$tmp/major; mkdir -p "$major/.changeset"

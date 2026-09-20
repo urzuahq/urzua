@@ -126,6 +126,11 @@ pub fn census<T>(
 /// `Population { eligible: 2, examined: 5, .. }` and attach it to a
 /// `RuleExecution`, which is the same bypass as having no constructor at all --
 /// the invariant is only structural if there is no second way in.
+///
+/// ```compile_fail
+/// use urzua_core::report::{Population, PopulationUnit};
+/// let _ = Population { unit: PopulationUnit::Record, eligible: 2, examined: 5 };
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct Population {
     unit: PopulationUnit,
@@ -151,10 +156,15 @@ impl Population {
             examined <= eligible,
             "{unit:?}: examined {examined} exceeds eligible {eligible}"
         );
+        // Raise `eligible`, never lower `examined`. Clamping the other way
+        // resolves a contradiction into `eligible == examined` -- "the rule
+        // examined its whole population", the most reassuring wrong answer
+        // available -- and desynchronises this from the `records_examined` each
+        // rule sets from the unclamped local.
         Population {
             unit,
-            eligible,
-            examined: examined.min(eligible),
+            eligible: eligible.max(examined),
+            examined,
         }
     }
 }
@@ -447,14 +457,6 @@ mod tests {
         let _ = Population::of(PopulationUnit::Record, 2, 5);
     }
 
-    /// Compile-time, not runtime: with private fields there is no expression
-    /// that writes a contradictory `Population`, so this property is checked by
-    /// the module boundary rather than by a test that could be deleted.
-    ///
-    /// ```compile_fail
-    /// use urzua_core::report::{Population, PopulationUnit};
-    /// let _ = Population { unit: PopulationUnit::Record, eligible: 2, examined: 5 };
-    /// ```
     #[test]
     fn a_population_carries_the_unit_its_numbers_are_in() {
         let types = Population::of(PopulationUnit::RecordType, 6, 6);

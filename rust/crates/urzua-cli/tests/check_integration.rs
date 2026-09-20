@@ -1740,3 +1740,38 @@ fn a_symlink_cycle_that_stays_inside_the_prefix_terminates() {
         "one claim file, read once, not once per hop: {stdout}"
     );
 }
+
+#[test]
+fn a_rule_handed_nothing_does_not_certify_the_corpus() {
+    // The census says `eligible: 0` -- the rule was handed nothing. The gate
+    // read only the older `scope` field, so the same report said `ok` over two
+    // records: a signal built this release and consumed by nothing (BUG-94).
+    let dir = one_adr_repo(
+        "handed-nothing",
+        "{header.layout-consistency: warn}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    );
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-y.md"),
+        "---\nStatus: Accepted\n---\n# 2 — Y\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let pop = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "header.layout-consistency")
+        .and_then(|r| r.get("population"))
+        .expect("the rule must carry a population");
+    assert_eq!(pop["eligible"], 0, "no type declares a layout: {stdout}");
+    assert_eq!(
+        parsed["status"], "not-run",
+        "a run whose only rule was handed nothing has established nothing: {stdout}"
+    );
+    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+}

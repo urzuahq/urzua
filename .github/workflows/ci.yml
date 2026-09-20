@@ -97,9 +97,30 @@ jobs:
           fi
           echo "found: $added"
 
+  release-invariants:
+    name: release invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # Full history and tags: the guard compares the manifest version against
+      # the newest tag, and a shallow checkout has neither.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # BUG-93. Both defects it guards against reached main unattended, and
+      # `make ci` only runs when a human runs it -- which was not in either
+      # path. A guard that fires only where the failure did not happen is a
+      # check reporting success without looking (ADR-55).
+      - name: planted-violation cases
+        run: .github/scripts/release-invariants.test.sh
+      - name: check the invariants on this ref
+        run: |
+          .github/scripts/release-invariants.sh \
+            .changeset rust/Cargo.toml "$(git tag --sort=-v:refname | head -1)"
+
   ci:
     name: ci
-    needs: [rust, changeset]
+    needs: [rust, changeset, release-invariants]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     if: always()

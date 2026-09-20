@@ -62,8 +62,36 @@ pub(crate) fn gated(
 /// distinction and a harder one; it is `MILE-106`'s subject, where
 /// `type.dir-matches-nothing` is the precedent for drawing it.
 pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) -> bool {
-    use urzua_core::report::{RuleScope, RuleStatus};
-    executed
-        .iter()
-        .any(|e| e.status == RuleStatus::Ran && e.scope == RuleScope::Records)
+    use urzua_core::report::{PopulationUnit, RuleScope, RuleStatus};
+    executed.iter().any(|e| {
+        if e.status != RuleStatus::Ran {
+            return false;
+        }
+        match &e.population {
+            // A converted rule states what it was handed. A run in which every
+            // such rule was handed nothing has established nothing, whatever
+            // `records_examined` says -- the census was added this release to
+            // make that visible and the gate did not read it, so a rule
+            // reporting `eligible: 0` still certified the corpus `ok`.
+            //
+            // This is per *run*, not per rule: one rule with an empty
+            // population among others that had work is the cold-start state and
+            // is not a fault. `header.layout-consistency` is in it permanently
+            // on this repository.
+            // The unit still matters: a config or path rule with a non-empty
+            // population has read declarations or filenames, not records, and
+            // letting either certify the corpus is BUG-81 and BUG-83.
+            Some(population) => {
+                matches!(
+                    population.unit(),
+                    PopulationUnit::Record | PopulationUnit::Field
+                ) && population.eligible() > 0
+            }
+            // Unconverted rules keep the old signal until every rule carries a
+            // population. `audit` runs two of them, and on the config `init`
+            // writes both legitimately examine nothing -- requiring a non-zero
+            // count here is BUG-84.
+            None => e.scope == RuleScope::Records,
+        }
+    })
 }

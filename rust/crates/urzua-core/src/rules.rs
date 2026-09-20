@@ -1319,7 +1319,15 @@ pub fn field_pending(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined: population.examined(),
+            // Records, not slots. `population` names the field-slot count in
+            // its own unit; `records_examined` is documented as authoritative
+            // and record-shaped until every rule is converted, and changing
+            // its unit here made one entry contradict itself -- `6` beside
+            // `scope: records` on a two-record corpus.
+            records_examined: records
+                .iter()
+                .filter(|r| required_by_type.contains_key(&r.record_type))
+                .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -1497,7 +1505,15 @@ pub fn field_quality(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined: population.examined(),
+            // Records, not slots. `population` names the field-slot count in
+            // its own unit; `records_examined` is documented as authoritative
+            // and record-shaped until every rule is converted, and changing
+            // its unit here made one entry contradict itself -- `6` beside
+            // `scope: records` on a two-record corpus.
+            records_examined: records
+                .iter()
+                .filter(|r| required_by_type.contains_key(&r.record_type))
+                .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
