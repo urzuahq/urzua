@@ -140,15 +140,28 @@ pub fn run() -> ExitCode {
                 check: "record-type-required-fields".to_string(),
                 status: DoctorStatus::Warn,
                 message: format!(
-                    "record type '{name}' has no required_fields -- field-quality/header rules will never fire for it"
+                    "record type '{name}' has no required_fields -- field.quality and field.pending will never fire for it"
                 ),
             });
         }
     }
 
-    let ci_path = repo_root.join(".github/workflows/ci.yml");
-    let ci_wired = std::fs::read_to_string(&ci_path)
-        .map(|content| content.contains("urzua check") || content.contains("make records"))
+    // Every workflow, not one by name. This check's own subject is whether the
+    // checker is wired in, and reading `ci.yml` alone made it report that a
+    // repository was unwired when its invocation simply lived in a differently
+    // named workflow (BUG-91).
+    let workflows_dir = repo_root.join(".github/workflows");
+    let ci_wired = std::fs::read_dir(&workflows_dir)
+        .map(|entries| {
+            entries.flatten().any(|entry| {
+                let path = entry.path();
+                let is_workflow = path.extension().is_some_and(|e| e == "yml" || e == "yaml");
+                is_workflow
+                    && std::fs::read_to_string(&path).is_ok_and(|content| {
+                        content.contains("urzua check") || content.contains("make records")
+                    })
+            })
+        })
         .unwrap_or(false);
     if ci_wired {
         checks.push(DoctorCheck {
@@ -161,8 +174,8 @@ pub fn run() -> ExitCode {
             check: "ci-wired".to_string(),
             status: DoctorStatus::Warn,
             message: format!(
-                "{} does not invoke `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
-                ci_path.display()
+                "no workflow in {} invokes `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
+                workflows_dir.display()
             ),
         });
     }

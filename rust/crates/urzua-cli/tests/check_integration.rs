@@ -1490,3 +1490,46 @@ fn a_directory_symlink_inside_claim_paths_is_treated_like_the_root() {
         "and its claims are read: {stdout}"
     );
 }
+
+#[test]
+fn ci_wired_finds_the_invocation_in_any_workflow_not_just_ci_yml() {
+    // The check's own subject is "is the checker actually wired in?". Reading
+    // one workflow by name made it report a falsehood about a repository where
+    // it is wired in -- this repo's invocation lives in checks.yml, and
+    // doctor read ci.yml.
+    let dir = fixture_repo("ci-wired-scan");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    // A workflow that is not named ci.yml, and a ci.yml that does not invoke it.
+    std::fs::write(
+        dir.join(".github/workflows/checks.yml"),
+        "name: checks\njobs:\n  records:\n    steps:\n      - run: urzua check\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/ci.yml"),
+        "name: ci\njobs:\n  build:\n    steps:\n      - run: cargo build\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["doctor"]).stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let ci = parsed["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "ci-wired")
+        .expect("ci-wired check must be present");
+    assert_eq!(
+        ci["status"], "ok",
+        "the invocation is in checks.yml, so the checker IS wired in: {stdout}"
+    );
+}
