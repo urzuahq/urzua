@@ -80,13 +80,16 @@ pub fn header_required_fields(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
+    // Record-scoped findings -- an unparsed header, a duplicated key -- are
+    // about the record, not about any one slot, so they are emitted once per
+    // record. Decision 1's rule against reporting on a candidate you did not
+    // examine governs *per-slot* findings; a record-scoped finding explaining
+    // why its slots are unreadable is the opposite of a contradiction.
     for record in records {
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
         };
-        examined += 1;
 
         if record.header.region.is_none() {
             let detail = match &record.header.parse_error {
@@ -116,29 +119,51 @@ pub fn header_required_fields(
                 message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
             });
         }
-
-        for field in required {
-            if record.header.get(field).is_none() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    message: format!(
-                        "missing required header field '{field}' for record type '{}'",
-                        record.record_type
-                    ),
-                });
-            }
-        }
     }
+
+    // The population is the declared slot: one `(record, required field)` pair
+    // per field the record's type declares.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            required_by_type
+                .get(&record.record_type)
+                .map(|required| (record, required))
+        })
+        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
+        .collect();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field)| {
+        // An unparsed header leaves every slot of that record unreadable: the
+        // rule was handed them and could not judge them. The record-scoped
+        // finding above says why.
+        if record.header.region.is_none() {
+            return Outcome::NotExamined;
+        }
+        if record.header.get(field.as_str()).is_none() {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "missing required header field '{field}' for record type '{}'",
+                    record.record_type
+                ),
+            });
+        }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined: records
+                .iter()
+                .filter(|r| required_by_type.contains_key(&r.record_type))
+                .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -1037,37 +1062,43 @@ pub fn header_pointer_field_clean(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_POINTER_FIELD_CLEAN;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let clean_fields_by_type = fields_with_capability(config, |k| k.enforce_clean_format);
 
-    for record in records {
-        let Some(fields) = clean_fields_by_type.get(&record.record_type) else {
-            continue;
+    // Declared slots: a field the type says carries clean references. A slot
+    // the record did not write is eligible and unexamined -- handed to the rule
+    // and not judged -- rather than outside its population.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            clean_fields_by_type
+                .get(&record.record_type)
+                .map(|fields| (record, fields))
+        })
+        .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
+        .collect();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
+        let Some(value) = record.header.get(field_name.as_str()) else {
+            return Outcome::NotExamined;
         };
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
-                continue;
-            };
-            examined += 1;
+        if value.trim() == "—" {
+            return Outcome::Examined;
+        }
 
-            if value.trim() == "—" {
-                continue;
-            }
-
-            for entry in value.split(',') {
-                let entry = entry.trim();
-                let is_clean_reference = entry
-                    .split_once('-')
-                    .map(|(prefix, num)| {
-                        !prefix.is_empty()
-                            && prefix.chars().all(|c| c.is_ascii_uppercase())
-                            && !num.is_empty()
-                            && num.chars().all(|c| c.is_ascii_digit())
-                    })
-                    .unwrap_or(false);
-                if !is_clean_reference {
-                    findings.push(Finding {
+        for entry in value.split(',') {
+            let entry = entry.trim();
+            let is_clean_reference = entry
+                .split_once('-')
+                .map(|(prefix, num)| {
+                    !prefix.is_empty()
+                        && prefix.chars().all(|c| c.is_ascii_uppercase())
+                        && !num.is_empty()
+                        && num.chars().all(|c| c.is_ascii_digit())
+                })
+                .unwrap_or(false);
+            if !is_clean_reference {
+                findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
                         file: record.path.clone(),
@@ -1077,16 +1108,19 @@ pub fn header_pointer_field_clean(
                             "{field_name} entry {entry:?} isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status"
                         ),
                     });
-                }
             }
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined: records
+                .iter()
+                .filter(|r| clean_fields_by_type.contains_key(&r.record_type))
+                .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2777,7 +2811,13 @@ mod tests {
             type_config_pointer(&[], None, Some(&["Derives-from", "Parent"]), None),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        assert_eq!(exec.records_examined, 2);
+        // One record; two declared clean-format slots, both written. The
+        // population names the unit, so 2 is no longer reported as records.
+        assert_eq!(exec.records_examined, 1);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(population.unit(), PopulationUnit::Field);
+        assert_eq!(population.eligible(), 2);
+        assert_eq!(population.examined(), 2);
         assert!(findings.is_empty());
     }
 
