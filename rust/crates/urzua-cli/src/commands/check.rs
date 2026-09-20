@@ -36,6 +36,9 @@ fn read_claim_files(
         // over an incomplete corpus -- the failure this whole rule exists to
         // prevent, arrived at from the inside.
         let mut paths = Vec::new();
+        let mut visited: std::collections::HashSet<std::path::PathBuf> =
+            std::collections::HashSet::new();
+        visited.insert(dir.canonicalize().unwrap_or_else(|_| dir.clone()));
         let mut pending = vec![dir.clone()];
         while let Some(current) = pending.pop() {
             let entries = std::fs::read_dir(&current)
@@ -59,19 +62,31 @@ fn read_claim_files(
                 // `is_file()` is false for a link whatever it points at, so
                 // testing it alone dropped a symlinked claim in silence, in a
                 // walk that aborts on every other failure (BUG-75).
-                let link = std::fs::symlink_metadata(&path)
+                // `symlink_metadata` first, so a dangling link is a named
+                // error rather than a silent skip.
+                std::fs::symlink_metadata(&path)
                     .map_err(|e| format!("claim_paths: could not stat {}: {e}", path.display()))?;
                 let target = std::fs::metadata(&path).map_err(|e| {
                     format!("claim_paths: could not resolve {}: {e}", path.display())
                 })?;
                 if target.is_dir() {
-                    if link.is_symlink() {
+                    // Followed only where it stays inside the repository, which
+                    // is the same test the declared root gets: rejecting every
+                    // link made the two paths disagree about one symlink
+                    // (BUG-85). `visited` is what actually stops the unbounded
+                    // walk a link to an ancestor produces (BUG-69).
+                    let resolved = path.canonicalize().map_err(|e| {
+                        format!("claim_paths: could not resolve {}: {e}", path.display())
+                    })?;
+                    if !resolved.starts_with(&repo_canonical) {
                         return Err(format!(
-                            "claim_paths: {} is a symlink to a directory; the walk does not follow it",
+                            "claim_paths: {} resolves outside the repository",
                             path.display()
                         ));
                     }
-                    pending.push(path);
+                    if visited.insert(resolved) {
+                        pending.push(path);
+                    }
                 } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
                     // A linked file is read, so its *target* must also stay
                     // inside the repository: a symlink named `.md` otherwise
@@ -137,7 +152,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // corpus a pointer resolves against: a target outside the requested path
     // still exists, and judging it absent turns a clean corpus into a failing
     // one purely by how the check was invoked (BUG-60).
-    let (records, full_text) = match load_records(&repo_root, &discovered.paths, &config) {
+    let (records, full_text) = match load_records(
+        &repo_root,
+        &discovered.paths,
+        &discovered.staged_deletions,
+        &config,
+    ) {
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };

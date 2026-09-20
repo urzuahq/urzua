@@ -65,6 +65,10 @@ pub enum RuleScope {
     #[default]
     Records,
     Config,
+    /// Tracked path names, examined without opening a file. Neither a corpus
+    /// record nor a configuration entry: counting it as a record let a rule
+    /// that never parsed anything certify the corpus (BUG-83).
+    Paths,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

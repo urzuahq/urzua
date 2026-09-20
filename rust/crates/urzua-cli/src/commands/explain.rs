@@ -27,7 +27,12 @@ pub fn run(config_path: Option<PathBuf>, path: String) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let (records, _full_text) = match load_records(&repo_root, &discovered.paths, &config) {
+    let (records, _full_text) = match load_records(
+        &repo_root,
+        &discovered.paths,
+        &discovered.staged_deletions,
+        &config,
+    ) {
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };

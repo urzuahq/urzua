@@ -38,6 +38,12 @@ pub enum DiscoveryError {
 #[derive(Debug, Clone)]
 pub struct DiscoveredFiles {
     pub paths: Vec<PathBuf>,
+    /// Paths staged for deletion. They are still tracked, so they appear in
+    /// `paths`, and they are legitimately not on disk. Carried separately
+    /// because without it a caller cannot tell a staged deletion from a file
+    /// someone deleted and has not staged, and skipping both let a record
+    /// vanish from the corpus with the run still reported clean (BUG-82).
+    pub staged_deletions: std::collections::HashSet<PathBuf>,
     pub source: DiscoverySource,
 }
 
@@ -53,6 +59,10 @@ pub enum DiscoverySource {
 pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, DiscoveryError> {
     let tracked = run_git(repo_root, &["ls-files"])?;
     let staged = run_git(repo_root, &["diff", "--name-only", "--cached"])?;
+    let deleted = run_git(
+        repo_root,
+        &["diff", "--name-only", "--cached", "--diff-filter=D"],
+    )?;
 
     let mut paths: Vec<PathBuf> = tracked
         .lines()
@@ -65,6 +75,11 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
 
     Ok(DiscoveredFiles {
         paths,
+        staged_deletions: deleted
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(PathBuf::from)
+            .collect(),
         source: DiscoverySource::GitTracked,
     })
 }

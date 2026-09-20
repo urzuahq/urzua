@@ -58,6 +58,7 @@ pub(crate) fn load_config(path: &PathBuf) -> Result<Config, String> {
 pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],
+    staged_deletions: &std::collections::HashSet<PathBuf>,
     config: &Config,
 ) -> Result<(Vec<Record>, HashMap<PathBuf, String>), String> {
     let mut records = Vec::new();
@@ -98,10 +99,16 @@ pub(crate) fn load_records(
                 }
                 // A record the tool cannot read is not a record that passes:
                 // dropping it shrank the corpus with nothing in the report to
-                // show a file had gone missing (BUG-76). Absence is the
-                // exception -- discovery unions `ls-files` with the staged
-                // diff, so a staged deletion is legitimately not on disk.
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                // show a file had gone missing (BUG-76). A staged deletion is
+                // the one legitimate absence, and only git can say which
+                // absences those are -- treating every `NotFound` as one let an
+                // unstaged `rm` shrink the corpus in silence (BUG-82).
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::NotFound
+                        && staged_deletions.contains(rel_path) =>
+                {
+                    continue
+                }
                 Err(e) => unreadable.push(format!("{}: {e}", rel_path.display())),
             }
         }
