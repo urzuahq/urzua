@@ -21,6 +21,29 @@ true of their contents.
 
 check validates header fields today but nothing validates what's inside a required section's prose -- SPEC-2 names this rule category and it has never been built.
 
+## The incident this milestone would have caught (`BUG-50`, 2026-09-17)
+
+Narrowing `SPEC-1` deleted its "Monorepo layout" section and took the revision-log block with it:
+
+```text
+SPEC-1 revision rows before:  22
+SPEC-1 revision rows after:    4   (marker gone; the four dangled after ## References)
+```
+
+`revision-log.change-class-required` is declared **`error`** in this repository. It stayed green,
+because the rule decides its own scope by searching the content for `> **Revision log**` -- so a
+record that loses one line leaves the rule's scope silently. The loss was found by review, not by the
+tool that exists to find it.
+
+That is this milestone's shape exactly. With `required_sections` declared per type, a `spec` missing
+its revision log is a **finding**; a type that declares no such section is out of scope at
+`eligible: 0`. Neither requires the rule to infer anything from the corpus, which is what `ADR-53`
+says policy must never do.
+
+`BUG-40`'s population work (`PR #89`) makes the absence *countable* -- 71 records carry no marker
+today -- but a count is not a verdict, and nobody watches it. This milestone is what turns it into
+one.
+
 ## Evidence from MILE-51 (2026-09-16)
 
 Run against `npryce/adr-tools`, whose records carry their metadata in sections — `## Status`,
