@@ -18,3 +18,6 @@ reported rather than one of them silently disappearing from the reference index.
 
 Fixes BUG-78: `header.field-set-consistency` no longer counts a record whose header never parsed as
 examined.
+
+Fixes BUG-81: `RuleExecution` carries a `scope`, so a rule that counted configuration entries can no
+longer satisfy the guard that a corpus record was examined.

@@ -1202,6 +1202,11 @@ fn audit_with_neither_of_its_rules_declared_is_not_ok() {
         stdout.contains("\"status\": \"not-run\""),
         "audit executed no rule: {stdout}"
     );
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "audit must not exit 0 when no rule examined anything: {stdout}"
+    );
 }
 
 #[test]
@@ -1329,4 +1334,35 @@ fn a_claim_paths_root_symlinked_to_a_real_directory_is_usable() {
         stdout.contains("claims to close BUG-1"),
         "and its claims must be read: {stdout}"
     );
+}
+
+#[test]
+fn a_config_scoped_rule_alone_does_not_make_a_run_ok() {
+    // type.no-declared-spec counts configured types, not records. Adding that
+    // count to "some rule examined something" let check report ok having read
+    // no record at all (BUG-81).
+    let dir = fixture_repo("config-scope-only");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {type.no-declared-spec: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n    spec: \"SPEC-1\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nTitle: X\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("\"status\": \"not-run\""),
+        "no record-scoped rule ran: {stdout}"
+    );
+    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
 }

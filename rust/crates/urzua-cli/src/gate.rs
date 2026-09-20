@@ -24,6 +24,7 @@ pub(crate) fn gated(
             RuleExecution {
                 rule: id.to_string(),
                 records_examined: 0,
+                scope: urzua_core::report::RuleScope::Records,
                 status: RuleStatus::NotEnabled,
             },
             Vec::new(),
@@ -49,7 +50,8 @@ pub(crate) fn gated(
 /// (ADR-55). Reachable since rules became opt-in: an empty or absent `rules`
 /// table, or a table declaring only rules nothing in the corpus addresses.
 pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) -> bool {
-    executed
-        .iter()
-        .any(|e| e.status == urzua_core::report::RuleStatus::Ran && e.records_examined > 0)
+    use urzua_core::report::{RuleScope, RuleStatus};
+    executed.iter().any(|e| {
+        e.status == RuleStatus::Ran && e.scope == RuleScope::Records && e.records_examined > 0
+    })
 }

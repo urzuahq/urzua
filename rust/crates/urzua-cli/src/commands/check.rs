@@ -22,6 +22,9 @@ fn read_claim_files(
     prefixes: &[String],
 ) -> Result<Vec<(String, String)>, String> {
     let mut out = Vec::new();
+    let repo_canonical = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
     for prefix in prefixes {
         let dir = repo_root.join(prefix);
         // `claim_paths` is a path *prefix*, so the claims may sit any depth
@@ -70,6 +73,19 @@ fn read_claim_files(
                     }
                     pending.push(path);
                 } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
+                    // A linked file is read, so its *target* must also stay
+                    // inside the repository: a symlink named `.md` otherwise
+                    // feeds an arbitrary file on the machine to the claim
+                    // scanner, and its contents steer the findings.
+                    let resolved = path.canonicalize().map_err(|e| {
+                        format!("claim_paths: could not resolve {}: {e}", path.display())
+                    })?;
+                    if !resolved.starts_with(&repo_canonical) {
+                        return Err(format!(
+                            "claim_paths: {} resolves outside the repository",
+                            path.display()
+                        ));
+                    }
                     paths.push(path);
                 }
             }
