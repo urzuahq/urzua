@@ -40,9 +40,14 @@ its revision log is a **finding**; a type that declares no such section is out o
 `eligible: 0`. Neither requires the rule to infer anything from the corpus, which is what `ADR-53`
 says policy must never do.
 
-`BUG-40`'s population work (`PR #89`) makes the absence *countable* -- 71 records carry no marker
-today -- but a count is not a verdict, and nobody watches it. This milestone is what turns it into
-one.
+`BUG-40`'s population work (`PR #89`) makes the absence *countable*. Measured on this repository
+2026-09-21: **307 records, 236 examined, 71 with no revision-log marker.** The same predicate
+`BUG-50` measured on 2026-09-19 gave 264 / 196 / 68 -- the corpus grew and the absent count tracked
+it, which is the arithmetic `BUG-50` says the report never stated.
+
+A count is not a verdict, and nobody watches it. `BUG-50` also notes that **some of those 71 are
+legitimate** -- a `waiver` may have nothing to log -- and the engine cannot tell which, because
+nothing declares which types carry a revision log. That is this milestone.
 
 ## Evidence from MILE-51 (2026-09-16)
 
