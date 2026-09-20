@@ -8,7 +8,8 @@ use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{
-    Finding, FindingSeverity, Population, PopulationUnit, RuleExecution, RuleScope, RuleStatus,
+    census, Finding, FindingSeverity, Outcome, Population, PopulationUnit, RuleExecution,
+    RuleScope, RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
@@ -1288,17 +1289,20 @@ pub fn field_pending(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_FIELD_PENDING;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
-        let Some(required) = required_by_type.get(&record.record_type) else {
-            continue;
-        };
-        for field in required {
-            examined += 1;
-            if classify(record.header.get(field)) != FieldState::Pending {
-                continue;
-            }
+    // Same population as `field.quality`: one declared slot per required field.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            required_by_type
+                .get(&record.record_type)
+                .map(|required| (record, required))
+        })
+        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
+        .collect();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field)| {
+        if classify(record.header.get(field.as_str())) == FieldState::Pending {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Warning,
@@ -1308,13 +1312,14 @@ pub fn field_pending(
                 message: format!("field '{field}' is marked pending -- work declared unfinished"),
             });
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined: population.examined(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -1442,23 +1447,30 @@ pub fn field_quality(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_FIELD_QUALITY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
-        let Some(required) = required_by_type.get(&record.record_type) else {
-            continue;
-        };
-        for field in required {
-            let state = classify(record.header.get(field));
-            examined += 1;
-            // `Pending` is `field.pending`'s subject, not this rule's: it means
-            // someone declared the work unfinished, where Blank and Placeholder
-            // mean someone forgot. One rule carries one declared level, so
-            // keeping both here left no setting that was correct (BUG-38).
-            match state {
-                FieldState::Blank | FieldState::Placeholder => {}
-                FieldState::Present | FieldState::Pending => continue,
-            }
+    // The population is the declared slot: one `(record, required field)` pair
+    // per field the record's *type* declares. Built here, before the rule runs,
+    // so `eligible` is this list's length and cannot disagree with what the
+    // body does. On this repository that is 1023 -- which is what
+    // `records_examined` has been reporting against a 307-record corpus
+    // (`BUG-40`), correct all along and labelled as something it was not.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            required_by_type
+                .get(&record.record_type)
+                .map(|required| (record, required))
+        })
+        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
+        .collect();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field)| {
+        let state = classify(record.header.get(field.as_str()));
+        // `Pending` is `field.pending`'s subject, not this rule's: it means
+        // someone declared the work unfinished, where Blank and Placeholder
+        // mean someone forgot. One rule carries one declared level, so
+        // keeping both here left no setting that was correct (BUG-38).
+        if matches!(state, FieldState::Blank | FieldState::Placeholder) {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Error,
@@ -1468,13 +1480,16 @@ pub fn field_quality(
                 message: format!("field '{field}' is {state:?} -- not a real, present value"),
             });
         }
-    }
+        // Every declared slot is judged: `classify(None)` is a real verdict,
+        // not an absence.
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined: population.examined(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },

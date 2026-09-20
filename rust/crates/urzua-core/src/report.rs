@@ -80,6 +80,40 @@ pub enum PopulationUnit {
     Claim,
 }
 
+/// What a rule decided about one candidate it was handed.
+///
+/// There is no "not in the population" answer, deliberately: the candidate list
+/// *is* the population, built before the rule runs. A rule that could reduce
+/// its own denominator is the hand-maintained count this type replaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    /// The rule reached a verdict about this candidate.
+    Examined,
+    /// The candidate was in the population and the rule did not judge it --
+    /// the declared slot is absent, or the header it needed did not parse.
+    /// `eligible > examined` is this, and it is the signal `MILE-106` reads.
+    NotExamined,
+}
+
+/// Run `body` over a population and report what it judged.
+///
+/// `eligible` is the candidate list's length, so it cannot drift from the
+/// rule's own skips -- the list and the loop are one thing. Hand-writing a
+/// parallel filter beside the loop is how `records_examined` came to hold
+/// three different denominators (`BUG-40`).
+pub fn census<T>(
+    unit: PopulationUnit,
+    candidates: Vec<T>,
+    mut body: impl FnMut(&T) -> Outcome,
+) -> Population {
+    let eligible = candidates.len();
+    let examined = candidates
+        .iter()
+        .filter(|c| body(c) == Outcome::Examined)
+        .count();
+    Population::of(unit, eligible, examined)
+}
+
 /// A rule's input population: what it was eligible to examine, and what it
 /// judged. `eligible > examined` is the signal, not an accounting slip -- it
 /// means the rule had something in front of it that it did not reach.
