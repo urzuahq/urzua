@@ -1333,10 +1333,16 @@ fn a_claim_paths_root_symlinked_to_a_real_directory_is_usable() {
 }
 
 #[test]
-fn a_config_scoped_rule_alone_does_not_make_a_run_ok() {
-    // type.no-declared-spec counts configured types, not records. Adding that
-    // count to "some rule examined something" let check report ok having read
-    // no record at all (BUG-81).
+fn a_config_scoped_rule_alone_discloses_that_it_read_no_record() {
+    // type.no-declared-spec counts configured types, not records, and reported
+    // them as `records_examined` -- so "some rule examined something" was
+    // satisfied by a rule that had opened no file (BUG-81).
+    //
+    // The count is now unit-bearing, so it cannot be mistaken for records, and
+    // the verdict no longer reads it: declaring only this rule is a thin config,
+    // which ADR-53 makes the adopter's call. What must not happen is the run
+    // reading as a clean corpus, and `records_read_by_any_rule: 0` is what
+    // prevents that.
     let dir = fixture_repo("config-scope-only");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -1356,11 +1362,22 @@ fn a_config_scoped_rule_alone_does_not_make_a_run_ok() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        stdout.contains("\"status\": \"not-run\""),
-        "no record-scoped rule ran: {stdout}"
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let pop = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "type.no-declared-spec")
+        .and_then(|r| r.get("population"))
+        .expect("the rule must carry a population");
+    assert_eq!(
+        pop["unit"], "record-type",
+        "it counts declarations, not records: {stdout}"
     );
-    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+    assert_eq!(
+        parsed["records_read_by_any_rule"], 0,
+        "a declaration is not a record read: {stdout}"
+    );
 }
 
 #[test]
@@ -1403,9 +1420,13 @@ fn an_unstaged_deletion_of_a_tracked_record_stops_the_run() {
 }
 
 #[test]
-fn a_path_scoped_rule_alone_does_not_make_a_run_ok() {
+fn a_path_scoped_rule_alone_discloses_that_it_read_no_record() {
     // type.record-outside-declared-dir reads tracked path names and never opens
-    // a file, so it cannot establish anything about a record's contents.
+    // a file, so it cannot establish anything about a record's contents -- yet
+    // it reported those names as `records_examined` (BUG-83).
+    //
+    // The unit now says `path`, and `records_read_by_any_rule: 0` says no
+    // record was judged, over a corpus whose one record is unparseable garbage.
     let dir = fixture_repo("path-scope-only");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -1425,11 +1446,22 @@ fn a_path_scoped_rule_alone_does_not_make_a_run_ok() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        stdout.contains("\"status\": \"not-run\""),
-        "no rule read this record: {stdout}"
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let pop = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "type.record-outside-declared-dir")
+        .and_then(|r| r.get("population"))
+        .expect("the rule must carry a population");
+    assert_eq!(
+        pop["unit"], "path",
+        "it judges filenames, not records: {stdout}"
     );
-    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+    assert_eq!(
+        parsed["records_read_by_any_rule"], 0,
+        "the one record was never opened: {stdout}"
+    );
 }
 
 #[test]
@@ -1742,10 +1774,12 @@ fn a_symlink_cycle_that_stays_inside_the_prefix_terminates() {
 }
 
 #[test]
-fn a_rule_handed_nothing_does_not_certify_the_corpus() {
-    // The census says `eligible: 0` -- the rule was handed nothing. The gate
-    // read only the older `scope` field, so the same report said `ok` over two
-    // records: a signal built this release and consumed by nothing (BUG-94).
+fn a_rule_handed_nothing_discloses_that_it_certified_nothing() {
+    // The census says `eligible: 0` -- the rule was handed nothing, and it says
+    // so where a reader sees it (BUG-94). Enabling a rule before its scope
+    // exists is the cold-start state, not a fault, so the verdict stays the
+    // adopter's (ADR-53); what must not happen is two records reading as
+    // examined when none were.
     let dir = one_adr_repo(
         "handed-nothing",
         "{header.layout-consistency: warn}",
@@ -1770,8 +1804,11 @@ fn a_rule_handed_nothing_does_not_certify_the_corpus() {
         .expect("the rule must carry a population");
     assert_eq!(pop["eligible"], 0, "no type declares a layout: {stdout}");
     assert_eq!(
-        parsed["status"], "not-run",
-        "a run whose only rule was handed nothing has established nothing: {stdout}"
+        parsed["files_examined"], 2,
+        "both records were read off disk: {stdout}"
     );
-    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+    assert_eq!(
+        parsed["records_read_by_any_rule"], 0,
+        "and neither was judged by any rule: {stdout}"
+    );
 }

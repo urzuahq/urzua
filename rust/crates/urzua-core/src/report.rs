@@ -56,6 +56,32 @@ pub struct RuleExecution {
     /// skipped, never omitted -- "off" and "ran clean" must stay
     /// distinguishable in the report.
     pub status: RuleStatus,
+    /// The records this rule reached a verdict about, for the report's
+    /// `records_read_by_any_rule`. Not serialized: it is an input to one
+    /// top-level number, and per-rule it would be a third denominator beside
+    /// the two the population already carries.
+    ///
+    /// Empty for `RecordType`, `Path` and `Claim` units -- a declaration, a
+    /// filename and an external assertion are not records read.
+    #[serde(skip)]
+    pub examined_records: Vec<PathBuf>,
+}
+
+/// The number of distinct records some rule reached a verdict about.
+///
+/// A union, never a sum: `field.quality` contributing 1041 slots contributes
+/// at most one record each, and populations in different units must never be
+/// added. It is the one number that makes "you get what you declare"
+/// (`ADR-53`) safe to say -- a run whose declared rules could read no record
+/// exits 0 and says so here, rather than the gate inferring a verdict from a
+/// count that meant something different for every rule.
+pub fn records_read_by_any_rule(executed: &[RuleExecution]) -> usize {
+    executed
+        .iter()
+        .filter(|e| e.status == RuleStatus::Ran)
+        .flat_map(|e| e.examined_records.iter())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
 }
 
 /// What a rule's population is counted in. A number without its unit is how
@@ -112,6 +138,32 @@ pub fn census<T>(
         .filter(|c| body(c) == Outcome::Examined)
         .count();
     Population::of(unit, eligible, examined)
+}
+
+/// `census`, also reporting *which* records were judged.
+///
+/// `record_of` names the record a candidate belongs to, so a `Field` rule with
+/// several slots per record still contributes that record once. The returned
+/// list feeds `records_read_by_any_rule` and nothing else; it is derived from
+/// the same pass that produces the population, so the two cannot disagree.
+pub fn census_records<T>(
+    unit: PopulationUnit,
+    candidates: Vec<T>,
+    record_of: impl Fn(&T) -> PathBuf,
+    mut body: impl FnMut(&T) -> Outcome,
+) -> (Population, Vec<PathBuf>) {
+    let eligible = candidates.len();
+    let mut examined_records = Vec::new();
+    let mut examined = 0;
+    for candidate in &candidates {
+        if body(candidate) == Outcome::Examined {
+            examined += 1;
+            examined_records.push(record_of(candidate));
+        }
+    }
+    examined_records.sort();
+    examined_records.dedup();
+    (Population::of(unit, eligible, examined), examined_records)
 }
 
 /// A rule's input population: what it was eligible to examine, and what it
@@ -222,6 +274,13 @@ pub struct ScopeInfo {
 pub struct CheckReport {
     pub status: ReportStatus,
     pub files_examined: usize,
+    /// How many records some rule actually reached a verdict about
+    /// ([`records_read_by_any_rule`]). `files_examined` says what was read off
+    /// disk; this says what was judged, and the gap between them is a run whose
+    /// declared rules could not address the corpus (`BUG-61`). The verdict
+    /// deliberately does not read it -- what gets checked is the adopter's call
+    /// (`ADR-53`) -- but no reader takes `0` here for a clean corpus.
+    pub records_read_by_any_rule: usize,
     pub rules_executed: Vec<RuleExecution>,
     pub scope: ScopeInfo,
     pub blocking: bool,
@@ -486,6 +545,7 @@ mod tests {
         let report = CheckReport {
             status: ReportStatus::Ok,
             files_examined: 1,
+            records_read_by_any_rule: 0,
             rules_executed: vec![],
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,

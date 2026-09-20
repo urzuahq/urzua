@@ -443,6 +443,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let report = CheckReport {
         status,
         files_examined: examined.len(),
+        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule(&rules_executed),
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),

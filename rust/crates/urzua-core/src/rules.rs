@@ -8,8 +8,8 @@ use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{
-    census, Finding, FindingSeverity, Outcome, Population, PopulationUnit, RuleExecution,
-    RuleScope, RuleStatus,
+    census, census_records, Finding, FindingSeverity, Outcome, Population, PopulationUnit,
+    RuleExecution, RuleScope, RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
@@ -133,28 +133,33 @@ pub fn header_required_fields(
         .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field)| {
-        // An unparsed header leaves every slot of that record unreadable: the
-        // rule was handed them and could not judge them. The record-scoped
-        // finding above says why.
-        if record.header.region.is_none() {
-            return Outcome::NotExamined;
-        }
-        if record.header.get(field.as_str()).is_none() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "missing required header field '{field}' for record type '{}'",
-                    record.record_type
-                ),
-            });
-        }
-        Outcome::Examined
-    });
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            // An unparsed header leaves every slot of that record unreadable: the
+            // rule was handed them and could not judge them. The record-scoped
+            // finding above says why.
+            if record.header.region.is_none() {
+                return Outcome::NotExamined;
+            }
+            if record.header.get(field.as_str()).is_none() {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "missing required header field '{field}' for record type '{}'",
+                        record.record_type
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -166,6 +171,7 @@ pub fn header_required_fields(
                 .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -187,29 +193,32 @@ pub fn header_layout_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_LAYOUT_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     // Eligible: records of a type that declares a layout. A type declaring
     // none puts its records outside this rule's population -- the rule does not
     // apply. A record whose header yields no detectable layout IS in the
     // population and simply was not judged, which `eligible > examined` says
     // and a bare count could not.
-    let eligible = records
+    let candidates: Vec<&Record> = records
         .iter()
         .filter(|r| declared_by_type.contains_key(&r.record_type))
-        .count();
-    for record in records {
-        let Some(&declared) = declared_by_type.get(&record.record_type) else {
-            continue;
-        };
-        let Some(actual) = record.header.layout() else {
-            continue;
-        };
-        examined += 1;
+        .collect();
 
-        if actual != declared {
-            let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
-            findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(&declared) = declared_by_type.get(&record.record_type) else {
+                return Outcome::NotExamined;
+            };
+            let Some(actual) = record.header.layout() else {
+                return Outcome::NotExamined;
+            };
+
+            if actual != declared {
+                let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
+                findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Warning,
                 file: record.path.clone(),
@@ -220,16 +229,20 @@ pub fn header_layout_consistency(
                     record.record_type
                 ),
             });
-        }
-    }
+            }
+            Outcome::Examined
+        },
+    );
 
+    let records_examined = population.examined();
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -258,31 +271,34 @@ pub fn header_field_set_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_FIELD_SET_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     // Eligible: records of a type declaring `known_fields`. An unparsed header
     // stays eligible and unexamined (BUG-78) rather than vanishing.
-    let eligible = records
+    let candidates: Vec<&Record> = records
         .iter()
         .filter(|r| allowed_by_type.contains_key(&r.record_type))
-        .count();
-    for record in records {
-        let Some(allowed) = allowed_by_type.get(&record.record_type) else {
-            continue;
-        };
-        // A record whose header region never parsed has an empty field list,
-        // which is indistinguishable here from a record whose fields are all
-        // allowed. Counting it as examined inflated the one signal ADR-55 makes
-        // load-bearing; `header.required-fields` reports the unparsed header
-        // (BUG-78).
-        if record.header.region.is_none() || record.header.parse_error.is_some() {
-            continue;
-        }
-        examined += 1;
+        .collect();
 
-        for field in &record.header.fields {
-            if !allowed.contains(&field.key.to_ascii_lowercase()) {
-                findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(allowed) = allowed_by_type.get(&record.record_type) else {
+                return Outcome::NotExamined;
+            };
+            // A record whose header region never parsed has an empty field list,
+            // which is indistinguishable here from a record whose fields are all
+            // allowed. Counting it as examined inflated the one signal ADR-55 makes
+            // load-bearing; `header.required-fields` reports the unparsed header
+            // (BUG-78).
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::NotExamined;
+            }
+
+            for field in &record.header.fields {
+                if !allowed.contains(&field.key.to_ascii_lowercase()) {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
                     file: record.path.clone(),
@@ -293,17 +309,21 @@ pub fn header_field_set_consistency(
                         field.key, record.record_type
                     ),
                 });
+                }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
+    let records_examined = population.examined();
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -377,6 +397,7 @@ pub fn type_record_outside_declared_dir(
             records_examined: examined,
             scope: RuleScope::Paths,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -451,6 +472,7 @@ pub fn type_dir_matches_nothing(
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -495,6 +517,7 @@ pub fn type_no_declared_spec(
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -546,6 +569,7 @@ pub fn header_deprecated_shape(
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -680,6 +704,7 @@ pub fn config_pointer_declaration_missing(
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -750,6 +775,7 @@ pub fn config_pointer_field_not_known(
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -809,6 +835,7 @@ pub fn config_pointer_narrative_overlap(
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -831,7 +858,22 @@ pub(crate) fn build_normalized_index(records: &[Record]) -> HashMap<String, &Rec
 pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_IDENTITY_COLLISION;
     let (_, collisions) = build_index_reporting_collisions(records);
-    let examined = records.iter().filter(|r| record_id(r).is_some()).count();
+
+    // A record whose filename yields no identifier is eligible and unexamined:
+    // it was handed to the rule, and the rule has no identity to collide.
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        records.iter().collect(),
+        |record| record.path.clone(),
+        |record| {
+            if record_id(record).is_some() {
+                Outcome::Examined
+            } else {
+                Outcome::NotExamined
+            }
+        },
+    );
+    let records_examined = population.examined();
 
     let mut findings = Vec::new();
     for (id, claimants) in collisions {
@@ -859,14 +901,11 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::Record,
-                records.len(),
-                examined,
-            )),
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -958,35 +997,40 @@ pub fn pointer_target_status(
         })
         .count();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
-        let Some(value) = record.header.get(field_name.as_str()) else {
-            return Outcome::NotExamined;
-        };
-        let references = extract_references(value);
-        if references.is_empty() {
-            return Outcome::NotExamined;
-        }
-
-        for reference in references {
-            let Some(target) = index.get(&normalize_id(&reference)) else {
-                continue;
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
             };
-            let status = target.header.get("Status").unwrap_or("(no Status field)");
-            if not_in.iter().any(|s| s == status) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    message: format!(
-                        "{field_name}: {reference} resolves, but its Status is {status}"
-                    ),
-                });
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::NotExamined;
             }
-        }
-        Outcome::Examined
-    });
+
+            for reference in references {
+                let Some(target) = index.get(&normalize_id(&reference)) else {
+                    continue;
+                };
+                let status = target.header.get("Status").unwrap_or("(no Status field)");
+                if not_in.iter().any(|s| s == status) {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "{field_name}: {reference} resolves, but its Status is {status}"
+                        ),
+                    });
+                }
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -995,6 +1039,7 @@ pub fn pointer_target_status(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1038,32 +1083,37 @@ pub fn pointer_resolution(
         })
         .count();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
-        let Some(value) = record.header.get(field_name.as_str()) else {
-            return Outcome::NotExamined;
-        };
-        let references = extract_references(value);
-        if references.is_empty() {
-            return Outcome::NotExamined;
-        }
-
-        for reference in references {
-            if index.contains_key(&normalize_id(&reference)) {
-                continue;
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
+            };
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::NotExamined;
             }
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "{field_name}: {reference} does not resolve to any discovered record"
-                ),
-            });
-        }
-        Outcome::Examined
-    });
+
+            for reference in references {
+                if index.contains_key(&normalize_id(&reference)) {
+                    continue;
+                }
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "{field_name}: {reference} does not resolve to any discovered record"
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -1072,6 +1122,7 @@ pub fn pointer_resolution(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1116,27 +1167,31 @@ pub fn header_pointer_field_clean(
         .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
-        let Some(value) = record.header.get(field_name.as_str()) else {
-            return Outcome::NotExamined;
-        };
-        if value.trim() == "—" {
-            return Outcome::Examined;
-        }
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
+            };
+            if value.trim() == "—" {
+                return Outcome::Examined;
+            }
 
-        for entry in value.split(',') {
-            let entry = entry.trim();
-            let is_clean_reference = entry
-                .split_once('-')
-                .map(|(prefix, num)| {
-                    !prefix.is_empty()
-                        && prefix.chars().all(|c| c.is_ascii_uppercase())
-                        && !num.is_empty()
-                        && num.chars().all(|c| c.is_ascii_digit())
-                })
-                .unwrap_or(false);
-            if !is_clean_reference {
-                findings.push(Finding {
+            for entry in value.split(',') {
+                let entry = entry.trim();
+                let is_clean_reference = entry
+                    .split_once('-')
+                    .map(|(prefix, num)| {
+                        !prefix.is_empty()
+                            && prefix.chars().all(|c| c.is_ascii_uppercase())
+                            && !num.is_empty()
+                            && num.chars().all(|c| c.is_ascii_digit())
+                    })
+                    .unwrap_or(false);
+                if !is_clean_reference {
+                    findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
                         file: record.path.clone(),
@@ -1146,10 +1201,11 @@ pub fn header_pointer_field_clean(
                             "{field_name} entry {entry:?} isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status"
                         ),
                     });
+                }
             }
-        }
-        Outcome::Examined
-    });
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -1161,6 +1217,7 @@ pub fn header_pointer_field_clean(
                 .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1205,24 +1262,28 @@ pub fn narrative_field_stale(
         .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
-        let Some(value) = record.header.get(field_name.as_str()) else {
-            return Outcome::NotExamined;
-        };
-        let references = extract_references(value);
-        if references.is_empty() {
-            return Outcome::NotExamined;
-        }
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
+            };
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::NotExamined;
+            }
 
-        for reference in references {
-            let Some(target) = index.get(&normalize_id(&reference)) else {
-                continue; // pointer_resolution already reports a dangling reference
-            };
-            let Some(status) = target.header.get("Status") else {
-                continue;
-            };
-            if terminal_statuses.iter().any(|t| t == status.trim()) {
-                findings.push(Finding {
+            for reference in references {
+                let Some(target) = index.get(&normalize_id(&reference)) else {
+                    continue; // pointer_resolution already reports a dangling reference
+                };
+                let Some(status) = target.header.get("Status") else {
+                    continue;
+                };
+                if terminal_statuses.iter().any(|t| t == status.trim()) {
+                    findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
                         file: record.path.clone(),
@@ -1232,10 +1293,11 @@ pub fn narrative_field_stale(
                             "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's Status/{field_name} should update"
                         ),
                     });
+                }
             }
-        }
-        Outcome::Examined
-    });
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -1247,6 +1309,7 @@ pub fn narrative_field_stale(
                 .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1386,19 +1449,26 @@ pub fn field_pending(
         .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field)| {
-        if classify(record.header.get(field.as_str())) == FieldState::Pending {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!("field '{field}' is marked pending -- work declared unfinished"),
-            });
-        }
-        Outcome::Examined
-    });
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            if classify(record.header.get(field.as_str())) == FieldState::Pending {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "field '{field}' is marked pending -- work declared unfinished"
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -1415,6 +1485,7 @@ pub fn field_pending(
                 .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1556,6 +1627,7 @@ pub fn claim_status_agreement(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -1584,26 +1656,31 @@ pub fn field_quality(
         .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field)| {
-        let state = classify(record.header.get(field.as_str()));
-        // `Pending` is `field.pending`'s subject, not this rule's: it means
-        // someone declared the work unfinished, where Blank and Placeholder
-        // mean someone forgot. One rule carries one declared level, so
-        // keeping both here left no setting that was correct (BUG-38).
-        if matches!(state, FieldState::Blank | FieldState::Placeholder) {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!("field '{field}' is {state:?} -- not a real, present value"),
-            });
-        }
-        // Every declared slot is judged: `classify(None)` is a real verdict,
-        // not an absence.
-        Outcome::Examined
-    });
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            let state = classify(record.header.get(field.as_str()));
+            // `Pending` is `field.pending`'s subject, not this rule's: it means
+            // someone declared the work unfinished, where Blank and Placeholder
+            // mean someone forgot. One rule carries one declared level, so
+            // keeping both here left no setting that was correct (BUG-38).
+            if matches!(state, FieldState::Blank | FieldState::Placeholder) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!("field '{field}' is {state:?} -- not a real, present value"),
+                });
+            }
+            // Every declared slot is judged: `classify(None)` is a real verdict,
+            // not an absence.
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -1620,6 +1697,7 @@ pub fn field_quality(
                 .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1634,38 +1712,40 @@ pub fn filename_title_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_FILENAME_TITLE_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
-        let Some(filename_number) = filename_number(record) else {
-            continue;
-        };
-        let Some(content) = full_text.get(&record.path) else {
-            continue;
-        };
-        examined += 1;
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        records.iter().collect(),
+        |record| record.path.clone(),
+        |record| {
+            let Some(filename_number) = filename_number(record) else {
+                return Outcome::NotExamined;
+            };
+            let Some(content) = full_text.get(&record.path) else {
+                return Outcome::NotExamined;
+            };
 
-        let mut push = |line: Option<usize>, message: String| {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line,
-                waived: None,
-                message,
-            });
-        };
+            let mut push = |line: Option<usize>, message: String| {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line,
+                    waived: None,
+                    message,
+                });
+            };
 
-        // Skipping instead would drop a record the rule was asked about.
-        let Ok(filename_number) = filename_number.parse::<u64>() else {
-            push(
-                None,
-                format!("filename number {filename_number} is too large to compare"),
-            );
-            continue;
-        };
+            // Skipping instead would drop a record the rule was asked about.
+            let Ok(filename_number) = filename_number.parse::<u64>() else {
+                push(
+                    None,
+                    format!("filename number {filename_number} is too large to compare"),
+                );
+                return Outcome::Examined;
+            };
 
-        match first_h1(content, record.header.region) {
+            match first_h1(content, record.header.region) {
             None => push(
                 None,
                 "no H1 title found to check against the filename's number".to_string(),
@@ -1688,19 +1768,20 @@ pub fn filename_title_consistency(
                 Some(_) => {}
             },
         }
-    }
+            Outcome::Examined
+        },
+    );
+
+    let records_examined = population.examined();
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::Record,
-                records.len(),
-                examined,
-            )),
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1820,27 +1901,30 @@ pub fn revision_log_change_class(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     // Every record is eligible. A record with no `**Revision log**` marker is
     // *absent* from this rule's judgement, not outside its population -- and
     // absence is exactly what BUG-50 reports as indistinguishable from
     // compliance: SPEC-1 lost 18 revision rows by losing one line and the rule
     // stayed green. The subtraction the report could not perform is now in it.
-    let eligible = records.len();
-    for record in records {
-        let Some(content) = full_text.get(&record.path) else {
-            continue;
-        };
-        let Some(entries) = find_revision_log_entries(content) else {
-            continue;
-        };
-        examined += 1;
+    let candidates: Vec<&Record> = records.iter().collect();
 
-        for entry in entries {
-            let class = entry.change_class.trim_matches('*').trim();
-            if !matches!(class, "substantive" | "structural") {
-                findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(content) = full_text.get(&record.path) else {
+                return Outcome::NotExamined;
+            };
+            let Some(entries) = find_revision_log_entries(content) else {
+                return Outcome::NotExamined;
+            };
+
+            for entry in entries {
+                let class = entry.change_class.trim_matches('*').trim();
+                if !matches!(class, "substantive" | "structural") {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
@@ -1851,17 +1935,21 @@ pub fn revision_log_change_class(
                         entry.date, entry.change_class
                     ),
                 });
+                }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
+    let records_examined = population.examined();
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2032,44 +2120,51 @@ pub fn embodiment_locator_exists(
     let slots = declared_slots(records, config, &["Realized-by"]);
     let records_examined = slots.len();
 
-    let population = census(PopulationUnit::Field, slots, |record| {
-        let Some(value) = record.header.get("Realized-by") else {
-            return Outcome::NotExamined;
-        };
-        let realized = parse_realized_by(value);
-        for locator in realized
-            .spec
-            .iter()
-            .chain(&realized.code)
-            .chain(&realized.test)
-        {
-            // An empty locator joins to the repository root, which exists --
-            // so it would pass while still computing to `Implemented`.
-            if locator.trim().is_empty() {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(value) = record.header.get("Realized-by") else {
+                return Outcome::NotExamined;
+            };
+            let realized = parse_realized_by(value);
+            for locator in realized
+                .spec
+                .iter()
+                .chain(&realized.code)
+                .chain(&realized.test)
+            {
+                // An empty locator joins to the repository root, which exists --
+                // so it would pass while still computing to `Implemented`.
+                if locator.trim().is_empty() {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: "Realized-by has an empty locator".to_string(),
+                    });
+                    continue;
+                }
+                if present(locator) {
+                    continue;
+                }
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
                     line: None,
                     waived: None,
-                    message: "Realized-by has an empty locator".to_string(),
+                    message: format!(
+                        "Realized-by names '{locator}', which is not in the working tree"
+                    ),
                 });
-                continue;
             }
-            if present(locator) {
-                continue;
-            }
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!("Realized-by names '{locator}', which is not in the working tree"),
-            });
-        }
-        Outcome::Examined
-    });
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -2078,6 +2173,7 @@ pub fn embodiment_locator_exists(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2106,33 +2202,38 @@ pub fn embodiment_consistency(
     let slots = declared_slots(records, config, &["Embodiment", "Realized-by"]);
     let records_examined = slots.len();
 
-    let population = census(PopulationUnit::Field, slots, |record| {
-        let Some(stated) = record.header.get("Embodiment") else {
-            return Outcome::NotExamined;
-        };
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
-            return Outcome::NotExamined;
-        };
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(stated) = record.header.get("Embodiment") else {
+                return Outcome::NotExamined;
+            };
+            let Some(realized_by_value) = record.header.get("Realized-by") else {
+                return Outcome::NotExamined;
+            };
 
-        let computed = compute_embodiment(
-            &parse_realized_by(realized_by_value),
-            drifted.contains(&record.path),
-        );
-        if stated.trim() != computed {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!(
+            let computed = compute_embodiment(
+                &parse_realized_by(realized_by_value),
+                drifted.contains(&record.path),
+            );
+            if stated.trim() != computed {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
                     "stated Embodiment '{}' disagrees with '{computed}', computed from Realized-by",
                     stated.trim()
                 ),
-            });
-        }
-        Outcome::Examined
-    });
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -2141,6 +2242,7 @@ pub fn embodiment_consistency(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2168,29 +2270,34 @@ pub fn embodiment_locator_promotion_candidate(
 
     // Findings are emitted after the census, not inside it: this rule judges
     // locators across records, so no single candidate is at fault.
-    let population = census(PopulationUnit::Field, slots, |record| {
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
-            return Outcome::NotExamined;
-        };
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(realized_by_value) = record.header.get("Realized-by") else {
+                return Outcome::NotExamined;
+            };
 
-        let parsed = parse_realized_by(realized_by_value);
-        for locator in parsed
-            .spec
-            .iter()
-            .chain(parsed.code.iter())
-            .chain(parsed.test.iter())
-        {
-            // A BTreeSet, not a Vec: the same record citing one locator
-            // under both `code:` and `test:` is still one record, not two
-            // independent citers -- cross-record duplication is what needs
-            // promotion, not cross-category duplication within one record.
-            citers
-                .entry(locator.clone())
-                .or_default()
-                .insert(record.path.clone());
-        }
-        Outcome::Examined
-    });
+            let parsed = parse_realized_by(realized_by_value);
+            for locator in parsed
+                .spec
+                .iter()
+                .chain(parsed.code.iter())
+                .chain(parsed.test.iter())
+            {
+                // A BTreeSet, not a Vec: the same record citing one locator
+                // under both `code:` and `test:` is still one record, not two
+                // independent citers -- cross-record duplication is what needs
+                // promotion, not cross-category duplication within one record.
+                citers
+                    .entry(locator.clone())
+                    .or_default()
+                    .insert(record.path.clone());
+            }
+            Outcome::Examined
+        },
+    );
 
     for (locator, paths) in citers {
         if paths.len() < 2 {
@@ -2219,6 +2326,7 @@ pub fn embodiment_locator_promotion_candidate(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2257,24 +2365,28 @@ pub fn supersession_reciprocity(
 
     let records_examined = slots.len();
 
-    let population = census(PopulationUnit::Field, slots, |record| {
-        let Some(id) = record_id(record) else {
-            return Outcome::NotExamined;
-        };
-        let normalized_id = normalize_id(&id);
-        let Some(value) = record.header.get(FIELD) else {
-            return Outcome::NotExamined;
-        };
-        // `—` is this corpus's written "nothing supersedes this", so the slot
-        // was answered. Skipping before counting left the reciprocating half of
-        // a correct pair uncounted.
-        if value.trim() == "—" {
-            return Outcome::Examined;
-        }
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(id) = record_id(record) else {
+                return Outcome::NotExamined;
+            };
+            let normalized_id = normalize_id(&id);
+            let Some(value) = record.header.get(FIELD) else {
+                return Outcome::NotExamined;
+            };
+            // `—` is this corpus's written "nothing supersedes this", so the slot
+            // was answered. Skipping before counting left the reciprocating half of
+            // a correct pair uncounted.
+            if value.trim() == "—" {
+                return Outcome::Examined;
+            }
 
-        for reference in extract_references(value) {
-            let Some(target) = index.get(&normalize_id(&reference)) else {
-                findings.push(Finding {
+            for reference in extract_references(value) {
+                let Some(target) = index.get(&normalize_id(&reference)) else {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
@@ -2282,17 +2394,17 @@ pub fn supersession_reciprocity(
  waived: None,
                     message: format!("Supersedes/Superseded-by: {reference} does not resolve to any discovered record"),
                 });
-                continue;
-            };
-            let target_value = target
-                .header
-                .get("Supersedes / Superseded-by")
-                .unwrap_or("");
-            let target_names_back = extract_references(target_value)
-                .iter()
-                .any(|r| normalize_id(r) == normalized_id);
-            if !target_names_back {
-                findings.push(Finding {
+                    continue;
+                };
+                let target_value = target
+                    .header
+                    .get("Supersedes / Superseded-by")
+                    .unwrap_or("");
+                let target_names_back = extract_references(target_value)
+                    .iter()
+                    .any(|r| normalize_id(r) == normalized_id);
+                if !target_names_back {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
@@ -2302,10 +2414,11 @@ pub fn supersession_reciprocity(
                         "claims a Supersedes/Superseded-by relation with {reference}, but {reference} does not reciprocally name {id}"
                     ),
                 });
+                }
             }
-        }
-        Outcome::Examined
-    });
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
@@ -2314,6 +2427,7 @@ pub fn supersession_reciprocity(
             records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
