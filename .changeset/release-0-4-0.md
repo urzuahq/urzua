@@ -1,5 +1,5 @@
 ---
-default: minor
+default: major
 ---
 
 Governance is configuration. Every rule is declared and opt-in, and the configuration is YAML.
