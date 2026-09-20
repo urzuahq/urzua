@@ -1404,13 +1404,21 @@ pub fn claim_status_agreement(
     // Present tense only: a claim is written in the present, while prose
     // *about* a past claim is written in the past. A narrowing, not a fix --
     // a present-tense sentence discussing a claim still matches.
+    // Counted per record resolved against, not per claim file read: this field
+    // exists to say how many *records* a rule examined, and counting inputs
+    // made it exceed the size of the corpus while saying nothing about records
+    // (BUG-89).
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for (path, content) in claims {
-        examined += 1;
         for (idx, line) in content.lines().enumerate() {
             for reference in claimed_closed(line) {
-                let Some(target) = index.get(&normalize_id(&reference)) else {
+                let normalized = normalize_id(&reference);
+                let Some(target) = index.get(&normalized) else {
                     continue;
                 };
+                if seen.insert(normalized) {
+                    examined += 1;
+                }
                 let status = target.header.get("Status").unwrap_or("(no Status field)");
                 if closed_statuses.iter().any(|s| s == status) {
                     continue;

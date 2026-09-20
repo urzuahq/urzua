@@ -37,6 +37,9 @@ satisfy.
 declared, or only rules that read the configuration or the path inventory, no longer exits 0 as
 though the corpus had been checked.
 
+Discovery reads git's output NUL-separated, so a record whose filename contains a non-ASCII
+character is part of the corpus rather than silently dropped.
+
 **A record the tool cannot read stops the run.** An unreadable or missing tracked record previously
 dropped out of the corpus, leaving a smaller `files_examined` and a clean verdict. A deletion staged
 in git is still a legitimate absence.
