@@ -29,7 +29,7 @@ Done when all five hold:
 
 | # | Criterion | Phase |
 |---|---|---|
-| 1 | `make check` runs `urzua check docs/` in this repo's CI and fails the build on a deliberately broken record | A |
+| 1 | `make check` runs `urzua check` in this repo's CI and fails the build on a deliberately broken record | A |
 | 2 | It reports files examined, rules executed, **and each rule's input population**, in both output formats | A |
 | 3 | It exits non-zero when given paths that match zero files | A |
 | 4 | Every rule family in §Rules is implemented and configurable | B |
@@ -59,8 +59,9 @@ corpora can be published at all, and the fastest deliverable must not sit behind
 
 ### Phase A — the loop closes
 
-**Done when `urzua check docs/` runs in this repository's CI and fails on a deliberately broken
-record.** Nothing more.
+**Done when `urzua check` runs in this repository's CI and fails on a deliberately broken record.**
+Nothing more. Unscoped: a path argument narrows which findings are reported (`BUG-67`), and this
+repository's corpus is no longer confined to `docs/` -- the claim files a rule reads live beside it.
 
 Scope:
 
@@ -315,6 +316,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > |---|---|---|
 > | 2026-08-20 | Split out of SPEC-1, which retains the cross-cutting rules. | **structural** |
 > | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-18/ADR-32) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |
+> | 2026-09-20 | Criterion 1 and Phase A now say `urzua check`, not `urzua check docs/`. **Why:** the scope argument selects which findings are reported, so naming `docs/` excluded every finding about a file outside it -- `claim.status-agreement` reports on the claim file in `.changeset/`, and the gate therefore could never fail on a false claim, which is the one thing that rule exists to catch (`BUG-86`). The criterion's intent is that the tool checks this repository and fails on a broken record; `docs/` was the whole corpus when it was written and no longer is. | **substantive** |
 > | 2026-09-09 | Rewrote §Rules for MILE-90/ADR-44: `pointer.resolution`/`header.pointer-field-clean` are now config-driven (`pointer_fields`/`narrative_fields` per type, no hardcoded field list); `blocked-on.stale` renamed `narrative-field.stale`, generalized beyond `Blocked-on`; added the three new config-level rules (`config.pointer-declaration-missing`, `config.pointer-field-not-known`, `config.pointer-narrative-overlap`) and the two rows this table had never listed at all (`type.no-declared-spec`, `header.deprecated-shape`) despite both already shipping. Corrected the stale "ten rules" framing to the real, current seventeen. **Why:** this table drifting behind the actual shipped rule set is the exact recurring gap this spec's own 2026-09-07 entry already named once; MILE-90 touched every one of these rule functions directly, making this the natural point to close the gap rather than let it recur a third time. | **structural** |
 > | 2026-09-07 | Rewrote §Rules as a complete, accurate list of all ten actually-shipped rule ids (adding `header.layout-consistency`/ADR-38 and `header.field-set-consistency`/ADR-39, neither previously mentioned at all), separated from the design language that's still unbuilt. Corrected §Out of scope's claim that cross-record reconciliation is `audit`-exclusive -- `check` has run `relation.supersession-reciprocity` directly since ADR-30, and the actual data-loss risk this spec was guarding against was a bulk *rewrite*, never a read-only reciprocity check. **Why:** per ADR-14's amendment adopted earlier the same day, a spec's body must stay a complete, replayable specification of its subject at every revision, not accumulate "not yet reconciled" notes as a substitute for actually updating it -- leaving this stale on the very day that policy was adopted would have been an immediate, visible contradiction. | **substantive** |
 > | 2026-09-07 | Added `blocked-on.stale` as an 11th rule (ADR-42); `pointer.resolution`'s row updated to include `Parent`/`Blocked-on`, which it had already gained (ADR-40) without this table being updated. **Why:** the same "spec must stay complete" policy applies to every rule addition, not just the ones made on the day the policy was adopted -- letting this table go one rule stale again immediately would have repeated the exact drift this spec was just corrected for. | **substantive** |
