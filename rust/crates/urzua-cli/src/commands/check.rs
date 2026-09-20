@@ -22,6 +22,9 @@ fn read_claim_files(
     prefixes: &[String],
 ) -> Result<Vec<(String, String)>, String> {
     let mut out = Vec::new();
+    let repo_canonical = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
     for prefix in prefixes {
         let dir = repo_root.join(prefix);
         // `claim_paths` is a path *prefix*, so the claims may sit any depth
@@ -50,11 +53,39 @@ fn read_claim_files(
                 // an ancestor gives an unbounded walk that leaves the declared
                 // prefix entirely -- measured at 904 files read, from other
                 // repositories on disk (BUG-69).
-                let meta = std::fs::symlink_metadata(&path)
+                // A link is never *descended* into -- a link to an ancestor
+                // gives an unbounded walk outside the declared prefix (BUG-69)
+                // -- but a linked file is still read. `symlink_metadata`'s
+                // `is_file()` is false for a link whatever it points at, so
+                // testing it alone dropped a symlinked claim in silence, in a
+                // walk that aborts on every other failure (BUG-75).
+                let link = std::fs::symlink_metadata(&path)
                     .map_err(|e| format!("claim_paths: could not stat {}: {e}", path.display()))?;
-                if meta.is_dir() {
+                let target = std::fs::metadata(&path).map_err(|e| {
+                    format!("claim_paths: could not resolve {}: {e}", path.display())
+                })?;
+                if target.is_dir() {
+                    if link.is_symlink() {
+                        return Err(format!(
+                            "claim_paths: {} is a symlink to a directory; the walk does not follow it",
+                            path.display()
+                        ));
+                    }
                     pending.push(path);
-                } else if meta.is_file() && path.extension().is_some_and(|e| e == "md") {
+                } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
+                    // A linked file is read, so its *target* must also stay
+                    // inside the repository: a symlink named `.md` otherwise
+                    // feeds an arbitrary file on the machine to the claim
+                    // scanner, and its contents steer the findings.
+                    let resolved = path.canonicalize().map_err(|e| {
+                        format!("claim_paths: could not resolve {}: {e}", path.display())
+                    })?;
+                    if !resolved.starts_with(&repo_canonical) {
+                        return Err(format!(
+                            "claim_paths: {} resolves outside the repository",
+                            path.display()
+                        ));
+                    }
                     paths.push(path);
                 }
             }
@@ -106,7 +137,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // corpus a pointer resolves against: a target outside the requested path
     // still exists, and judging it absent turns a clean corpus into a failing
     // one purely by how the check was invoked (BUG-60).
-    let (records, full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let (records, full_text) = match load_records(&repo_root, &discovered.paths, &config) {
+        Ok(r) => r,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     let in_scope: std::collections::HashSet<&std::path::Path> =
         scoped.iter().map(|p| p.as_path()).collect();
 
@@ -155,14 +189,30 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // following the documented `claim_paths: [".changeset"]` pattern
                 // would otherwise lose `check` entirely the moment a release
                 // consumes the last fragment.
-                // `symlink_metadata`, not `exists()`/`is_dir()`: both follow
-                // links, so `read_dir` would traverse the target before the
-                // per-entry check applies, and a root symlinked to an ancestor
-                // escaped the declared prefix entirely (BUG-69).
+                // A root symlinked to an ancestor escaped the declared prefix
+                // entirely (BUG-69). Rejecting every symlink also rejected a
+                // link to a legitimate directory, with a message saying it was
+                // not readable when it was (BUG-80) -- so the target is
+                // resolved and required to stay inside the repository instead.
                 let declared = repo_root.join(prefix);
-                if !std::fs::symlink_metadata(&declared).is_ok_and(|m| m.is_dir()) {
+                let resolved = declared.canonicalize().ok();
+                // Both sides canonicalised: the repo root may itself reach
+                // through a link (macOS `/tmp`), and comparing a resolved path
+                // against an unresolved root reports every entry as outside.
+                let root = repo_root
+                    .canonicalize()
+                    .unwrap_or_else(|_| repo_root.clone());
+                let inside = resolved
+                    .as_ref()
+                    .is_some_and(|r| r.starts_with(&root) && r.is_dir());
+                if !inside {
+                    let why = match &resolved {
+                        Some(r) if !r.is_dir() => "is not a directory",
+                        Some(_) => "resolves outside the repository",
+                        None => "does not resolve",
+                    };
                     return emit(&CouldNotRun::from(format!(
-                        "claim.status-agreement: claim_paths entry '{prefix}' is not a readable directory"
+                        "claim.status-agreement: claim_paths entry '{prefix}' {why}"
                     )));
                 }
             }
@@ -283,6 +333,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             let dir_exists = |d: &str| repo_root.join(d).is_dir();
             rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists)
         }),
+        crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
+            rules::identity_collision(&records)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
@@ -346,7 +399,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         .filter(|r| in_scope.contains(r.path.as_path()))
         .collect();
 
-    let status = if examined.is_empty() {
+    let status = if examined.is_empty() || !crate::gate::any_rule_looked(&rules_executed) {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
         ReportStatus::Ok

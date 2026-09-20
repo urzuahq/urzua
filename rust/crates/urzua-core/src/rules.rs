@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
-use crate::report::{Finding, FindingSeverity, RuleExecution, RuleStatus};
+use crate::report::{Finding, FindingSeverity, RuleExecution, RuleScope, RuleStatus};
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -24,6 +24,7 @@ pub const RULE_HEADER_FIELD_SET_CONSISTENCY: &str = "header.field-set-consistenc
 pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
 pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
 pub const RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR: &str = "type.record-outside-declared-dir";
+pub const RULE_IDENTITY_COLLISION: &str = "identity.collision";
 pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
@@ -50,6 +51,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_TYPE_NO_DECLARED_SPEC,
     RULE_TYPE_DIR_MATCHES_NOTHING,
     RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+    RULE_IDENTITY_COLLISION,
     RULE_HEADER_DEPRECATED_SHAPE,
     RULE_CONFIG_POINTER_DECLARATION_MISSING,
     RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
@@ -133,6 +135,7 @@ pub fn header_required_fields(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -186,6 +189,7 @@ pub fn header_layout_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -221,6 +225,14 @@ pub fn header_field_set_consistency(
         let Some(allowed) = allowed_by_type.get(&record.record_type) else {
             continue;
         };
+        // A record whose header region never parsed has an empty field list,
+        // which is indistinguishable here from a record whose fields are all
+        // allowed. Counting it as examined inflated the one signal ADR-55 makes
+        // load-bearing; `header.required-fields` reports the unparsed header
+        // (BUG-78).
+        if record.header.region.is_none() || record.header.parse_error.is_some() {
+            continue;
+        }
         examined += 1;
 
         for field in &record.header.fields {
@@ -244,6 +256,7 @@ pub fn header_field_set_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -315,6 +328,7 @@ pub fn type_record_outside_declared_dir(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -383,6 +397,7 @@ pub fn type_dir_matches_nothing(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Config,
             status: RuleStatus::Ran,
         },
         findings,
@@ -421,6 +436,7 @@ pub fn type_no_declared_spec(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Config,
             status: RuleStatus::Ran,
         },
         findings,
@@ -466,6 +482,7 @@ pub fn header_deprecated_shape(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Config,
             status: RuleStatus::Ran,
         },
         findings,
@@ -594,6 +611,7 @@ pub fn config_pointer_declaration_missing(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Config,
             status: RuleStatus::Ran,
         },
         findings,
@@ -658,6 +676,7 @@ pub fn config_pointer_field_not_known(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Config,
             status: RuleStatus::Ran,
         },
         findings,
@@ -711,6 +730,7 @@ pub fn config_pointer_narrative_overlap(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Config,
             status: RuleStatus::Ran,
         },
         findings,
@@ -724,10 +744,81 @@ pub fn config_pointer_narrative_overlap(
 /// copies of this same loop, one of which (`graph()`'s) never normalized at
 /// all (BUG-0011).
 pub(crate) fn build_normalized_index(records: &[Record]) -> HashMap<String, &Record> {
-    records
-        .iter()
-        .filter_map(|record| record_id(record).map(|id| (normalize_id(&id), record)))
-        .collect()
+    build_index_reporting_collisions(records).0
+}
+
+/// Two records resolving to one identifier is a corpus error the index cannot
+/// represent: it keeps one and the other stops existing for every rule that
+/// resolves a reference. Reported here rather than papered over, because the
+/// tool knows both records are there (BUG-79).
+pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_IDENTITY_COLLISION;
+    let (_, collisions) = build_index_reporting_collisions(records);
+    let examined = records.iter().filter(|r| record_id(r).is_some()).count();
+
+    let mut findings = Vec::new();
+    for (id, claimants) in collisions {
+        let mut paths: Vec<String> = claimants
+            .iter()
+            .map(|r| r.path.display().to_string())
+            .collect();
+        paths.sort();
+        for record in &claimants {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "identifier {id} is claimed by {} records ({}) -- a reference to it resolves to only one of them",
+                    claimants.len(),
+                    paths.join(", ")
+                ),
+            });
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            records_examined: examined,
+            scope: RuleScope::Records,
+            status: RuleStatus::Ran,
+        },
+        findings,
+    )
+}
+
+/// Records by normalized identifier.
+pub(crate) type RecordIndex<'a> = HashMap<String, &'a Record>;
+
+/// One identifier and every record claiming it.
+pub(crate) type IdentifierCollision<'a> = (String, Vec<&'a Record>);
+
+/// The index plus the identifiers more than one record claims. Collecting
+/// straight into a map kept whichever record sorted last and made the loser
+/// invisible to every rule that resolves a reference -- so the verdict on a
+/// corpus depended on filename order (BUG-79).
+pub(crate) fn build_index_reporting_collisions(
+    records: &[Record],
+) -> (RecordIndex<'_>, Vec<IdentifierCollision<'_>>) {
+    let mut index: HashMap<String, &Record> = HashMap::new();
+    let mut claimants: HashMap<String, Vec<&Record>> = HashMap::new();
+    for record in records {
+        let Some(id) = record_id(record) else {
+            continue;
+        };
+        let key = normalize_id(&id);
+        claimants.entry(key.clone()).or_default().push(record);
+        index.entry(key).or_insert(record);
+    }
+    let mut collisions: Vec<IdentifierCollision<'_>> = claimants
+        .into_iter()
+        .filter(|(_, rs)| rs.len() > 1)
+        .collect();
+    collisions.sort_by(|a, b| a.0.cmp(&b.0));
+    (index, collisions)
 }
 
 /// Rule 2 (config-driven per type since MILE-0090/ADR-0044): a
@@ -800,6 +891,7 @@ pub fn pointer_target_status(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -856,6 +948,7 @@ pub fn pointer_resolution(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -934,6 +1027,7 @@ pub fn header_pointer_field_clean(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1005,6 +1099,7 @@ pub fn narrative_field_stale(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1159,6 +1254,7 @@ pub fn field_pending(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1271,6 +1367,7 @@ pub fn claim_status_agreement(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1315,6 +1412,7 @@ pub fn field_quality(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1390,6 +1488,7 @@ pub fn filename_title_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1543,6 +1642,7 @@ pub fn revision_log_change_class(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1731,6 +1831,7 @@ pub fn embodiment_locator_exists(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1786,6 +1887,7 @@ pub fn embodiment_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1854,6 +1956,7 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1927,6 +2030,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
+            scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
         findings,
@@ -1999,6 +2103,29 @@ mod tests {
         assert_eq!(exec.records_examined, 1, "the rule must reach a verdict");
         assert_eq!(findings.len(), 1, "DEC-2 is terminal by declaration");
         assert!(findings[0].message.contains("DEC-2"));
+    }
+
+    #[test]
+    fn header_field_set_consistency_does_not_count_an_unparsed_header() {
+        // An unparsed header leaves an empty field list, which is
+        // indistinguishable here from a record whose fields are all allowed.
+        // Counting it inflates the signal ADR-55 makes load-bearing (BUG-78).
+        let (r, _) = yaml_record(
+            "docs/adr/ADR-1-x.md",
+            "---\nStatus: [unclosed\n---\n# 1 — X\n",
+        );
+        let mut allowed = HashMap::new();
+        allowed.insert(
+            "adr".to_string(),
+            ["status".to_string()]
+                .into_iter()
+                .collect::<HashSet<String>>(),
+        );
+        let (exec, _) = header_field_set_consistency(&[r], &allowed);
+        assert_eq!(
+            exec.records_examined, 0,
+            "the rule never saw this record's fields"
+        );
     }
 
     fn terminal_for_tests() -> Vec<String> {

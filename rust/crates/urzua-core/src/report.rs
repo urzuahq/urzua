@@ -37,6 +37,13 @@ pub struct Finding {
 pub struct RuleExecution {
     pub rule: String,
     pub records_examined: usize,
+    /// What `records_examined` counted. A rule that reads the configuration
+    /// counts declarations, not records, and the two must not be added
+    /// together: a config-scoped count satisfying "some rule examined
+    /// something" let `check` report `Ok` having read no record at all
+    /// (BUG-81).
+    #[serde(default)]
+    pub scope: RuleScope,
     /// ADR-7: a rule a repository did not turn on is reported as deliberately
     /// skipped, never omitted -- "off" and "ran clean" must stay
     /// distinguishable in the report.
@@ -48,6 +55,16 @@ pub struct RuleExecution {
 pub enum RuleStatus {
     Ran,
     NotEnabled,
+}
+
+/// Whether a rule's examined count refers to corpus records or to
+/// configuration entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuleScope {
+    #[default]
+    Records,
+    Config,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

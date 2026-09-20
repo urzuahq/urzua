@@ -24,6 +24,18 @@ Evidence it is not met yet: several records in this corpus were hand-written dur
 work, and two of them were rejected by `check` for header shapes `urzua new` would have produced
 correctly. The command was available and not reached for.
 
+## A friction point found in this project's own use
+
+`urzua new` writes a record and leaves it untracked, and `check` governs tracked files only
+(`ADR-56`). Between the two, a freshly created record is invisible: a reference to it from an
+already-tracked file is reported as dangling, at `error` severity, blocking, while the record sits on
+disk. It happened twice in one session and was misdiagnosed both times as a stale build.
+
+Staging what `urzua new` creates would close that window at the source. Recorded here rather than
+decided, because it is a question about which path is faster -- this milestone's subject -- and not
+about what is governed, which `ADR-56` settles. It should be configurable if it is built: a command
+that touches the index is not what every workflow wants.
+
 ## What would satisfy it
 
 A measurement rather than an assertion. Candidates, unchosen:

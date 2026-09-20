@@ -46,7 +46,10 @@ pub fn run(
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let (records, _full_text) = match load_records(&repo_root, &discovered.paths, &config) {
+        Ok(r) => r,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
 
     if !apply {
