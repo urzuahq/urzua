@@ -1491,50 +1491,69 @@ pub fn claim_status_agreement(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let index = build_normalized_index(records);
     // Present tense only: a claim is written in the present, while prose
     // *about* a past claim is written in the past. A narrowing, not a fix --
     // a present-tense sentence discussing a claim still matches.
-    // Counted per record resolved against, not per claim file read: this field
-    // exists to say how many *records* a rule examined, and counting inputs
-    // made it exceed the size of the corpus while saying nothing about records
-    // (BUG-89).
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut occurrences: Vec<(&String, usize, String, String)> = Vec::new();
     for (path, content) in claims {
         for (idx, line) in content.lines().enumerate() {
             for reference in claimed_closed(line) {
                 let normalized = normalize_id(&reference);
-                let Some(target) = index.get(&normalized) else {
-                    continue;
-                };
-                if seen.insert(normalized) {
-                    examined += 1;
-                }
-                let status = target.header.get("Status").unwrap_or("(no Status field)");
-                if closed_statuses.iter().any(|s| s == status) {
-                    continue;
-                }
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: PathBuf::from(path),
-                    line: Some(idx + 1),
-                    waived: None,
-                    message: format!(
-                        "claims to close {reference}, but {reference} has Status {status}"
-                    ),
-                });
+                occurrences.push((path, idx + 1, reference, normalized));
             }
         }
+    }
+
+    // One candidate per *distinct* claimed reference, deduped the same way the
+    // verdict is: two changesets closing one record are one thing to judge.
+    // Counting occurrences instead made the number exceed the corpus while
+    // saying nothing about records (BUG-89).
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let candidates: Vec<&str> = occurrences
+        .iter()
+        .map(|(_, _, _, normalized)| normalized.as_str())
+        .filter(|normalized| seen.insert(normalized))
+        .collect();
+
+    // A claimed reference resolving to no record is eligible and unexamined --
+    // the claim was made and the engine could not judge it. It was a bare
+    // `continue` that moved no number.
+    let population = census(PopulationUnit::Claim, candidates, |normalized| {
+        if index.contains_key(*normalized) {
+            Outcome::Examined
+        } else {
+            Outcome::NotExamined
+        }
+    });
+    let records_examined = population.examined();
+
+    // Findings are per occurrence, not per candidate: each place the claim is
+    // written is its own thing to correct.
+    for (path, line, reference, normalized) in occurrences {
+        let Some(target) = index.get(&normalized) else {
+            continue;
+        };
+        let status = target.header.get("Status").unwrap_or("(no Status field)");
+        if closed_statuses.iter().any(|s| s == status) {
+            continue;
+        }
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Error,
+            file: PathBuf::from(path),
+            line: Some(line),
+            waived: None,
+            message: format!("claims to close {reference}, but {reference} has Status {status}"),
+        });
     }
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -1969,6 +1988,29 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
     }
 }
 
+/// The records whose type declares *every* named field, as the rule's
+/// candidate slots. A rule needing two fields takes the pair as one candidate,
+/// so a record carrying only one of them is eligible and unexamined rather
+/// than outside the population.
+fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -> Vec<&'a Record> {
+    records
+        .iter()
+        .filter(|record| {
+            config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| {
+                    fields.iter().all(|wanted| {
+                        t.known_fields
+                            .iter()
+                            .flatten()
+                            .any(|declared| declared == wanted)
+                    })
+                })
+        })
+        .collect()
+}
+
 /// A `Realized-by` locator naming a path that is not in the working tree.
 ///
 /// `Embodiment` is computed from these paths, so a locator naming nothing lets
@@ -1979,19 +2021,21 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
 /// filesystem.
 pub fn embodiment_locator_exists(
     records: &[Record],
+    config: &Config,
     present: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
+    // One candidate per declared slot, not per locator: the population is the
+    // rule's input, not its work count.
+    let slots = declared_slots(records, config, &["Realized-by"]);
+    let records_examined = slots.len();
+
+    let population = census(PopulationUnit::Field, slots, |record| {
         let Some(value) = record.header.get("Realized-by") else {
-            continue;
+            return Outcome::NotExamined;
         };
-        // One per record, not per locator: `records_examined` is the rule's
-        // input population, not its work count.
-        examined += 1;
         let realized = parse_realized_by(value);
         for locator in realized
             .spec
@@ -2024,13 +2068,14 @@ pub fn embodiment_locator_exists(
                 message: format!("Realized-by names '{locator}', which is not in the working tree"),
             });
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2049,20 +2094,25 @@ pub fn embodiment_locator_exists(
 /// same shape as `full_text` elsewhere in this module).
 pub fn embodiment_consistency(
     records: &[Record],
+    config: &Config,
     drifted: &HashSet<PathBuf>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
+    // The candidate is the *pair*: the rule needs both fields, so a record
+    // carrying only one of them is handed to the rule and reaches no verdict.
+    // Treating each field as its own slot would make that state unreportable.
+    let slots = declared_slots(records, config, &["Embodiment", "Realized-by"]);
+    let records_examined = slots.len();
+
+    let population = census(PopulationUnit::Field, slots, |record| {
         let Some(stated) = record.header.get("Embodiment") else {
-            continue;
+            return Outcome::NotExamined;
         };
         let Some(realized_by_value) = record.header.get("Realized-by") else {
-            continue;
+            return Outcome::NotExamined;
         };
-        examined += 1;
 
         let computed = compute_embodiment(
             &parse_realized_by(realized_by_value),
@@ -2081,13 +2131,14 @@ pub fn embodiment_consistency(
                 ),
             });
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2100,20 +2151,27 @@ pub fn embodiment_consistency(
 /// drift independently on what is really one piece of shared evidence (the
 /// ADR-0072/0073/0074 shape RFC-0005 names). Reports only; a human runs the
 /// actual promotion into a `claim` record, never this rule.
-pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+pub fn embodiment_locator_promotion_candidate(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut citers: std::collections::BTreeMap<
         String,
         std::collections::BTreeSet<std::path::PathBuf>,
     > = std::collections::BTreeMap::new();
-    for record in records {
+
+    let slots = declared_slots(records, config, &["Realized-by"]);
+    let records_examined = slots.len();
+
+    // Findings are emitted after the census, not inside it: this rule judges
+    // locators across records, so no single candidate is at fault.
+    let population = census(PopulationUnit::Field, slots, |record| {
         let Some(realized_by_value) = record.header.get("Realized-by") else {
-            continue;
+            return Outcome::NotExamined;
         };
-        examined += 1;
 
         let parsed = parse_realized_by(realized_by_value);
         for locator in parsed
@@ -2131,7 +2189,8 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
                 .or_default()
                 .insert(record.path.clone());
         }
-    }
+        Outcome::Examined
+    });
 
     for (locator, paths) in citers {
         if paths.len() < 2 {
@@ -2156,8 +2215,8 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2169,10 +2228,13 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
 /// the forward claim leaves the reverse unguarded -- a record can claim to
 /// supersede something that doesn't reciprocally point back, sending a
 /// reader of the *target* to a record that denies the relation.
-pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+pub fn supersession_reciprocity(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
+    const FIELD: &str = "Supersedes / Superseded-by";
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut index: HashMap<String, &Record> = HashMap::new();
     for record in records {
@@ -2181,18 +2243,34 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
         }
     }
 
-    for record in records {
+    // A record whose filename yields no id is eligible but unexaminable: the
+    // reciprocity test is "does the target name *me* back", which needs an id.
+    let slots: Vec<&Record> = records
+        .iter()
+        .filter(|record| {
+            config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.known_fields.iter().flatten().any(|f| f == FIELD))
+        })
+        .collect();
+
+    let records_examined = slots.len();
+
+    let population = census(PopulationUnit::Field, slots, |record| {
         let Some(id) = record_id(record) else {
-            continue;
+            return Outcome::NotExamined;
         };
         let normalized_id = normalize_id(&id);
-        let Some(value) = record.header.get("Supersedes / Superseded-by") else {
-            continue;
+        let Some(value) = record.header.get(FIELD) else {
+            return Outcome::NotExamined;
         };
+        // `—` is this corpus's written "nothing supersedes this", so the slot
+        // was answered. Skipping before counting left the reciprocating half of
+        // a correct pair uncounted.
         if value.trim() == "—" {
-            continue;
+            return Outcome::Examined;
         }
-        examined += 1;
 
         for reference in extract_references(value) {
             let Some(target) = index.get(&normalize_id(&reference)) else {
@@ -2226,13 +2304,14 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
                 });
             }
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2558,6 +2637,13 @@ mod tests {
     /// Full builder for the config-level pointer/narrative-field validation
     /// tests (MILE-90) -- the two helpers above default both new fields to
     /// `None`, which isn't useful for testing them directly.
+    fn embodiment_config() -> Config {
+        config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Embodiment", "Realized-by"]), None, None),
+        )])
+    }
+
     fn type_config_pointer(
         required_fields: &[&str],
         known_fields: Option<&[&str]>,
@@ -3454,7 +3540,8 @@ mod tests {
         );
         let present = |p: &str| p == "src/real.rs";
 
-        let (exec, findings) = embodiment_locator_exists(std::slice::from_ref(&r), &present);
+        let (exec, findings) =
+            embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
         // One record, whatever its locator count -- `records_examined` is the
         // rule's input population, not its work count.
         assert_eq!(exec.records_examined, 1);
@@ -3464,13 +3551,14 @@ mod tests {
 
         // Every locator present means silence, not a rule that cannot fire.
         let all_there = |_: &str| true;
-        let (_, none) = embodiment_locator_exists(std::slice::from_ref(&r), &all_there);
+        let (_, none) =
+            embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &all_there);
         assert!(none.is_empty(), "{none:?}");
 
         // An empty locator names nothing, and the repo root exists -- so it
         // passed a raw existence check while still computing to `Implemented`.
         let empty = record("docs/adr/ADR-2-y.md", "adr", "> Realized-by: code:\n");
-        let (_, findings) = embodiment_locator_exists(&[empty], &all_there);
+        let (_, findings) = embodiment_locator_exists(&[empty], &embodiment_config(), &all_there);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(
             findings[0].message.contains("empty locator"),
@@ -3596,7 +3684,7 @@ mod tests {
             "adr",
             "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
         );
-        let (exec, findings) = embodiment_consistency(&[r], &HashSet::new());
+        let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Verified"));
@@ -3610,7 +3698,7 @@ mod tests {
             "adr",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (_, findings) = embodiment_consistency(&[r], &HashSet::new());
+        let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3635,16 +3723,23 @@ mod tests {
         );
         let mut drifted = HashSet::new();
         drifted.insert(r.path.clone());
-        let (_, findings) = embodiment_consistency(&[r], &drifted);
+        let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &drifted);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Drift detected"));
     }
 
     #[test]
-    fn no_realized_by_field_is_not_examined() {
+    fn a_record_missing_half_the_pair_is_handed_to_the_rule_and_not_judged() {
         let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
-        let (exec, findings) = embodiment_consistency(&[r], &HashSet::new());
-        assert_eq!(exec.records_examined, 0);
+        let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "the type declares both fields, so the record is a candidate that reached no verdict"
+        );
         assert!(findings.is_empty());
     }
 
@@ -3670,7 +3765,8 @@ mod tests {
             "adr",
             "> Realized-by: code:src/shared.rs\n",
         );
-        let (exec, findings) = embodiment_locator_promotion_candidate(&[a, b]);
+        let (exec, findings) =
+            embodiment_locator_promotion_candidate(&[a, b], &embodiment_config());
         assert_eq!(exec.records_examined, 2);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("src/shared.rs"));
@@ -3687,7 +3783,7 @@ mod tests {
             "adr",
             "> Realized-by: code:src/shared.rs, test:src/shared.rs\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a]);
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3698,7 +3794,7 @@ mod tests {
             "adr",
             "> Realized-by: code:src/a.rs\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a]);
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty());
     }
 
@@ -3717,8 +3813,20 @@ mod tests {
             "> Supersedes / Superseded-by: ADR-0001\n",
         );
 
-        let (exec, findings) = supersession_reciprocity(&[old, new]);
-        assert_eq!(exec.records_examined, 1);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(
+            population.examined(),
+            2,
+            "the reciprocating half answered its slot with the em dash"
+        );
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("ADR-0001"));
     }
@@ -3736,19 +3844,38 @@ mod tests {
             "> Supersedes / Superseded-by: ADR-0001\n",
         );
 
-        let (_, findings) = supersession_reciprocity(&[old, new]);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!((population.eligible(), population.examined()), (2, 2));
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
     #[test]
-    fn an_em_dash_supersession_value_is_not_examined() {
+    fn an_em_dash_supersession_value_answers_its_slot() {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
             "> Supersedes / Superseded-by: —\n",
         );
-        let (exec, findings) = supersession_reciprocity(&[r]);
-        assert_eq!(exec.records_examined, 0);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let (exec, findings) = supersession_reciprocity(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 1),
+            "the em dash is a written answer, not an unfilled slot"
+        );
         assert!(findings.is_empty());
     }
 }

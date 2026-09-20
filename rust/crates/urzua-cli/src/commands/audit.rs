@@ -59,7 +59,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     let (exec2, findings2) = crate::gate::gated(
         &config,
         rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-        || rules::supersession_reciprocity(&records),
+        || rules::supersession_reciprocity(&records, &config),
     );
     let mut findings = findings1;
     findings.extend(findings2);

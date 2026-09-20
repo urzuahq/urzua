@@ -312,7 +312,7 @@ fn audit_exits_0_on_reciprocated_supersession() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -344,7 +344,7 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n",
     )
     .unwrap();
     // ADR-0001 claims to supersede ADR-0002, but ADR-0002 never points back --
