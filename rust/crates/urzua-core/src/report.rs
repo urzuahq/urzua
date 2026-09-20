@@ -87,14 +87,31 @@ pub enum PopulationUnit {
 /// No public constructor. `of` is the only way in and it upholds
 /// `examined <= eligible`, so the invariant cannot be written wrong rather
 /// than being checked for afterwards.
+///
+/// The fields are **private**. Public fields would let any caller write
+/// `Population { eligible: 2, examined: 5, .. }` and attach it to a
+/// `RuleExecution`, which is the same bypass as having no constructor at all --
+/// the invariant is only structural if there is no second way in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct Population {
-    pub unit: PopulationUnit,
-    pub eligible: usize,
-    pub examined: usize,
+    unit: PopulationUnit,
+    eligible: usize,
+    examined: usize,
 }
 
 impl Population {
+    pub fn unit(&self) -> PopulationUnit {
+        self.unit
+    }
+
+    pub fn eligible(&self) -> usize {
+        self.eligible
+    }
+
+    pub fn examined(&self) -> usize {
+        self.examined
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
         debug_assert!(
             examined <= eligible,
@@ -396,12 +413,21 @@ mod tests {
         let _ = Population::of(PopulationUnit::Record, 2, 5);
     }
 
+    /// Compile-time, not runtime: with private fields there is no expression
+    /// that writes a contradictory `Population`, so this property is checked by
+    /// the module boundary rather than by a test that could be deleted.
+    ///
+    /// ```compile_fail
+    /// use urzua_core::report::{Population, PopulationUnit};
+    /// let _ = Population { unit: PopulationUnit::Record, eligible: 2, examined: 5 };
+    /// ```
     #[test]
     fn a_population_carries_the_unit_its_numbers_are_in() {
         let types = Population::of(PopulationUnit::RecordType, 6, 6);
         let records = Population::of(PopulationUnit::Record, 309, 309);
         assert_ne!(
-            types.unit, records.unit,
+            types.unit(),
+            records.unit(),
             "six declarations and 309 records must not read as the same quantity"
         );
     }
