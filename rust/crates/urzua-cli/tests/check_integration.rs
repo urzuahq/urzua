@@ -1089,17 +1089,13 @@ fn a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    // `changes/loop -> ..` is a cycle. Following it terminates because the walk
-    // keeps a visited set; what must never happen is the same claim being read
-    // once per hop, which is how BUG-69 reported 33 findings for one file.
-    let claims = stdout.matches("claims to close BUG-1").count();
-    assert_eq!(
-        claims, 1,
-        "one claim file must be read once, not once per symlink hop: {stdout}"
-    );
+    // `changes/loop -> ..` points at an ancestor of the declared prefix, which
+    // would sweep the whole repository and report on files never declared as
+    // claims (BUG-88). Refused, and the message says why.
+    assert_eq!(out.status.code(), Some(2), "must not run: {stdout}");
     assert!(
-        !stdout.contains("loop/changes/loop"),
-        "the walk must not re-enter through the link: {stdout}"
+        stdout.contains("ancestor of the declared prefix"),
+        "and must name the reason: {stdout}"
     );
 }
 
@@ -1676,5 +1672,71 @@ fn a_field_rule_counts_declared_slots_not_records() {
     assert_eq!(
         parsed["files_examined"], 2,
         "the corpus is 2 records: {stdout}"
+    );
+}
+
+#[test]
+fn a_record_whose_name_git_quotes_is_still_examined() {
+    // git C-quotes any path with a non-ASCII byte under the default
+    // core.quotepath, so the name arrived wrapped in quotes and its parent
+    // never matched the declared dir (BUG-87).
+    let dir = one_adr_repo(
+        "quoted-path",
+        "{header.required-fields: error}",
+        "---\nStatus: Accepted\n---\n# 1 \u{2014} X\n",
+    );
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-caf\u{e9}.md"),
+        "---\nTitle: no status\n---\n# 2 \u{2014} Caf\u{e9}\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("\"files_examined\": 2"),
+        "the accented record belongs to the corpus: {stdout}"
+    );
+    assert!(
+        stdout.contains("Status"),
+        "and its missing required field is reported: {stdout}"
+    );
+    assert_eq!(out.status.code(), Some(1), "blocking: {stdout}");
+}
+
+#[test]
+fn a_symlink_cycle_that_stays_inside_the_prefix_terminates() {
+    let dir = fixture_repo("claim-sibling-cycle");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join("changes/a")).unwrap();
+    std::fs::create_dir_all(dir.join("changes/b")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 \u{2014} X\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("changes/a/0001-f.md"), "Fixes BUG-1.\n").unwrap();
+    // Mutual sibling links: a cycle that never leaves the declared prefix, so
+    // only the visited set can stop the walk.
+    std::os::unix::fs::symlink("../b", dir.join("changes/a/tob")).unwrap();
+    std::os::unix::fs::symlink("../a", dir.join("changes/b/toa")).unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let claims = stdout.matches("claims to close BUG-1").count();
+    assert_eq!(
+        claims, 1,
+        "one claim file, read once, not once per hop: {stdout}"
     );
 }

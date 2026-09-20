@@ -57,16 +57,21 @@ pub enum DiscoverySource {
 /// raw filesystem walk: an untracked scratch file must never appear here, or
 /// a single stray file changes what every run examines.
 pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, DiscoveryError> {
-    let tracked = run_git(repo_root, &["ls-files"])?;
-    let staged = run_git(repo_root, &["diff", "--name-only", "--cached"])?;
+    // `-z`, so paths arrive NUL-separated and verbatim. With `core.quotepath`
+    // at its default git C-quotes any path holding a non-ASCII byte -- the
+    // name arrives wrapped in quotes with the bytes escaped, its parent never
+    // equals the declared `dir`, and the record drops out of the corpus with
+    // no rule reporting it (BUG-87).
+    let tracked = run_git(repo_root, &["ls-files", "-z"])?;
+    let staged = run_git(repo_root, &["diff", "--name-only", "--cached", "-z"])?;
     let deleted = run_git(
         repo_root,
-        &["diff", "--name-only", "--cached", "--diff-filter=D"],
+        &["diff", "--name-only", "--cached", "--diff-filter=D", "-z"],
     )?;
 
     let mut paths: Vec<PathBuf> = tracked
-        .lines()
-        .chain(staged.lines())
+        .split('\0')
+        .chain(staged.split('\0'))
         .filter(|l| !l.is_empty())
         .map(PathBuf::from)
         .collect();
@@ -76,7 +81,7 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
     Ok(DiscoveredFiles {
         paths,
         staged_deletions: deleted
-            .lines()
+            .split('\0')
             .filter(|l| !l.is_empty())
             .map(PathBuf::from)
             .collect(),

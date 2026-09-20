@@ -36,9 +36,16 @@ fn read_claim_files(
         // over an incomplete corpus -- the failure this whole rule exists to
         // prevent, arrived at from the inside.
         let mut paths = Vec::new();
+        // A link may point anywhere inside the repository -- declaring
+        // `claims/x -> shared` is the author saying claims also live there,
+        // the same thing the declared root already does (BUG-85). What it may
+        // not do is point at an *ancestor* of the prefix: that sweeps the whole
+        // tree, so files never declared as claims produced blocking findings
+        // under paths that do not exist (BUG-88).
+        let prefix_canonical = dir.canonicalize().unwrap_or_else(|_| dir.clone());
         let mut visited: std::collections::HashSet<std::path::PathBuf> =
             std::collections::HashSet::new();
-        visited.insert(dir.canonicalize().unwrap_or_else(|_| dir.clone()));
+        visited.insert(prefix_canonical.clone());
         let mut pending = vec![dir.clone()];
         while let Some(current) = pending.pop() {
             let entries = std::fs::read_dir(&current)
@@ -81,6 +88,12 @@ fn read_claim_files(
                     if !resolved.starts_with(&repo_canonical) {
                         return Err(format!(
                             "claim_paths: {} resolves outside the repository",
+                            path.display()
+                        ));
+                    }
+                    if prefix_canonical.starts_with(&resolved) {
+                        return Err(format!(
+                            "claim_paths: {} resolves to an ancestor of the declared prefix, which would read the whole tree",
                             path.display()
                         ));
                     }

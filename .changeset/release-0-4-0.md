@@ -37,6 +37,9 @@ satisfy.
 declared, or only rules that read the configuration or the path inventory, no longer exits 0 as
 though the corpus had been checked.
 
+Discovery reads git's output NUL-separated, so a record whose filename contains a non-ASCII
+character is part of the corpus rather than silently dropped.
+
 **A record the tool cannot read stops the run.** An unreadable or missing tracked record previously
 dropped out of the corpus, leaving a smaller `files_examined` and a clean verdict. A deletion staged
 in git is still a legitimate absence.
@@ -48,4 +51,4 @@ no longer discards findings about files git does not track.
 `claim_paths` is read to any depth, follows symlinks that stay inside the repository, bounds the walk
 against cycles, and fails the run rather than skipping a claim it could not read.
 
-Fixes BUG-38, BUG-39, BUG-42, BUG-43, BUG-44, BUG-45, BUG-46, BUG-48, BUG-49, BUG-53, BUG-54, BUG-55, BUG-56, BUG-58, BUG-59, BUG-60, BUG-61, BUG-62, BUG-63, BUG-64, BUG-67, BUG-68, BUG-69, BUG-70, BUG-71, BUG-72, BUG-75, BUG-76, BUG-77, BUG-78, BUG-79, BUG-80, BUG-81, BUG-82, BUG-83, BUG-84, BUG-85 and BUG-86.
+Fixes BUG-38, BUG-39, BUG-42, BUG-43, BUG-44, BUG-45, BUG-46, BUG-48, BUG-49, BUG-53, BUG-54, BUG-55, BUG-56, BUG-58, BUG-59, BUG-60, BUG-61, BUG-62, BUG-63, BUG-64, BUG-67, BUG-68, BUG-69, BUG-70, BUG-71, BUG-72, BUG-75, BUG-76, BUG-77, BUG-78, BUG-79, BUG-80, BUG-81, BUG-82, BUG-83, BUG-84, BUG-85, BUG-86, BUG-87, BUG-89 and BUG-90.
