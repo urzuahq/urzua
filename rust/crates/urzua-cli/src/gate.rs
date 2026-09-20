@@ -23,6 +23,7 @@ pub(crate) fn gated(
         None | Some(RuleLevel::Off) => (
             RuleExecution {
                 rule: id.to_string(),
+                population: None,
                 records_examined: 0,
                 scope: urzua_core::report::RuleScope::Records,
                 status: RuleStatus::NotEnabled,
