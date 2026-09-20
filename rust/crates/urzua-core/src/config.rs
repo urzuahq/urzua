@@ -40,6 +40,12 @@ pub struct RuleSetting {
     /// never inferred: a built-in list is how a rule silently stops applying.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_statuses: Option<Vec<String>>,
+    /// Statuses that mean a referenced record's work is over. Only meaningful
+    /// to `narrative-field.stale`. Declared per repository rather than compiled
+    /// in: a built-in table keyed on this repository's own type names is how the
+    /// rule went inert for every other corpus (BUG-59).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_statuses: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +103,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             claim_paths: Option<Vec<String>>,
             #[serde(default)]
             closed_statuses: Option<Vec<String>>,
+            #[serde(default)]
+            terminal_statuses: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -112,6 +120,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 not_in: table.not_in,
                 claim_paths: table.claim_paths,
                 closed_statuses: table.closed_statuses,
+                terminal_statuses: table.terminal_statuses,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -120,6 +129,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 not_in: None,
                 claim_paths: None,
                 closed_statuses: None,
+                terminal_statuses: None,
             })
         }
     }
@@ -273,6 +283,7 @@ pub enum ConfigError {
 pub fn rule_requires_options(rule: &str) -> bool {
     rule == crate::rules::RULE_CLAIM_STATUS_AGREEMENT
         || rule == crate::rules::RULE_POINTER_TARGET_STATUS
+        || rule == crate::rules::RULE_NARRATIVE_FIELD_STALE
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
@@ -318,6 +329,11 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
                 "closed_statuses",
                 crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
             ),
+            (
+                setting.terminal_statuses.is_some(),
+                "terminal_statuses",
+                crate::rules::RULE_NARRATIVE_FIELD_STALE,
+            ),
         ];
         for (present, option, owner) in misplaced {
             if present && name != owner {
@@ -352,6 +368,12 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
                         "treats every claim as a violation, including correct ones",
                     ),
                 ]
+            } else if name == crate::rules::RULE_NARRATIVE_FIELD_STALE {
+                &[(
+                    setting.terminal_statuses.as_ref().is_some_and(declared),
+                    "terminal_statuses",
+                    "examines every reference and can never report",
+                )]
             } else if name == crate::rules::RULE_POINTER_TARGET_STATUS {
                 &[(
                     setting.not_in.as_ref().is_some_and(declared),

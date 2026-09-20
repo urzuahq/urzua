@@ -17,29 +17,44 @@ use crate::emit;
 /// Reads the files a repository pointed `claim.status-agreement` at. Kept in
 /// the CLI because `urzua-core` is pure (ADR-5) -- the rule is given file
 /// contents, never a path to open.
-fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(String, String)> {
+fn read_claim_files(
+    repo_root: &std::path::Path,
+    prefixes: &[String],
+) -> Result<Vec<(String, String)>, String> {
     let mut out = Vec::new();
     for prefix in prefixes {
         let dir = repo_root.join(prefix);
-        // A path that does not resolve is a typo, not an empty directory. The
-        // rule reported `ran` with zero findings either way, which is
-        // indistinguishable from a clean corpus -- and `OptionRequired` exists
-        // to stop this rule going inert when `claim_paths` is *missing*, so a
-        // misspelled one must not get through the same door (BUG-56).
         // `claim_paths` is a path *prefix*, so the claims may sit any depth
-        // below it. Reading one level deep made a nested layout report a clean
-        // run over an empty claim list -- through the same door BUG-56's guard
-        // was built to close (BUG-63).
+        // below it: reading one level deep made a nested layout report a clean
+        // run over an empty claim list (BUG-63).
+        //
+        // Nothing here is skipped on error. A claim the rule could not read is
+        // a claim it did not check, and continuing past it reports agreement
+        // over an incomplete corpus -- the failure this whole rule exists to
+        // prevent, arrived at from the inside.
         let mut paths = Vec::new();
         let mut pending = vec![dir.clone()];
         while let Some(current) = pending.pop() {
-            let Ok(entries) = std::fs::read_dir(&current) else {
-                continue;
-            };
-            for path in entries.flatten().map(|e| e.path()) {
-                if path.is_dir() {
+            let entries = std::fs::read_dir(&current)
+                .map_err(|e| format!("claim_paths: could not read {}: {e}", current.display()))?;
+            for entry in entries {
+                let path = entry
+                    .map_err(|e| {
+                        format!(
+                            "claim_paths: could not read an entry of {}: {e}",
+                            current.display()
+                        )
+                    })?
+                    .path();
+                // `symlink_metadata`: a link is never descended into. A link to
+                // an ancestor gives an unbounded walk that leaves the declared
+                // prefix entirely -- measured at 904 files read, from other
+                // repositories on disk (BUG-69).
+                let meta = std::fs::symlink_metadata(&path)
+                    .map_err(|e| format!("claim_paths: could not stat {}: {e}", path.display()))?;
+                if meta.is_dir() {
                     pending.push(path);
-                } else if path.extension().is_some_and(|e| e == "md") {
+                } else if meta.is_file() && path.extension().is_some_and(|e| e == "md") {
                     paths.push(path);
                 }
             }
@@ -47,17 +62,17 @@ fn read_claim_files(repo_root: &std::path::Path, prefixes: &[String]) -> Vec<(St
         // Sorted so a finding's order does not depend on the filesystem.
         paths.sort();
         for path in paths {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                let shown = path
-                    .strip_prefix(repo_root)
-                    .unwrap_or(&path)
-                    .display()
-                    .to_string();
-                out.push((shown, content));
-            }
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| format!("claim_paths: could not read {}: {e}", path.display()))?;
+            let shown = path
+                .strip_prefix(repo_root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
+            out.push((shown, content));
         }
     }
-    out
+    Ok(out)
 }
 
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
@@ -78,6 +93,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
+    let requested_scopes = match crate::discovery::relative_scopes(&repo_root, &paths) {
+        Ok(s) => s,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     let scoped = match scope_to_requested_paths(&repo_root, &discovered.paths, &paths) {
         Ok(p) => p,
         Err(e) => return emit(&CouldNotRun::from(e)),
@@ -136,7 +155,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // following the documented `claim_paths: [".changeset"]` pattern
                 // would otherwise lose `check` entirely the moment a release
                 // consumes the last fragment.
-                if !repo_root.join(prefix).exists() {
+                // `symlink_metadata`, not `exists()`/`is_dir()`: both follow
+                // links, so `read_dir` would traverse the target before the
+                // per-entry check applies, and a root symlinked to an ancestor
+                // escaped the declared prefix entirely (BUG-69).
+                let declared = repo_root.join(prefix);
+                if !std::fs::symlink_metadata(&declared).is_ok_and(|m| m.is_dir()) {
                     return emit(&CouldNotRun::from(format!(
                         "claim.status-agreement: claim_paths entry '{prefix}' is not a readable directory"
                     )));
@@ -144,6 +168,19 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             }
         }
     }
+
+    let claims = {
+        let paths = config
+            .rules
+            .get(rules::RULE_CLAIM_STATUS_AGREEMENT)
+            .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+            .and_then(|s| s.claim_paths.clone())
+            .unwrap_or_default();
+        match read_claim_files(&repo_root, &paths) {
+            Ok(c) => c,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        }
+    };
 
     let drifted = compute_drifted_records(&repo_root, &records);
 
@@ -178,13 +215,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }),
         crate::gate::gated(&config, rules::RULE_CLAIM_STATUS_AGREEMENT, || {
             let setting = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT);
-            let paths = setting
-                .and_then(|s| s.claim_paths.clone())
-                .unwrap_or_default();
             let closed = setting
                 .and_then(|s| s.closed_statuses.clone())
                 .unwrap_or_default();
-            let claims = read_claim_files(&repo_root, &paths);
             rules::claim_status_agreement(&records, &claims, &closed)
         }),
         crate::gate::gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
@@ -235,7 +268,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::header_field_set_consistency(&records, &known_fields_by_type)
         }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
-            rules::narrative_field_stale(&records, &config)
+            let terminal = config
+                .rules
+                .get(rules::RULE_NARRATIVE_FIELD_STALE)
+                .and_then(|s| s.terminal_statuses.clone())
+                .unwrap_or_default();
+            rules::narrative_field_stale(&records, &config, &terminal)
         }),
         crate::gate::gated(&config, rules::RULE_TYPE_DIR_MATCHES_NOTHING, || {
             let mut matched: HashMap<String, usize> = HashMap::new();
@@ -248,13 +286,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(
             &config,
             rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
-            || {
-                let claimed: std::collections::HashSet<&std::path::Path> =
-                    records.iter().map(|r| r.path.as_path()).collect();
-                rules::type_record_outside_declared_dir(&config, &discovered.paths, &|p| {
-                    claimed.contains(p)
-                })
-            },
+            || rules::type_record_outside_declared_dir(&config, &discovered.paths),
         ),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)
@@ -287,12 +319,17 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         findings.extend(rule_findings);
     }
 
-    // A finding about the config names the config file, which is outside every
-    // record scope and must survive a path argument. Everything else is scoped
-    // by the path it names -- including findings about files that are
-    // deliberately not records, which "not a record" would have exempted.
-    if !paths.is_empty() {
-        findings.retain(|f| in_scope.contains(f.file.as_path()) || f.file == config_path.as_path());
+    // Scoped against the requested prefixes themselves, never against the
+    // discovered set: that set holds the *tracked* files under the scope, and a
+    // rule may report on a file git does not track -- a claim file is read
+    // straight off disk -- whose finding then belonged to no scope at all and
+    // was dropped, so `check .` passed a corpus `check` blocked (BUG-67).
+    // A finding about the config survives every scope, being outside all of them.
+    if !requested_scopes.is_empty() {
+        findings.retain(|f| {
+            f.file == config_path.as_path()
+                || requested_scopes.iter().any(|s| f.file.starts_with(s))
+        });
     }
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.

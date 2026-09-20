@@ -261,7 +261,6 @@ pub fn header_field_set_consistency(
 pub fn type_record_outside_declared_dir(
     config: &Config,
     candidates: &[std::path::PathBuf],
-    claimed: &dyn Fn(&std::path::Path) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR;
     let mut findings = Vec::new();
@@ -288,7 +287,11 @@ pub fn type_record_outside_declared_dir(
             continue;
         }
         examined += 1;
-        if claimed(path) {
+        // Ownership is decided by the path, which is what RFC-35 defines. It
+        // was decided by the loaded record set, which also excludes a file the
+        // loader could not read -- so a staged deletion directly inside a
+        // declared dir was reported as sitting outside it (BUG-71).
+        if dirs.iter().any(|d| path.parent() == Some(d.as_path())) {
             continue;
         }
         unowned.push(path);
@@ -741,8 +744,8 @@ pub(crate) fn build_normalized_index(records: &[Record]) -> HashMap<String, &Rec
 ///
 /// Fires only on the statuses a repository declares unacceptable. With none
 /// declared it examines nothing and reports nothing, rather than falling back
-/// to a built-in list -- the fallback is what `is_terminal_status`'s `_ => &[]`
-/// did, and it makes a rule silently stop applying.
+/// to a built-in list: a table keyed on record type names makes the rule
+/// silently stop applying to every corpus that names its types differently.
 pub fn pointer_target_status(
     records: &[Record],
     pointer_fields_by_type: &HashMap<String, Vec<String>>,
@@ -905,7 +908,8 @@ pub fn header_pointer_field_clean(
                 let is_clean_reference = entry
                     .split_once('-')
                     .map(|(prefix, num)| {
-                        prefix.chars().all(|c| c.is_ascii_uppercase())
+                        !prefix.is_empty()
+                            && prefix.chars().all(|c| c.is_ascii_uppercase())
                             && !num.is_empty()
                             && num.chars().all(|c| c.is_ascii_digit())
                     })
@@ -948,7 +952,11 @@ pub fn header_pointer_field_clean(
 /// nothing has asked for one yet. A dangling reference is deliberately not
 /// this rule's job; that's `pointer_resolution`'s error case, reused rather
 /// than duplicated here.
-pub fn narrative_field_stale(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+pub fn narrative_field_stale(
+    records: &[Record],
+    config: &Config,
+    terminal_statuses: &[String],
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_NARRATIVE_FIELD_STALE;
     let mut findings = Vec::new();
     let mut examined = 0;
@@ -977,7 +985,7 @@ pub fn narrative_field_stale(records: &[Record], config: &Config) -> (RuleExecut
                 let Some(status) = target.header.get("Status") else {
                     continue;
                 };
-                if is_terminal_status(&target.record_type, status) {
+                if terminal_statuses.iter().any(|t| t == status.trim()) {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
@@ -1001,18 +1009,6 @@ pub fn narrative_field_stale(records: &[Record], config: &Config) -> (RuleExecut
         },
         findings,
     )
-}
-
-fn is_terminal_status(record_type: &str, status: &str) -> bool {
-    let status = status.trim();
-    let terminal: &[&str] = match record_type {
-        "bug" => &["Fixed", "WontFix"],
-        "adr" | "rfc" => &["Accepted", "Rejected", "Superseded"],
-        "spec" => &["Accepted"],
-        "milestone" => &["Done", "WontDo"],
-        _ => &[],
-    };
-    terminal.contains(&status)
 }
 
 /// A record's own identifier, derived from its filename: `TYPE-NNNN-slug.md`,
@@ -1111,7 +1107,8 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
             let is_reference = token
                 .split_once('-')
                 .map(|(prefix, num)| {
-                    prefix.chars().all(|c| c.is_ascii_uppercase())
+                    !prefix.is_empty()
+                        && prefix.chars().all(|c| c.is_ascii_uppercase())
                         && !num.is_empty()
                         && num.chars().all(|c| c.is_ascii_digit())
                 })
@@ -1986,6 +1983,40 @@ mod tests {
     }
 
     #[test]
+    fn narrative_field_stale_judges_a_type_the_engine_has_never_heard_of() {
+        // The compiled-in table knew five type names and returned "not
+        // terminal" for every other, so the rule was inert for any corpus that
+        // named its types differently -- which is every adopter (BUG-59).
+        let blocked = record("docs/decisions/DEC-1-x.md", "dec", "> Blocked-on: DEC-2\n");
+        let target = record("docs/decisions/DEC-2-y.md", "dec", "> Status: Ratified\n");
+        let config = config_with_types(vec![(
+            "dec",
+            type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
+        )]);
+
+        let (exec, findings) =
+            narrative_field_stale(&[blocked, target], &config, &["Ratified".to_string()]);
+        assert_eq!(exec.records_examined, 1, "the rule must reach a verdict");
+        assert_eq!(findings.len(), 1, "DEC-2 is terminal by declaration");
+        assert!(findings[0].message.contains("DEC-2"));
+    }
+
+    fn terminal_for_tests() -> Vec<String> {
+        [
+            "Fixed",
+            "WontFix",
+            "Accepted",
+            "Rejected",
+            "Superseded",
+            "Done",
+            "WontDo",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    }
+
+    #[test]
     fn missing_required_field_is_a_finding() {
         let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
         let mut required = HashMap::new();
@@ -2587,7 +2618,8 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[bug, milestone], &config);
+        let (exec, findings) =
+            narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("BUG-3"));
@@ -2607,7 +2639,8 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[bug, milestone], &config);
+        let (exec, findings) =
+            narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
         assert_eq!(exec.records_examined, 1);
         assert!(findings.is_empty());
     }
@@ -2623,7 +2656,7 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[milestone], &config);
+        let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
         assert_eq!(exec.records_examined, 0);
         assert!(findings.is_empty());
     }
@@ -2639,7 +2672,7 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[milestone], &config);
+        let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
         assert_eq!(exec.records_examined, 1);
         assert!(
             findings.is_empty(),
@@ -2662,7 +2695,7 @@ mod tests {
             "rfc",
             type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[bug, rfc], &config);
+        let (exec, findings) = narrative_field_stale(&[bug, rfc], &config, &terminal_for_tests());
         assert_eq!(exec.records_examined, 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.starts_with("Motivated-by:"));

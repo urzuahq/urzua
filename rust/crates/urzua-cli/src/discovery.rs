@@ -112,6 +112,27 @@ pub(crate) fn load_records(
 /// by hand while exercising a genuinely narrower path for the first time;
 /// no existing test used anything but `check docs/`, so nothing exercised
 /// the narrower case at all.
+/// The requested paths as repository-relative prefixes. Separated from the file
+/// filtering because a finding is scoped by the path it names, which may be a
+/// file no type owns and git does not track (BUG-67).
+pub(crate) fn relative_scopes(
+    repo_root: &Path,
+    requested: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    let mut out = Vec::new();
+    for p in requested {
+        let canonical = p
+            .canonicalize()
+            .map_err(|e| format!("could not resolve {}: {e}", p.display()))?;
+        let relative = canonical
+            .strip_prefix(repo_root)
+            .map_err(|_| format!("{} is outside the repository", p.display()))?
+            .to_path_buf();
+        out.push(relative);
+    }
+    Ok(out)
+}
+
 pub(crate) fn scope_to_requested_paths(
     repo_root: &Path,
     discovered: &[PathBuf],
@@ -121,17 +142,7 @@ pub(crate) fn scope_to_requested_paths(
         return Ok(discovered.to_vec());
     }
 
-    let mut relative_scopes = Vec::new();
-    for p in requested {
-        let canonical = p
-            .canonicalize()
-            .map_err(|e| format!("could not resolve {}: {e}", p.display()))?;
-        let relative = canonical
-            .strip_prefix(repo_root)
-            .map_err(|_| format!("{} is outside the repository", p.display()))?
-            .to_path_buf();
-        relative_scopes.push(relative);
-    }
+    let relative_scopes = relative_scopes(repo_root, requested)?;
 
     Ok(discovered
         .iter()

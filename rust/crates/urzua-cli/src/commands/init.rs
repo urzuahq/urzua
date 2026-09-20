@@ -164,7 +164,12 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         // they would load, report `ran`, and examine zero records. Declining to
         // propose a rule that cannot fire is the same judgement already applied
         // to a rule whose required options adopt mode cannot supply.
-        if identity_dependent(id) && proposed.iter().any(|rt| rt.prefix.is_none()) {
+        //
+        // Every type, not any: these rules skip an individual record whose
+        // filename yields no identity, so one prefix-less directory costs only
+        // its own records -- dropping the rule outright would cost the rest of
+        // the corpus its checks (BUG-70).
+        if identity_dependent(id) && proposed.iter().all(|rt| rt.prefix.is_none()) {
             continue;
         }
         rules.insert(Value::from(*id), Value::from("warn"));
@@ -427,6 +432,30 @@ mod tests {
             "without it the prefix defaults to DECISION and every identity rule goes inert: {yaml}"
         );
         assert!(yaml.contains("filename.title-consistency"));
+    }
+
+    #[test]
+    fn one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix() {
+        let proposed = vec![
+            ProposedRecordType {
+                name: "adr".to_string(),
+                dir: "docs/adr".to_string(),
+                record_count: 2,
+                prefix: Some("ADR".to_string()),
+            },
+            ProposedRecordType {
+                name: "note".to_string(),
+                dir: "docs/notes".to_string(),
+                record_count: 1,
+                prefix: None,
+            },
+        ];
+        let yaml = render_config_yaml(&proposed);
+        assert!(
+            yaml.contains("filename.title-consistency"),
+            "adr carries a prefix, so the identity rules still address it: {yaml}"
+        );
+        assert!(yaml.contains("prefix: ADR"));
     }
 
     #[test]
