@@ -1147,34 +1147,44 @@ pub fn narrative_field_stale(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_NARRATIVE_FIELD_STALE;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let narrative_fields_by_type = fields_with_capability(config, |k| k.check_target_staleness);
     let index = build_normalized_index(records);
 
-    for record in records {
-        let Some(fields) = narrative_fields_by_type.get(&record.record_type) else {
-            continue;
+    // Declared narrative slots. A slot the record did not write, or wrote as
+    // prose yielding no reference, is eligible and unexamined: BUG-39 was the
+    // extractor silently returning nothing on prose, and its fix was verified
+    // by watching this count move from 7 to 8. Counting a slot as examined
+    // merely because it is present would pin the number and retire the
+    // instrument that measured that fix.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            narrative_fields_by_type
+                .get(&record.record_type)
+                .map(|fields| (record, fields))
+        })
+        .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
+        .collect();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
+        let Some(value) = record.header.get(field_name.as_str()) else {
+            return Outcome::NotExamined;
         };
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
+        let references = extract_references(value);
+        if references.is_empty() {
+            return Outcome::NotExamined;
+        }
+
+        for reference in references {
+            let Some(target) = index.get(&normalize_id(&reference)) else {
+                continue; // pointer_resolution already reports a dangling reference
+            };
+            let Some(status) = target.header.get("Status") else {
                 continue;
             };
-            let references = extract_references(value);
-            if references.is_empty() {
-                continue;
-            }
-            examined += 1;
-
-            for reference in references {
-                let Some(target) = index.get(&normalize_id(&reference)) else {
-                    continue; // pointer_resolution already reports a dangling reference
-                };
-                let Some(status) = target.header.get("Status") else {
-                    continue;
-                };
-                if terminal_statuses.iter().any(|t| t == status.trim()) {
-                    findings.push(Finding {
+            if terminal_statuses.iter().any(|t| t == status.trim()) {
+                findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
                         file: record.path.clone(),
@@ -1184,16 +1194,19 @@ pub fn narrative_field_stale(
                             "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's Status/{field_name} should update"
                         ),
                     });
-                }
             }
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined: records
+                .iter()
+                .filter(|r| narrative_fields_by_type.contains_key(&r.record_type))
+                .count(),
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2252,7 +2265,14 @@ mod tests {
 
         let (exec, findings) =
             narrative_field_stale(&[blocked, target], &config, &["Ratified".to_string()]);
-        assert_eq!(exec.records_examined, 1, "the rule must reach a verdict");
+        let population = exec.population.expect("the rule must state what it was handed");
+        assert_eq!(population.unit(), PopulationUnit::Field);
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(
+            population.examined(),
+            1,
+            "only DEC-1 wrote the slot, so only DEC-1 reaches a verdict"
+        );
         assert_eq!(findings.len(), 1, "DEC-2 is terminal by declaration");
         assert!(findings[0].message.contains("DEC-2"));
     }
@@ -2942,7 +2962,13 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 0);
+        let population = exec.population.expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 1, "the slot is declared and written");
+        assert_eq!(
+            population.examined(),
+            0,
+            "prose yielding no reference is handed but not judged -- the BUG-39 instrument"
+        );
         assert!(findings.is_empty());
     }
 
