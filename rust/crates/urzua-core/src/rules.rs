@@ -927,53 +927,72 @@ pub fn pointer_target_status(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_TARGET_STATUS;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let index = build_normalized_index(records);
 
-    for record in records {
-        let fields = pointer_fields_by_type
-            .get(&record.record_type)
-            .into_iter()
-            .flatten()
-            .chain(
-                narrative_fields_by_type
-                    .get(&record.record_type)
-                    .into_iter()
-                    .flatten(),
-            );
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
+    // Declared slots: every pointer or narrative field the record's type
+    // declares, whether or not the record wrote it. A slot left unwritten is
+    // eligible and unexamined -- handed to the rule and not judged.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .flat_map(|record| {
+            pointer_fields_by_type
+                .get(&record.record_type)
+                .into_iter()
+                .flatten()
+                .chain(
+                    narrative_fields_by_type
+                        .get(&record.record_type)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(move |field| (record, field))
+        })
+        .collect();
+
+    let records_examined = records
+        .iter()
+        .filter(|r| {
+            pointer_fields_by_type.contains_key(&r.record_type)
+                || narrative_fields_by_type.contains_key(&r.record_type)
+        })
+        .count();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
+        let Some(value) = record.header.get(field_name.as_str()) else {
+            return Outcome::NotExamined;
+        };
+        let references = extract_references(value);
+        if references.is_empty() {
+            return Outcome::NotExamined;
+        }
+
+        for reference in references {
+            let Some(target) = index.get(&normalize_id(&reference)) else {
                 continue;
             };
-            examined += 1;
-
-            for reference in extract_references(value) {
-                let Some(target) = index.get(&normalize_id(&reference)) else {
-                    continue;
-                };
-                let status = target.header.get("Status").unwrap_or("(no Status field)");
-                if not_in.iter().any(|s| s == status) {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        message: format!(
-                            "{field_name}: {reference} resolves, but its Status is {status}"
-                        ),
-                    });
-                }
+            let status = target.header.get("Status").unwrap_or("(no Status field)");
+            if not_in.iter().any(|s| s == status) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "{field_name}: {reference} resolves, but its Status is {status}"
+                    ),
+                });
             }
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -988,50 +1007,69 @@ pub fn pointer_resolution(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_RESOLUTION;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let index = build_normalized_index(records);
 
-    for record in records {
-        let fields = pointer_fields_by_type
-            .get(&record.record_type)
-            .into_iter()
-            .flatten()
-            .chain(
-                narrative_fields_by_type
-                    .get(&record.record_type)
-                    .into_iter()
-                    .flatten(),
-            );
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
-                continue;
-            };
-            examined += 1;
+    // Declared slots: every pointer or narrative field the record's type
+    // declares, whether or not the record wrote it. A slot left unwritten is
+    // eligible and unexamined -- handed to the rule and not judged.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .flat_map(|record| {
+            pointer_fields_by_type
+                .get(&record.record_type)
+                .into_iter()
+                .flatten()
+                .chain(
+                    narrative_fields_by_type
+                        .get(&record.record_type)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(move |field| (record, field))
+        })
+        .collect();
 
-            for reference in extract_references(value) {
-                if index.contains_key(&normalize_id(&reference)) {
-                    continue;
-                }
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    message: format!(
-                        "{field_name}: {reference} does not resolve to any discovered record"
-                    ),
-                });
-            }
+    let records_examined = records
+        .iter()
+        .filter(|r| {
+            pointer_fields_by_type.contains_key(&r.record_type)
+                || narrative_fields_by_type.contains_key(&r.record_type)
+        })
+        .count();
+
+    let population = census(PopulationUnit::Field, slots, |(record, field_name)| {
+        let Some(value) = record.header.get(field_name.as_str()) else {
+            return Outcome::NotExamined;
+        };
+        let references = extract_references(value);
+        if references.is_empty() {
+            return Outcome::NotExamined;
         }
-    }
+
+        for reference in references {
+            if index.contains_key(&normalize_id(&reference)) {
+                continue;
+            }
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "{field_name}: {reference} does not resolve to any discovered record"
+                ),
+            });
+        }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
+            population: Some(population),
+            records_examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
         },
@@ -2265,7 +2303,9 @@ mod tests {
 
         let (exec, findings) =
             narrative_field_stale(&[blocked, target], &config, &["Ratified".to_string()]);
-        let population = exec.population.expect("the rule must state what it was handed");
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
         assert_eq!(population.unit(), PopulationUnit::Field);
         assert_eq!(population.eligible(), 2, "both records declare the slot");
         assert_eq!(
@@ -2962,7 +3002,9 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
-        let population = exec.population.expect("the rule must state what it was handed");
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
         assert_eq!(population.eligible(), 1, "the slot is declared and written");
         assert_eq!(
             population.examined(),
