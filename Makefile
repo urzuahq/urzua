@@ -63,7 +63,7 @@ rust-clean: ## Remove the Rust target directory
 # -------------------------------------------------------------------- records
 
 records: rust-build ## Validate this repo's own governance records
-	@$(RUST_DIR)/target/release/urzua check docs/
+	@$(RUST_DIR)/target/release/urzua check
 
 release-guard: ## Exercise the release guard's planted-violation cases
 	@.github/scripts/release-guard.test.sh
