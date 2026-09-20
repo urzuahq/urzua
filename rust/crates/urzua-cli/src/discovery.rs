@@ -59,9 +59,10 @@ pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],
     config: &Config,
-) -> (Vec<Record>, HashMap<PathBuf, String>) {
+) -> Result<(Vec<Record>, HashMap<PathBuf, String>), String> {
     let mut records = Vec::new();
     let mut full_text = HashMap::new();
+    let mut unreadable: Vec<String> = Vec::new();
     for (type_name, type_config) in &config.record_types {
         let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
@@ -95,11 +96,25 @@ pub(crate) fn load_records(
                     ));
                     full_text.insert(rel_path.clone(), content);
                 }
-                Err(_) => continue,
+                // A record the tool cannot read is not a record that passes:
+                // dropping it shrank the corpus with nothing in the report to
+                // show a file had gone missing (BUG-76). Absence is the
+                // exception -- discovery unions `ls-files` with the staged
+                // diff, so a staged deletion is legitimately not on disk.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => unreadable.push(format!("{}: {e}", rel_path.display())),
             }
         }
     }
-    (records, full_text)
+    if !unreadable.is_empty() {
+        return Err(format!(
+            "could not read {} tracked record(s): {}",
+            unreadable.len(),
+            unreadable.join("; ")
+        ));
+    }
+
+    Ok((records, full_text))
 }
 
 /// Restrict discovered files to those under any of the requested paths,

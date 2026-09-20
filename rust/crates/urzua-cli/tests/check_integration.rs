@@ -1087,15 +1087,19 @@ fn a_symlink_inside_a_claim_path_is_not_descended_into() {
     std::os::unix::fs::symlink("..", dir.join("changes/loop")).unwrap();
     commit_all(&dir);
 
-    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
-    let claims = stdout.matches("claims to close BUG-1").count();
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    // A directory symlink is refused outright rather than skipped: skipping is
+    // how a claim goes unread in silence (BUG-75), and following it is how the
+    // walk leaves the declared prefix (BUG-69).
     assert_eq!(
-        claims, 1,
-        "one claim file must be read once, not once per symlink hop: {stdout}"
+        out.status.code(),
+        Some(2),
+        "a symlinked directory inside claim_paths must abort the run: {stdout}"
     );
     assert!(
-        !stdout.contains("changes/loop"),
-        "the traversal must not leave the declared prefix: {stdout}"
+        stdout.contains("symlink"),
+        "and the message must say why: {stdout}"
     );
 }
 
@@ -1132,5 +1136,197 @@ fn a_staged_deletion_is_not_reported_as_owned_by_no_type() {
     assert!(
         !stdout.contains("ADR-2-y.md"),
         "it sits directly in the declared dir and no longer exists: {stdout}"
+    );
+    // Positive control: without it this test passes just as well when the rule
+    // never ran at all, which is the shape ADR-55 forbids.
+    let examined = stdout
+        .split("\"rule\": \"type.record-outside-declared-dir\"")
+        .nth(1)
+        .and_then(|s| s.split("\"records_examined\": ").nth(1))
+        .and_then(|s| s.split(&[',', '\n'][..]).next())
+        .unwrap_or("0");
+    assert_ne!(
+        examined.trim(),
+        "0",
+        "the rule must have examined the declared dir's files: {stdout}"
+    );
+}
+
+fn one_adr_repo(name: &str, rules: &str, body: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules: {rules}\n\n\
+             record_types:\n\
+             \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-1-x.md"), body).unwrap();
+    commit_all(&dir);
+    dir
+}
+
+#[test]
+fn a_run_in_which_no_rule_examined_anything_is_not_ok() {
+    // A record that would fail header.required-fields, with no rule declared
+    // to look at it. Reporting `ok` makes a config that lost its rules block
+    // indistinguishable from a clean corpus (ADR-55).
+    let dir = one_adr_repo("no-rules", "{}", "---\nTitle: X\n---\n# 1 — X\n");
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("\"status\": \"not-run\""),
+        "no rule examined anything, so nothing was established: {stdout}"
+    );
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "and it must not exit 0: {stdout}"
+    );
+}
+
+#[test]
+fn audit_with_neither_of_its_rules_declared_is_not_ok() {
+    let dir = one_adr_repo(
+        "audit-no-rules",
+        "{header.required-fields: error}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    );
+    let out = run_urzua(&dir, &["audit"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("\"status\": \"not-run\""),
+        "audit executed no rule: {stdout}"
+    );
+}
+
+#[test]
+fn an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus() {
+    let dir = one_adr_repo(
+        "unreadable",
+        "{header.required-fields: error}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    );
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-y.md"),
+        "---\nStatus: Accepted\n---\n# 2 — Y\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    // Invalid UTF-8 is the realistic trigger; permissions are flakier in CI.
+    std::fs::write(dir.join("docs/adr/ADR-2-y.md"), [0xff, 0xfe, 0x00, 0x9f]).unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("could not read"),
+        "an unreadable record must be named, not dropped: {stdout}"
+    );
+    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+}
+
+#[test]
+fn two_records_claiming_one_identifier_are_reported() {
+    let dir = fixture_repo("identity-collision");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {identity.collision: error}\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-y.md"),
+        "---\nStatus: Fixed\n---\n# 1 — Y\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("is claimed by 2 records"),
+        "the index keeps one and the other stops existing: {stdout}"
+    );
+    assert_eq!(out.status.code(), Some(1), "blocking: {stdout}");
+}
+
+#[test]
+fn a_symlinked_claim_file_is_read_not_skipped() {
+    let dir = fixture_repo("claim-symlinked-file");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join("store")).unwrap();
+    std::fs::create_dir_all(dir.join("changes")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("store/0001-f.md"), "Fixes BUG-1.\n").unwrap();
+    std::os::unix::fs::symlink("../store/0001-f.md", dir.join("changes/0001-f.md")).unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("claims to close BUG-1"),
+        "a symlinked claim is still a claim: {stdout}"
+    );
+    assert_eq!(out.status.code(), Some(1), "BUG-1 is Open: {stdout}");
+}
+
+#[test]
+fn a_claim_paths_root_symlinked_to_a_real_directory_is_usable() {
+    let dir = fixture_repo("claim-root-symlink");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join("store")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("store/0001-f.md"), "Fixes BUG-1.\n").unwrap();
+    std::os::unix::fs::symlink("store", dir.join("changes")).unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        !stdout.contains("not a readable directory") && !stdout.contains("does not resolve"),
+        "it is a readable directory inside the repository: {stdout}"
+    );
+    assert!(
+        stdout.contains("claims to close BUG-1"),
+        "and its claims must be read: {stdout}"
     );
 }

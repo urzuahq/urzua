@@ -82,7 +82,10 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let (records, full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let (records, full_text) = match load_records(&repo_root, &discovered.paths, &config) {
+        Ok(r) => r,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     let missing: Vec<_> = records
         .iter()
         .filter(|r| r.header.get("Stable-Id").is_none())
@@ -179,7 +182,10 @@ pub fn run_schema_report(config_path: Option<PathBuf>, field: String) -> ExitCod
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let (records, _full_text) = load_records(&repo_root, &discovered.paths, &config);
+    let (records, _full_text) = match load_records(&repo_root, &discovered.paths, &config) {
+        Ok(r) => r,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     if records.is_empty() {
         return emit(&CouldNotRun::from(
             "no records discovered -- nothing to check",

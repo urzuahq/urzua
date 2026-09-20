@@ -42,3 +42,14 @@ pub(crate) fn gated(
         }
     }
 }
+
+/// `Ok` means "checked and clean", so it requires that something was actually
+/// checked. A run in which no rule examined a record has established nothing,
+/// and reporting it as clean is indistinguishable from a corpus that passed
+/// (ADR-55). Reachable since rules became opt-in: an empty or absent `rules`
+/// table, or a table declaring only rules nothing in the corpus addresses.
+pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) -> bool {
+    executed
+        .iter()
+        .any(|e| e.status == urzua_core::report::RuleStatus::Ran && e.records_examined > 0)
+}
