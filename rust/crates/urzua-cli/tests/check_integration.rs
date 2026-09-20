@@ -1633,3 +1633,48 @@ fn a_type_declaring_no_layout_puts_its_records_outside_the_population() {
     assert_eq!(pop["eligible"], 0, "no type declares a layout: {stdout}");
     assert_eq!(pop["examined"], 0, "{stdout}");
 }
+
+#[test]
+fn a_field_rule_counts_declared_slots_not_records() {
+    // BUG-40: field.quality reported 1023 against a 309-record corpus and the
+    // number was never wrong -- it was 100% of declared field slots under a
+    // name claiming records. The slot list is now the population, so the
+    // denominator cannot be mislabelled.
+    let dir = fixture_repo("field-slot-population");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {field.quality: error}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\", \"Author\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    for (n, slug) in [(1, "a"), (2, "b")] {
+        std::fs::write(
+            dir.join(format!("docs/adr/ADR-{n}-{slug}.md")),
+            "---\nStatus: Accepted\nDate: 2026-01-01\nAuthor: someone\n---\n# x\n",
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let pop = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "field.quality")
+        .and_then(|r| r.get("population"))
+        .expect("field.quality must carry a population");
+    assert_eq!(pop["unit"], "field", "not records: {stdout}");
+    assert_eq!(
+        pop["eligible"], 6,
+        "2 records x 3 declared required fields, not 2: {stdout}"
+    );
+    assert_eq!(
+        parsed["files_examined"], 2,
+        "the corpus is 2 records: {stdout}"
+    );
+}
