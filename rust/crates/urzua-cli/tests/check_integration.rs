@@ -1533,3 +1533,46 @@ fn ci_wired_finds_the_invocation_in_any_workflow_not_just_ci_yml() {
         "the invocation is in checks.yml, so the checker IS wired in: {stdout}"
     );
 }
+
+#[test]
+fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
+    // "No workflow invokes the checker" and "the workflows could not be read"
+    // are different answers. Collapsing them reports confidently about a
+    // directory never opened -- the defect BUG-91 fixed, one level down.
+    let dir = fixture_repo("ci-wired-unreadable");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/checks.yml"),
+        "name: checks\njobs:\n  records:\n    steps:\n      - run: urzua check\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    use std::os::unix::fs::PermissionsExt;
+    let workflows = dir.join(".github/workflows");
+    std::fs::set_permissions(&workflows, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let out = run_urzua(&dir, &["doctor"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    std::fs::set_permissions(&workflows, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let ci = parsed["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "ci-wired")
+        .expect("ci-wired check must be present");
+    assert_eq!(
+        ci["status"], "error",
+        "an unreadable workflows directory is not the same as an unwired checker: {stdout}"
+    );
+    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+}

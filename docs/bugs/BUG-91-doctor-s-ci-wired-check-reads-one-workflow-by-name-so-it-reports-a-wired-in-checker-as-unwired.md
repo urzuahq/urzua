@@ -35,6 +35,16 @@ code, which is the behaviour the defect produces -- a test pinning the wrong ans
 The hardcoded filename also predates this repository having more than one workflow. It became wrong
 when `checks.yml` was added, and nothing re-derived the check from that change.
 
+## The fix's own first attempt had the same defect
+
+Review caught that the rewritten scan used `unwrap_or(false)`, `flatten()` and `is_ok_and()`, so an
+unreadable workflows directory, an unreadable entry, or an unreadable workflow file all became
+*"no workflow invokes the checker"* -- a confident answer about a directory never opened. That is the
+defect this record is about, reproduced inside its own fix.
+
+Only an **absent** `.github/workflows` is a warning now. Any other failure is an `error`, because
+*"cannot tell whether the checker is wired in"* is not the same claim as *"it is not"*.
+
 ## Also fixed here
 
 `doctor`'s `required_fields` warning claimed *"field-quality/header rules will never fire for it"*.
