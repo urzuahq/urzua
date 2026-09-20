@@ -1576,3 +1576,60 @@ fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
     );
     assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
 }
+
+#[test]
+fn a_record_with_no_revision_log_is_absent_not_outside_the_population() {
+    // BUG-50: "absence is indistinguishable from compliance". SPEC-1 lost 18
+    // revision rows by losing one marker line and the rule stayed green. The
+    // report now performs the subtraction it could not.
+    let dir = one_adr_repo(
+        "revision-log-absent",
+        "{revision-log.change-class-required: error}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
+    );
+    // A second record with no revision log at all.
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-y.md"),
+        "---\nStatus: Accepted\n---\n# 2 — Y\n\nNo log here.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let pop = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "revision-log.change-class-required")
+        .and_then(|r| r.get("population"))
+        .expect("the rule must carry a population");
+    assert_eq!(pop["eligible"], 2, "both records are in scope: {stdout}");
+    assert_eq!(
+        pop["examined"], 1,
+        "only one carries a log, and the other's absence must be visible: {stdout}"
+    );
+}
+
+#[test]
+fn a_type_declaring_no_layout_puts_its_records_outside_the_population() {
+    // Distinct from absence: the rule does not apply at all, which is the
+    // cold-start state and must read as eligible 0 rather than as a rule
+    // whose matcher is broken.
+    let dir = one_adr_repo(
+        "layout-not-declared",
+        "{header.layout-consistency: warn}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    );
+    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let pop = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "header.layout-consistency")
+        .and_then(|r| r.get("population"))
+        .expect("the rule must carry a population");
+    assert_eq!(pop["eligible"], 0, "no type declares a layout: {stdout}");
+    assert_eq!(pop["examined"], 0, "{stdout}");
+}
