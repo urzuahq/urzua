@@ -29,8 +29,13 @@ fail=0
 pending=$(find "$changeset_dir" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
 version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$manifest" | head -1)
 
-if [ "$pending" -gt 0 ] && [ -n "$latest_tag" ]; then
-  if [ "v$version" != "$latest_tag" ]; then
+if [ "$pending" -gt 0 ]; then
+  if [ -z "$latest_tag" ]; then
+    # "I could not determine the newest tag" is not "the versions agree" --
+    # the distinction doctor's ci-wired check got right this same release.
+    echo "::error::could not determine the newest tag (shallow checkout, or no tags) -- cannot compare $manifest's version against it"
+    fail=1
+  elif [ "v$version" != "$latest_tag" ]; then
     echo "::error::$manifest says $version but the newest tag is $latest_tag, with $pending changeset fragment(s) still pending -- a release-prep bump has reached this branch ahead of its release (BUG-92)"
     fail=1
   fi
