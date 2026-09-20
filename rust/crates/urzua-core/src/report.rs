@@ -37,6 +37,14 @@ pub struct Finding {
 pub struct RuleExecution {
     pub rule: String,
     pub records_examined: usize,
+    /// What this rule was handed and what it judged, in a stated unit
+    /// (`BUG-40`). `records_examined` holds three different denominators
+    /// across the rule set -- 1023 of them over a 309-record corpus for
+    /// `field.quality` -- because the unit was never named. `None` while a
+    /// rule is not yet converted; `records_examined` is authoritative until
+    /// every rule carries a population.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub population: Option<Population>,
     /// What `records_examined` counted. A rule that reads the configuration
     /// counts declarations, not records, and the two must not be added
     /// together: a config-scoped count satisfying "some rule examined
@@ -48,6 +56,56 @@ pub struct RuleExecution {
     /// skipped, never omitted -- "off" and "ran clean" must stay
     /// distinguishable in the report.
     pub status: RuleStatus,
+}
+
+/// What a rule's population is counted in. A number without its unit is how
+/// `records_examined` came to mean records for one rule, configuration
+/// declarations for another and `(record, field)` pairs for a third, all under
+/// one name (`BUG-40`, `BUG-81`, `BUG-83`, `BUG-90`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PopulationUnit {
+    /// One entry in `config.record_types`.
+    RecordType,
+    /// One tracked record-shaped path, judged without opening the file.
+    Path,
+    /// One loaded record; the verdict is about the file as a whole.
+    Record,
+    /// One `(record, field-name)` pair where the name is **declared by
+    /// config** -- never "a field that happens to be present". The slot
+    /// exists because the configuration says so, which is what lets an
+    /// absent or unreadable one still be counted.
+    Field,
+    /// One closure assertion drawn from a declared `claim_paths` tree.
+    Claim,
+}
+
+/// A rule's input population: what it was eligible to examine, and what it
+/// judged. `eligible > examined` is the signal, not an accounting slip -- it
+/// means the rule had something in front of it that it did not reach.
+///
+/// No public constructor. `of` is the only way in and it upholds
+/// `examined <= eligible`, so the invariant cannot be written wrong rather
+/// than being checked for afterwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct Population {
+    pub unit: PopulationUnit,
+    pub eligible: usize,
+    pub examined: usize,
+}
+
+impl Population {
+    pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
+        debug_assert!(
+            examined <= eligible,
+            "{unit:?}: examined {examined} exceeds eligible {eligible}"
+        );
+        Population {
+            unit,
+            eligible,
+            examined: examined.min(eligible),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -326,6 +384,27 @@ impl Report for MigrateSchemaReport {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    #[should_panic(expected = "exceeds eligible")]
+    fn a_population_cannot_examine_more_than_it_was_eligible_for() {
+        // Upheld by construction rather than checked after the fact: BUG-90
+        // was a count exceeding the size of the corpus that nothing in the
+        // report could contradict. Every test run and every dev build trips
+        // the assertion; release clamps rather than emitting a number that
+        // contradicts itself.
+        let _ = Population::of(PopulationUnit::Record, 2, 5);
+    }
+
+    #[test]
+    fn a_population_carries_the_unit_its_numbers_are_in() {
+        let types = Population::of(PopulationUnit::RecordType, 6, 6);
+        let records = Population::of(PopulationUnit::Record, 309, 309);
+        assert_ne!(
+            types.unit, records.unit,
+            "six declarations and 309 records must not read as the same quantity"
+        );
+    }
 
     use super::*;
 

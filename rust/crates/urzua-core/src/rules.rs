@@ -7,7 +7,9 @@ use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
-use crate::report::{Finding, FindingSeverity, RuleExecution, RuleScope, RuleStatus};
+use crate::report::{
+    Finding, FindingSeverity, Population, PopulationUnit, RuleExecution, RuleScope, RuleStatus,
+};
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -134,6 +136,7 @@ pub fn header_required_fields(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -188,6 +191,7 @@ pub fn header_layout_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -255,6 +259,7 @@ pub fn header_field_set_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -327,6 +332,7 @@ pub fn type_record_outside_declared_dir(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(PopulationUnit::Path, examined, examined)),
             records_examined: examined,
             scope: RuleScope::Paths,
             status: RuleStatus::Ran,
@@ -396,6 +402,11 @@ pub fn type_dir_matches_nothing(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(
+                PopulationUnit::RecordType,
+                config.record_types.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
@@ -435,6 +446,11 @@ pub fn type_no_declared_spec(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(
+                PopulationUnit::RecordType,
+                config.record_types.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
@@ -481,6 +497,11 @@ pub fn header_deprecated_shape(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(
+                PopulationUnit::RecordType,
+                config.record_types.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
@@ -610,6 +631,11 @@ pub fn config_pointer_declaration_missing(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(
+                PopulationUnit::RecordType,
+                config.record_types.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
@@ -675,6 +701,11 @@ pub fn config_pointer_field_not_known(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(
+                PopulationUnit::RecordType,
+                config.record_types.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
@@ -729,6 +760,11 @@ pub fn config_pointer_narrative_overlap(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: Some(Population::of(
+                PopulationUnit::RecordType,
+                config.record_types.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Config,
             status: RuleStatus::Ran,
@@ -782,6 +818,7 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -890,6 +927,7 @@ pub fn pointer_target_status(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -947,6 +985,7 @@ pub fn pointer_resolution(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1026,6 +1065,7 @@ pub fn header_pointer_field_clean(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1098,6 +1138,7 @@ pub fn narrative_field_stale(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1253,6 +1294,7 @@ pub fn field_pending(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1366,6 +1408,7 @@ pub fn claim_status_agreement(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1411,6 +1454,7 @@ pub fn field_quality(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1487,6 +1531,7 @@ pub fn filename_title_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1641,6 +1686,7 @@ pub fn revision_log_change_class(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1830,6 +1876,7 @@ pub fn embodiment_locator_exists(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1886,6 +1933,7 @@ pub fn embodiment_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1955,6 +2003,7 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -2029,6 +2078,7 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
+            population: None,
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
