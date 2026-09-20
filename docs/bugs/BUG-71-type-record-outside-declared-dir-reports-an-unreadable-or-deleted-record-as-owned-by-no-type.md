@@ -20,7 +20,9 @@ docs/adr/ADR-2-y.md | sits below a declared record type's dir but not directly i
                       so no type owns it and no rule examines it
 ```
 
-It is directly in it, and it does not exist. The same false positive arises for any unreadable or
+The message is false in both halves. The file is directly in the declared directory -- so the type
+owns it by location, which is what `RFC-35` defines ownership to mean -- and it no longer exists, so
+there is nothing there to own. The same false positive arises for any unreadable or
 non-UTF-8 `.md` directly inside a declared directory.
 
 The rule should decide ownership from the path -- whether its parent is a declared `dir` -- which is

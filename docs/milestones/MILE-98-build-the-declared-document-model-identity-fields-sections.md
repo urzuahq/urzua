@@ -44,8 +44,8 @@ Blocked on this: `MILE-4`, `MILE-5`, `MILE-6`, `MILE-7`, `MILE-55`, `MILE-97`.
 family: *the engine knows something and never compares it to what the corpus says about it*. Every one
 is fixable today as another hardcoded comparison, and that is precisely the mistake --
 `PLACEHOLDER_TOKENS` was transcribed from this project's own templates by hand, the companion-pair
-check knows one pair, the revision-log rule keys on a literal string. **Each is a comparison written as
-a constant.** Under a declared model they are declarations, so fixing them first means fixing them
+check knows one pair, the revision-log rule keys on a literal string, and `waiver.rs` reads `Rule`,
+`Scope` and `Expires` as literals. **Each is a comparison written as a constant.** Under a declared model they are declarations, so fixing them first means fixing them
 twice.
 
 It is also subtractive, which is the argument for doing it rather than working around it:

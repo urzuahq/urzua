@@ -20,9 +20,15 @@ changes/loop/changes/0001-f.md               | claims to close BUG-1 ...
 changes/loop/changes/loop/changes/0001-f.md  | ... (x33)
 ```
 
-Every path after the first does not exist. The traversal also leaves the declared prefix entirely --
-`..` re-enters the repository root -- so the rule reads files the configuration never pointed it at.
-It terminates only because the operating system caps symlink resolution depth.
+Every path after the first is a symlink alias for the same real file, so one claim is read and
+reported over and over under names no one wrote. The traversal also leaves the declared prefix
+entirely -- `..` re-enters the repository root -- so the rule reads files the configuration never
+pointed it at. It terminates only because the operating system caps symlink resolution depth.
+
+The root itself was the worse case, found by review rather than by the fix. `exists()` and `is_dir()`
+both follow links, so a `claim_paths` root symlinked to an ancestor was traversed before any
+per-entry check applied: measured at **904 files examined**, including files belonging to other
+repositories on the same disk.
 
 `symlink_metadata` rather than `is_dir`, or a set of canonicalised visited directories.
 
