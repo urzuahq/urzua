@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records ci hooks-install \
+.PHONY: help build check test fmt fmt-check lint clean records ci release-invariants hooks-install \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint rust-clean
 
 help: ## Show available commands
@@ -29,7 +29,7 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint rust-build test records release-guard ## Run exactly what CI runs, locally
+ci: fmt-check lint rust-build test records release-guard release-invariants ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
 hooks-install: ## Install the pre-push hook (fmt + clippy, not the full suite)
@@ -67,3 +67,7 @@ records: rust-build ## Validate this repo's own governance records
 
 release-guard: ## Exercise the release guard's planted-violation cases
 	@.github/scripts/release-guard.test.sh
+
+release-invariants: ## Check the release invariants, and exercise their planted-violation cases
+	@.github/scripts/release-invariants.test.sh
+	@.github/scripts/release-invariants.sh .changeset rust/Cargo.toml "$$(git tag --sort=-v:refname | head -1)"
