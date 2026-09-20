@@ -163,6 +163,15 @@ pub fn header_layout_consistency(
     let mut findings = Vec::new();
     let mut examined = 0;
 
+    // Eligible: records of a type that declares a layout. A type declaring
+    // none puts its records outside this rule's population -- the rule does not
+    // apply. A record whose header yields no detectable layout IS in the
+    // population and simply was not judged, which `eligible > examined` says
+    // and a bare count could not.
+    let eligible = records
+        .iter()
+        .filter(|r| declared_by_type.contains_key(&r.record_type))
+        .count();
     for record in records {
         let Some(&declared) = declared_by_type.get(&record.record_type) else {
             continue;
@@ -191,7 +200,7 @@ pub fn header_layout_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
+            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -225,6 +234,12 @@ pub fn header_field_set_consistency(
     let mut findings = Vec::new();
     let mut examined = 0;
 
+    // Eligible: records of a type declaring `known_fields`. An unparsed header
+    // stays eligible and unexamined (BUG-78) rather than vanishing.
+    let eligible = records
+        .iter()
+        .filter(|r| allowed_by_type.contains_key(&r.record_type))
+        .count();
     for record in records {
         let Some(allowed) = allowed_by_type.get(&record.record_type) else {
             continue;
@@ -259,7 +274,7 @@ pub fn header_field_set_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
+            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -818,7 +833,11 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
+            population: Some(Population::of(
+                PopulationUnit::Record,
+                records.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1531,7 +1550,11 @@ pub fn filename_title_consistency(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
+            population: Some(Population::of(
+                PopulationUnit::Record,
+                records.len(),
+                examined,
+            )),
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
@@ -1656,6 +1679,12 @@ pub fn revision_log_change_class(
     let mut findings = Vec::new();
     let mut examined = 0;
 
+    // Every record is eligible. A record with no `**Revision log**` marker is
+    // *absent* from this rule's judgement, not outside its population -- and
+    // absence is exactly what BUG-50 reports as indistinguishable from
+    // compliance: SPEC-1 lost 18 revision rows by losing one line and the rule
+    // stayed green. The subtraction the report could not perform is now in it.
+    let eligible = records.len();
     for record in records {
         let Some(content) = full_text.get(&record.path) else {
             continue;
@@ -1686,7 +1715,7 @@ pub fn revision_log_change_class(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
+            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
             records_examined: examined,
             scope: RuleScope::Records,
             status: RuleStatus::Ran,
