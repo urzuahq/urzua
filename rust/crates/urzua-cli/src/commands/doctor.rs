@@ -140,31 +140,81 @@ pub fn run() -> ExitCode {
                 check: "record-type-required-fields".to_string(),
                 status: DoctorStatus::Warn,
                 message: format!(
-                    "record type '{name}' has no required_fields -- field-quality/header rules will never fire for it"
+                    "record type '{name}' has no required_fields -- field.quality and field.pending will never fire for it"
                 ),
             });
         }
     }
 
-    let ci_path = repo_root.join(".github/workflows/ci.yml");
-    let ci_wired = std::fs::read_to_string(&ci_path)
-        .map(|content| content.contains("urzua check") || content.contains("make records"))
-        .unwrap_or(false);
-    if ci_wired {
-        checks.push(DoctorCheck {
+    // Every workflow, not one by name. Reading `ci.yml` alone reported that a
+    // repository was unwired when its invocation lived in a differently named
+    // workflow (BUG-91).
+    //
+    // No error swallowed. "No workflow invokes the checker" and "the workflows
+    // could not be read" are different answers, and collapsing them reports
+    // confidently about a directory never opened -- the defect this check was
+    // just fixed for, one level down. Only an absent directory is a warning.
+    let workflows_dir = repo_root.join(".github/workflows");
+    let ci_wired: Result<bool, String> = match std::fs::read_dir(&workflows_dir) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(format!("could not read {}: {e}", workflows_dir.display())),
+        Ok(entries) => {
+            let mut found = false;
+            let mut failure: Option<String> = None;
+            for entry in entries {
+                let path = match entry {
+                    Ok(entry) => entry.path(),
+                    Err(e) => {
+                        failure = Some(format!(
+                            "could not read an entry of {}: {e}",
+                            workflows_dir.display()
+                        ));
+                        break;
+                    }
+                };
+                if !path.extension().is_some_and(|e| e == "yml" || e == "yaml") {
+                    continue;
+                }
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        if content.contains("urzua check") || content.contains("make records") {
+                            found = true;
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        failure = Some(format!("could not read {}: {e}", path.display()));
+                        break;
+                    }
+                }
+            }
+            match failure {
+                Some(message) => Err(message),
+                None => Ok(found),
+            }
+        }
+    };
+    match &ci_wired {
+        Err(message) => checks.push(DoctorCheck {
+            check: "ci-wired".to_string(),
+            status: DoctorStatus::Error,
+            message: format!(
+                "{message} -- cannot tell whether the checker is wired in, which is not the same as it not being"
+            ),
+        }),
+        Ok(true) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
             status: DoctorStatus::Ok,
-            message: "CI workflow invokes `urzua check` or `make records`".to_string(),
-        });
-    } else {
-        checks.push(DoctorCheck {
+            message: "a workflow invokes `urzua check` or `make records`".to_string(),
+        }),
+        Ok(false) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
             status: DoctorStatus::Warn,
             message: format!(
-                "{} does not invoke `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
-                ci_path.display()
+                "no workflow in {} invokes `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
+                workflows_dir.display()
             ),
-        });
+        }),
     }
 
     let has_error = checks.iter().any(|c| c.status == DoctorStatus::Error);
