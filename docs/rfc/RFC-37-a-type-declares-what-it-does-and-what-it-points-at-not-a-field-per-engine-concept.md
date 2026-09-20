@@ -31,9 +31,20 @@ Nine type-level fields today:
 | `known_fields`, `pointer_fields`, `narrative_fields` | which fields exist and of what kind |
 | `spec` | the spec record governing this type |
 
-`MILE-98` already dissolves five of them -- `header_shape` and `header_layout` into `fields.from`,
-`prefix` into `identity.pattern`, the three field lists into the `fields` layer -- and its argument
-for doing so is that the change is subtractive. That half has a plan.
+`MILE-98` already dissolves **six** of them -- `header_shape` and `header_layout` into `fields.from`,
+`prefix` into `identity.pattern`, and `known_fields`, `pointer_fields` and `narrative_fields` into
+the `fields` layer -- and its argument for doing so is that the change is subtractive. That half has
+a plan.
+
+`required_fields` is the seventh and its destination is **unresolved**. It is a per-field property
+under a declared `fields` layer, but nothing has decided whether it moves there, stays a list, or
+becomes a rule option. Out of scope here, named so the inventory is complete.
+
+**`ADR-44` requires `pointer_fields` and `narrative_fields` per type** and defines the graph and
+validation behaviour reading them. This proposal does not supersede it: the *capability* those keys
+declare -- that a field is a pointer, or narrative -- survives intact, and only its spelling moves
+into `fields`. `MILE-98` owns that migration and must carry an explicit compatibility decision for
+`ADR-44`; this RFC touches neither key.
 
 **The remainder does not.** After `MILE-98` the document model accounts for `dir`, `identity`,
 `fields` and `sections`. `spec` is left over, and it is governance rather than structure:
@@ -77,15 +88,28 @@ record_types:
       governed-by: "SPEC-3"
 ```
 
-**`capabilities`** -- what a type *does* in the engine. The engine recognises a closed set of
+**`capabilities`** -- what a type *does* in the engine. The engine recognises a **closed** set of
 capability names and asks "which type declared this capability", never "is this type called X".
 Evidenced twice: suppression (`BUG-74`, `ADR-11`) and roles (`MILE-55`).
+
+**An unrecognised capability name is a load-time error, not an ignored value.** A declaration the
+engine silently drops is a check that never fires, which `ADR-55` decides against and which
+`config.rs` already enforces for unknown rule names and misplaced rule options. A typo in
+`suppresses-findings` would otherwise disable suppression silently -- the failure `BUG-74` is about,
+reintroduced by the mechanism meant to fix it.
 
 **`relations`** -- what a type *points at*, as a typed link to another record. `spec` becomes
 `relations: {governed-by: SPEC-3}`, and `type.no-declared-spec` becomes a general rule taking the
 relation name as a declared option: *a type must declare the `governed-by` relation*. The rule stops
 naming specs, the message stops citing `ADR-41`, and a corpus that governs its types with something
 other than a spec can say so.
+
+**The relation stays optional, exactly as `spec` is today.** `ADR-41` decided a governing record is
+an editorial judgement and sometimes not warranted, and the current rule is a `warn` a corpus may
+legitimately carry or waive. The generalised rule inherits that unchanged: declared opt-in, `warn` by
+default, and a type for which no governing record is warranted is not made an error here. Whether a
+per-type opt-out is worth expressing -- a relation declared deliberately absent rather than merely
+missing -- is left open below.
 
 This is subtractive in the same way `MILE-98` is: `spec` and `type.no-declared-spec`'s hardcoded
 vocabulary both resolve into it rather than being rebuilt.
@@ -106,9 +130,15 @@ vocabulary both resolve into it rather than being rebuilt.
 - **What happens to `dir`?** It survives both `MILE-98` and this proposal as the one genuinely
   structural key that is neither identity, fields, sections, capability nor relation. That may
   indicate a third category rather than an exception.
-- **Migration.** Both axes are additive, so a v2 config keeps loading. Whether `spec` is accepted as
-  a deprecated alias or removed at a schema bump is undecided, and `MILE-98` will force a schema
-  conversation anyway.
+- **Migration is additive for `capabilities`, not for `relations`.** `capabilities` is a new key, so
+  every existing config keeps loading untouched. `relations` *replaces* `spec`, a key this repository
+  and any adopter already use, so it needs one of: `spec` accepted as a deprecated alias populating
+  `relations.governed-by`, both accepted with a conflict being a load error, or removal at a schema
+  bump. Undecided -- and `MILE-98` forces a schema conversation anyway, so doing both at once is the
+  obvious economy and the obvious risk.
+- **Is a deliberately-absent relation worth expressing?** `ADR-41` allows a type to have no governing
+  record on purpose, today indistinguishable from nobody having written one. Declaring a relation
+  explicitly absent would separate them, at the cost of a second way to say nothing.
 
 ## Non-goals
 
