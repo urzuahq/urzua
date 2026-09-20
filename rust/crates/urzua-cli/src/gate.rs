@@ -44,14 +44,25 @@ pub(crate) fn gated(
     }
 }
 
-/// `Ok` means "checked and clean", so it requires that something was actually
-/// checked. A run in which no rule examined a record has established nothing,
-/// and reporting it as clean is indistinguishable from a corpus that passed
-/// (ADR-55). Reachable since rules became opt-in: an empty or absent `rules`
-/// table, or a table declaring only rules nothing in the corpus addresses.
+/// `Ok` means "checked and clean", so it requires that a rule capable of
+/// judging records actually ran. A run with no such rule has established
+/// nothing, and reporting it clean is indistinguishable from a corpus that
+/// passed (ADR-55). Reachable since rules became opt-in: an empty or absent
+/// `rules` table, or a table declaring only rules that read the configuration
+/// or the path inventory.
+///
+/// Deliberately *not* `records_examined > 0`. A rule that ran and examined
+/// nothing is usually correct -- a corpus with no supersessions gives
+/// `relation.supersession-reciprocity` nothing to judge, and that is a clean
+/// result, not an unestablished one. Requiring a non-zero count made `audit`
+/// unsatisfiable on exactly the config `init` generates (BUG-84).
+///
+/// Telling "nothing to examine" from "could not address anything" is a real
+/// distinction and a harder one; it is `MILE-106`'s subject, where
+/// `type.dir-matches-nothing` is the precedent for drawing it.
 pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) -> bool {
     use urzua_core::report::{RuleScope, RuleStatus};
-    executed.iter().any(|e| {
-        e.status == RuleStatus::Ran && e.scope == RuleScope::Records && e.records_examined > 0
-    })
+    executed
+        .iter()
+        .any(|e| e.status == RuleStatus::Ran && e.scope == RuleScope::Records)
 }

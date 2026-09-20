@@ -1065,7 +1065,7 @@ fn a_claim_paths_entry_naming_a_file_does_not_load() {
 }
 
 #[test]
-fn a_symlink_inside_a_claim_path_is_not_descended_into() {
+fn a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once() {
     let dir = fixture_repo("claim-symlink");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
@@ -1089,17 +1089,17 @@ fn a_symlink_inside_a_claim_path_is_not_descended_into() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    // A directory symlink is refused outright rather than skipped: skipping is
-    // how a claim goes unread in silence (BUG-75), and following it is how the
-    // walk leaves the declared prefix (BUG-69).
+    // `changes/loop -> ..` is a cycle. Following it terminates because the walk
+    // keeps a visited set; what must never happen is the same claim being read
+    // once per hop, which is how BUG-69 reported 33 findings for one file.
+    let claims = stdout.matches("claims to close BUG-1").count();
     assert_eq!(
-        out.status.code(),
-        Some(2),
-        "a symlinked directory inside claim_paths must abort the run: {stdout}"
+        claims, 1,
+        "one claim file must be read once, not once per symlink hop: {stdout}"
     );
     assert!(
-        stdout.contains("symlink"),
-        "and the message must say why: {stdout}"
+        !stdout.contains("loop/changes/loop"),
+        "the walk must not re-enter through the link: {stdout}"
     );
 }
 
@@ -1365,4 +1365,128 @@ fn a_config_scoped_rule_alone_does_not_make_a_run_ok() {
         "no record-scoped rule ran: {stdout}"
     );
     assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+}
+
+#[test]
+fn an_unstaged_deletion_of_a_tracked_record_stops_the_run() {
+    let dir = one_adr_repo(
+        "unstaged-deletion",
+        "{header.required-fields: error}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    );
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-y.md"),
+        "---\nStatus: Accepted\n---\n# 2 — Y\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    // Deleted from the worktree, not staged: git still tracks it.
+    std::fs::remove_file(dir.join("docs/adr/ADR-2-y.md")).unwrap();
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("ADR-2-y.md"),
+        "the missing record must be named: {stdout}"
+    );
+    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+
+    // Staged, it is a deletion the corpus has accounted for.
+    std::process::Command::new("git")
+        .args(["rm", "-q", "--cached", "docs/adr/ADR-2-y.md"])
+        .current_dir(&dir)
+        .status()
+        .unwrap();
+    let staged = run_urzua(&dir, &["check"]);
+    assert_eq!(
+        staged.status.code(),
+        Some(0),
+        "a staged deletion is legitimately absent: {}",
+        String::from_utf8_lossy(&staged.stdout)
+    );
+}
+
+#[test]
+fn a_path_scoped_rule_alone_does_not_make_a_run_ok() {
+    // type.record-outside-declared-dir reads tracked path names and never opens
+    // a file, so it cannot establish anything about a record's contents.
+    let dir = fixture_repo("path-scope-only");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {type.record-outside-declared-dir: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Id\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "garbage not a header at all\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("\"status\": \"not-run\""),
+        "no rule read this record: {stdout}"
+    );
+    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+}
+
+#[test]
+fn audit_is_ok_on_a_clean_corpus_with_no_relationships() {
+    // Both rules run and legitimately have nothing to judge. init generates
+    // this config, so requiring a non-zero examined count made every fresh
+    // adopter's first audit fail CI (BUG-84).
+    let dir = one_adr_repo(
+        "audit-no-relationships",
+        "{pointer.resolution: warn, relation.supersession-reciprocity: warn}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    );
+    let out = run_urzua(&dir, &["audit"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        stdout.contains("\"status\": \"ok\""),
+        "a corpus with no relationships is clean, not unestablished: {stdout}"
+    );
+    assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
+}
+
+#[test]
+fn a_directory_symlink_inside_claim_paths_is_treated_like_the_root() {
+    let dir = fixture_repo("claim-nested-symlink");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join("shared")).unwrap();
+    std::fs::create_dir_all(dir.join("claims/real")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"claims\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("shared/0001-f.md"), "Fixes BUG-1.\n").unwrap();
+    std::os::unix::fs::symlink("../../shared", dir.join("claims/real/linked")).unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        !stdout.contains("\"status\": \"not-run\""),
+        "an in-repo directory symlink is accepted as a root, so it is accepted nested: {stdout}"
+    );
+    assert!(
+        stdout.contains("claims to close BUG-1"),
+        "and its claims are read: {stdout}"
+    );
 }

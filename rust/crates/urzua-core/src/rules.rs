@@ -328,7 +328,7 @@ pub fn type_record_outside_declared_dir(
         RuleExecution {
             rule: RULE_ID.to_string(),
             records_examined: examined,
-            scope: RuleScope::Records,
+            scope: RuleScope::Paths,
             status: RuleStatus::Ran,
         },
         findings,
