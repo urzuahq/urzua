@@ -133,8 +133,9 @@ class of untruth this release spent itself removing.
 
 So: an excluded rule is **omitted from `rules_executed` entirely**, and the report gains a top-level
 `rules_selected` naming the filter that produced it. Omission plus the filter is recoverable;
-`not-enabled` is not. This reproduces `audit`'s two-entry report exactly, which is the behaviour being
-replaced.
+`not-enabled` is not. `rules_executed` then holds exactly the two entries `audit` reports today, which
+is the behaviour being replaced — and deprecated `audit` emits `rules_selected` as well, so the two
+reports agree in shape and not merely in contents (see §3).
 
 A requested rule the config does not declare is an **invocation error, exit 2** — asking for a policy
 that does not exist is a mistake in the command, not a finding about the corpus. Selection narrows
@@ -151,6 +152,17 @@ rules to declare a category, which this RFC does not decide.
 One release where `audit` runs as today and emits a `Notice` naming the replacement invocation
 (`ADR-46`: a `Notice` never moves the exit code, so no adopter's build breaks on the warning). Removed
 the release after.
+
+**Deprecated `audit` emits `rules_selected` too**, naming its own two rule ids. `audit` has always
+been a fixed selection; the field states which one rather than leaving a consumer to infer it from the
+length of `rules_executed`. The point is that a consumer migrating from `audit` to
+`check --rules …` sees **no schema change at all** — the deprecated command and its replacement emit
+the same shape, so the migration is the invocation and nothing else.
+
+Without this the equivalence claim below is ambiguous: `audit` would emit one shape and its stated
+replacement another, and "reproduces `audit`'s two-entry report exactly" would be true of
+`rules_executed` and false of the report. Adding the field to `audit` during deprecation is a strictly
+additive change to a command already being retired, which is the cheapest place to absorb it.
 
 This is pre-1.0 and `config.rs` records that there are *"no real external adopters yet whose behavior
 a hardcoded fallback would need to preserve"* — the cheapest moment this decision will ever have.
@@ -233,5 +245,6 @@ there being two implementations.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Deprecated `audit` emits `rules_selected` as well. **Why:** the equivalence claim was ambiguous for a consumer reading the report as a schema rather than as a list. `audit` has always been a fixed selection, so naming it costs nothing, and it means migrating from `audit` to `check --rules` changes the invocation and not the shape of what comes back. | **substantive** |
 > | 2026-09-21 | Defined the filtered report's contract; downgraded the `fix` half from a settled design to a named direction. **Why:** review found three things the first draft asserted without working out. An excluded rule had no status that was not already taken, and reusing `not-enabled` would have reported a declared policy as declined. And sharing `embodiment_consistency` with `fix` was claimed to close the drift divergence and change no behaviour; it does neither, because `check` gates the rule and supplies a `drifted` set `fix` has no plumbing to build. The divergence is in the rule's input, not in there being two implementations. | **substantive** |
 > | 2026-09-21 | Filed. **Why:** `BUG-99` was filed against `audit`'s empty-rule-set edge case, and examining it showed the edge case was a symptom: `audit` is a read-only subset of `check` that outlived `ADR-53`, and `fix` carries the duplicate-implementation risk `ADR-30` was written to avoid. Filed as an RFC rather than three bug fixes because the question is which commands the surface should have, not how to patch the ones it has. | **substantive** |
