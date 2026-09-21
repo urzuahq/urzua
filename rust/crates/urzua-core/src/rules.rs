@@ -46,6 +46,7 @@ pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
+pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -72,6 +73,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_EMBODIMENT_LOCATOR_EXISTS,
     RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
+    RULE_CONFIG_SCOPE_MATCHES_NOTHING,
 ];
 
 pub fn header_required_fields(
@@ -2263,6 +2265,68 @@ pub fn embodiment_locator_promotion_candidate(
     )
 }
 
+/// A declared rule whose candidates the configuration could not reach
+/// (`MILE-106`).
+///
+/// Fires on `out_of_scope > 0`, never on a merely empty result. Those are
+/// different problems with opposite fixes: a corpus that has not written a
+/// revision log yet is doing nothing wrong and time resolves it, while a
+/// `prefix` that matches no filename will examine zero records forever
+/// (`BUG-61`). `type.dir-matches-nothing` draws the same line between an
+/// absent directory and an empty one, and is the precedent this follows.
+///
+/// Deliberately silent on `Unreadable`: `header.required-fields` already
+/// reports the parse error, per record, with the parser's own message.
+///
+/// Judges the run rather than the corpus, so it reads the executions the other
+/// rules produced and never sees a record. It excludes itself -- judging its
+/// own execution while producing it is not a verdict anyone can act on.
+pub fn config_scope_matches_nothing(executed: &[RuleExecution]) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CONFIG_SCOPE_MATCHES_NOTHING;
+    let mut findings = Vec::new();
+
+    let candidates: Vec<&RuleExecution> = executed
+        .iter()
+        .filter(|e| e.rule != RULE_ID && e.status == RuleStatus::Ran)
+        .collect();
+
+    let population = census(PopulationUnit::Rule, candidates, |exec| {
+        let Some(population) = &exec.population else {
+            return Outcome::Absent;
+        };
+        if population.out_of_scope() == 0 {
+            return Outcome::Examined;
+        }
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Warning,
+            file: std::path::PathBuf::from(".urzua/config.yaml"),
+            line: None,
+            waived: None,
+            message: format!(
+                "'{}' was handed {} candidate(s) the configuration does not reach -- \
+                 {} of {} are outside what this repository declared, so the rule cannot \
+                 apply to them however the records are edited",
+                exec.rule,
+                population.out_of_scope(),
+                population.out_of_scope(),
+                population.eligible()
+            ),
+        });
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
 /// Rule 5 (Phase 6): `Supersedes`/`Superseded-by` reciprocity. Checking only
 /// the forward claim leaves the reverse unguarded -- a record can claim to
 /// supersede something that doesn't reciprocally point back, sending a
@@ -2914,6 +2978,74 @@ mod tests {
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty());
+    }
+
+    fn exec_with(
+        rule: &str,
+        eligible: usize,
+        examined: usize,
+        out_of_scope: usize,
+    ) -> RuleExecution {
+        RuleExecution {
+            rule: rule.to_string(),
+            population: Some(Population::detailed(
+                PopulationUnit::Record,
+                eligible,
+                examined,
+                out_of_scope,
+            )),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_scope_reaching_nothing_is_reported_observed_failing() {
+        // BUG-61's shape: init wrote a prefix matching no filename, so the rule
+        // examines zero records forever and no edit to a record changes that.
+        let executed = [exec_with("identity.collision", 2, 0, 2)];
+        let (exec, findings) = config_scope_matches_nothing(&executed);
+        assert_eq!(examined(&exec), 1, "the rule must judge the execution");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("identity.collision"));
+    }
+
+    #[test]
+    fn a_rule_with_nothing_written_yet_is_not_reported() {
+        // Identical eligible/examined to the case above. The corpus simply has
+        // no revision logs, which time resolves and config cannot.
+        let executed = [exec_with("revision-log.change-class-required", 2, 0, 0)];
+        let (exec, findings) = config_scope_matches_nothing(&executed);
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "an empty corpus is not a misconfiguration: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn it_does_not_judge_its_own_execution() {
+        let executed = [exec_with(RULE_CONFIG_SCOPE_MATCHES_NOTHING, 3, 0, 3)];
+        let (exec, findings) = config_scope_matches_nothing(&executed);
+        assert_eq!(
+            exec.population.expect("carries a population").eligible(),
+            0,
+            "its own execution is not a candidate"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_rule_that_did_not_run_is_not_a_candidate() {
+        let executed = [RuleExecution {
+            rule: "field.quality".to_string(),
+            population: None,
+            status: RuleStatus::NotEnabled,
+            examined_records: Vec::new(),
+        }];
+        let (exec, findings) = config_scope_matches_nothing(&executed);
+        assert_eq!(exec.population.expect("carries a population").eligible(), 0);
         assert!(findings.is_empty());
     }
 

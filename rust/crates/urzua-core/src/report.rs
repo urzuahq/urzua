@@ -101,6 +101,9 @@ pub enum PopulationUnit {
     Field,
     /// One closure assertion drawn from a declared `claim_paths` tree.
     Claim,
+    /// One other rule's execution. The unit of a rule that judges the run
+    /// rather than the corpus.
+    Rule,
 }
 
 /// What a rule decided about one candidate it was handed.
