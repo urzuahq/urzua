@@ -1810,3 +1810,81 @@ fn a_rule_handed_nothing_discloses_that_it_certified_nothing() {
         "and neither was judged by any rule: {stdout}"
     );
 }
+
+#[test]
+fn a_blocking_finding_is_never_reported_as_a_run_that_did_not_happen() {
+    // A config finding survives every scope filter, so scoping to a path with
+    // no records left `status: not-run` beside `blocking: true` -- a run that
+    // established nothing and found a blocking error at the same time.
+    let dir = fixture_repo("blocking-not-run");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/elsewhere")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {config.pointer-field-not-known: error}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Status\"]\n\
+         \x20   pointer_fields: [\"Nonexistent\"]\n    narrative_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "# 1 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/elsewhere/.keep"), "x\n").unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check", "docs/elsewhere"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["blocking"], true, "{stdout}");
+    assert_ne!(
+        parsed["status"], "not-run",
+        "a blocking finding is something established: {stdout}"
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "blocking is exit 1, not 2: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn records_read_never_exceeds_files_examined() {
+    // Rules run over the whole corpus so a reference resolves outside the scope
+    // (BUG-67), but counting those here put the two numbers on different
+    // denominators -- BUG-40, in the field added to end it.
+    let dir = fixture_repo("scoped-denominator");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {identity.collision: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    for n in 1..=3 {
+        std::fs::write(
+            dir.join(format!("docs/adr/ADR-{n}-x.md")),
+            format!("# {n} — X\n\n> Status: Accepted\n"),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check", "docs/adr/ADR-1-x.md"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["files_examined"], 1, "{stdout}");
+    assert_eq!(
+        parsed["records_read_by_any_rule"], 1,
+        "both numbers count the scope, or they are not comparable: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

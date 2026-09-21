@@ -445,7 +445,15 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         .filter(|r| in_scope.contains(r.path.as_path()))
         .collect();
 
-    let status = if examined.is_empty() || !crate::gate::any_rule_looked(&rules_executed) {
+    // `blocking` is decided over findings that survive the scope filter, and a
+    // config finding survives every scope. Deciding `not-run` from the record
+    // count alone therefore produced `status: not-run` beside `blocking: true`
+    // -- a run that established nothing and found a blocking error at once. A
+    // blocking finding is something established, so it settles the question
+    // before the record count is consulted.
+    let status = if blocking {
+        ReportStatus::FindingsPresent
+    } else if examined.is_empty() || !crate::gate::any_rule_looked(&rules_executed) {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
         ReportStatus::Ok
@@ -456,7 +464,15 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let report = CheckReport {
         status,
         files_examined: examined.len(),
-        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule(&rules_executed),
+        // Counted over the same set `files_examined` counts, or the report
+        // carries two numbers on different denominators -- which is `BUG-40`,
+        // in the field added this release to end it. Rules run over the whole
+        // corpus because a reference resolves against records outside the
+        // scope (BUG-67); what is *reported on* is the scope.
+        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule_within(
+            &rules_executed,
+            &in_scope,
+        ),
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),
