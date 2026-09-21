@@ -350,6 +350,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
             rules::header_field_set_consistency(&records, &known_fields_by_type)
         }),
+        crate::gate::gated(&config, rules::RULE_FIELD_UNTRIMMED_VALUE, || {
+            rules::field_untrimmed_value(&records, &known_fields_by_type)
+        }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             let terminal = config
                 .rules

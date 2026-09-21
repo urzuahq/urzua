@@ -125,6 +125,7 @@ rules:
   pointer.resolution: error
   field.quality: error
   field.pending: warn
+  field.untrimmed-value: warn
   filename.title-consistency: error
   relation.supersession-reciprocity: error
   revision-log.change-class-required: error
