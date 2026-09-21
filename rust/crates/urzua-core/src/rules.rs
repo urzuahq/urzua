@@ -995,7 +995,9 @@ pub fn pointer_target_status(
                     continue;
                 };
                 let status = target.header.get("Status").unwrap_or("(no Status field)");
-                if not_in.iter().any(|s| s == status) {
+                // A quoted YAML scalar keeps its trailing space, so an untrimmed
+                // compare let a record declared `Superseded` escape this rule.
+                if not_in.iter().any(|s| s == status.trim()) {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
@@ -1558,7 +1560,7 @@ pub fn claim_status_agreement(
             continue;
         };
         let status = target.header.get("Status").unwrap_or("(no Status field)");
-        if closed_statuses.iter().any(|s| s == status) {
+        if closed_statuses.iter().any(|s| s == status.trim()) {
             continue;
         }
         findings.push(Finding {
@@ -3307,6 +3309,48 @@ mod tests {
         )]);
         let (_, findings) = header_pointer_field_clean(&[r], &config);
         assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn a_target_status_with_trailing_space_is_still_that_status() {
+        // A quoted YAML scalar keeps its trailing space, so an untrimmed compare
+        // let a record declared `Superseded` slip past both status rules while
+        // narrative-field.stale, which trimmed, caught it.
+        // Frontmatter, not blockquote: the blockquote parser trims at parse
+        // time, so only a quoted YAML scalar carries the space this far.
+        let yaml = |path: &str, content: &str| {
+            Record::parse_with_shape_and_prefix(
+                PathBuf::from(path),
+                "adr".to_string(),
+                content,
+                crate::header::HeaderShape::YamlFrontmatter,
+                "ADR".to_string(),
+            )
+        };
+        let target = yaml(
+            "docs/adr/ADR-1-x.md",
+            "---\nStatus: \"Superseded   \"\n---\n# 1 — X\n",
+        );
+        let source = yaml(
+            "docs/adr/ADR-2-y.md",
+            "---\nDerives-from: ADR-1\n---\n# 2 — Y\n",
+        );
+        let pointers: HashMap<String, Vec<String>> =
+            [("adr".to_string(), vec!["Derives-from".to_string()])]
+                .into_iter()
+                .collect();
+
+        let (_, findings) = pointer_target_status(
+            &[target, source],
+            &pointers,
+            &HashMap::new(),
+            &["Superseded".to_string()],
+        );
+        assert_eq!(
+            findings.len(),
+            1,
+            "trailing space must not exempt it: {findings:?}"
+        );
     }
 
     #[test]

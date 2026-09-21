@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records ci release-invariants hooks-install \
+.PHONY: help build check test fmt fmt-check lint clean records ci release-guard release-invariants hooks-install \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint rust-clean
 
 help: ## Show available commands
