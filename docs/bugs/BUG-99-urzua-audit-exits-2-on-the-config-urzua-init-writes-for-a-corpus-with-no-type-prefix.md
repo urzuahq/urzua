@@ -3,6 +3,7 @@ Stable-Id: 01M30VE5PPB5TVTF85WW5BRH8H
 Status: Open
 Found-in: "Reviewing what the 0.4.0 population work did and did not fix; reproduced against a scratch repository built to the prefixless shape"
 Regression-test: "not yet written -- `init` then `audit` on a corpus with no type prefix must not exit 2"
+Blocked-on: RFC-38
 ---
 # 99 — urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
 
@@ -54,18 +55,23 @@ eighteen rules and cannot reach this state, so every fixture exercising the gate
 The 0.4.0 verdict/disclosure split does not fix it either: the rules are `not-enabled` rather than
 having run over an empty population, so `any_rule_looked` is false before and after.
 
-## Candidate fixes
+## The cause is not the edge case
 
-Not decided here; the choice belongs with whoever takes it.
+This was first written up as an empty-rule-set edge case, with three candidate patches: warn from
+`init`, teach `audit` to tell "nothing declared for me" from "could not run", or broaden what `audit`
+runs. All three patch a symptom.
 
-1. **`init` warns** when the config it writes leaves `audit` with no declared rule. Cheapest, and
-   consistent with `ADR-33` -- adopt mode proposes and reports, it does not decide. Fixes the
-   surprise, not the exit code.
-2. **`audit` distinguishes** "no rule declared for me" from "could not run". This is the `ADR-53`
-   reading: an adopter who declared no audit policy has no audit policy to enforce. It reopens
-   `BUG-77`'s question for this one command and needs that argued rather than assumed.
-3. **Broaden what `audit` runs**, so its rule set is not wholly identity-dependent. The largest
-   change and the one most likely to have its own consequences.
+The cause is that `audit` owns a rule set at all. It runs two rule functions `check` already runs,
+over the same corpus, producing the same report shape and exit codes -- a read-only subset of another
+command. `ADR-53` then made rules a declared, opt-in policy, at which point a hardcoded subset inside
+the tool overrides the adopter's declaration. `BUG-42` is that contradiction surfacing once already;
+`gated()` fixed the severity half and left the selection half.
+
+`BUG-42`, `BUG-84` and this bug are three instances of the one root. `RFC-38` proposes retiring the
+command rather than patching it a third time, at which point this closes without a separate fix.
+
+If `RFC-38` is rejected, candidate 1 is the cheapest patch and candidate 2 reopens `BUG-77` for one
+command, which would need arguing rather than assuming.
 
 ## References
 
@@ -81,4 +87,5 @@ Not decided here; the choice belongs with whoever takes it.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Re-diagnosed and `Blocked-on: RFC-38` declared. **Why:** filed as an empty-rule-set edge case with three candidate patches. Examining why `audit` has a rule set at all showed the edge case is a symptom of a read-only subset command that outlived `ADR-53`, and that `BUG-42` and `BUG-84` share that root. A bug record that misdiagnoses its own cause is the artifact this project keeps finding in review; corrected before it shipped rather than after. | **substantive** |
 > | 2026-09-21 | Filed, with a reproduction. **Why:** named during the 0.4.0 population planning as a live `BUG-84` variant "under investigation, to be filed separately" and then not filed, so it existed only in a plan document no rule reads. Reproduced before filing rather than carried forward on the original assertion. | **substantive** |
