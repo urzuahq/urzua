@@ -158,8 +158,16 @@ pub fn census<T>(
     mut body: impl FnMut(&T) -> Outcome,
 ) -> Population {
     let eligible = candidates.len();
-    let examined = candidates.iter().filter(|c| body(c).is_examined()).count();
-    Population::of(unit, eligible, examined)
+    let mut examined = 0;
+    let mut out_of_scope = 0;
+    for candidate in &candidates {
+        match body(candidate) {
+            Outcome::Examined => examined += 1,
+            Outcome::OutOfScope => out_of_scope += 1,
+            Outcome::Absent | Outcome::Unreadable => {}
+        }
+    }
+    Population::detailed(unit, eligible, examined, out_of_scope)
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -177,15 +185,23 @@ pub fn census_records<T>(
     let eligible = candidates.len();
     let mut examined_records = Vec::new();
     let mut examined = 0;
+    let mut out_of_scope = 0;
     for candidate in &candidates {
-        if body(candidate).is_examined() {
-            examined += 1;
-            examined_records.push(record_of(candidate));
+        match body(candidate) {
+            Outcome::Examined => {
+                examined += 1;
+                examined_records.push(record_of(candidate));
+            }
+            Outcome::OutOfScope => out_of_scope += 1,
+            Outcome::Absent | Outcome::Unreadable => {}
         }
     }
     examined_records.sort();
     examined_records.dedup();
-    (Population::of(unit, eligible, examined), examined_records)
+    (
+        Population::detailed(unit, eligible, examined, out_of_scope),
+        examined_records,
+    )
 }
 
 /// A rule's input population: what it was eligible to examine, and what it
@@ -210,6 +226,11 @@ pub struct Population {
     unit: PopulationUnit,
     eligible: usize,
     examined: usize,
+    /// Candidates the *configuration* does not reach, as distinct from ones the
+    /// corpus has not written yet. Always serialized, including as `0`: a
+    /// diagnostic that appears only when non-zero cannot be told from one
+    /// nothing computed.
+    out_of_scope: usize,
 }
 
 impl Population {
@@ -225,7 +246,25 @@ impl Population {
         self.examined
     }
 
+    /// How many candidates the configuration could not reach. Non-zero means
+    /// the configuration does not match this corpus, which is a different
+    /// problem from the corpus not having the content yet -- and the only one
+    /// of the two an adopter fixes by editing config (`BUG-61`).
+    pub fn out_of_scope(&self) -> usize {
+        self.out_of_scope
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
+        Population::detailed(unit, eligible, examined, 0)
+    }
+
+    /// `of`, naming how many candidates were beyond the configuration's reach.
+    pub fn detailed(
+        unit: PopulationUnit,
+        eligible: usize,
+        examined: usize,
+        out_of_scope: usize,
+    ) -> Self {
         debug_assert!(
             examined <= eligible,
             "{unit:?}: examined {examined} exceeds eligible {eligible}"
@@ -239,6 +278,7 @@ impl Population {
             unit,
             eligible: eligible.max(examined),
             examined,
+            out_of_scope,
         }
     }
 }
