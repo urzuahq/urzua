@@ -2,7 +2,7 @@
 Stable-Id: 01M2YPPRG2JB523YSJ8EKXDW8R
 Status: Fixed
 Found-in: "Round 9 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_path_scoped_rule_alone_does_not_make_a_run_ok"
+Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_path_scoped_rule_alone_discloses_that_it_read_no_record"
 ---
 # 83 — A rule that examines path names was marked as examining records so it alone certifies the corpus
 
@@ -39,3 +39,4 @@ naming a single rule cannot cover a property every rule must have.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Regression test rewritten, `Status: Fixed` unchanged. **Why:** as with `BUG-81`, the finding stands and only the mechanism changes. The `scope` label this bug corrected to `Paths` is deleted along with the count it labelled -- a hand-set label beside a hand-maintained integer is what went wrong twice, here and in `BUG-81`. The unit now travels with the count as `unit: path`. The rewritten test asserts that, plus `records_read_by_any_rule: 0` over a corpus whose one record is unparseable garbage: the rule judged a filename and never opened the file, and the report says so. | **substantive** |

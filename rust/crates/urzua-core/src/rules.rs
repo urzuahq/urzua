@@ -1517,7 +1517,7 @@ pub fn claim_status_agreement(
     // One candidate per *distinct* claimed reference, deduped the same way the
     // verdict is: two changesets closing one record are one thing to judge.
     // Counting occurrences instead made the number exceed the corpus while
-    // saying nothing about records (BUG-89).
+    // saying nothing about records (BUG-90).
     let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
     let candidates: Vec<&str> = occurrences
         .iter()

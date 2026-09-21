@@ -2,7 +2,7 @@
 Stable-Id: 01M30JSVKZ8DMSPCMVN0JHXG1X
 Status: Fixed
 Found-in: "Round 11 of the 0.4.0 review, against nine PRs that had never been reviewed in aggregate"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_rule_handed_nothing_does_not_certify_the_corpus"
+Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_rule_handed_nothing_discloses_that_it_certified_nothing"
 ---
 # 94 — The census reports that a rule was handed nothing and the gate does not read it
 
@@ -68,3 +68,4 @@ change.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Regression test renamed and re-pointed at the disclosure. **Why:** the fix as filed made the gate read the population, and that gate is now deleted -- `BUG-88`'s re-grading established that `eligible: 0` is the cold start of enabling a rule before its scope exists, not a fault. The finding stands: a signal built this release and consumed by nothing is the defect. It is now consumed by `records_read_by_any_rule`, and the test asserts that a two-record corpus whose only rule was handed nothing reports `files_examined: 2, records_read_by_any_rule: 0`. | **substantive** |

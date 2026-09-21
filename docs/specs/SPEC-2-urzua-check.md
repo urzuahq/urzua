@@ -30,7 +30,7 @@ Done when all five hold:
 | # | Criterion | Phase |
 |---|---|---|
 | 1 | `make check` runs `urzua check` in this repo's CI and fails the build on a deliberately broken record | A |
-| 2 | It reports files examined, rules executed, **and each rule's input population**, in both output formats | A |
+| 2 | It reports files examined, records read by any rule, rules executed, **and each rule's input population with its unit** | A |
 | 3 | It exits non-zero when given paths that match zero files | A |
 | 4 | Every rule family in §Rules is implemented and configurable | B |
 | 5 | It runs green in one source codebase with that codebase's hand-written linter **deleted** | C |
@@ -285,8 +285,14 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 
   So a rule whose findings depend on derived input reports that input's size:
   `transition: 91 records, 0 with readable history` is self-refuting on its face, and `0 findings`
-  is not. A rule reporting a zero population is `not-run`, not `ok` — §5 of RFC-11, applied to a
-  rule's input rather than its output.
+  is not.
+
+  The defect is `eligible: N, examined: 0` — the rule was handed candidates and reached a verdict on
+  none of them. That is §5 of RFC-11 applied to a rule's input rather than its output. `eligible: 0`
+  is a *different* state and not a defect: it is the cold start of enabling a rule before its scope
+  exists, which `header.layout-consistency` occupies permanently on this repository. Neither is a
+  `check` verdict — what gets checked is the adopter's declaration (`ADR-53`) — and the separation
+  between disclosing the population and judging it is `MILE-106`'s.
 - **Fixture containment.** The rule tests deliberately contain record-shaped strings, and a
   self-referential fixture that the checker then scans is a documented trap. Fixtures live outside
   the discovered record set, and that exclusion is asserted rather than assumed.
@@ -314,6 +320,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Criterion 2 no longer says "in both output formats", and re-keyed the zero-population rule in §Acceptance. **Why:** two claims that had gone untrue. There is one output format -- `ADR-23` and `ADR-26` removed the second -- so the criterion was unsatisfiable as written and no amount of correct implementation could have met it. And "a rule reporting a zero population is `not-run`" was written when a rule reported one number; now that a population carries `eligible` and `examined` separately, the two zeros mean opposite things, and treating `eligible: 0` as a fault makes enabling a rule before its scope exists fail the build (`BUG-84`). The criterion also now requires the unit, because a count without one held three different denominators (`BUG-40`). | **substantive** |
 > | 2026-08-20 | Split out of SPEC-1, which retains the cross-cutting rules. | **structural** |
 > | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-18/ADR-32) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |
 > | 2026-09-20 | Criterion 1 and Phase A now say `urzua check`, not `urzua check docs/`. **Why:** the scope argument selects which findings are reported, so naming `docs/` excluded every finding about a file outside it -- `claim.status-agreement` reports on the claim file in `.changeset/`, and the gate therefore could never fail on a false claim, which is the one thing that rule exists to catch (`BUG-86`). The criterion's intent is that the tool checks this repository and fails on a broken record; `docs/` was the whole corpus when it was written and no longer is. | **substantive** |
