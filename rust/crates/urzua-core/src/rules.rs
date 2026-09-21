@@ -2002,6 +2002,11 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
 /// candidate slots. A rule needing two fields takes the pair as one candidate,
 /// so a record carrying only one of them is eligible and unexamined rather
 /// than outside the population.
+///
+/// Declared means `required_fields` **or** `known_fields`: the latter is
+/// documented as the fields a type carries *beyond* the former, so reading it
+/// alone silently drops every type that requires the field instead of merely
+/// permitting it. `config.pointer-field-not-known` already unions the two.
 fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -> Vec<&'a Record> {
     records
         .iter()
@@ -2011,9 +2016,9 @@ fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -
                 .get(&record.record_type)
                 .is_some_and(|t| {
                     fields.iter().all(|wanted| {
-                        t.known_fields
+                        t.required_fields
                             .iter()
-                            .flatten()
+                            .chain(t.known_fields.iter().flatten())
                             .any(|declared| declared == wanted)
                     })
                 })
@@ -2272,7 +2277,12 @@ pub fn supersession_reciprocity(
             config
                 .record_types
                 .get(&record.record_type)
-                .is_some_and(|t| t.known_fields.iter().flatten().any(|f| f == FIELD))
+                .is_some_and(|t| {
+                    t.required_fields
+                        .iter()
+                        .chain(t.known_fields.iter().flatten())
+                        .any(|f| f == FIELD)
+                })
         })
         .collect();
 
@@ -2674,6 +2684,60 @@ mod tests {
             .as_ref()
             .expect("every rule carries a population")
             .examined()
+    }
+
+    #[test]
+    fn a_slot_declared_only_as_required_is_still_a_declared_slot() {
+        // `known_fields` is documented as the fields a type carries *beyond*
+        // `required_fields`, so a type that requires `Realized-by` declares it
+        // just as much as one that lists it as known. Selecting candidates from
+        // `known_fields` alone handed these rules nothing, and a rule handed
+        // nothing reports a clean `eligible: 0` -- the ADR-55 shape.
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
+        );
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&["Embodiment", "Realized-by"], None, None, None),
+        )]);
+
+        let (exec, findings) = embodiment_consistency(&[r], &config, &HashSet::new());
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 1),
+            "the pair is declared, so the record is a candidate the rule judged"
+        );
+        assert_eq!(findings.len(), 1, "Verified disagrees with Implemented");
+    }
+
+    #[test]
+    fn a_supersession_slot_declared_only_as_required_is_still_declared() {
+        let old = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: —\n",
+        );
+        let new = record(
+            "docs/adr/ADR-2-y.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-0001\n",
+        );
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&["Supersedes / Superseded-by"], None, None, None),
+        )]);
+
+        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(findings.len(), 1, "the claim is one-directional");
     }
 
     fn embodiment_config() -> Config {
