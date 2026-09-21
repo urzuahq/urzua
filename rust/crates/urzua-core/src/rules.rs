@@ -257,25 +257,17 @@ fn layout_label(layout: HeaderLayout) -> &'static str {
 /// 0 for it -- required so an existing corpus's legitimate optional fields
 /// (`Stable-Id`, `Realized-by`, `Derives-from` on `adr`, none of which are
 /// *required*) don't all become false positives the moment this rule ships.
-/// Whether a header field's key names a field the type declared.
-///
-/// One definition, so the property suite (`MILE-101`) tests the matcher the
-/// rules actually use rather than a restatement of it. `allowed` holds the
-/// declared names already folded by the same function, so both sides of the
-/// comparison agree by construction.
-///
-/// Case-insensitive because a corpus writes `Status` and `status` and means
-/// one field. The fold is **ASCII-only**, which is a known defect for any
-/// vocabulary that is not: `"CAF\u{c9}"` folds to `"caf\u{c9}"` while a declared
-/// `caf\u{e9}` folds to itself, so the two never match and a declared field is
-/// reported undeclared (`BUG-97`).
+/// Exact (`ADR-57`): matching case-insensitively would accept a name nobody
+/// declared -- `Maße` and `Masse` are different words.
 pub fn field_is_declared(key: &str, allowed: &HashSet<String>) -> bool {
-    allowed.contains(&fold_field_name(key))
+    allowed.contains(key)
 }
 
-/// The single fold every declared-field comparison goes through.
-pub fn fold_field_name(name: &str) -> String {
-    name.to_ascii_lowercase()
+/// A hint on a finding, never a verdict, so an approximate answer is safe here.
+pub fn near_miss<'a>(key: &str, allowed: &'a HashSet<String>) -> Option<&'a String> {
+    allowed
+        .iter()
+        .find(|d| d.to_lowercase() == key.to_lowercase())
 }
 
 pub fn header_field_set_consistency(
@@ -317,10 +309,16 @@ pub fn header_field_set_consistency(
                     file: record.path.clone(),
                     line: Some(field.line),
                     waived: None,
-                    message: format!(
-                        "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
-                        field.key, record.record_type
-                    ),
+                    message: match near_miss(&field.key, allowed) {
+                        Some(declared) => format!(
+                            "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case",
+                            field.key, record.record_type
+                        ),
+                        None => format!(
+                            "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
+                            field.key, record.record_type
+                        ),
+                    },
                 });
                 }
             }
@@ -2627,7 +2625,7 @@ mod tests {
         let mut allowed = HashMap::new();
         allowed.insert(
             "adr".to_string(),
-            HashSet::from(["status".to_string(), "date".to_string()]),
+            HashSet::from(["Status".to_string(), "Date".to_string()]),
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
@@ -2646,7 +2644,7 @@ mod tests {
         let mut allowed = HashMap::new();
         allowed.insert(
             "adr".to_string(),
-            HashSet::from(["status".to_string(), "realized-by".to_string()]),
+            HashSet::from(["Status".to_string(), "Realized-by".to_string()]),
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);

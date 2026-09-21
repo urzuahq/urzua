@@ -60,13 +60,11 @@ impl Gen {
 
 /// The property, stated once and checked against whatever matcher is passed in.
 ///
-/// > A field name the config declared is matched by the same name a record
-/// > writes, whatever case the author used.
+/// > A field name matches the declaration when it is the same name, and only
+/// > then. A different spelling is a different field.
 ///
-/// This is the claim `fold_field_name` exists to make good on. It is *not* the
-/// "accepted or reported, never neither" property the plan for this slice
-/// stated -- that one is vacuous against a `bool` and is checked against the
-/// rule instead, in `every_field_a_record_carries_is_either_accepted_or_reported`.
+/// Comparing loosely would be the engine guessing which two spellings are
+/// really one name, which `ADR-57` decided is not its call to make.
 ///
 /// Returns the first counterexample rather than panicking, so the same function
 /// serves the passing check and the mutation check.
@@ -79,31 +77,35 @@ fn first_counterexample(
 
     for _ in 0..cases {
         let declared = gen.field_name();
-        let allowed: HashSet<String> = [crate::rules::fold_field_name(&declared)]
-            .into_iter()
-            .collect();
+        let allowed: HashSet<String> = [declared.clone()].into_iter().collect();
 
-        // The record writes the same name the config declared, in whatever case
-        // the author happened to use. A corpus does this constantly: `Status`
-        // declared, `status` written.
-        let written = if gen.below(2) == 0 {
+        // Half the cases write the declared name back exactly and must match.
+        // The other half change its case, which is now a *different* name and
+        // must not: accepting it is how `Maße` and `Masse` become one field.
+        let same_case = gen.below(2) == 0;
+        let written = if same_case {
             declared.clone()
         } else {
             declared.to_uppercase()
         };
 
-        if !matcher(&written, &allowed) {
+        let matched = matcher(&written, &allowed);
+        // An uppercase form that is byte-identical (no cased characters at all,
+        // e.g. `漢-漢`) is the same name, not a counterexample.
+        let expected = same_case || written == declared;
+        if matched != expected {
             return Some((declared, written));
         }
     }
     None
 }
 
-/// The narrowed matcher the mutation test runs against: it compares raw bytes,
-/// dropping the case fold. A suite that cannot tell this from the real matcher
-/// is not testing anything.
-fn case_sensitive_matcher(key: &str, allowed: &HashSet<String>) -> bool {
-    allowed.contains(key)
+/// The mutation the property must reject. A suite that cannot tell this from
+/// exact comparison is not testing anything.
+fn case_insensitive_matcher(key: &str, allowed: &HashSet<String>) -> bool {
+    allowed
+        .iter()
+        .any(|d| d.to_lowercase() == key.to_lowercase())
 }
 
 #[cfg(test)]
@@ -115,29 +117,22 @@ mod tests {
     /// If this ever passes, the property has stopped discriminating and every
     /// other assertion in this file is worthless.
     #[test]
-    fn the_property_rejects_a_matcher_that_forgot_to_fold_case() {
-        let found = first_counterexample(case_sensitive_matcher, 500, 0xC0FFEE);
+    fn the_property_rejects_a_case_insensitive_matcher() {
+        let found = first_counterexample(case_insensitive_matcher, 500, 0xC0FFEE);
         assert!(
             found.is_some(),
-            "a matcher comparing raw bytes must fail the property -- \
-             if it passes, the property is not testing the fold"
+            "a case-insensitive matcher must fail the property -- it accepts a \
+             spelling the adopter did not declare"
         );
     }
 
     /// The same property against the matcher the rules actually use.
-    ///
-    /// **Expected to fail today, and that is the point** (`BUG-97`): the fold is
-    /// `to_ascii_lowercase`, so `É` does not fold to `é` and a field the config
-    /// declared is reported undeclared. Marked `should_panic` so the suite is
-    /// green while the defect stands and turns red the moment it is fixed --
-    /// at which point this attribute comes off and the assertion stands alone.
     #[test]
-    #[should_panic(expected = "BUG-97")]
-    fn a_declared_field_name_is_always_matched_by_the_name_a_record_writes() {
+    fn a_field_name_matches_its_declaration_exactly_and_only_exactly() {
         if let Some((declared, written)) = first_counterexample(field_is_declared, 500, 0xC0FFEE) {
             panic!(
-                "BUG-97: type declared {declared:?}, record wrote {written:?}, \
-                 and the rule reports it undeclared -- the fold is ASCII-only"
+                "type declared {declared:?}, record wrote {written:?}, and the \
+                 matcher disagreed with exact comparison"
             );
         }
     }
@@ -163,14 +158,14 @@ mod tests {
     /// construction -- so it only has content against the rule, where "neither"
     /// means the field was silently dropped from the report.
     ///
-    /// Kept alongside the fold property rather than instead of it: this one
+    /// Kept alongside the exact-match property rather than instead of it: this one
     /// catches a field going missing, the other catches it being misjudged, and
     /// neither implies the other.
     ///
     /// The first version of this asserted `accepted || reported`, which are
     /// exact complements -- a tautology that could not fail, inside the suite
     /// built to catch exactly that. It now predicts the finding count from the
-    /// fold and holds the parser to recovering the key.
+    /// declared name and holds the parser to recovering the key.
     #[test]
     fn every_field_a_record_carries_is_either_accepted_or_reported() {
         use crate::rules::header_field_set_consistency;
@@ -184,9 +179,7 @@ mod tests {
             let mut allowed_by_type = HashMap::new();
             allowed_by_type.insert(
                 "note".to_string(),
-                [crate::rules::fold_field_name(&declared)]
-                    .into_iter()
-                    .collect::<HashSet<String>>(),
+                [declared.clone()].into_iter().collect::<HashSet<String>>(),
             );
 
             let body = format!("> {written}: x\n");
@@ -210,12 +203,10 @@ mod tests {
 
             let (_, findings) = header_field_set_consistency(&[record], &allowed_by_type);
 
-            // Predicted from the fold the rule uses, not from the rule's own
+            // Predicted from the declaration, not from the rule's own
             // output: a prediction the rule cannot influence is the only kind
             // that can catch it doing nothing.
-            let expected = usize::from(
-                crate::rules::fold_field_name(&written) != crate::rules::fold_field_name(&declared),
-            );
+            let expected = usize::from(written != declared);
             assert_eq!(
                 findings.len(),
                 expected,
@@ -305,12 +296,10 @@ mod tests {
 
         let full_text: HashMap<std::path::PathBuf, String> =
             [(path.clone(), body.to_string())].into_iter().collect();
-        let allowed: HashMap<String, std::collections::HashSet<String>> = [(
-            "note".to_string(),
-            declared.iter().map(|f| rules::fold_field_name(f)).collect(),
-        )]
-        .into_iter()
-        .collect();
+        let allowed: HashMap<String, std::collections::HashSet<String>> =
+            [("note".to_string(), declared.iter().cloned().collect())]
+                .into_iter()
+                .collect();
         let layouts: HashMap<String, HeaderLayout> =
             [("note".to_string(), HeaderLayout::OnePerLine)]
                 .into_iter()
@@ -410,8 +399,8 @@ mod tests {
     /// evidence anyone can act on.
     #[test]
     fn a_seed_reproduces_its_counterexample() {
-        let a = first_counterexample(case_sensitive_matcher, 500, 0xC0FFEE);
-        let b = first_counterexample(case_sensitive_matcher, 500, 0xC0FFEE);
+        let a = first_counterexample(case_insensitive_matcher, 500, 0xC0FFEE);
+        let b = first_counterexample(case_insensitive_matcher, 500, 0xC0FFEE);
         assert_eq!(a, b);
         assert!(a.is_some());
     }
