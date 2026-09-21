@@ -410,7 +410,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // answerable once every other rule has reported.
     let (scope_exec, scope_findings) =
         crate::gate::gated(&config, rules::RULE_CONFIG_SCOPE_MATCHES_NOTHING, || {
-            rules::config_scope_matches_nothing(&rules_executed)
+            rules::config_scope_matches_nothing(&rules_executed, &config_path)
         });
     rules_executed.push(scope_exec);
     findings.extend(scope_findings);

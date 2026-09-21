@@ -2281,7 +2281,10 @@ pub fn embodiment_locator_promotion_candidate(
 /// Judges the run rather than the corpus, so it reads the executions the other
 /// rules produced and never sees a record. It excludes itself -- judging its
 /// own execution while producing it is not a verdict anyone can act on.
-pub fn config_scope_matches_nothing(executed: &[RuleExecution]) -> (RuleExecution, Vec<Finding>) {
+pub fn config_scope_matches_nothing(
+    executed: &[RuleExecution],
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CONFIG_SCOPE_MATCHES_NOTHING;
     let mut findings = Vec::new();
 
@@ -2300,7 +2303,7 @@ pub fn config_scope_matches_nothing(executed: &[RuleExecution]) -> (RuleExecutio
         findings.push(Finding {
             rule: RULE_ID.to_string(),
             severity: FindingSeverity::Warning,
-            file: std::path::PathBuf::from(".urzua/config.yaml"),
+            file: config_path.to_path_buf(),
             line: None,
             waived: None,
             message: format!(
@@ -3005,10 +3008,24 @@ mod tests {
         // BUG-61's shape: init wrote a prefix matching no filename, so the rule
         // examines zero records forever and no edit to a record changes that.
         let executed = [exec_with("identity.collision", 2, 0, 2)];
-        let (exec, findings) = config_scope_matches_nothing(&executed);
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1, "the rule must judge the execution");
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("identity.collision"));
+    }
+
+    #[test]
+    fn the_finding_names_the_configuration_the_caller_selected() {
+        // check's scoped filter keeps a config finding only when its path equals
+        // the selected config, so a hardcoded path makes this finding vanish
+        // under `--config` -- a finding that disappears rather than one that is
+        // wrong.
+        let executed = [exec_with("identity.collision", 2, 0, 2)];
+        let chosen = std::path::Path::new("custom/urzua.yaml");
+        let (_, findings) = config_scope_matches_nothing(&executed, chosen);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].file, chosen);
     }
 
     #[test]
@@ -3016,7 +3033,8 @@ mod tests {
         // Identical eligible/examined to the case above. The corpus simply has
         // no revision logs, which time resolves and config cannot.
         let executed = [exec_with("revision-log.change-class-required", 2, 0, 0)];
-        let (exec, findings) = config_scope_matches_nothing(&executed);
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
         assert!(
             findings.is_empty(),
@@ -3027,7 +3045,8 @@ mod tests {
     #[test]
     fn it_does_not_judge_its_own_execution() {
         let executed = [exec_with(RULE_CONFIG_SCOPE_MATCHES_NOTHING, 3, 0, 3)];
-        let (exec, findings) = config_scope_matches_nothing(&executed);
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(
             exec.population.expect("carries a population").eligible(),
             0,
@@ -3044,7 +3063,8 @@ mod tests {
             status: RuleStatus::NotEnabled,
             examined_records: Vec::new(),
         }];
-        let (exec, findings) = config_scope_matches_nothing(&executed);
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(exec.population.expect("carries a population").eligible(), 0);
         assert!(findings.is_empty());
     }
