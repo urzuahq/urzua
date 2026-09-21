@@ -1396,6 +1396,10 @@ pub fn field_pending(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // Unreadable, not absent -- the same reason as `field.quality`.
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::NotExamined;
+            }
             if classify(record.header.get(field.as_str())) == FieldState::Pending {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -1589,6 +1593,15 @@ pub fn field_quality(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // Unreadable, not absent: the header did not parse, so this slot
+            // has no value to classify. Calling it Blank reports something
+            // untrue about a file that may well set the field, and a rule whose
+            // `examined` can never fall short of `eligible` can never be caught
+            // not looking (ADR-55). `header.required-fields` reports the parse
+            // error itself, once per record rather than once per slot.
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::NotExamined;
+            }
             let state = classify(record.header.get(field.as_str()));
             // `Pending` is `field.pending`'s subject, not this rule's: it means
             // someone declared the work unfinished, where Blank and Placeholder
@@ -1604,8 +1617,6 @@ pub fn field_quality(
                     message: format!("field '{field}' is {state:?} -- not a real, present value"),
                 });
             }
-            // Every declared slot is judged: `classify(None)` is a real verdict,
-            // not an absence.
             Outcome::Examined
         },
     );
@@ -2665,6 +2676,43 @@ mod tests {
     /// Full builder for the config-level pointer/narrative-field validation
     /// tests (MILE-90) -- the two helpers above default both new fields to
     /// `None`, which isn't useful for testing them directly.
+    #[test]
+    fn a_slot_behind_an_unparsed_header_is_not_judged_and_not_reported_on() {
+        // The record plainly sets `Status`, and the header does not parse, so
+        // the rule cannot read either slot. Calling both Blank reports
+        // something untrue about the file, and pinning `examined` to `eligible`
+        // makes the rule invisible to the one check ADR-55 asks for: a rule
+        // whose population can never show a gap can never be caught not
+        // looking. `header.required-fields` reports the parse error itself.
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: Accepted\n  Date  :: nope\n---\n",
+        );
+        let mut required = HashMap::new();
+        required.insert(
+            "adr".to_string(),
+            vec!["Status".to_string(), "Date".to_string()],
+        );
+
+        let (exec, findings) = field_quality(&[r.clone()], &required);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (2, 0),
+            "both declared slots are unreadable, not judged"
+        );
+        assert!(
+            findings.is_empty(),
+            "no finding about a slot the rule could not read: {findings:?}"
+        );
+
+        let (exec, findings) = field_pending(&[r], &required);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!((population.eligible(), population.examined()), (2, 0));
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     /// What the rule judged, per its own census. A planted test asserts the
     /// rule *looked* -- a finding's absence alone is the ADR-55 defect.
     fn examined(exec: &RuleExecution) -> usize {
