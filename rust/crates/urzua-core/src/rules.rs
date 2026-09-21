@@ -1627,7 +1627,7 @@ pub fn field_untrimmed_value(
                     line: None,
                     waived: None,
                     message: format!(
-                        "field '{field}' is {value:?} -- the surrounding whitespace is part of the value, so it will not match '{}' anywhere",
+                        "field '{field}' is {value:?} -- the surrounding whitespace is part of the value, so any exact comparison against '{}' fails",
                         value.trim()
                     ),
                 });

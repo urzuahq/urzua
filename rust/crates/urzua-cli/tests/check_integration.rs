@@ -1888,3 +1888,40 @@ fn records_read_never_exceeds_files_examined() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_type_declaring_only_required_fields_is_still_checked_for_whitespace() {
+    // `known_fields_by_type` is absent for such a type, because
+    // header.field-set-consistency skips it by design. A rule reading that map
+    // would skip it too -- silently, which is the shape ADR-55 names.
+    let dir = fixture_repo("required-only-whitespace");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {field.untrimmed-value: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n\
+         \x20   header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: \"Accepted   \"\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let hits = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "field.untrimmed-value")
+        .count();
+    assert_eq!(hits, 1, "no known_fields must not mean no check: {stdout}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}

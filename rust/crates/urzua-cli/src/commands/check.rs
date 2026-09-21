@@ -180,6 +180,8 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let mut required_by_type = HashMap::new();
     let mut header_layout_by_type = HashMap::new();
     let mut known_fields_by_type = HashMap::new();
+    let mut declared_fields_by_type: HashMap<String, std::collections::HashSet<String>> =
+        HashMap::new();
     let mut pointer_fields_by_type = HashMap::new();
     let mut narrative_fields_by_type = HashMap::new();
     for (name, cfg) in &config.record_types {
@@ -187,14 +189,19 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         if let Some(layout) = cfg.header_layout {
             header_layout_by_type.insert(name.clone(), layout);
         }
-        if let Some(known) = &cfg.known_fields {
-            let allowed: std::collections::HashSet<String> = cfg
-                .required_fields
-                .iter()
-                .chain(known.iter())
-                .cloned()
-                .collect();
-            known_fields_by_type.insert(name.clone(), allowed);
+        // Every declared name, for rules that judge a value rather than the
+        // field set. `known_fields_by_type` is absent for a type declaring only
+        // `required_fields`, because `header.field-set-consistency` skips such a
+        // type by design -- a rule reading that map would skip it too, silently.
+        let declared: std::collections::HashSet<String> = cfg
+            .required_fields
+            .iter()
+            .chain(cfg.known_fields.iter().flatten())
+            .cloned()
+            .collect();
+        declared_fields_by_type.insert(name.clone(), declared.clone());
+        if cfg.known_fields.is_some() {
+            known_fields_by_type.insert(name.clone(), declared);
         }
         if let Some(pointer_fields) = &cfg.pointer_fields {
             pointer_fields_by_type.insert(name.clone(), pointer_fields.clone());
@@ -351,7 +358,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::header_field_set_consistency(&records, &known_fields_by_type)
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_UNTRIMMED_VALUE, || {
-            rules::field_untrimmed_value(&records, &known_fields_by_type)
+            rules::field_untrimmed_value(&records, &declared_fields_by_type)
         }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             let terminal = config
