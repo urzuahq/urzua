@@ -9,7 +9,7 @@ use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{
     census, census_records, Finding, FindingSeverity, Outcome, Population, PopulationUnit,
-    RuleExecution, RuleScope, RuleStatus,
+    RuleExecution, RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
@@ -165,11 +165,6 @@ pub fn header_required_fields(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined: records
-                .iter()
-                .filter(|r| required_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -234,13 +229,10 @@ pub fn header_layout_consistency(
         },
     );
 
-    let records_examined = population.examined();
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -315,13 +307,10 @@ pub fn header_field_set_consistency(
         },
     );
 
-    let records_examined = population.examined();
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -394,8 +383,6 @@ pub fn type_record_outside_declared_dir(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(Population::of(PopulationUnit::Path, examined, examined)),
-            records_examined: examined,
-            scope: RuleScope::Paths,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -469,8 +456,6 @@ pub fn type_dir_matches_nothing(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -514,8 +499,6 @@ pub fn type_no_declared_spec(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -566,8 +549,6 @@ pub fn header_deprecated_shape(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -701,8 +682,6 @@ pub fn config_pointer_declaration_missing(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -772,8 +751,6 @@ pub fn config_pointer_field_not_known(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -832,8 +809,6 @@ pub fn config_pointer_narrative_overlap(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -873,7 +848,6 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
             }
         },
     );
-    let records_examined = population.examined();
 
     let mut findings = Vec::new();
     for (id, claimants) in collisions {
@@ -902,8 +876,6 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -989,14 +961,6 @@ pub fn pointer_target_status(
         })
         .collect();
 
-    let records_examined = records
-        .iter()
-        .filter(|r| {
-            pointer_fields_by_type.contains_key(&r.record_type)
-                || narrative_fields_by_type.contains_key(&r.record_type)
-        })
-        .count();
-
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
@@ -1036,8 +1000,6 @@ pub fn pointer_target_status(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1075,14 +1037,6 @@ pub fn pointer_resolution(
         })
         .collect();
 
-    let records_examined = records
-        .iter()
-        .filter(|r| {
-            pointer_fields_by_type.contains_key(&r.record_type)
-                || narrative_fields_by_type.contains_key(&r.record_type)
-        })
-        .count();
-
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
@@ -1119,8 +1073,6 @@ pub fn pointer_resolution(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1211,11 +1163,6 @@ pub fn header_pointer_field_clean(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined: records
-                .iter()
-                .filter(|r| clean_fields_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1303,11 +1250,6 @@ pub fn narrative_field_stale(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined: records
-                .iter()
-                .filter(|r| narrative_fields_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1479,11 +1421,6 @@ pub fn field_pending(
             // and record-shaped until every rule is converted, and changing
             // its unit here made one entry contradict itself -- `6` beside
             // `scope: records` on a two-record corpus.
-            records_examined: records
-                .iter()
-                .filter(|r| required_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1598,7 +1535,6 @@ pub fn claim_status_agreement(
             Outcome::NotExamined
         }
     });
-    let records_examined = population.examined();
 
     // Findings are per occurrence, not per candidate: each place the claim is
     // written is its own thing to correct.
@@ -1624,8 +1560,6 @@ pub fn claim_status_agreement(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -1691,11 +1625,6 @@ pub fn field_quality(
             // and record-shaped until every rule is converted, and changing
             // its unit here made one entry contradict itself -- `6` beside
             // `scope: records` on a two-record corpus.
-            records_examined: records
-                .iter()
-                .filter(|r| required_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1772,14 +1701,10 @@ pub fn filename_title_consistency(
         },
     );
 
-    let records_examined = population.examined();
-
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1941,13 +1866,10 @@ pub fn revision_log_change_class(
         },
     );
 
-    let records_examined = population.examined();
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -2118,7 +2040,6 @@ pub fn embodiment_locator_exists(
     // One candidate per declared slot, not per locator: the population is the
     // rule's input, not its work count.
     let slots = declared_slots(records, config, &["Realized-by"]);
-    let records_examined = slots.len();
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -2170,8 +2091,6 @@ pub fn embodiment_locator_exists(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -2200,7 +2119,6 @@ pub fn embodiment_consistency(
     // carrying only one of them is handed to the rule and reaches no verdict.
     // Treating each field as its own slot would make that state unreportable.
     let slots = declared_slots(records, config, &["Embodiment", "Realized-by"]);
-    let records_examined = slots.len();
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -2239,8 +2157,6 @@ pub fn embodiment_consistency(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -2266,7 +2182,6 @@ pub fn embodiment_locator_promotion_candidate(
     > = std::collections::BTreeMap::new();
 
     let slots = declared_slots(records, config, &["Realized-by"]);
-    let records_examined = slots.len();
 
     // Findings are emitted after the census, not inside it: this rule judges
     // locators across records, so no single candidate is at fault.
@@ -2323,8 +2238,6 @@ pub fn embodiment_locator_promotion_candidate(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -2362,8 +2275,6 @@ pub fn supersession_reciprocity(
                 .is_some_and(|t| t.known_fields.iter().flatten().any(|f| f == FIELD))
         })
         .collect();
-
-    let records_examined = slots.len();
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -2424,8 +2335,6 @@ pub fn supersession_reciprocity(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            records_examined,
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -2527,9 +2436,11 @@ mod tests {
                 .collect::<HashSet<String>>(),
         );
         let (exec, _) = header_field_set_consistency(&[r], &allowed);
+        let population = exec.population.expect("the rule carries a population");
         assert_eq!(
-            exec.records_examined, 0,
-            "the rule never saw this record's fields"
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "the record is in the population and the rule never saw its fields"
         );
     }
 
@@ -2558,7 +2469,7 @@ mod tests {
         );
 
         let (exec, findings) = header_required_fields(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Deciders"));
     }
@@ -2579,7 +2490,12 @@ mod tests {
         required.insert("adr".to_string(), vec!["Status".to_string()]);
 
         let (exec, findings) = header_required_fields(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "the declared slot survives a header that did not parse, unjudged"
+        );
         assert_eq!(findings.len(), 1);
         assert!(
             findings[0].message.contains("YAML parse error"),
@@ -2602,7 +2518,7 @@ mod tests {
         );
 
         let (exec, findings) = header_required_fields(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -2637,7 +2553,7 @@ mod tests {
         declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("one-per-line"));
         assert!(findings[0].message.contains("pipe-delimited"));
@@ -2654,7 +2570,7 @@ mod tests {
         declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2664,7 +2580,7 @@ mod tests {
         let declared = HashMap::new();
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -2685,7 +2601,7 @@ mod tests {
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Sponsor"));
     }
@@ -2704,7 +2620,7 @@ mod tests {
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2714,7 +2630,7 @@ mod tests {
         let allowed = HashMap::new();
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -2751,6 +2667,15 @@ mod tests {
     /// Full builder for the config-level pointer/narrative-field validation
     /// tests (MILE-90) -- the two helpers above default both new fields to
     /// `None`, which isn't useful for testing them directly.
+    /// What the rule judged, per its own census. A planted test asserts the
+    /// rule *looked* -- a finding's absence alone is the ADR-55 defect.
+    fn examined(exec: &RuleExecution) -> usize {
+        exec.population
+            .as_ref()
+            .expect("every rule carries a population")
+            .examined()
+    }
+
     fn embodiment_config() -> Config {
         config_with_types(vec![(
             "adr",
@@ -2793,7 +2718,7 @@ mod tests {
 
         let (exec, findings) =
             type_no_declared_spec(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("milestone"));
     }
@@ -2810,7 +2735,7 @@ mod tests {
 
         let (exec, findings) =
             type_no_declared_spec(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2829,7 +2754,7 @@ mod tests {
 
         let (exec, findings) =
             header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("adr"));
     }
@@ -2849,7 +2774,7 @@ mod tests {
 
         let (exec, findings) =
             header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2861,7 +2786,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("spec"));
     }
@@ -2874,7 +2799,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2883,7 +2808,7 @@ mod tests {
         let config = config_with_types(vec![("adr", type_config_pointer(&[], None, None, None))]);
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2895,7 +2820,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Feeds-into"));
     }
@@ -2913,7 +2838,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2930,7 +2855,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Blocked-on"));
     }
@@ -2948,7 +2873,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2968,7 +2893,7 @@ mod tests {
             &HashMap::new(),
             &["Draft".to_string()],
         );
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Draft"));
 
@@ -3038,7 +2963,7 @@ mod tests {
             type_config_pointer(&[], None, Some(&["Derives-from"]), None),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("RFC-1 (Accepted)"));
         assert_eq!(findings[0].severity, FindingSeverity::Warning);
@@ -3071,9 +2996,7 @@ mod tests {
             type_config_pointer(&[], None, Some(&["Derives-from", "Parent"]), None),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        // One record; two declared clean-format slots, both written. The
-        // population names the unit, so 2 is no longer reported as records.
-        assert_eq!(exec.records_examined, 1);
+        // One record; two declared clean-format slots, both written.
         let population = exec.population.expect("the rule carries a population");
         assert_eq!(population.unit(), PopulationUnit::Field);
         assert_eq!(population.eligible(), 2);
@@ -3144,7 +3067,7 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -3165,7 +3088,7 @@ mod tests {
         )]);
         let (exec, findings) =
             narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("BUG-3"));
         assert!(findings[0].message.contains("Fixed"));
@@ -3186,7 +3109,7 @@ mod tests {
         )]);
         let (exec, findings) =
             narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -3226,7 +3149,7 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(
             findings.is_empty(),
             "a dangling reference is pointer_resolution's error case, not this rule's"
@@ -3249,7 +3172,7 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[bug, rfc], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.starts_with("Motivated-by:"));
     }
@@ -3352,7 +3275,7 @@ mod tests {
             "# 37 — Y\n\n> Status: Accepted\n".to_string(),
         );
         let (exec, findings) = filename_title_consistency(&[new_style, legacy_style], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3511,7 +3434,7 @@ mod tests {
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 
         let (exec, findings) = field_quality(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Placeholder"));
     }
@@ -3528,7 +3451,7 @@ mod tests {
         let closed = vec!["Fixed".to_string()];
 
         let (exec, findings) = claim_status_agreement(&[bug], &claims, &closed);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert_eq!(findings[0].line, Some(1));
@@ -3639,7 +3562,7 @@ mod tests {
         let exists = |d: &str| d == "docs/present";
         let (exec, findings) = type_dir_matches_nothing(&config, &path, &HashMap::new(), &exists);
 
-        assert_eq!(exec.records_examined, 2, "both types are examined");
+        assert_eq!(examined(&exec), 2, "both types are examined");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("docs/absent"), "{findings:?}");
         assert!(!findings[0].message.contains("present"), "{findings:?}");
@@ -3658,7 +3581,7 @@ mod tests {
             embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
         // One record, whatever its locator count -- `records_examined` is the
         // rule's input population, not its work count.
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
@@ -3738,7 +3661,7 @@ mod tests {
         full_text.insert(r.path.clone(), "# 0002 — Wrong Number\n".to_string());
 
         let (exec, findings) = filename_title_consistency(&[r], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains('1'));
         assert!(findings[0].message.contains('2'));
@@ -3751,7 +3674,7 @@ mod tests {
         full_text.insert(r.path.clone(), "# 0001 — Correct\n".to_string());
 
         let (exec, findings) = filename_title_consistency(&[r], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3763,7 +3686,7 @@ mod tests {
         full_text.insert(r.path.clone(), content.to_string());
 
         let (exec, findings) = revision_log_change_class(&[r], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("2026-08-20"));
     }
@@ -3787,7 +3710,7 @@ mod tests {
         full_text.insert(r.path.clone(), content.to_string());
 
         let (exec, findings) = revision_log_change_class(&[r], &full_text);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -3799,7 +3722,7 @@ mod tests {
             "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
         );
         let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Verified"));
         assert!(findings[0].message.contains("Implemented"));
@@ -3881,7 +3804,7 @@ mod tests {
         );
         let (exec, findings) =
             embodiment_locator_promotion_candidate(&[a, b], &embodiment_config());
-        assert_eq!(exec.records_examined, 2);
+        assert_eq!(examined(&exec), 2);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("src/shared.rs"));
     }

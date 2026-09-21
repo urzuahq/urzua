@@ -24,8 +24,6 @@ pub(crate) fn gated(
             RuleExecution {
                 rule: id.to_string(),
                 population: None,
-                records_examined: 0,
-                scope: urzua_core::report::RuleScope::Records,
                 status: RuleStatus::NotEnabled,
                 examined_records: Vec::new(),
             },

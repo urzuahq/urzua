@@ -735,7 +735,10 @@ fn an_undeclared_rule_is_reported_as_not_enabled_never_omitted() {
         .find(|r| r["rule"] == "header.required-fields")
         .expect("an undeclared rule must still appear, marked not-enabled");
     assert_eq!(required["status"], "not-enabled");
-    assert_eq!(required["records_examined"], 0);
+    assert!(
+        required.get("population").is_none(),
+        "a rule that did not run has no population to report: {required}"
+    );
 
     // Every rule this build ships is accounted for, so a reader can tell
     // "not configured" from "does not exist". Asserted against ALL_RULES
@@ -860,16 +863,10 @@ fn a_path_scope_narrows_what_is_reported_on_not_what_a_pointer_resolves_against(
         stdout.contains("\"files_examined\": 1"),
         "only the in-scope record is reported on: {stdout}"
     );
-    let examined = stdout
-        .split("\"rule\": \"pointer.resolution\"")
-        .nth(1)
-        .and_then(|s| s.split("\"records_examined\": ").nth(1))
-        .and_then(|s| s.split(&[',', '\n'][..]).next())
-        .unwrap_or("0");
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(
-        examined.trim(),
-        "1",
-        "the assertion above is vacuous unless the rule actually read the record: {stdout}"
+        parsed["records_read_by_any_rule"], 1,
+        "the assertion above is vacuous unless a rule actually read the record: {stdout}"
     );
 }
 
@@ -1135,16 +1132,17 @@ fn a_staged_deletion_is_not_reported_as_owned_by_no_type() {
     );
     // Positive control: without it this test passes just as well when the rule
     // never ran at all, which is the shape ADR-55 forbids.
-    let examined = stdout
-        .split("\"rule\": \"type.record-outside-declared-dir\"")
-        .nth(1)
-        .and_then(|s| s.split("\"records_examined\": ").nth(1))
-        .and_then(|s| s.split(&[',', '\n'][..]).next())
-        .unwrap_or("0");
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let population = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "type.record-outside-declared-dir")
+        .and_then(|r| r.get("population"))
+        .expect("the rule must carry a population");
     assert_ne!(
-        examined.trim(),
-        "0",
-        "the rule must have examined the declared dir's files: {stdout}"
+        population["examined"], 0,
+        "the rule must have examined the declared dir\'s files: {stdout}"
     );
 }
 

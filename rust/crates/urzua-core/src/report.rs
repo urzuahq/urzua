@@ -29,29 +29,26 @@ pub struct Finding {
     pub waived: Option<String>,
 }
 
-/// One rule's execution record: not just "did it run" but "how many records
-/// did it actually examine." A rule that ran over zero derived input and a
-/// rule that ran cleanly over the whole corpus both report `rulesExecuted`
-/// unless this is tracked separately.
+/// One rule's execution record: not just "did it run" but what it was handed
+/// and what it judged. A rule that ran over zero derived input and a rule that
+/// ran cleanly over the whole corpus both report `rulesExecuted` unless the
+/// population is tracked separately.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RuleExecution {
     pub rule: String,
-    pub records_examined: usize,
-    /// What this rule was handed and what it judged, in a stated unit
-    /// (`BUG-40`). `records_examined` holds three different denominators
-    /// across the rule set -- 1023 of them over a 309-record corpus for
-    /// `field.quality` -- because the unit was never named. `None` while a
-    /// rule is not yet converted; `records_examined` is authoritative until
-    /// every rule carries a population.
+    /// What this rule was handed and what it judged, in a stated unit.
+    ///
+    /// This replaces `records_examined` and `RuleScope`, which were one number
+    /// and a hand-set label for what it counted. The number held three
+    /// different denominators across the rule set -- 1041 of them over a
+    /// 315-record corpus for `field.quality` -- because the unit was named
+    /// beside it rather than carried with it (`BUG-40`), and the label went
+    /// wrong twice on its own (`BUG-81`, `BUG-83`). A unit that travels with
+    /// its count cannot be read as a different unit's.
+    ///
+    /// `None` only when the rule was not enabled, where `status` says so.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub population: Option<Population>,
-    /// What `records_examined` counted. A rule that reads the configuration
-    /// counts declarations, not records, and the two must not be added
-    /// together: a config-scoped count satisfying "some rule examined
-    /// something" let `check` report `Ok` having read no record at all
-    /// (BUG-81).
-    #[serde(default)]
-    pub scope: RuleScope,
     /// ADR-7: a rule a repository did not turn on is reported as deliberately
     /// skipped, never omitted -- "off" and "ran clean" must stay
     /// distinguishable in the report.
@@ -226,20 +223,6 @@ impl Population {
 pub enum RuleStatus {
     Ran,
     NotEnabled,
-}
-
-/// Whether a rule's examined count refers to corpus records or to
-/// configuration entries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum RuleScope {
-    #[default]
-    Records,
-    Config,
-    /// Tracked path names, examined without opening a file. Neither a corpus
-    /// record nor a configuration entry: counting it as a record let a rule
-    /// that never parsed anything certify the corpus (BUG-83).
-    Paths,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
