@@ -488,6 +488,69 @@ impl Report for MigrateSchemaReport {
 #[cfg(test)]
 mod tests {
 
+    /// `Population` implements no `Add`, so the compiler refuses the obvious
+    /// mistake outright.
+    ///
+    /// ```compile_fail
+    /// use urzua_core::report::{Population, PopulationUnit};
+    /// let a = Population::of(PopulationUnit::Field, 1041, 1041);
+    /// let b = Population::of(PopulationUnit::Record, 315, 315);
+    /// let _ = a + b;
+    /// ```
+    #[test]
+    fn a_total_across_units_is_a_union_of_records_never_a_sum_of_populations() {
+        // 1041 field slots and 315 records are the same 315 records counted
+        // twice in different units. Adding the columns is how `records_examined`
+        // came to report a number larger than the corpus (`BUG-90`), and the
+        // accessors still make it typable even though `Population` has no `Add`.
+        // `records_read_by_any_rule` is the replacement, and it must stay a
+        // union: one record judged by five rules contributes one, not five.
+        let path = |p: &str| std::path::PathBuf::from(p);
+        let executed = vec![
+            RuleExecution {
+                rule: "field.quality".to_string(),
+                population: Some(Population::of(PopulationUnit::Field, 4, 4)),
+                status: RuleStatus::Ran,
+                examined_records: vec![path("a.md"), path("b.md")],
+            },
+            RuleExecution {
+                rule: "identity.collision".to_string(),
+                population: Some(Population::of(PopulationUnit::Record, 2, 2)),
+                status: RuleStatus::Ran,
+                examined_records: vec![path("a.md"), path("b.md")],
+            },
+            RuleExecution {
+                rule: "type.no-declared-spec".to_string(),
+                population: Some(Population::of(PopulationUnit::RecordType, 1, 1)),
+                status: RuleStatus::Ran,
+                examined_records: vec![],
+            },
+        ];
+
+        let naive_sum: usize = executed
+            .iter()
+            .filter_map(|e| e.population.as_ref())
+            .map(|p| p.examined())
+            .sum();
+        assert_eq!(naive_sum, 7, "the mistake this guards against");
+        assert_eq!(
+            records_read_by_any_rule(&executed),
+            2,
+            "two records, however many rules and units judged them"
+        );
+    }
+
+    #[test]
+    fn a_rule_that_did_not_run_contributes_no_records() {
+        let executed = vec![RuleExecution {
+            rule: "field.quality".to_string(),
+            population: None,
+            status: RuleStatus::NotEnabled,
+            examined_records: vec![std::path::PathBuf::from("a.md")],
+        }];
+        assert_eq!(records_read_by_any_rule(&executed), 0);
+    }
+
     #[test]
     #[should_panic(expected = "exceeds eligible")]
     fn a_population_cannot_examine_more_than_it_was_eligible_for() {

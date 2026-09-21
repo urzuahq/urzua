@@ -1416,11 +1416,6 @@ pub fn field_pending(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            // Records, not slots. `population` names the field-slot count in
-            // its own unit; `records_examined` is documented as authoritative
-            // and record-shaped until every rule is converted, and changing
-            // its unit here made one entry contradict itself -- `6` beside
-            // `scope: records` on a two-record corpus.
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -1577,9 +1572,8 @@ pub fn field_quality(
     // The population is the declared slot: one `(record, required field)` pair
     // per field the record's *type* declares. Built here, before the rule runs,
     // so `eligible` is this list's length and cannot disagree with what the
-    // body does. On this repository that is 1023 -- which is what
-    // `records_examined` has been reporting against a 307-record corpus
-    // (`BUG-40`), correct all along and labelled as something it was not.
+    // body does. It is far larger than the record count and always was
+    // (`BUG-40`); the unit is what makes that legible rather than alarming.
     let slots: Vec<(&Record, &String)> = records
         .iter()
         .filter_map(|record| {
@@ -1620,11 +1614,6 @@ pub fn field_quality(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            // Records, not slots. `population` names the field-slot count in
-            // its own unit; `records_examined` is documented as authoritative
-            // and record-shaped until every rule is converted, and changing
-            // its unit here made one entry contradict itself -- `6` beside
-            // `scope: records` on a two-record corpus.
             status: RuleStatus::Ran,
             examined_records,
         },
@@ -2107,9 +2096,8 @@ pub fn embodiment_locator_exists(
 /// what its own `Realized-by` locators compute to, including drift -- a
 /// locator that changed, per git history, since the `Realized-by` line was
 /// last touched. Both `Embodiment` and `Realized-by` have to be present --
-/// a record with no `Realized-by` at all has nothing for this rule to check
-/// yet, which is a real, expected `records_examined: 0` on a corpus that
-/// hasn't adopted the field, not a defect in the rule. `drifted` is
+/// a record with no `Realized-by` at all is eligible and unexamined on a
+/// corpus that hasn't adopted the field, not a defect in the rule. `drifted` is
 /// precomputed by the caller (git history is I/O, this function isn't --
 /// same shape as `full_text` elsewhere in this module).
 pub fn embodiment_consistency(
@@ -3643,8 +3631,8 @@ mod tests {
 
         let (exec, findings) =
             embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
-        // One record, whatever its locator count -- `records_examined` is the
-        // rule's input population, not its work count.
+        // One candidate per declared slot, whatever its locator count: the
+        // population is the rule's input, not its work count.
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
