@@ -224,6 +224,188 @@ mod tests {
         }
     }
 
+    /// **Every `Record`- or `Field`-unit rule must be able to report a gap.**
+    ///
+    /// `eligible` is the candidate list's length, built by the runner, so a rule
+    /// cannot influence it. `examined` is body-reported and cannot be
+    /// recomputed -- the design says so explicitly and claims assertability for
+    /// `eligible` only. Nothing enforced the boundary it drew: `field.quality`
+    /// and `field.pending` returned `Examined` unconditionally, so their
+    /// populations were pinned to 100% and reported nothing, for as long as they
+    /// had populations at all.
+    ///
+    /// A population that can never show a gap is not a measurement, and it is
+    /// invisible to `MILE-106`, whose signal is `eligible > 0 && examined == 0`.
+    /// This is the test-time half of that check: `MILE-106` asks whether a rule
+    /// *did* judge nothing; this asks whether it *could* ever report having
+    /// judged less than it was handed.
+    ///
+    /// `RecordType` rules are excluded deliberately: a declaration cannot be
+    /// missing from the table it *is*, so `eligible == examined` is correct
+    /// there rather than tautological. `Path` is excluded for the same reason --
+    /// a filename is judged without opening anything, so every candidate gets a
+    /// verdict.
+    ///
+    /// One adversarial record serves every rule: a filename carrying no number,
+    /// a header that does not parse, and therefore no field of any kind. Each
+    /// rule's type declares the fields it needs, so `eligible > 0` throughout
+    /// and every gap comes from the record, never from an empty population.
+    #[test]
+    fn every_record_and_field_rule_can_report_examined_below_eligible() {
+        use crate::config::{Config, RecordTypeConfig};
+        use crate::header::HeaderLayout;
+        use crate::rules;
+        use std::collections::HashMap;
+
+        let path = std::path::PathBuf::from("docs/notes/no-number-here.md");
+        let body = "this is not a header at all\n";
+        let record = crate::record::Record {
+            path: path.clone(),
+            record_type: "note".to_string(),
+            type_prefix: "NOTE".to_string(),
+            header: crate::header::parse(body),
+        };
+        let records = [record];
+
+        let fields =
+            |names: &[&str]| -> Vec<String> { names.iter().map(|s| s.to_string()).collect() };
+        let declared = fields(&[
+            "Status",
+            "Embodiment",
+            "Realized-by",
+            "Supersedes / Superseded-by",
+            "Derives-from",
+            "Blocked-on",
+        ]);
+
+        let by_type = |v: Vec<String>| -> HashMap<String, Vec<String>> {
+            [("note".to_string(), v)].into_iter().collect()
+        };
+
+        let config = Config {
+            schema_version: 2,
+            rules: HashMap::new(),
+            record_types: [(
+                "note".to_string(),
+                RecordTypeConfig {
+                    dir: "docs/notes".to_string(),
+                    required_fields: declared.clone(),
+                    header_shape: Default::default(),
+                    prefix: None,
+                    header_layout: Some(HeaderLayout::OnePerLine),
+                    known_fields: Some(declared.clone()),
+                    pointer_fields: Some(fields(&["Derives-from"])),
+                    narrative_fields: Some(fields(&["Blocked-on"])),
+                    spec: None,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        let full_text: HashMap<std::path::PathBuf, String> =
+            [(path.clone(), body.to_string())].into_iter().collect();
+        let allowed: HashMap<String, std::collections::HashSet<String>> = [(
+            "note".to_string(),
+            declared.iter().map(|f| rules::fold_field_name(f)).collect(),
+        )]
+        .into_iter()
+        .collect();
+        let layouts: HashMap<String, HeaderLayout> =
+            [("note".to_string(), HeaderLayout::OnePerLine)]
+                .into_iter()
+                .collect();
+        let pointers = by_type(fields(&["Derives-from"]));
+        let narratives = by_type(fields(&["Blocked-on"]));
+        let required = by_type(declared.clone());
+
+        let cases: Vec<(
+            &str,
+            (crate::report::RuleExecution, Vec<crate::report::Finding>),
+        )> = vec![
+            (
+                "header.required-fields",
+                rules::header_required_fields(&records, &required),
+            ),
+            (
+                "header.layout-consistency",
+                rules::header_layout_consistency(&records, &layouts),
+            ),
+            (
+                "header.field-set-consistency",
+                rules::header_field_set_consistency(&records, &allowed),
+            ),
+            (
+                "header.pointer-field-clean",
+                rules::header_pointer_field_clean(&records, &config),
+            ),
+            ("field.quality", rules::field_quality(&records, &required)),
+            ("field.pending", rules::field_pending(&records, &required)),
+            (
+                "filename.title-consistency",
+                rules::filename_title_consistency(&records, &full_text),
+            ),
+            (
+                "revision-log.change-class-required",
+                rules::revision_log_change_class(&records, &full_text),
+            ),
+            ("identity.collision", rules::identity_collision(&records)),
+            (
+                "pointer.resolution",
+                rules::pointer_resolution(&records, &pointers, &narratives),
+            ),
+            (
+                "pointer.target-status",
+                rules::pointer_target_status(&records, &pointers, &narratives, &[]),
+            ),
+            (
+                "narrative-field.stale",
+                rules::narrative_field_stale(&records, &config, &[]),
+            ),
+            (
+                "relation.supersession-reciprocity",
+                rules::supersession_reciprocity(&records, &config),
+            ),
+            (
+                "embodiment.consistency",
+                rules::embodiment_consistency(&records, &config, &Default::default()),
+            ),
+            (
+                "embodiment.locator-exists",
+                rules::embodiment_locator_exists(&records, &config, &|_| true),
+            ),
+            (
+                "embodiment.locator-promotion-candidate",
+                rules::embodiment_locator_promotion_candidate(&records, &config),
+            ),
+        ];
+
+        let mut tautological = Vec::new();
+        for (id, (exec, _)) in cases {
+            let population = exec
+                .population
+                .unwrap_or_else(|| panic!("{id} reported no population"));
+            assert!(
+                population.eligible() > 0,
+                "{id}: the fixture must hand it candidates, or the gap below is vacuous"
+            );
+            if population.examined() >= population.eligible() {
+                tautological.push(format!(
+                    "{id} ({}/{})",
+                    population.eligible(),
+                    population.examined()
+                ));
+            }
+        }
+
+        assert!(
+            tautological.is_empty(),
+            "these rules judged every candidate of a record with no parseable header, \
+             no filename number and no fields -- their populations cannot report a gap, \
+             so MILE-106 can never see them: {tautological:?}"
+        );
+    }
+
     /// A seed reproduces its counterexample exactly, or a failure report is not
     /// evidence anyone can act on.
     #[test]
