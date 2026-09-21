@@ -161,9 +161,12 @@ wrongly, at the cost of each rule re-deriving what it needs and of `urzua-core` 
 config type rather than on plain data.
 
 The second is cheaper, already proven here, and removes the class outright rather than naming it. The
-first preserves the current shape and is more work for the same guarantee. **Recommendation: converge
-on `&Config`**, and treat a rule taking a bare collection as the exception that has to argue for
-itself.
+first preserves the current shape and is more work for the same guarantee.
+
+**Decided: converge on `&Config`.** A rule taking a bare collection derived from configuration is the
+exception and has to argue for itself. Wrapper types are not pursued -- they would add four types to
+preserve a shape whose only merit is that it is the current one, and fifteen rules already demonstrate
+the alternative works.
 
 Either way the rule is: **a bare collection derived from configuration does not cross a function
 boundary.**
@@ -234,5 +237,6 @@ current callers wants a test pinning its present behaviour **before** the type i
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Projection direction decided: converge on `&Config` rather than introduce wrapper types. **Why:** fifteen rules already take it and none of them can be called wrongly, so the alternative is demonstrated rather than proposed. Wrappers would add four types to preserve a shape whose only argument is incumbency. | **substantive** |
 > | 2026-09-21 | Widened to cover projections of the configuration, not only declared values. **Why:** a Major defect shipped and was caught the same day from the same root -- `field.untrimmed-value` was wired to `known_fields_by_type` where it needed `declared_fields_by_type`, two parameters of identical type with opposite absence semantics, so the rule silently skipped every type declaring only `required_fields`. Six further parameters share a type, two of them adjacent arguments of one function that would compile if swapped. Fifteen rules already take `&Config` and cannot be called wrongly, so the safe pattern is present and applied to a minority. | **substantive** |
 > | 2026-09-21 | Filed. **Why:** `ADR-57` took three passes to implement because the comparison it decided lives at six call sites, and between the first pass and the last two rules disagreed about one field on one record. `normalize_id` is the same shape with thirteen hand-applied calls and is load-bearing today. Filed while the evidence was in front of us rather than after the release, and deliberately not implemented in `0.4.0`. | **substantive** |

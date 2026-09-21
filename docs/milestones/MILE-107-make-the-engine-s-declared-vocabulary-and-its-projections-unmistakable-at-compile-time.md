@@ -59,8 +59,8 @@ constructed, the fossil of that handover.
 `FieldName` first: no existing normalization to preserve, and `ADR-57` already specifies its
 comparison, so it is the cheap proof the pattern works.
 
-The projections second, and probably by converging on `&Config` rather than by adding four wrapper
-types -- the safe pattern is already the majority in `rules.rs`.
+The projections second, by converging on `&Config`. `RFC-39` decides this rather than leaving it open:
+the safe pattern is already the majority in `rules.rs`, so it is demonstrated rather than proposed.
 
 `RecordId` last and carefully. Thirteen working call sites, and the risk is a conversion that
 normalizes where the old code did not or fails to where it did. Every current caller wants a test
@@ -70,4 +70,5 @@ pinning present behaviour **before** the type is introduced.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Projection approach fixed to `&Config` per `RFC-39`'s decision, rather than left as two options. | **structural** |
 > | 2026-09-21 | Filed. **Why:** `RFC-39` was a `Draft` with no work item, and both halves of it caused a shipped defect during the `0.4.0` review on the day it was filed. Filed so the work is scheduled rather than left as a proposal, and so the evidence stays attached to it while it is fresh. | **substantive** |
