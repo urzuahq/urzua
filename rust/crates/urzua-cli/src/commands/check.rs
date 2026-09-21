@@ -192,7 +192,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 .required_fields
                 .iter()
                 .chain(known.iter())
-                .map(|f| f.to_ascii_lowercase())
+                .map(|f| urzua_core::rules::fold_field_name(f))
                 .collect();
             known_fields_by_type.insert(name.clone(), allowed);
         }

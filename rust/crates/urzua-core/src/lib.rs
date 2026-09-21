@@ -16,6 +16,10 @@ pub mod graph;
 pub mod header;
 pub mod migrate;
 pub mod new_record;
+/// `SPEC-4`'s acceptance suite (`MILE-101`). Test-only: it exercises the
+/// engine, it is not part of its surface.
+#[cfg(test)]
+mod property;
 pub mod record;
 pub mod report;
 pub mod rules;

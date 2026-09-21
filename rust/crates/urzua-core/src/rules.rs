@@ -257,6 +257,27 @@ fn layout_label(layout: HeaderLayout) -> &'static str {
 /// 0 for it -- required so an existing corpus's legitimate optional fields
 /// (`Stable-Id`, `Realized-by`, `Derives-from` on `adr`, none of which are
 /// *required*) don't all become false positives the moment this rule ships.
+/// Whether a header field's key names a field the type declared.
+///
+/// One definition, so the property suite (`MILE-101`) tests the matcher the
+/// rules actually use rather than a restatement of it. `allowed` holds the
+/// declared names already folded by the same function, so both sides of the
+/// comparison agree by construction.
+///
+/// Case-insensitive because a corpus writes `Status` and `status` and means
+/// one field. The fold is **ASCII-only**, which is a known defect for any
+/// vocabulary that is not: `"CAF\u{c9}"` folds to `"caf\u{c9}"` while a declared
+/// `caf\u{e9}` folds to itself, so the two never match and a declared field is
+/// reported undeclared (`BUG-97`).
+pub fn field_is_declared(key: &str, allowed: &HashSet<String>) -> bool {
+    allowed.contains(&fold_field_name(key))
+}
+
+/// The single fold every declared-field comparison goes through.
+pub fn fold_field_name(name: &str) -> String {
+    name.to_ascii_lowercase()
+}
+
 pub fn header_field_set_consistency(
     records: &[Record],
     allowed_by_type: &HashMap<String, HashSet<String>>,
@@ -289,7 +310,7 @@ pub fn header_field_set_consistency(
             }
 
             for field in &record.header.fields {
-                if !allowed.contains(&field.key.to_ascii_lowercase()) {
+                if !field_is_declared(&field.key, allowed) {
                     findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
