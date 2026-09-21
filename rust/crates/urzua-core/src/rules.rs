@@ -142,7 +142,7 @@ pub fn header_required_fields(
             // rule was handed them and could not judge them. The record-scoped
             // finding above says why.
             if record.header.region.is_none() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_none() {
                 findings.push(Finding {
@@ -205,10 +205,10 @@ pub fn header_layout_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(&declared) = declared_by_type.get(&record.record_type) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let Some(actual) = record.header.layout() else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             if actual != declared {
@@ -292,7 +292,7 @@ pub fn header_field_set_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(allowed) = allowed_by_type.get(&record.record_type) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             // A record whose header region never parsed has an empty field list,
             // which is indistinguishable here from a record whose fields are all
@@ -300,7 +300,7 @@ pub fn header_field_set_consistency(
             // load-bearing; `header.required-fields` reports the unparsed header
             // (BUG-78).
             if record.header.region.is_none() || record.header.parse_error.is_some() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
 
             for field in &record.header.fields {
@@ -858,7 +858,7 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
             if record_id(record).is_some() {
                 Outcome::Examined
             } else {
-                Outcome::NotExamined
+                Outcome::OutOfScope
             }
         },
     );
@@ -981,11 +981,11 @@ pub fn pointer_target_status(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             }
 
             for reference in references {
@@ -1057,11 +1057,11 @@ pub fn pointer_resolution(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             }
 
             for reference in references {
@@ -1139,7 +1139,7 @@ pub fn header_pointer_field_clean(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             if value.trim() == "—" {
                 return Outcome::Examined;
@@ -1229,11 +1229,11 @@ pub fn narrative_field_stale(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             }
 
             for reference in references {
@@ -1412,7 +1412,7 @@ pub fn field_pending(
         |(record, field)| {
             // Unreadable, not absent -- the same reason as `field.quality`.
             if record.header.region.is_none() || record.header.parse_error.is_some() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
             if classify(record.header.get(field.as_str())) == FieldState::Pending {
                 findings.push(Finding {
@@ -1545,7 +1545,7 @@ pub fn claim_status_agreement(
         if index.contains_key(*normalized) {
             Outcome::Examined
         } else {
-            Outcome::NotExamined
+            Outcome::Absent
         }
     });
 
@@ -1614,7 +1614,7 @@ pub fn field_quality(
             // not looking (ADR-55). `header.required-fields` reports the parse
             // error itself, once per record rather than once per slot.
             if record.header.region.is_none() || record.header.parse_error.is_some() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
             let state = classify(record.header.get(field.as_str()));
             // `Pending` is `field.pending`'s subject, not this rule's: it means
@@ -1662,10 +1662,10 @@ pub fn filename_title_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(filename_number) = filename_number(record) else {
-                return Outcome::NotExamined;
+                return Outcome::OutOfScope;
             };
             let Some(content) = full_text.get(&record.path) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             let mut push = |line: Option<usize>, message: String| {
@@ -1854,10 +1854,10 @@ pub fn revision_log_change_class(
         |record| record.path.clone(),
         |record| {
             let Some(content) = full_text.get(&record.path) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let Some(entries) = find_revision_log_entries(content) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             for entry in entries {
@@ -2066,7 +2066,7 @@ pub fn embodiment_locator_exists(
         |record| record.path.clone(),
         |record| {
             let Some(value) = record.header.get("Realized-by") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let realized = parse_realized_by(value);
             for locator in realized
@@ -2144,10 +2144,10 @@ pub fn embodiment_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(stated) = record.header.get("Embodiment") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let Some(realized_by_value) = record.header.get("Realized-by") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             let computed = compute_embodiment(
@@ -2209,7 +2209,7 @@ pub fn embodiment_locator_promotion_candidate(
         |record| record.path.clone(),
         |record| {
             let Some(realized_by_value) = record.header.get("Realized-by") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             let parsed = parse_realized_by(realized_by_value);
@@ -2305,11 +2305,11 @@ pub fn supersession_reciprocity(
         |record| record.path.clone(),
         |record| {
             let Some(id) = record_id(record) else {
-                return Outcome::NotExamined;
+                return Outcome::OutOfScope;
             };
             let normalized_id = normalize_id(&id);
             let Some(value) = record.header.get(FIELD) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             // `—` is this corpus's written "nothing supersedes this", so the slot
             // was answered. Skipping before counting left the reciprocating half of

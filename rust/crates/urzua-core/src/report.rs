@@ -106,16 +106,44 @@ pub enum PopulationUnit {
 /// What a rule decided about one candidate it was handed.
 ///
 /// There is no "not in the population" answer, deliberately: the candidate list
-/// *is* the population, built before the rule runs. A rule that could reduce
-/// its own denominator is the hand-maintained count this type replaces.
+/// *is* the population, built before the rule runs. A rule that could reduce its
+/// own denominator is the hand-maintained count this type replaces.
+///
+/// The variants below `Examined` all count as unexamined on the wire, where they
+/// collapse into `eligible - examined`. They are separate here because the
+/// reason a rule judged nothing decides what an adopter should do about it, and
+/// those actions are opposite: `Absent` means wait, `Unreadable` means fix the
+/// records, `OutOfScope` means fix the configuration. Collapsing them in the
+/// code rather than at the wire is what left `MILE-106` with no way to tell a
+/// fresh corpus from a misconfigured one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     /// The rule reached a verdict about this candidate.
     Examined,
-    /// The candidate was in the population and the rule did not judge it --
-    /// the declared slot is absent, or the header it needed did not parse.
-    /// `eligible > examined` is this, and it is the signal `MILE-106` reads.
-    NotExamined,
+    /// The declared slot or section is not there. Legitimate and common on a
+    /// corpus that has not adopted the convention yet.
+    Absent,
+    /// Present, and the rule could not read it -- a header that did not parse.
+    /// The corpus is malformed, not incomplete.
+    Unreadable,
+    /// The record does not match the shape the configuration declared, so no
+    /// amount of editing this record makes the rule apply: a filename yielding
+    /// no identifier under the declared `prefix` is the case `BUG-61` found,
+    /// where `init` wrote a prefix matching nothing and five rules silently
+    /// examined zero records.
+    ///
+    /// The one state whose subject is the configuration rather than the corpus,
+    /// and the reason a configurable engine needs this distinction at all --
+    /// a linter with compiled-in rules cannot reach it.
+    OutOfScope,
+}
+
+impl Outcome {
+    /// Whether this counts toward `examined`. The wire carries two numbers; the
+    /// collapse happens here, once.
+    pub fn is_examined(self) -> bool {
+        self == Outcome::Examined
+    }
 }
 
 /// Run `body` over a population and report what it judged.
@@ -130,10 +158,7 @@ pub fn census<T>(
     mut body: impl FnMut(&T) -> Outcome,
 ) -> Population {
     let eligible = candidates.len();
-    let examined = candidates
-        .iter()
-        .filter(|c| body(c) == Outcome::Examined)
-        .count();
+    let examined = candidates.iter().filter(|c| body(c).is_examined()).count();
     Population::of(unit, eligible, examined)
 }
 
@@ -153,7 +178,7 @@ pub fn census_records<T>(
     let mut examined_records = Vec::new();
     let mut examined = 0;
     for candidate in &candidates {
-        if body(candidate) == Outcome::Examined {
+        if body(candidate).is_examined() {
             examined += 1;
             examined_records.push(record_of(candidate));
         }
