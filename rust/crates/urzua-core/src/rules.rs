@@ -264,10 +264,12 @@ pub fn field_is_declared(key: &str, allowed: &HashSet<String>) -> bool {
 }
 
 /// A hint on a finding, never a verdict, so an approximate answer is safe here.
+///
+/// `min` rather than `find`: several declared names can differ only in case, and
+/// a message that changes between runs on one corpus is `BUG-79`'s shape.
 pub fn near_miss<'a>(key: &str, allowed: &'a HashSet<String>) -> Option<&'a String> {
-    allowed
-        .iter()
-        .find(|d| d.to_lowercase() == key.to_lowercase())
+    let key = key.to_lowercase();
+    allowed.iter().filter(|d| d.to_lowercase() == key).min()
 }
 
 pub fn header_field_set_consistency(
@@ -2922,6 +2924,24 @@ mod tests {
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn the_case_only_hint_names_the_same_declaration_every_run() {
+        // A fresh `HashSet` each time: iteration order is randomised per
+        // instance but fixed within one, so reusing a single set would pass
+        // against an order-dependent implementation.
+        for _ in 0..40 {
+            let allowed: HashSet<String> = ["Blocked-on", "Blocked-On", "BLOCKED-on"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            assert_eq!(
+                near_miss("blocked-on", &allowed).map(String::as_str),
+                Some("BLOCKED-on"),
+                "the hint must not depend on which spelling the set yields first"
+            );
+        }
     }
 
     #[test]
