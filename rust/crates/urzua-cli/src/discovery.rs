@@ -184,12 +184,7 @@ pub(crate) fn compute_drifted_records(repo_root: &Path, records: &[Record]) -> H
         let Some(realized_by_value) = record.header.get("Realized-by") else {
             continue;
         };
-        let Some(field) = record
-            .header
-            .fields
-            .iter()
-            .find(|f| f.key.eq_ignore_ascii_case("Realized-by"))
-        else {
+        let Some(field) = record.header.fields.iter().find(|f| f.key == "Realized-by") else {
             continue;
         };
         let Ok(Some(reference_commit)) =

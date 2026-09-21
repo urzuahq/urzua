@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M30ME8D4DNR4TDBSZPDPVVBY
-Status: Open
+Status: Fixed
 Found-in: "Reading the ten `to_ascii_lowercase` call sites while planning the property suite (MILE-101); confirmed against the Rust standard library rather than against the engine"
-Regression-test: "not yet written -- a type declaring a field name with a non-ASCII letter, and a record writing that same name, must not report the field as undeclared"
-Blocked-on: MILE-101
+Regression-test: "rust/crates/urzua-core/src/property.rs::a_field_name_matches_its_declaration_exactly_and_only_exactly"
 ---
 # 97 — a field name with a non-ascii letter is compared by ascii folding so a declared field reports undeclared
 
@@ -45,3 +44,4 @@ finding it counts as the suite working rather than as a surprise.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-21 | Filed. **Why:** found by reading the call sites while planning `MILE-101`, and confirmed directly rather than by inspection. Filed before the suite that will find it, so that the suite's first real finding is a prediction met rather than a new discovery. | **substantive** |
+> | 2026-09-21 | `Status: Open` → `Fixed`, by `ADR-57`, without the fix this record proposed. **Why:** filed expecting a swap to a better case-insensitive comparison. The property suite (`MILE-101`) found a harder counterexample than the one predicted here -- `ß`/`SS`, which full Unicode lower-casing does not fix either -- and then a worse problem in the other direction: any correct case-insensitive comparison makes `Maße` and `Masse` one field, and accepting a name nobody declared is a *missing* finding, which is `ADR-55`'s own defect class. Measured on this corpus: 1788 field names matched exactly and none differed only in case, so the comparison had never done any work. Field names are now compared exactly and the defect has no surface left to live on. A case-only difference is still reported, and the finding names the declared spelling. | **substantive** |

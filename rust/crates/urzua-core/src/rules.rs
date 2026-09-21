@@ -257,25 +257,19 @@ fn layout_label(layout: HeaderLayout) -> &'static str {
 /// 0 for it -- required so an existing corpus's legitimate optional fields
 /// (`Stable-Id`, `Realized-by`, `Derives-from` on `adr`, none of which are
 /// *required*) don't all become false positives the moment this rule ships.
-/// Whether a header field's key names a field the type declared.
-///
-/// One definition, so the property suite (`MILE-101`) tests the matcher the
-/// rules actually use rather than a restatement of it. `allowed` holds the
-/// declared names already folded by the same function, so both sides of the
-/// comparison agree by construction.
-///
-/// Case-insensitive because a corpus writes `Status` and `status` and means
-/// one field. The fold is **ASCII-only**, which is a known defect for any
-/// vocabulary that is not: `"CAF\u{c9}"` folds to `"caf\u{c9}"` while a declared
-/// `caf\u{e9}` folds to itself, so the two never match and a declared field is
-/// reported undeclared (`BUG-97`).
+/// Exact (`ADR-57`): matching case-insensitively would accept a name nobody
+/// declared -- `Maße` and `Masse` are different words.
 pub fn field_is_declared(key: &str, allowed: &HashSet<String>) -> bool {
-    allowed.contains(&fold_field_name(key))
+    allowed.contains(key)
 }
 
-/// The single fold every declared-field comparison goes through.
-pub fn fold_field_name(name: &str) -> String {
-    name.to_ascii_lowercase()
+/// A hint on a finding, never a verdict, so an approximate answer is safe here.
+///
+/// `min` rather than `find`: several declared names can differ only in case, and
+/// a message that changes between runs on one corpus is `BUG-79`'s shape.
+pub fn near_miss<'a>(key: &str, allowed: &'a HashSet<String>) -> Option<&'a String> {
+    let key = key.to_lowercase();
+    allowed.iter().filter(|d| d.to_lowercase() == key).min()
 }
 
 pub fn header_field_set_consistency(
@@ -317,10 +311,16 @@ pub fn header_field_set_consistency(
                     file: record.path.clone(),
                     line: Some(field.line),
                     waived: None,
-                    message: format!(
-                        "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
-                        field.key, record.record_type
-                    ),
+                    message: match near_miss(&field.key, allowed) {
+                        Some(declared) => format!(
+                            "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case",
+                            field.key, record.record_type
+                        ),
+                        None => format!(
+                            "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
+                            field.key, record.record_type
+                        ),
+                    },
                 });
                 }
             }
@@ -731,13 +731,9 @@ pub fn config_pointer_field_not_known(
         let type_config = &config.record_types[type_name];
         examined += 1;
 
-        let mut declared: HashSet<String> = type_config
-            .required_fields
-            .iter()
-            .map(|f| f.to_ascii_lowercase())
-            .collect();
+        let mut declared: HashSet<String> = type_config.required_fields.iter().cloned().collect();
         if let Some(known) = &type_config.known_fields {
-            declared.extend(known.iter().map(|f| f.to_ascii_lowercase()));
+            declared.extend(known.iter().cloned());
         }
 
         let mut relation_fields: Vec<&String> = Vec::new();
@@ -749,7 +745,7 @@ pub fn config_pointer_field_not_known(
         }
 
         for field in relation_fields {
-            if !declared.contains(&field.to_ascii_lowercase()) {
+            if !declared.contains(field) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -802,12 +798,9 @@ pub fn config_pointer_narrative_overlap(
         else {
             continue;
         };
-        let pointer_lower: HashSet<String> = pointer_fields
-            .iter()
-            .map(|f| f.to_ascii_lowercase())
-            .collect();
+        let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
         for field in narrative_fields {
-            if pointer_lower.contains(&field.to_ascii_lowercase()) {
+            if declared_pointers.contains(field) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -2627,7 +2620,7 @@ mod tests {
         let mut allowed = HashMap::new();
         allowed.insert(
             "adr".to_string(),
-            HashSet::from(["status".to_string(), "date".to_string()]),
+            HashSet::from(["Status".to_string(), "Date".to_string()]),
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
@@ -2646,7 +2639,7 @@ mod tests {
         let mut allowed = HashMap::new();
         allowed.insert(
             "adr".to_string(),
-            HashSet::from(["status".to_string(), "realized-by".to_string()]),
+            HashSet::from(["Status".to_string(), "Realized-by".to_string()]),
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
@@ -2931,6 +2924,65 @@ mod tests {
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn the_case_only_hint_names_the_same_declaration_every_run() {
+        // A fresh `HashSet` each time: iteration order is randomised per
+        // instance but fixed within one, so reusing a single set would pass
+        // against an order-dependent implementation.
+        for _ in 0..40 {
+            let allowed: HashSet<String> = ["Blocked-on", "Blocked-On", "BLOCKED-on"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            assert_eq!(
+                near_miss("blocked-on", &allowed).map(String::as_str),
+                Some("BLOCKED-on"),
+                "the hint must not depend on which spelling the set yields first"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pointer_field_differing_only_in_case_is_absent_from_known_fields() {
+        // Accepted here, the field is unreadable everywhere else: the record
+        // writes `Derives-from` and `header.pointer-field-clean` looks up
+        // `Derives-From`, which ADR-57 makes a different name.
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(
+                &["Status"],
+                Some(&["Derives-from"]),
+                Some(&["Derives-From"]),
+                Some(&[]),
+            ),
+        )]);
+        let (exec, findings) =
+            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Derives-From"));
+    }
+
+    #[test]
+    fn pointer_and_narrative_names_differing_only_in_case_do_not_overlap() {
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(
+                &[],
+                Some(&["Blocked-on", "Blocked-On"]),
+                Some(&["Blocked-on"]),
+                Some(&["Blocked-On"]),
+            ),
+        )]);
+        let (exec, findings) =
+            config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "two different names are two fields (ADR-57): {findings:?}"
+        );
     }
 
     #[test]

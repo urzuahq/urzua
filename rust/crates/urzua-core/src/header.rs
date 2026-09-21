@@ -36,19 +36,25 @@ impl Header {
     /// violation the caller should check for separately via
     /// [`Header::duplicate_keys`] -- this method deliberately doesn't hide
     /// that by picking one silently.
+    ///
+    /// Exact (`ADR-57`): matching loosely here made two rules disagree about
+    /// one field -- `header.field-set-consistency` called `status` undeclared
+    /// while `header.required-fields` read it as satisfying `Status`.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
-            .find(|f| f.key.eq_ignore_ascii_case(key))
+            .find(|f| f.key == key)
             .map(|f| f.value.as_str())
     }
 
+    /// Exact (`ADR-57`): `Status` and `status` are two fields, so writing both
+    /// is not this defect. The undeclared one is reported by
+    /// `header.field-set-consistency`, which names the declared spelling.
     pub fn duplicate_keys(&self) -> Vec<String> {
         let mut seen = std::collections::HashSet::new();
         let mut dupes = Vec::new();
         for f in &self.fields {
-            let lower = f.key.to_ascii_lowercase();
-            if !seen.insert(lower.clone()) && !dupes.contains(&f.key) {
+            if !seen.insert(f.key.clone()) && !dupes.contains(&f.key) {
                 dupes.push(f.key.clone());
             }
         }
@@ -388,6 +394,29 @@ mod tests {
         let h = parse(doc);
         assert_eq!(h.get("Status"), Some("Draft"));
         assert_eq!(h.region, Some((3, 3)));
+    }
+
+    #[test]
+    fn get_does_not_answer_for_a_differently_cased_key() {
+        // ADR-57: the record wrote a different name, so the declared one is
+        // absent. Answering here let header.required-fields read the field as
+        // satisfied while header.field-set-consistency called it undeclared.
+        let h = parse("# T\n\n> status: Accepted\n");
+        assert_eq!(h.get("status"), Some("Accepted"));
+        assert_eq!(h.get("Status"), None);
+        assert_eq!(h.get("STATUS"), None);
+    }
+
+    #[test]
+    fn two_spellings_of_one_word_are_two_keys_not_a_duplicate() {
+        let h = parse("# T\n\n> Status: A\n> status: B\n");
+        assert!(
+            h.duplicate_keys().is_empty(),
+            "ADR-57 makes these two fields: {:?}",
+            h.duplicate_keys()
+        );
+        assert_eq!(h.get("Status"), Some("A"));
+        assert_eq!(h.get("status"), Some("B"));
     }
 
     #[test]
