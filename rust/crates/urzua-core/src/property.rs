@@ -166,6 +166,11 @@ mod tests {
     /// Kept alongside the fold property rather than instead of it: this one
     /// catches a field going missing, the other catches it being misjudged, and
     /// neither implies the other.
+    ///
+    /// The first version of this asserted `accepted || reported`, which are
+    /// exact complements -- a tautology that could not fail, inside the suite
+    /// built to catch exactly that. It now predicts the finding count from the
+    /// fold and holds the parser to recovering the key.
     #[test]
     fn every_field_a_record_carries_is_either_accepted_or_reported() {
         use crate::rules::header_field_set_consistency;
@@ -192,17 +197,29 @@ mod tests {
                 header: crate::header::parse(&body),
             };
 
-            // A field whose key the parser did not recover is not this
-            // property's subject -- there is no key to judge.
-            let parsed_keys = record.header.fields.len();
+            // The parser must recover the key before the rule can be held to
+            // anything about it. Excusing the unparsed case instead is what
+            // made the first version of this assertion unfailable.
+            assert_eq!(
+                record.header.fields.len(),
+                1,
+                "declared {declared:?}, wrote {written:?}: the parser did not \
+                 recover the generated field"
+            );
+            assert_eq!(record.header.fields[0].key, written);
+
             let (_, findings) = header_field_set_consistency(&[record], &allowed_by_type);
 
-            let accepted = findings.is_empty() && parsed_keys > 0;
-            let reported = !findings.is_empty();
-            assert!(
-                parsed_keys == 0 || accepted || reported,
-                "declared {declared:?}, wrote {written:?}: the field was neither \
-                 accepted nor reported -- it left no trace in the output"
+            // Predicted from the fold the rule uses, not from the rule's own
+            // output: a prediction the rule cannot influence is the only kind
+            // that can catch it doing nothing.
+            let expected = usize::from(
+                crate::rules::fold_field_name(&written) != crate::rules::fold_field_name(&declared),
+            );
+            assert_eq!(
+                findings.len(),
+                expected,
+                "declared {declared:?}, wrote {written:?}: expected {expected} finding(s)"
             );
         }
     }
