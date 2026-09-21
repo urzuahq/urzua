@@ -729,13 +729,9 @@ pub fn config_pointer_field_not_known(
         let type_config = &config.record_types[type_name];
         examined += 1;
 
-        let mut declared: HashSet<String> = type_config
-            .required_fields
-            .iter()
-            .map(|f| f.to_ascii_lowercase())
-            .collect();
+        let mut declared: HashSet<String> = type_config.required_fields.iter().cloned().collect();
         if let Some(known) = &type_config.known_fields {
-            declared.extend(known.iter().map(|f| f.to_ascii_lowercase()));
+            declared.extend(known.iter().cloned());
         }
 
         let mut relation_fields: Vec<&String> = Vec::new();
@@ -747,7 +743,7 @@ pub fn config_pointer_field_not_known(
         }
 
         for field in relation_fields {
-            if !declared.contains(&field.to_ascii_lowercase()) {
+            if !declared.contains(field) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -800,12 +796,9 @@ pub fn config_pointer_narrative_overlap(
         else {
             continue;
         };
-        let pointer_lower: HashSet<String> = pointer_fields
-            .iter()
-            .map(|f| f.to_ascii_lowercase())
-            .collect();
+        let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
         for field in narrative_fields {
-            if pointer_lower.contains(&field.to_ascii_lowercase()) {
+            if declared_pointers.contains(field) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -2929,6 +2922,47 @@ mod tests {
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_pointer_field_differing_only_in_case_is_absent_from_known_fields() {
+        // Accepted here, the field is unreadable everywhere else: the record
+        // writes `Derives-from` and `header.pointer-field-clean` looks up
+        // `Derives-From`, which ADR-57 makes a different name.
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(
+                &["Status"],
+                Some(&["Derives-from"]),
+                Some(&["Derives-From"]),
+                Some(&[]),
+            ),
+        )]);
+        let (exec, findings) =
+            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Derives-From"));
+    }
+
+    #[test]
+    fn pointer_and_narrative_names_differing_only_in_case_do_not_overlap() {
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(
+                &[],
+                Some(&["Blocked-on", "Blocked-On"]),
+                Some(&["Blocked-on"]),
+                Some(&["Blocked-On"]),
+            ),
+        )]);
+        let (exec, findings) =
+            config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "two different names are two fields (ADR-57): {findings:?}"
+        );
     }
 
     #[test]
