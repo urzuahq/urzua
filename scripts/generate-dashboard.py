@@ -219,6 +219,7 @@ def build_data(root: Path) -> dict:
         "check": {
             "status": check["status"],
             "files_examined": check["files_examined"],
+            "records_read_by_any_rule": check["records_read_by_any_rule"],
             "blocking": check["blocking"],
             "rules_executed": check["rules_executed"],
             "findings_count": len(check["findings"]),
@@ -586,7 +587,8 @@ function renderPanels() {
 }
 
 document.getElementById('stat-grid').innerHTML = `
-  <div class="stat"><span class="n">${DATA.check.files_examined}</span><span class="l">Records checked</span></div>
+  <div class="stat"><span class="n">${DATA.check.records_read_by_any_rule}</span><span class="l">Records judged</span></div>
+  <div class="stat"><span class="n">${DATA.check.files_examined}</span><span class="l">Records read</span></div>
   <div class="stat"><span class="n">${DATA.milestones.filter(m=>m.status==='Done').length}</span><span class="l">Milestones done</span></div>
   <div class="stat"><span class="n">${DATA.rfcs.filter(r=>r.status==='Draft').length}</span><span class="l">RFCs open</span></div>
   <div class="stat"><span class="n">${DATA.bugs.filter(b=>b.status==='Open').length}</span><span class="l">Bugs open</span></div>

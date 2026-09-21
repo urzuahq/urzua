@@ -59,7 +59,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     let (exec2, findings2) = crate::gate::gated(
         &config,
         rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-        || rules::supersession_reciprocity(&records),
+        || rules::supersession_reciprocity(&records, &config),
     );
     let mut findings = findings1;
     findings.extend(findings2);
@@ -80,10 +80,12 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         ReportStatus::FindingsPresent
     };
 
+    let rules_executed = vec![exec1, exec2];
     let report = CheckReport {
         status,
         files_examined: records.len(),
-        rules_executed: vec![exec1, exec2],
+        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule(&rules_executed),
+        rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),
             record_types: config.record_types.keys().cloned().collect(),

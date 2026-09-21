@@ -8,8 +8,8 @@ use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{
-    census, Finding, FindingSeverity, Outcome, Population, PopulationUnit, RuleExecution,
-    RuleScope, RuleStatus,
+    census, census_records, Finding, FindingSeverity, Outcome, Population, PopulationUnit,
+    RuleExecution, RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
@@ -80,13 +80,16 @@ pub fn header_required_fields(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
+    // Record-scoped findings -- an unparsed header, a duplicated key -- are
+    // about the record, not about any one slot, so they are emitted once per
+    // record. Decision 1's rule against reporting on a candidate you did not
+    // examine governs *per-slot* findings; a record-scoped finding explaining
+    // why its slots are unreadable is the opposite of a contradiction.
     for record in records {
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
         };
-        examined += 1;
 
         if record.header.region.is_none() {
             let detail = match &record.header.parse_error {
@@ -116,9 +119,32 @@ pub fn header_required_fields(
                 message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
             });
         }
+    }
 
-        for field in required {
-            if record.header.get(field).is_none() {
+    // The population is the declared slot: one `(record, required field)` pair
+    // per field the record's type declares.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            required_by_type
+                .get(&record.record_type)
+                .map(|required| (record, required))
+        })
+        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
+        .collect();
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            // An unparsed header leaves every slot of that record unreadable: the
+            // rule was handed them and could not judge them. The record-scoped
+            // finding above says why.
+            if record.header.region.is_none() {
+                return Outcome::NotExamined;
+            }
+            if record.header.get(field.as_str()).is_none() {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -131,16 +157,16 @@ pub fn header_required_fields(
                     ),
                 });
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -162,29 +188,32 @@ pub fn header_layout_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_LAYOUT_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     // Eligible: records of a type that declares a layout. A type declaring
     // none puts its records outside this rule's population -- the rule does not
     // apply. A record whose header yields no detectable layout IS in the
     // population and simply was not judged, which `eligible > examined` says
     // and a bare count could not.
-    let eligible = records
+    let candidates: Vec<&Record> = records
         .iter()
         .filter(|r| declared_by_type.contains_key(&r.record_type))
-        .count();
-    for record in records {
-        let Some(&declared) = declared_by_type.get(&record.record_type) else {
-            continue;
-        };
-        let Some(actual) = record.header.layout() else {
-            continue;
-        };
-        examined += 1;
+        .collect();
 
-        if actual != declared {
-            let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
-            findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(&declared) = declared_by_type.get(&record.record_type) else {
+                return Outcome::NotExamined;
+            };
+            let Some(actual) = record.header.layout() else {
+                return Outcome::NotExamined;
+            };
+
+            if actual != declared {
+                let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
+                findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Warning,
                 file: record.path.clone(),
@@ -195,16 +224,17 @@ pub fn header_layout_consistency(
                     record.record_type
                 ),
             });
-        }
-    }
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -233,31 +263,34 @@ pub fn header_field_set_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_FIELD_SET_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     // Eligible: records of a type declaring `known_fields`. An unparsed header
     // stays eligible and unexamined (BUG-78) rather than vanishing.
-    let eligible = records
+    let candidates: Vec<&Record> = records
         .iter()
         .filter(|r| allowed_by_type.contains_key(&r.record_type))
-        .count();
-    for record in records {
-        let Some(allowed) = allowed_by_type.get(&record.record_type) else {
-            continue;
-        };
-        // A record whose header region never parsed has an empty field list,
-        // which is indistinguishable here from a record whose fields are all
-        // allowed. Counting it as examined inflated the one signal ADR-55 makes
-        // load-bearing; `header.required-fields` reports the unparsed header
-        // (BUG-78).
-        if record.header.region.is_none() || record.header.parse_error.is_some() {
-            continue;
-        }
-        examined += 1;
+        .collect();
 
-        for field in &record.header.fields {
-            if !allowed.contains(&field.key.to_ascii_lowercase()) {
-                findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(allowed) = allowed_by_type.get(&record.record_type) else {
+                return Outcome::NotExamined;
+            };
+            // A record whose header region never parsed has an empty field list,
+            // which is indistinguishable here from a record whose fields are all
+            // allowed. Counting it as examined inflated the one signal ADR-55 makes
+            // load-bearing; `header.required-fields` reports the unparsed header
+            // (BUG-78).
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::NotExamined;
+            }
+
+            for field in &record.header.fields {
+                if !allowed.contains(&field.key.to_ascii_lowercase()) {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
                     file: record.path.clone(),
@@ -268,17 +301,18 @@ pub fn header_field_set_consistency(
                         field.key, record.record_type
                     ),
                 });
+                }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -349,9 +383,8 @@ pub fn type_record_outside_declared_dir(
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(Population::of(PopulationUnit::Path, examined, examined)),
-            records_examined: examined,
-            scope: RuleScope::Paths,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -423,9 +456,8 @@ pub fn type_dir_matches_nothing(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -467,9 +499,8 @@ pub fn type_no_declared_spec(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -518,9 +549,8 @@ pub fn header_deprecated_shape(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -652,9 +682,8 @@ pub fn config_pointer_declaration_missing(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -722,9 +751,8 @@ pub fn config_pointer_field_not_known(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -781,9 +809,8 @@ pub fn config_pointer_narrative_overlap(
                 config.record_types.len(),
                 examined,
             )),
-            records_examined: examined,
-            scope: RuleScope::Config,
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -806,7 +833,21 @@ pub(crate) fn build_normalized_index(records: &[Record]) -> HashMap<String, &Rec
 pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_IDENTITY_COLLISION;
     let (_, collisions) = build_index_reporting_collisions(records);
-    let examined = records.iter().filter(|r| record_id(r).is_some()).count();
+
+    // A record whose filename yields no identifier is eligible and unexamined:
+    // it was handed to the rule, and the rule has no identity to collide.
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        records.iter().collect(),
+        |record| record.path.clone(),
+        |record| {
+            if record_id(record).is_some() {
+                Outcome::Examined
+            } else {
+                Outcome::NotExamined
+            }
+        },
+    );
 
     let mut findings = Vec::new();
     for (id, claimants) in collisions {
@@ -834,14 +875,9 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::Record,
-                records.len(),
-                examined,
-            )),
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -902,28 +938,43 @@ pub fn pointer_target_status(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_TARGET_STATUS;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let index = build_normalized_index(records);
 
-    for record in records {
-        let fields = pointer_fields_by_type
-            .get(&record.record_type)
-            .into_iter()
-            .flatten()
-            .chain(
-                narrative_fields_by_type
-                    .get(&record.record_type)
-                    .into_iter()
-                    .flatten(),
-            );
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
-                continue;
-            };
-            examined += 1;
+    // Declared slots: every pointer or narrative field the record's type
+    // declares, whether or not the record wrote it. A slot left unwritten is
+    // eligible and unexamined -- handed to the rule and not judged.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .flat_map(|record| {
+            pointer_fields_by_type
+                .get(&record.record_type)
+                .into_iter()
+                .flatten()
+                .chain(
+                    narrative_fields_by_type
+                        .get(&record.record_type)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(move |field| (record, field))
+        })
+        .collect();
 
-            for reference in extract_references(value) {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
+            };
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::NotExamined;
+            }
+
+            for reference in references {
                 let Some(target) = index.get(&normalize_id(&reference)) else {
                     continue;
                 };
@@ -941,16 +992,16 @@ pub fn pointer_target_status(
                     });
                 }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -963,28 +1014,43 @@ pub fn pointer_resolution(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_RESOLUTION;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let index = build_normalized_index(records);
 
-    for record in records {
-        let fields = pointer_fields_by_type
-            .get(&record.record_type)
-            .into_iter()
-            .flatten()
-            .chain(
-                narrative_fields_by_type
-                    .get(&record.record_type)
-                    .into_iter()
-                    .flatten(),
-            );
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
-                continue;
-            };
-            examined += 1;
+    // Declared slots: every pointer or narrative field the record's type
+    // declares, whether or not the record wrote it. A slot left unwritten is
+    // eligible and unexamined -- handed to the rule and not judged.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .flat_map(|record| {
+            pointer_fields_by_type
+                .get(&record.record_type)
+                .into_iter()
+                .flatten()
+                .chain(
+                    narrative_fields_by_type
+                        .get(&record.record_type)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(move |field| (record, field))
+        })
+        .collect();
 
-            for reference in extract_references(value) {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
+            };
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::NotExamined;
+            }
+
+            for reference in references {
                 if index.contains_key(&normalize_id(&reference)) {
                     continue;
                 }
@@ -999,16 +1065,16 @@ pub fn pointer_resolution(
                     ),
                 });
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1037,22 +1103,32 @@ pub fn header_pointer_field_clean(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_POINTER_FIELD_CLEAN;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let clean_fields_by_type = fields_with_capability(config, |k| k.enforce_clean_format);
 
-    for record in records {
-        let Some(fields) = clean_fields_by_type.get(&record.record_type) else {
-            continue;
-        };
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
-                continue;
-            };
-            examined += 1;
+    // Declared slots: a field the type says carries clean references. A slot
+    // the record did not write is eligible and unexamined -- handed to the rule
+    // and not judged -- rather than outside its population.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            clean_fields_by_type
+                .get(&record.record_type)
+                .map(|fields| (record, fields))
+        })
+        .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
+        .collect();
 
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
+            };
             if value.trim() == "—" {
-                continue;
+                return Outcome::Examined;
             }
 
             for entry in value.split(',') {
@@ -1079,16 +1155,16 @@ pub fn header_pointer_field_clean(
                     });
                 }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1113,24 +1189,38 @@ pub fn narrative_field_stale(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_NARRATIVE_FIELD_STALE;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let narrative_fields_by_type = fields_with_capability(config, |k| k.check_target_staleness);
     let index = build_normalized_index(records);
 
-    for record in records {
-        let Some(fields) = narrative_fields_by_type.get(&record.record_type) else {
-            continue;
-        };
-        for field_name in fields {
-            let Some(value) = record.header.get(field_name) else {
-                continue;
+    // Declared narrative slots. A slot the record did not write, or wrote as
+    // prose yielding no reference, is eligible and unexamined: BUG-39 was the
+    // extractor silently returning nothing on prose, and its fix was verified
+    // by watching this count move from 7 to 8. Counting a slot as examined
+    // merely because it is present would pin the number and retire the
+    // instrument that measured that fix.
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            narrative_fields_by_type
+                .get(&record.record_type)
+                .map(|fields| (record, fields))
+        })
+        .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
+        .collect();
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::NotExamined;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                continue;
+                return Outcome::NotExamined;
             }
-            examined += 1;
 
             for reference in references {
                 let Some(target) = index.get(&normalize_id(&reference)) else {
@@ -1152,16 +1242,16 @@ pub fn narrative_field_stale(
                     });
                 }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1301,35 +1391,37 @@ pub fn field_pending(
         .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field)| {
-        if classify(record.header.get(field.as_str())) == FieldState::Pending {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!("field '{field}' is marked pending -- work declared unfinished"),
-            });
-        }
-        Outcome::Examined
-    });
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            // Unreadable, not absent -- the same reason as `field.quality`.
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::NotExamined;
+            }
+            if classify(record.header.get(field.as_str())) == FieldState::Pending {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "field '{field}' is marked pending -- work declared unfinished"
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            // Records, not slots. `population` names the field-slot count in
-            // its own unit; `records_examined` is documented as authoritative
-            // and record-shaped until every rule is converted, and changing
-            // its unit here made one entry contradict itself -- `6` beside
-            // `scope: records` on a two-record corpus.
-            records_examined: records
-                .iter()
-                .filter(|r| required_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1406,52 +1498,69 @@ pub fn claim_status_agreement(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let index = build_normalized_index(records);
     // Present tense only: a claim is written in the present, while prose
     // *about* a past claim is written in the past. A narrowing, not a fix --
     // a present-tense sentence discussing a claim still matches.
-    // Counted per record resolved against, not per claim file read: this field
-    // exists to say how many *records* a rule examined, and counting inputs
-    // made it exceed the size of the corpus while saying nothing about records
-    // (BUG-89).
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut occurrences: Vec<(&String, usize, String, String)> = Vec::new();
     for (path, content) in claims {
         for (idx, line) in content.lines().enumerate() {
             for reference in claimed_closed(line) {
                 let normalized = normalize_id(&reference);
-                let Some(target) = index.get(&normalized) else {
-                    continue;
-                };
-                if seen.insert(normalized) {
-                    examined += 1;
-                }
-                let status = target.header.get("Status").unwrap_or("(no Status field)");
-                if closed_statuses.iter().any(|s| s == status) {
-                    continue;
-                }
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: PathBuf::from(path),
-                    line: Some(idx + 1),
-                    waived: None,
-                    message: format!(
-                        "claims to close {reference}, but {reference} has Status {status}"
-                    ),
-                });
+                occurrences.push((path, idx + 1, reference, normalized));
             }
         }
+    }
+
+    // One candidate per *distinct* claimed reference, deduped the same way the
+    // verdict is: two changesets closing one record are one thing to judge.
+    // Counting occurrences instead made the number exceed the corpus while
+    // saying nothing about records (BUG-90).
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let candidates: Vec<&str> = occurrences
+        .iter()
+        .map(|(_, _, _, normalized)| normalized.as_str())
+        .filter(|normalized| seen.insert(normalized))
+        .collect();
+
+    // A claimed reference resolving to no record is eligible and unexamined --
+    // the claim was made and the engine could not judge it. It was a bare
+    // `continue` that moved no number.
+    let population = census(PopulationUnit::Claim, candidates, |normalized| {
+        if index.contains_key(*normalized) {
+            Outcome::Examined
+        } else {
+            Outcome::NotExamined
+        }
+    });
+
+    // Findings are per occurrence, not per candidate: each place the claim is
+    // written is its own thing to correct.
+    for (path, line, reference, normalized) in occurrences {
+        let Some(target) = index.get(&normalized) else {
+            continue;
+        };
+        let status = target.header.get("Status").unwrap_or("(no Status field)");
+        if closed_statuses.iter().any(|s| s == status) {
+            continue;
+        }
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Error,
+            file: PathBuf::from(path),
+            line: Some(line),
+            waived: None,
+            message: format!("claims to close {reference}, but {reference} has Status {status}"),
+        });
     }
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records: Vec::new(),
         },
         findings,
     )
@@ -1467,9 +1576,8 @@ pub fn field_quality(
     // The population is the declared slot: one `(record, required field)` pair
     // per field the record's *type* declares. Built here, before the rule runs,
     // so `eligible` is this list's length and cannot disagree with what the
-    // body does. On this repository that is 1023 -- which is what
-    // `records_examined` has been reporting against a 307-record corpus
-    // (`BUG-40`), correct all along and labelled as something it was not.
+    // body does. It is far larger than the record count and always was
+    // (`BUG-40`); the unit is what makes that legible rather than alarming.
     let slots: Vec<(&Record, &String)> = records
         .iter()
         .filter_map(|record| {
@@ -1480,42 +1588,45 @@ pub fn field_quality(
         .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
         .collect();
 
-    let population = census(PopulationUnit::Field, slots, |(record, field)| {
-        let state = classify(record.header.get(field.as_str()));
-        // `Pending` is `field.pending`'s subject, not this rule's: it means
-        // someone declared the work unfinished, where Blank and Placeholder
-        // mean someone forgot. One rule carries one declared level, so
-        // keeping both here left no setting that was correct (BUG-38).
-        if matches!(state, FieldState::Blank | FieldState::Placeholder) {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!("field '{field}' is {state:?} -- not a real, present value"),
-            });
-        }
-        // Every declared slot is judged: `classify(None)` is a real verdict,
-        // not an absence.
-        Outcome::Examined
-    });
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            // Unreadable, not absent: the header did not parse, so this slot
+            // has no value to classify. Calling it Blank reports something
+            // untrue about a file that may well set the field, and a rule whose
+            // `examined` can never fall short of `eligible` can never be caught
+            // not looking (ADR-55). `header.required-fields` reports the parse
+            // error itself, once per record rather than once per slot.
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::NotExamined;
+            }
+            let state = classify(record.header.get(field.as_str()));
+            // `Pending` is `field.pending`'s subject, not this rule's: it means
+            // someone declared the work unfinished, where Blank and Placeholder
+            // mean someone forgot. One rule carries one declared level, so
+            // keeping both here left no setting that was correct (BUG-38).
+            if matches!(state, FieldState::Blank | FieldState::Placeholder) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!("field '{field}' is {state:?} -- not a real, present value"),
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
             population: Some(population),
-            // Records, not slots. `population` names the field-slot count in
-            // its own unit; `records_examined` is documented as authoritative
-            // and record-shaped until every rule is converted, and changing
-            // its unit here made one entry contradict itself -- `6` beside
-            // `scope: records` on a two-record corpus.
-            records_examined: records
-                .iter()
-                .filter(|r| required_by_type.contains_key(&r.record_type))
-                .count(),
-            scope: RuleScope::Records,
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1530,38 +1641,40 @@ pub fn filename_title_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_FILENAME_TITLE_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
-        let Some(filename_number) = filename_number(record) else {
-            continue;
-        };
-        let Some(content) = full_text.get(&record.path) else {
-            continue;
-        };
-        examined += 1;
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        records.iter().collect(),
+        |record| record.path.clone(),
+        |record| {
+            let Some(filename_number) = filename_number(record) else {
+                return Outcome::NotExamined;
+            };
+            let Some(content) = full_text.get(&record.path) else {
+                return Outcome::NotExamined;
+            };
 
-        let mut push = |line: Option<usize>, message: String| {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line,
-                waived: None,
-                message,
-            });
-        };
+            let mut push = |line: Option<usize>, message: String| {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line,
+                    waived: None,
+                    message,
+                });
+            };
 
-        // Skipping instead would drop a record the rule was asked about.
-        let Ok(filename_number) = filename_number.parse::<u64>() else {
-            push(
-                None,
-                format!("filename number {filename_number} is too large to compare"),
-            );
-            continue;
-        };
+            // Skipping instead would drop a record the rule was asked about.
+            let Ok(filename_number) = filename_number.parse::<u64>() else {
+                push(
+                    None,
+                    format!("filename number {filename_number} is too large to compare"),
+                );
+                return Outcome::Examined;
+            };
 
-        match first_h1(content, record.header.region) {
+            match first_h1(content, record.header.region) {
             None => push(
                 None,
                 "no H1 title found to check against the filename's number".to_string(),
@@ -1584,19 +1697,16 @@ pub fn filename_title_consistency(
                 Some(_) => {}
             },
         }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::Record,
-                records.len(),
-                examined,
-            )),
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1716,27 +1826,30 @@ pub fn revision_log_change_class(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     // Every record is eligible. A record with no `**Revision log**` marker is
     // *absent* from this rule's judgement, not outside its population -- and
     // absence is exactly what BUG-50 reports as indistinguishable from
     // compliance: SPEC-1 lost 18 revision rows by losing one line and the rule
     // stayed green. The subtraction the report could not perform is now in it.
-    let eligible = records.len();
-    for record in records {
-        let Some(content) = full_text.get(&record.path) else {
-            continue;
-        };
-        let Some(entries) = find_revision_log_entries(content) else {
-            continue;
-        };
-        examined += 1;
+    let candidates: Vec<&Record> = records.iter().collect();
 
-        for entry in entries {
-            let class = entry.change_class.trim_matches('*').trim();
-            if !matches!(class, "substantive" | "structural") {
-                findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(content) = full_text.get(&record.path) else {
+                return Outcome::NotExamined;
+            };
+            let Some(entries) = find_revision_log_entries(content) else {
+                return Outcome::NotExamined;
+            };
+
+            for entry in entries {
+                let class = entry.change_class.trim_matches('*').trim();
+                if !matches!(class, "substantive" | "structural") {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
@@ -1747,17 +1860,18 @@ pub fn revision_log_change_class(
                         entry.date, entry.change_class
                     ),
                 });
+                }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Record, eligible, examined)),
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1884,6 +1998,34 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
     }
 }
 
+/// The records whose type declares *every* named field, as the rule's
+/// candidate slots. A rule needing two fields takes the pair as one candidate,
+/// so a record carrying only one of them is eligible and unexamined rather
+/// than outside the population.
+///
+/// Declared means `required_fields` **or** `known_fields`: the latter is
+/// documented as the fields a type carries *beyond* the former, so reading it
+/// alone silently drops every type that requires the field instead of merely
+/// permitting it. `config.pointer-field-not-known` already unions the two.
+fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -> Vec<&'a Record> {
+    records
+        .iter()
+        .filter(|record| {
+            config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| {
+                    fields.iter().all(|wanted| {
+                        t.required_fields
+                            .iter()
+                            .chain(t.known_fields.iter().flatten())
+                            .any(|declared| declared == wanted)
+                    })
+                })
+        })
+        .collect()
+}
+
 /// A `Realized-by` locator naming a path that is not in the working tree.
 ///
 /// `Embodiment` is computed from these paths, so a locator naming nothing lets
@@ -1894,60 +2036,68 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
 /// filesystem.
 pub fn embodiment_locator_exists(
     records: &[Record],
+    config: &Config,
     present: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
-        let Some(value) = record.header.get("Realized-by") else {
-            continue;
-        };
-        // One per record, not per locator: `records_examined` is the rule's
-        // input population, not its work count.
-        examined += 1;
-        let realized = parse_realized_by(value);
-        for locator in realized
-            .spec
-            .iter()
-            .chain(&realized.code)
-            .chain(&realized.test)
-        {
-            // An empty locator joins to the repository root, which exists --
-            // so it would pass while still computing to `Implemented`.
-            if locator.trim().is_empty() {
+    // One candidate per declared slot, not per locator: the population is the
+    // rule's input, not its work count.
+    let slots = declared_slots(records, config, &["Realized-by"]);
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(value) = record.header.get("Realized-by") else {
+                return Outcome::NotExamined;
+            };
+            let realized = parse_realized_by(value);
+            for locator in realized
+                .spec
+                .iter()
+                .chain(&realized.code)
+                .chain(&realized.test)
+            {
+                // An empty locator joins to the repository root, which exists --
+                // so it would pass while still computing to `Implemented`.
+                if locator.trim().is_empty() {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: "Realized-by has an empty locator".to_string(),
+                    });
+                    continue;
+                }
+                if present(locator) {
+                    continue;
+                }
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
                     line: None,
                     waived: None,
-                    message: "Realized-by has an empty locator".to_string(),
+                    message: format!(
+                        "Realized-by names '{locator}', which is not in the working tree"
+                    ),
                 });
-                continue;
             }
-            if present(locator) {
-                continue;
-            }
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!("Realized-by names '{locator}', which is not in the working tree"),
-            });
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -1957,54 +2107,62 @@ pub fn embodiment_locator_exists(
 /// what its own `Realized-by` locators compute to, including drift -- a
 /// locator that changed, per git history, since the `Realized-by` line was
 /// last touched. Both `Embodiment` and `Realized-by` have to be present --
-/// a record with no `Realized-by` at all has nothing for this rule to check
-/// yet, which is a real, expected `records_examined: 0` on a corpus that
-/// hasn't adopted the field, not a defect in the rule. `drifted` is
+/// a record with no `Realized-by` at all is eligible and unexamined on a
+/// corpus that hasn't adopted the field, not a defect in the rule. `drifted` is
 /// precomputed by the caller (git history is I/O, this function isn't --
 /// same shape as `full_text` elsewhere in this module).
 pub fn embodiment_consistency(
     records: &[Record],
+    config: &Config,
     drifted: &HashSet<PathBuf>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
-        let Some(stated) = record.header.get("Embodiment") else {
-            continue;
-        };
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
-            continue;
-        };
-        examined += 1;
+    // The candidate is the *pair*: the rule needs both fields, so a record
+    // carrying only one of them is handed to the rule and reaches no verdict.
+    // Treating each field as its own slot would make that state unreportable.
+    let slots = declared_slots(records, config, &["Embodiment", "Realized-by"]);
 
-        let computed = compute_embodiment(
-            &parse_realized_by(realized_by_value),
-            drifted.contains(&record.path),
-        );
-        if stated.trim() != computed {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                message: format!(
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(stated) = record.header.get("Embodiment") else {
+                return Outcome::NotExamined;
+            };
+            let Some(realized_by_value) = record.header.get("Realized-by") else {
+                return Outcome::NotExamined;
+            };
+
+            let computed = compute_embodiment(
+                &parse_realized_by(realized_by_value),
+                drifted.contains(&record.path),
+            );
+            if stated.trim() != computed {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
                     "stated Embodiment '{}' disagrees with '{computed}', computed from Realized-by",
                     stated.trim()
                 ),
-            });
-        }
-    }
+                });
+            }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2015,38 +2173,50 @@ pub fn embodiment_consistency(
 /// drift independently on what is really one piece of shared evidence (the
 /// ADR-0072/0073/0074 shape RFC-0005 names). Reports only; a human runs the
 /// actual promotion into a `claim` record, never this rule.
-pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+pub fn embodiment_locator_promotion_candidate(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut citers: std::collections::BTreeMap<
         String,
         std::collections::BTreeSet<std::path::PathBuf>,
     > = std::collections::BTreeMap::new();
-    for record in records {
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
-            continue;
-        };
-        examined += 1;
 
-        let parsed = parse_realized_by(realized_by_value);
-        for locator in parsed
-            .spec
-            .iter()
-            .chain(parsed.code.iter())
-            .chain(parsed.test.iter())
-        {
-            // A BTreeSet, not a Vec: the same record citing one locator
-            // under both `code:` and `test:` is still one record, not two
-            // independent citers -- cross-record duplication is what needs
-            // promotion, not cross-category duplication within one record.
-            citers
-                .entry(locator.clone())
-                .or_default()
-                .insert(record.path.clone());
-        }
-    }
+    let slots = declared_slots(records, config, &["Realized-by"]);
+
+    // Findings are emitted after the census, not inside it: this rule judges
+    // locators across records, so no single candidate is at fault.
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(realized_by_value) = record.header.get("Realized-by") else {
+                return Outcome::NotExamined;
+            };
+
+            let parsed = parse_realized_by(realized_by_value);
+            for locator in parsed
+                .spec
+                .iter()
+                .chain(parsed.code.iter())
+                .chain(parsed.test.iter())
+            {
+                // A BTreeSet, not a Vec: the same record citing one locator
+                // under both `code:` and `test:` is still one record, not two
+                // independent citers -- cross-record duplication is what needs
+                // promotion, not cross-category duplication within one record.
+                citers
+                    .entry(locator.clone())
+                    .or_default()
+                    .insert(record.path.clone());
+            }
+            Outcome::Examined
+        },
+    );
 
     for (locator, paths) in citers {
         if paths.len() < 2 {
@@ -2071,10 +2241,9 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2084,10 +2253,13 @@ pub fn embodiment_locator_promotion_candidate(records: &[Record]) -> (RuleExecut
 /// the forward claim leaves the reverse unguarded -- a record can claim to
 /// supersede something that doesn't reciprocally point back, sending a
 /// reader of the *target* to a record that denies the relation.
-pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+pub fn supersession_reciprocity(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
+    const FIELD: &str = "Supersedes / Superseded-by";
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut index: HashMap<String, &Record> = HashMap::new();
     for record in records {
@@ -2096,22 +2268,45 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
         }
     }
 
-    for record in records {
-        let Some(id) = record_id(record) else {
-            continue;
-        };
-        let normalized_id = normalize_id(&id);
-        let Some(value) = record.header.get("Supersedes / Superseded-by") else {
-            continue;
-        };
-        if value.trim() == "—" {
-            continue;
-        }
-        examined += 1;
+    // A record whose filename yields no id is eligible but unexaminable: the
+    // reciprocity test is "does the target name *me* back", which needs an id.
+    let slots: Vec<&Record> = records
+        .iter()
+        .filter(|record| {
+            config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| {
+                    t.required_fields
+                        .iter()
+                        .chain(t.known_fields.iter().flatten())
+                        .any(|f| f == FIELD)
+                })
+        })
+        .collect();
 
-        for reference in extract_references(value) {
-            let Some(target) = index.get(&normalize_id(&reference)) else {
-                findings.push(Finding {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |record| record.path.clone(),
+        |record| {
+            let Some(id) = record_id(record) else {
+                return Outcome::NotExamined;
+            };
+            let normalized_id = normalize_id(&id);
+            let Some(value) = record.header.get(FIELD) else {
+                return Outcome::NotExamined;
+            };
+            // `—` is this corpus's written "nothing supersedes this", so the slot
+            // was answered. Skipping before counting left the reciprocating half of
+            // a correct pair uncounted.
+            if value.trim() == "—" {
+                return Outcome::Examined;
+            }
+
+            for reference in extract_references(value) {
+                let Some(target) = index.get(&normalize_id(&reference)) else {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
@@ -2119,17 +2314,17 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
  waived: None,
                     message: format!("Supersedes/Superseded-by: {reference} does not resolve to any discovered record"),
                 });
-                continue;
-            };
-            let target_value = target
-                .header
-                .get("Supersedes / Superseded-by")
-                .unwrap_or("");
-            let target_names_back = extract_references(target_value)
-                .iter()
-                .any(|r| normalize_id(r) == normalized_id);
-            if !target_names_back {
-                findings.push(Finding {
+                    continue;
+                };
+                let target_value = target
+                    .header
+                    .get("Supersedes / Superseded-by")
+                    .unwrap_or("");
+                let target_names_back = extract_references(target_value)
+                    .iter()
+                    .any(|r| normalize_id(r) == normalized_id);
+                if !target_names_back {
+                    findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
                     file: record.path.clone(),
@@ -2139,17 +2334,18 @@ pub fn supersession_reciprocity(records: &[Record]) -> (RuleExecution, Vec<Findi
                         "claims a Supersedes/Superseded-by relation with {reference}, but {reference} does not reciprocally name {id}"
                     ),
                 });
+                }
             }
-        }
-    }
+            Outcome::Examined
+        },
+    );
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: None,
-            records_examined: examined,
-            scope: RuleScope::Records,
+            population: Some(population),
             status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -2218,7 +2414,16 @@ mod tests {
 
         let (exec, findings) =
             narrative_field_stale(&[blocked, target], &config, &["Ratified".to_string()]);
-        assert_eq!(exec.records_examined, 1, "the rule must reach a verdict");
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.unit(), PopulationUnit::Field);
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(
+            population.examined(),
+            1,
+            "only DEC-1 wrote the slot, so only DEC-1 reaches a verdict"
+        );
         assert_eq!(findings.len(), 1, "DEC-2 is terminal by declaration");
         assert!(findings[0].message.contains("DEC-2"));
     }
@@ -2240,9 +2445,11 @@ mod tests {
                 .collect::<HashSet<String>>(),
         );
         let (exec, _) = header_field_set_consistency(&[r], &allowed);
+        let population = exec.population.expect("the rule carries a population");
         assert_eq!(
-            exec.records_examined, 0,
-            "the rule never saw this record's fields"
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "the record is in the population and the rule never saw its fields"
         );
     }
 
@@ -2271,7 +2478,7 @@ mod tests {
         );
 
         let (exec, findings) = header_required_fields(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Deciders"));
     }
@@ -2292,7 +2499,12 @@ mod tests {
         required.insert("adr".to_string(), vec!["Status".to_string()]);
 
         let (exec, findings) = header_required_fields(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "the declared slot survives a header that did not parse, unjudged"
+        );
         assert_eq!(findings.len(), 1);
         assert!(
             findings[0].message.contains("YAML parse error"),
@@ -2315,7 +2527,7 @@ mod tests {
         );
 
         let (exec, findings) = header_required_fields(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -2350,7 +2562,7 @@ mod tests {
         declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("one-per-line"));
         assert!(findings[0].message.contains("pipe-delimited"));
@@ -2367,7 +2579,7 @@ mod tests {
         declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2377,7 +2589,7 @@ mod tests {
         let declared = HashMap::new();
 
         let (exec, findings) = header_layout_consistency(&[r], &declared);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -2398,7 +2610,7 @@ mod tests {
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Sponsor"));
     }
@@ -2417,7 +2629,7 @@ mod tests {
         );
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2427,7 +2639,7 @@ mod tests {
         let allowed = HashMap::new();
 
         let (exec, findings) = header_field_set_consistency(&[r], &allowed);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -2464,6 +2676,113 @@ mod tests {
     /// Full builder for the config-level pointer/narrative-field validation
     /// tests (MILE-90) -- the two helpers above default both new fields to
     /// `None`, which isn't useful for testing them directly.
+    #[test]
+    fn a_slot_behind_an_unparsed_header_is_not_judged_and_not_reported_on() {
+        // The record plainly sets `Status`, and the header does not parse, so
+        // the rule cannot read either slot. Calling both Blank reports
+        // something untrue about the file, and pinning `examined` to `eligible`
+        // makes the rule invisible to the one check ADR-55 asks for: a rule
+        // whose population can never show a gap can never be caught not
+        // looking. `header.required-fields` reports the parse error itself.
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: Accepted\n  Date  :: nope\n---\n",
+        );
+        let mut required = HashMap::new();
+        required.insert(
+            "adr".to_string(),
+            vec!["Status".to_string(), "Date".to_string()],
+        );
+
+        let (exec, findings) = field_quality(&[r.clone()], &required);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (2, 0),
+            "both declared slots are unreadable, not judged"
+        );
+        assert!(
+            findings.is_empty(),
+            "no finding about a slot the rule could not read: {findings:?}"
+        );
+
+        let (exec, findings) = field_pending(&[r], &required);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!((population.eligible(), population.examined()), (2, 0));
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// What the rule judged, per its own census. A planted test asserts the
+    /// rule *looked* -- a finding's absence alone is the ADR-55 defect.
+    fn examined(exec: &RuleExecution) -> usize {
+        exec.population
+            .as_ref()
+            .expect("every rule carries a population")
+            .examined()
+    }
+
+    #[test]
+    fn a_slot_declared_only_as_required_is_still_a_declared_slot() {
+        // `known_fields` is documented as the fields a type carries *beyond*
+        // `required_fields`, so a type that requires `Realized-by` declares it
+        // just as much as one that lists it as known. Selecting candidates from
+        // `known_fields` alone handed these rules nothing, and a rule handed
+        // nothing reports a clean `eligible: 0` -- the ADR-55 shape.
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
+        );
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&["Embodiment", "Realized-by"], None, None, None),
+        )]);
+
+        let (exec, findings) = embodiment_consistency(&[r], &config, &HashSet::new());
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 1),
+            "the pair is declared, so the record is a candidate the rule judged"
+        );
+        assert_eq!(findings.len(), 1, "Verified disagrees with Implemented");
+    }
+
+    #[test]
+    fn a_supersession_slot_declared_only_as_required_is_still_declared() {
+        let old = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: —\n",
+        );
+        let new = record(
+            "docs/adr/ADR-2-y.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-0001\n",
+        );
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&["Supersedes / Superseded-by"], None, None, None),
+        )]);
+
+        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(findings.len(), 1, "the claim is one-directional");
+    }
+
+    fn embodiment_config() -> Config {
+        config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Embodiment", "Realized-by"]), None, None),
+        )])
+    }
+
     fn type_config_pointer(
         required_fields: &[&str],
         known_fields: Option<&[&str]>,
@@ -2499,7 +2818,7 @@ mod tests {
 
         let (exec, findings) =
             type_no_declared_spec(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("milestone"));
     }
@@ -2516,7 +2835,7 @@ mod tests {
 
         let (exec, findings) =
             type_no_declared_spec(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2535,7 +2854,7 @@ mod tests {
 
         let (exec, findings) =
             header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("adr"));
     }
@@ -2555,7 +2874,7 @@ mod tests {
 
         let (exec, findings) =
             header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2567,7 +2886,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("spec"));
     }
@@ -2580,7 +2899,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2589,7 +2908,7 @@ mod tests {
         let config = config_with_types(vec![("adr", type_config_pointer(&[], None, None, None))]);
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2601,7 +2920,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Feeds-into"));
     }
@@ -2619,7 +2938,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2636,7 +2955,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Blocked-on"));
     }
@@ -2654,7 +2973,7 @@ mod tests {
         )]);
         let (exec, findings) =
             config_pointer_narrative_overlap(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2674,7 +2993,7 @@ mod tests {
             &HashMap::new(),
             &["Draft".to_string()],
         );
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Draft"));
 
@@ -2744,7 +3063,7 @@ mod tests {
             type_config_pointer(&[], None, Some(&["Derives-from"]), None),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("RFC-1 (Accepted)"));
         assert_eq!(findings[0].severity, FindingSeverity::Warning);
@@ -2777,7 +3096,11 @@ mod tests {
             type_config_pointer(&[], None, Some(&["Derives-from", "Parent"]), None),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        assert_eq!(exec.records_examined, 2);
+        // One record; two declared clean-format slots, both written.
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(population.unit(), PopulationUnit::Field);
+        assert_eq!(population.eligible(), 2);
+        assert_eq!(population.examined(), 2);
         assert!(findings.is_empty());
     }
 
@@ -2844,7 +3167,7 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = header_pointer_field_clean(&[r], &config);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -2865,7 +3188,7 @@ mod tests {
         )]);
         let (exec, findings) =
             narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("BUG-3"));
         assert!(findings[0].message.contains("Fixed"));
@@ -2886,7 +3209,7 @@ mod tests {
         )]);
         let (exec, findings) =
             narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
 
@@ -2902,7 +3225,15 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 0);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 1, "the slot is declared and written");
+        assert_eq!(
+            population.examined(),
+            0,
+            "prose yielding no reference is handed but not judged -- the BUG-39 instrument"
+        );
         assert!(findings.is_empty());
     }
 
@@ -2918,7 +3249,7 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(
             findings.is_empty(),
             "a dangling reference is pointer_resolution's error case, not this rule's"
@@ -2941,7 +3272,7 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
         )]);
         let (exec, findings) = narrative_field_stale(&[bug, rfc], &config, &terminal_for_tests());
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.starts_with("Motivated-by:"));
     }
@@ -3044,7 +3375,7 @@ mod tests {
             "# 37 — Y\n\n> Status: Accepted\n".to_string(),
         );
         let (exec, findings) = filename_title_consistency(&[new_style, legacy_style], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3203,7 +3534,7 @@ mod tests {
         required.insert("adr".to_string(), vec!["Author".to_string()]);
 
         let (exec, findings) = field_quality(&[r], &required);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Placeholder"));
     }
@@ -3220,7 +3551,7 @@ mod tests {
         let closed = vec!["Fixed".to_string()];
 
         let (exec, findings) = claim_status_agreement(&[bug], &claims, &closed);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert_eq!(findings[0].line, Some(1));
@@ -3331,7 +3662,7 @@ mod tests {
         let exists = |d: &str| d == "docs/present";
         let (exec, findings) = type_dir_matches_nothing(&config, &path, &HashMap::new(), &exists);
 
-        assert_eq!(exec.records_examined, 2, "both types are examined");
+        assert_eq!(examined(&exec), 2, "both types are examined");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("docs/absent"), "{findings:?}");
         assert!(!findings[0].message.contains("present"), "{findings:?}");
@@ -3346,23 +3677,25 @@ mod tests {
         );
         let present = |p: &str| p == "src/real.rs";
 
-        let (exec, findings) = embodiment_locator_exists(std::slice::from_ref(&r), &present);
-        // One record, whatever its locator count -- `records_examined` is the
-        // rule's input population, not its work count.
-        assert_eq!(exec.records_examined, 1);
+        let (exec, findings) =
+            embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
+        // One candidate per declared slot, whatever its locator count: the
+        // population is the rule's input, not its work count.
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
 
         // Every locator present means silence, not a rule that cannot fire.
         let all_there = |_: &str| true;
-        let (_, none) = embodiment_locator_exists(std::slice::from_ref(&r), &all_there);
+        let (_, none) =
+            embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &all_there);
         assert!(none.is_empty(), "{none:?}");
 
         // An empty locator names nothing, and the repo root exists -- so it
         // passed a raw existence check while still computing to `Implemented`.
         let empty = record("docs/adr/ADR-2-y.md", "adr", "> Realized-by: code:\n");
-        let (_, findings) = embodiment_locator_exists(&[empty], &all_there);
+        let (_, findings) = embodiment_locator_exists(&[empty], &embodiment_config(), &all_there);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(
             findings[0].message.contains("empty locator"),
@@ -3428,7 +3761,7 @@ mod tests {
         full_text.insert(r.path.clone(), "# 0002 — Wrong Number\n".to_string());
 
         let (exec, findings) = filename_title_consistency(&[r], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains('1'));
         assert!(findings[0].message.contains('2'));
@@ -3441,7 +3774,7 @@ mod tests {
         full_text.insert(r.path.clone(), "# 0001 — Correct\n".to_string());
 
         let (exec, findings) = filename_title_consistency(&[r], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3453,7 +3786,7 @@ mod tests {
         full_text.insert(r.path.clone(), content.to_string());
 
         let (exec, findings) = revision_log_change_class(&[r], &full_text);
-        assert_eq!(exec.records_examined, 1);
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("2026-08-20"));
     }
@@ -3477,7 +3810,7 @@ mod tests {
         full_text.insert(r.path.clone(), content.to_string());
 
         let (exec, findings) = revision_log_change_class(&[r], &full_text);
-        assert_eq!(exec.records_examined, 0);
+        assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
 
@@ -3488,8 +3821,8 @@ mod tests {
             "adr",
             "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
         );
-        let (exec, findings) = embodiment_consistency(&[r], &HashSet::new());
-        assert_eq!(exec.records_examined, 1);
+        let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
+        assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Verified"));
         assert!(findings[0].message.contains("Implemented"));
@@ -3502,7 +3835,7 @@ mod tests {
             "adr",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (_, findings) = embodiment_consistency(&[r], &HashSet::new());
+        let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3527,16 +3860,23 @@ mod tests {
         );
         let mut drifted = HashSet::new();
         drifted.insert(r.path.clone());
-        let (_, findings) = embodiment_consistency(&[r], &drifted);
+        let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &drifted);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Drift detected"));
     }
 
     #[test]
-    fn no_realized_by_field_is_not_examined() {
+    fn a_record_missing_half_the_pair_is_handed_to_the_rule_and_not_judged() {
         let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
-        let (exec, findings) = embodiment_consistency(&[r], &HashSet::new());
-        assert_eq!(exec.records_examined, 0);
+        let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "the type declares both fields, so the record is a candidate that reached no verdict"
+        );
         assert!(findings.is_empty());
     }
 
@@ -3562,8 +3902,9 @@ mod tests {
             "adr",
             "> Realized-by: code:src/shared.rs\n",
         );
-        let (exec, findings) = embodiment_locator_promotion_candidate(&[a, b]);
-        assert_eq!(exec.records_examined, 2);
+        let (exec, findings) =
+            embodiment_locator_promotion_candidate(&[a, b], &embodiment_config());
+        assert_eq!(examined(&exec), 2);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("src/shared.rs"));
     }
@@ -3579,7 +3920,7 @@ mod tests {
             "adr",
             "> Realized-by: code:src/shared.rs, test:src/shared.rs\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a]);
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -3590,7 +3931,7 @@ mod tests {
             "adr",
             "> Realized-by: code:src/a.rs\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a]);
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty());
     }
 
@@ -3609,8 +3950,20 @@ mod tests {
             "> Supersedes / Superseded-by: ADR-0001\n",
         );
 
-        let (exec, findings) = supersession_reciprocity(&[old, new]);
-        assert_eq!(exec.records_examined, 1);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(
+            population.examined(),
+            2,
+            "the reciprocating half answered its slot with the em dash"
+        );
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("ADR-0001"));
     }
@@ -3628,19 +3981,38 @@ mod tests {
             "> Supersedes / Superseded-by: ADR-0001\n",
         );
 
-        let (_, findings) = supersession_reciprocity(&[old, new]);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!((population.eligible(), population.examined()), (2, 2));
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
     #[test]
-    fn an_em_dash_supersession_value_is_not_examined() {
+    fn an_em_dash_supersession_value_answers_its_slot() {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
             "> Supersedes / Superseded-by: —\n",
         );
-        let (exec, findings) = supersession_reciprocity(&[r]);
-        assert_eq!(exec.records_examined, 0);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let (exec, findings) = supersession_reciprocity(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 1),
+            "the em dash is a written answer, not an unfilled slot"
+        );
         assert!(findings.is_empty());
     }
 }

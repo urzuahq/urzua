@@ -29,33 +29,56 @@ pub struct Finding {
     pub waived: Option<String>,
 }
 
-/// One rule's execution record: not just "did it run" but "how many records
-/// did it actually examine." A rule that ran over zero derived input and a
-/// rule that ran cleanly over the whole corpus both report `rulesExecuted`
-/// unless this is tracked separately.
+/// One rule's execution record: not just "did it run" but what it was handed
+/// and what it judged. A rule that ran over zero derived input and a rule that
+/// ran cleanly over the whole corpus both report `rulesExecuted` unless the
+/// population is tracked separately.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RuleExecution {
     pub rule: String,
-    pub records_examined: usize,
-    /// What this rule was handed and what it judged, in a stated unit
-    /// (`BUG-40`). `records_examined` holds three different denominators
-    /// across the rule set -- 1023 of them over a 309-record corpus for
-    /// `field.quality` -- because the unit was never named. `None` while a
-    /// rule is not yet converted; `records_examined` is authoritative until
-    /// every rule carries a population.
+    /// What this rule was handed and what it judged, in a stated unit.
+    ///
+    /// This replaces `records_examined` and `RuleScope`, which were one number
+    /// and a hand-set label for what it counted. The number held three
+    /// different denominators across the rule set -- 1041 of them over a
+    /// 315-record corpus for `field.quality` -- because the unit was named
+    /// beside it rather than carried with it (`BUG-40`), and the label went
+    /// wrong twice on its own (`BUG-81`, `BUG-83`). A unit that travels with
+    /// its count cannot be read as a different unit's.
+    ///
+    /// `None` only when the rule was not enabled, where `status` says so.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub population: Option<Population>,
-    /// What `records_examined` counted. A rule that reads the configuration
-    /// counts declarations, not records, and the two must not be added
-    /// together: a config-scoped count satisfying "some rule examined
-    /// something" let `check` report `Ok` having read no record at all
-    /// (BUG-81).
-    #[serde(default)]
-    pub scope: RuleScope,
     /// ADR-7: a rule a repository did not turn on is reported as deliberately
     /// skipped, never omitted -- "off" and "ran clean" must stay
     /// distinguishable in the report.
     pub status: RuleStatus,
+    /// The records this rule reached a verdict about, for the report's
+    /// `records_read_by_any_rule`. Not serialized: it is an input to one
+    /// top-level number, and per-rule it would be a third denominator beside
+    /// the two the population already carries.
+    ///
+    /// Empty for `RecordType`, `Path` and `Claim` units -- a declaration, a
+    /// filename and an external assertion are not records read.
+    #[serde(skip)]
+    pub examined_records: Vec<PathBuf>,
+}
+
+/// The number of distinct records some rule reached a verdict about.
+///
+/// A union, never a sum: `field.quality` contributing 1041 slots contributes
+/// at most one record each, and populations in different units must never be
+/// added. It is the one number that makes "you get what you declare"
+/// (`ADR-53`) safe to say -- a run whose declared rules could read no record
+/// exits 0 and says so here, rather than the gate inferring a verdict from a
+/// count that meant something different for every rule.
+pub fn records_read_by_any_rule(executed: &[RuleExecution]) -> usize {
+    executed
+        .iter()
+        .filter(|e| e.status == RuleStatus::Ran)
+        .flat_map(|e| e.examined_records.iter())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
 }
 
 /// What a rule's population is counted in. A number without its unit is how
@@ -112,6 +135,32 @@ pub fn census<T>(
         .filter(|c| body(c) == Outcome::Examined)
         .count();
     Population::of(unit, eligible, examined)
+}
+
+/// `census`, also reporting *which* records were judged.
+///
+/// `record_of` names the record a candidate belongs to, so a `Field` rule with
+/// several slots per record still contributes that record once. The returned
+/// list feeds `records_read_by_any_rule` and nothing else; it is derived from
+/// the same pass that produces the population, so the two cannot disagree.
+pub fn census_records<T>(
+    unit: PopulationUnit,
+    candidates: Vec<T>,
+    record_of: impl Fn(&T) -> PathBuf,
+    mut body: impl FnMut(&T) -> Outcome,
+) -> (Population, Vec<PathBuf>) {
+    let eligible = candidates.len();
+    let mut examined_records = Vec::new();
+    let mut examined = 0;
+    for candidate in &candidates {
+        if body(candidate) == Outcome::Examined {
+            examined += 1;
+            examined_records.push(record_of(candidate));
+        }
+    }
+    examined_records.sort();
+    examined_records.dedup();
+    (Population::of(unit, eligible, examined), examined_records)
 }
 
 /// A rule's input population: what it was eligible to examine, and what it
@@ -176,20 +225,6 @@ pub enum RuleStatus {
     NotEnabled,
 }
 
-/// Whether a rule's examined count refers to corpus records or to
-/// configuration entries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum RuleScope {
-    #[default]
-    Records,
-    Config,
-    /// Tracked path names, examined without opening a file. Neither a corpus
-    /// record nor a configuration entry: counting it as a record let a rule
-    /// that never parsed anything certify the corpus (BUG-83).
-    Paths,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReportStatus {
@@ -222,6 +257,13 @@ pub struct ScopeInfo {
 pub struct CheckReport {
     pub status: ReportStatus,
     pub files_examined: usize,
+    /// How many records some rule actually reached a verdict about
+    /// ([`records_read_by_any_rule`]). `files_examined` says what was read off
+    /// disk; this says what was judged, and the gap between them is a run whose
+    /// declared rules could not address the corpus (`BUG-61`). The verdict
+    /// deliberately does not read it -- what gets checked is the adopter's call
+    /// (`ADR-53`) -- but no reader takes `0` here for a clean corpus.
+    pub records_read_by_any_rule: usize,
     pub rules_executed: Vec<RuleExecution>,
     pub scope: ScopeInfo,
     pub blocking: bool,
@@ -446,6 +488,69 @@ impl Report for MigrateSchemaReport {
 #[cfg(test)]
 mod tests {
 
+    /// `Population` implements no `Add`, so the compiler refuses the obvious
+    /// mistake outright.
+    ///
+    /// ```compile_fail
+    /// use urzua_core::report::{Population, PopulationUnit};
+    /// let a = Population::of(PopulationUnit::Field, 1041, 1041);
+    /// let b = Population::of(PopulationUnit::Record, 315, 315);
+    /// let _ = a + b;
+    /// ```
+    #[test]
+    fn a_total_across_units_is_a_union_of_records_never_a_sum_of_populations() {
+        // 1041 field slots and 315 records are the same 315 records counted
+        // twice in different units. Adding the columns is how `records_examined`
+        // came to report a number larger than the corpus (`BUG-90`), and the
+        // accessors still make it typable even though `Population` has no `Add`.
+        // `records_read_by_any_rule` is the replacement, and it must stay a
+        // union: one record judged by five rules contributes one, not five.
+        let path = |p: &str| std::path::PathBuf::from(p);
+        let executed = vec![
+            RuleExecution {
+                rule: "field.quality".to_string(),
+                population: Some(Population::of(PopulationUnit::Field, 4, 4)),
+                status: RuleStatus::Ran,
+                examined_records: vec![path("a.md"), path("b.md")],
+            },
+            RuleExecution {
+                rule: "identity.collision".to_string(),
+                population: Some(Population::of(PopulationUnit::Record, 2, 2)),
+                status: RuleStatus::Ran,
+                examined_records: vec![path("a.md"), path("b.md")],
+            },
+            RuleExecution {
+                rule: "type.no-declared-spec".to_string(),
+                population: Some(Population::of(PopulationUnit::RecordType, 1, 1)),
+                status: RuleStatus::Ran,
+                examined_records: vec![],
+            },
+        ];
+
+        let naive_sum: usize = executed
+            .iter()
+            .filter_map(|e| e.population.as_ref())
+            .map(|p| p.examined())
+            .sum();
+        assert_eq!(naive_sum, 7, "the mistake this guards against");
+        assert_eq!(
+            records_read_by_any_rule(&executed),
+            2,
+            "two records, however many rules and units judged them"
+        );
+    }
+
+    #[test]
+    fn a_rule_that_did_not_run_contributes_no_records() {
+        let executed = vec![RuleExecution {
+            rule: "field.quality".to_string(),
+            population: None,
+            status: RuleStatus::NotEnabled,
+            examined_records: vec![std::path::PathBuf::from("a.md")],
+        }];
+        assert_eq!(records_read_by_any_rule(&executed), 0);
+    }
+
     #[test]
     #[should_panic(expected = "exceeds eligible")]
     fn a_population_cannot_examine_more_than_it_was_eligible_for() {
@@ -486,6 +591,7 @@ mod tests {
         let report = CheckReport {
             status: ReportStatus::Ok,
             files_examined: 1,
+            records_read_by_any_rule: 0,
             rules_executed: vec![],
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,

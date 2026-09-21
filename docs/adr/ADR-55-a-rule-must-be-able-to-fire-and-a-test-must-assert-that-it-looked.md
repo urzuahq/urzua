@@ -33,6 +33,11 @@ corpus" are distinguishable. The field has been in every report since it was int
 reads it. Seven rounds of adversarial review re-derived by hand a signal the tool was already
 printing.
 
+*(Amended 2026-09-21: `records_examined` was replaced by `RuleExecution.population`, which carries
+`eligible` and `examined` with the unit they are counted in. The argument above is unchanged and the
+diagnosis was understated -- the field was not only unread, it was untrue, holding three different
+denominators under one name (`BUG-40`). See the Consequences below for the clause this changes.)*
+
 `ADR-53` decided that every rule is a declared policy and every policy is opt-in. It does not say a
 declared policy must be **capable of firing**, and that is the hole these twenty defects fall through.
 
@@ -80,8 +85,9 @@ is the same failure as not having it, arrived at more slowly.
 ## Consequences
 
 - A new opt-in rule reports a declared rule that ran over nothing (`MILE-106`).
-- A planted-violation test asserts on `records_examined`, not only on the presence or absence of a
-  finding. Absence is not evidence when the rule may never have run.
+- A planted-violation test asserts on the rule's **population** -- a specific `eligible`/`examined`
+  pair -- not only on the presence or absence of a finding. Absence is not evidence when the rule may
+  never have run.
 - `AGENTS.md`'s existing requirement gains this second clause; satisfying the first alone has twice
   produced a test that could not fail.
 - The legitimately-empty case must be discriminated rather than suppressed. A declared type a corpus
@@ -97,3 +103,10 @@ is the same failure as not having it, arrived at more slowly.
 - `MILE-106`, which builds the engine half.
 - `BUG-60`, `BUG-67`, `BUG-70` -- the instances whose tests could not fail.
 - `type.dir-matches-nothing`, the precedent for discriminating an empty state from a misdeclared one.
+- `BUG-40`, which established that the signal this ADR relies on was itself not one number.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-09-21 | Re-keyed the planted-test clause from `records_examined` to the rule's population. **Why:** this ADR's normative clause named a field that the same argument caused to be deleted -- the signal it told tests to assert on could not distinguish records from declared slots from configuration entries, so a test satisfying the clause could still be asserting against the wrong denominator. The requirement is unchanged; only the instrument it names is now one that carries its unit. | **substantive** |

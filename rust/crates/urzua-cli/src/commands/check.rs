@@ -309,7 +309,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(
             &config,
             rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-            || rules::supersession_reciprocity(&records),
+            || rules::supersession_reciprocity(&records, &config),
         ),
         crate::gate::gated(
             &config,
@@ -317,7 +317,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             || rules::revision_log_change_class(&records, &full_text),
         ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
-            rules::embodiment_consistency(&records, &drifted)
+            rules::embodiment_consistency(&records, &config, &drifted)
         }),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
             // Tracked *and* on disk: tracked alone passes a staged deletion,
@@ -337,12 +337,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // so only a definite absence counts.
                 repo_root.join(path).try_exists().unwrap_or(true)
             };
-            rules::embodiment_locator_exists(&records, &present)
+            rules::embodiment_locator_exists(&records, &config, &present)
         }),
         crate::gate::gated(
             &config,
             rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
-            || rules::embodiment_locator_promotion_candidate(&records),
+            || rules::embodiment_locator_promotion_candidate(&records, &config),
         ),
         crate::gate::gated(&config, rules::RULE_HEADER_LAYOUT_CONSISTENCY, || {
             rules::header_layout_consistency(&records, &header_layout_by_type)
@@ -443,6 +443,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let report = CheckReport {
         status,
         files_examined: examined.len(),
+        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule(&rules_executed),
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),

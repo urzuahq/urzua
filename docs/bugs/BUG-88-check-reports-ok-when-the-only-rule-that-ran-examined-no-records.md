@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M2YR3GYZER3NSN1GDAN5GZ12
-Status: Open
+Status: WontFix
 Found-in: "Round 10 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "not yet written -- a corpus whose records none of the declared rules can read must not report ok"
-Blocked-on: MILE-106
+Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_rule_handed_nothing_discloses_that_it_certified_nothing -- asserting the disclosure, not a non-zero exit"
 ---
 # 88 — check reports ok when the only rule that ran examined no records
 
@@ -62,3 +61,4 @@ failed here.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | `Status: Open` → `WontFix`, re-graded as a thin-config state rather than a defect. **Why:** nothing in the reported run was ever untrue. One policy was declared, it ran, and it held; the fixture is silent because it declares nothing that reads a header, which `ADR-53` makes the adopter's call. Attempting to close it through the gate is what produced `BUG-84` -- requiring a non-zero population made `audit` unsatisfiable on exactly the config `init` generates -- and the fourth review established with fixtures that no predicate over rule populations satisfies both at once. The real concern was that such a run reads as a clean corpus, and that is now answered by disclosure instead: the report carries `records_read_by_any_rule`, so the run exits 0 and states that no rule judged any record. Judging that number is `MILE-106`'s, as a declared opt-in rule. | **substantive** |
