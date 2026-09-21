@@ -125,6 +125,24 @@ so `ADR-53` holds.
 
 `audit`'s behaviour becomes `check --rules pointer.resolution,relation.supersession-reciprocity`.
 
+**The filtered report's contract, which is not a detail.** `RuleExecution.status` has two values today,
+`ran` and `not-enabled`, and both already mean something. A filtered run has a third population —
+declared, enabled, and excluded by this invocation — and it must not borrow either name. Reporting an
+excluded rule as `not-enabled` would say the repository declined a policy it declared, which is the
+class of untruth this release spent itself removing.
+
+So: an excluded rule is **omitted from `rules_executed` entirely**, and the report gains a top-level
+`rules_selected` naming the filter that produced it. Omission plus the filter is recoverable;
+`not-enabled` is not. This reproduces `audit`'s two-entry report exactly, which is the behaviour being
+replaced.
+
+A requested rule the config does not declare is an **invocation error, exit 2** — asking for a policy
+that does not exist is a mistake in the command, not a finding about the corpus. Selection narrows
+what runs and never enables anything, so `ADR-53` holds.
+
+`status` and the exit code are computed over the selected set exactly as they are today over the full
+set, with no special case.
+
 Whether a named group (`--rules cross-record`) should exist is an open question below; it requires
 rules to declare a category, which this RFC does not decide.
 
@@ -142,14 +160,33 @@ were all patches to a command this RFC proposes retiring.
 
 ### 4. `fix` detect consumes the rule, not a second copy
 
-`fix`'s detect mode reads `rules::embodiment_consistency`'s findings instead of calling
-`detect_repairs`. `detect_repairs` narrows to producing the *repair* — the computed value to write —
-from a finding already established, rather than re-establishing it.
+`fix`'s detect mode should stop re-deriving the comparison. **The direction is settled; the mechanism
+is not, and three obstacles are named here rather than waved at.** They are why this half proposes a
+goal and defers its design instead of claiming a change that has not been worked out.
 
-This closes the drift divergence as a consequence: there is one comparison, so there is one answer
-about drift.
+1. **A `Finding` does not carry the computed value.** `build_fix_report` needs `Vec<Repair>`, and a
+   repair is the *computed* `Embodiment` to write. Recovering it by parsing a finding's message would
+   make that message a wire format. So the rule must return a structured computed value alongside its
+   finding — a `rules.rs` signature change touching every rule's return type, or a new per-rule
+   payload. Neither is free.
 
-`fix`'s command status is unaffected. It writes.
+2. **`check` gates the rule; `fix` does not.** `check.rs:319` runs `embodiment_consistency` through
+   `gated(&config, ...)`. If `fix` consumed the rule's result, a config declaring
+   `embodiment.consistency: off` would silently produce no repairs, where today `fix` repairs
+   regardless. That is a real behaviour change. It is arguably *correct* under `ADR-53` — but whether
+   repair is governed by the same declaration as detection has never been decided.
+
+3. **`check` computes `drifted`; `fix` does not.** The rule takes a `drifted: &HashSet<PathBuf>` built
+   from git history by `check`'s caller. `fix` has no such plumbing, which is exactly why
+   `detect_repairs` skips drift and says so in a comment. Sharing the rule means either giving `fix`
+   that plumbing or passing an empty set and getting a different answer from the same function — a
+   *new* divergence wearing the shape of a fix.
+
+**So the divergence is named here, not closed.** An earlier draft of this RFC claimed sharing the rule
+would give "one answer about drift". That was wrong: the difference is in the rule's *input*, not in
+there being two implementations.
+
+`fix`'s command status is unaffected either way. It writes.
 
 ## Open questions
 
@@ -157,9 +194,14 @@ about drift.
   cross-record` is expressible? It is the tidier end state and it is how `audit`'s intent would
   survive as data rather than as a hardcoded pair. It is also a schema change, and this RFC does not
   need it — an explicit rule list reproduces `audit` exactly today. Deliberately left open.
-- **Does `fix` apply mode want its own rule-result input**, or only detect? Apply needs the computed
-  value, which a finding's message does not carry structurally. This may require the rule to return a
-  computed value alongside its finding, which is a `rules.rs` signature question.
+- **How does a rule return a structured computed value** alongside its findings, without making every
+  rule's signature carry a payload most of them have nothing to put in? This gates the `fix` half
+  entirely.
+- **Is repair governed by the same declaration as detection?** If `fix` runs through `gated()`, then
+  `embodiment.consistency: off` disables repair too. `ADR-53` suggests yes; nobody has decided it, and
+  it is a behaviour change either way.
+- **Does `fix` gain git-history plumbing, or accept a narrower answer than `check`** and say so in its
+  report? Passing an empty `drifted` silently is the one option this RFC rules out.
 - **Where does the command taxonomy live once settled** — `RFC-20` already asks this and does not
   answer it. If that RFC moves out of `Draft`, this one should be read against it.
 - **Is one deprecation release enough**, given there is no telemetry on who invokes what? There are no
@@ -170,8 +212,10 @@ about drift.
 - **Does not propose removing `fix`.** It writes; that is a distinct verb and it earns a command. Only
   its detect-mode duplication is in scope.
 - **Does not decide `fix`'s capability model.** `RFC-19` owns that.
-- **Does not change any rule's behaviour.** No finding appears or disappears; this is about which
-  command surface reaches them.
+- **Does not change any rule's behaviour.** No finding appears or disappears from `check`; this is
+  about which command surface reaches them. That holds for the `audit` half. The `fix` half *would*
+  change `fix`'s behaviour, which is why it is proposed as a direction with its obstacles named rather
+  than as a settled design.
 - **Does not ship in `0.4.0`.** That release already carries a breaking report-contract change
   (`BUG-40`). A CLI-surface break wants its own release and its own migration note.
 
@@ -189,4 +233,5 @@ about drift.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Defined the filtered report's contract; downgraded the `fix` half from a settled design to a named direction. **Why:** review found three things the first draft asserted without working out. An excluded rule had no status that was not already taken, and reusing `not-enabled` would have reported a declared policy as declined. And sharing `embodiment_consistency` with `fix` was claimed to close the drift divergence and change no behaviour; it does neither, because `check` gates the rule and supplies a `drifted` set `fix` has no plumbing to build. The divergence is in the rule's input, not in there being two implementations. | **substantive** |
 > | 2026-09-21 | Filed. **Why:** `BUG-99` was filed against `audit`'s empty-rule-set edge case, and examining it showed the edge case was a symptom: `audit` is a read-only subset of `check` that outlived `ADR-53`, and `fix` carries the duplicate-implementation risk `ADR-30` was written to avoid. Filed as an RFC rather than three bug fixes because the question is which commands the surface should have, not how to patch the ones it has. | **substantive** |

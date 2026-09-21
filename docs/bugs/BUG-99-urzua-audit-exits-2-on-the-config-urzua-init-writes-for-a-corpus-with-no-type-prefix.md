@@ -70,8 +70,9 @@ the tool overrides the adopter's declaration. `BUG-42` is that contradiction sur
 `BUG-42`, `BUG-84` and this bug are three instances of the one root. `RFC-38` proposes retiring the
 command rather than patching it a third time, at which point this closes without a separate fix.
 
-If `RFC-38` is rejected, candidate 1 is the cheapest patch and candidate 2 reopens `BUG-77` for one
-command, which would need arguing rather than assuming.
+If `RFC-38` is rejected, warning from `init` is the cheapest patch, and teaching `audit` to tell
+"nothing declared for me" from "could not run" reopens `BUG-77` for one command, which would need
+arguing rather than assuming.
 
 ## References
 
