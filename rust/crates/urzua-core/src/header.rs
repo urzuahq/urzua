@@ -397,6 +397,29 @@ mod tests {
     }
 
     #[test]
+    fn get_does_not_answer_for_a_differently_cased_key() {
+        // ADR-57: the record wrote a different name, so the declared one is
+        // absent. Answering here let header.required-fields read the field as
+        // satisfied while header.field-set-consistency called it undeclared.
+        let h = parse("# T\n\n> status: Accepted\n");
+        assert_eq!(h.get("status"), Some("Accepted"));
+        assert_eq!(h.get("Status"), None);
+        assert_eq!(h.get("STATUS"), None);
+    }
+
+    #[test]
+    fn two_spellings_of_one_word_are_two_keys_not_a_duplicate() {
+        let h = parse("# T\n\n> Status: A\n> status: B\n");
+        assert!(
+            h.duplicate_keys().is_empty(),
+            "ADR-57 makes these two fields: {:?}",
+            h.duplicate_keys()
+        );
+        assert_eq!(h.get("Status"), Some("A"));
+        assert_eq!(h.get("status"), Some("B"));
+    }
+
+    #[test]
     fn duplicate_keys_are_detected_not_first_wins() {
         let doc = "> Status: Draft\n> Status: Accepted\n";
         let h = parse(doc);
