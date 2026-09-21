@@ -68,6 +68,18 @@ has a finding in front of them, and an approximate suggestion cannot cause a wro
 
 `BUG-97` closes without a fix. There is no loose comparison left to get wrong.
 
+**This applies to every comparison of a field *name*, not to one rule.** `Header::get`, which every
+rule uses to read a field's value, matched case-insensitively — so `header.field-set-consistency`
+reported `status` undeclared while `header.required-fields` read the same field as satisfying
+`Status`, and the engine gave two answers about one field. `duplicate_keys` and `discovery`'s
+`Realized-by` lookup had the same split. All are exact.
+
+It does **not** apply to field *values*. `field_state.rs` matches a value against `PLACEHOLDER_TOKENS`
+case-insensitively, and that list is the engine's own, not the adopter's: there is no declaration to
+overreach against, and someone typing `TBD` left a placeholder by any reading. `BUG-50`'s revision log
+already records that this list should become declared config under `MILE-98` — **when it does, this
+decision applies to it**, because it will then be the adopter's declaration like any other.
+
 ## Reversibility
 
 Cheap. The comparison is one function, `rules::field_is_declared`, and reinstating a loose
@@ -85,6 +97,13 @@ a reversal cannot be silent.
 - Two rule tests were relying on the loose comparison: both declared lowercase names against records writing
   capitalised ones, and passed only because `check.rs` lowercased declarations while building the
   allowed set. Both were corrected to the spellings a real config contains.
+- A record writing `status` where its type declares `Status` now draws two findings rather than one
+  half-answer: the required field is missing, and the written one is undeclared with its declared
+  spelling named. Measured no-op on this corpus — 68 findings and zero errors before and after.
+- **The comparison is still spread across call sites.** Nothing stops the next one choosing its own
+  equality; a field name is a `String`, and four different comparisons were live when this was
+  written. Making it a type whose equality is defined once is the structural answer and is deliberately
+  not attempted here.
 - `SPEC-2`'s rule description does not mention case sensitivity either way and needs no change; this
   ADR is the first statement of the rule.
 
@@ -100,4 +119,5 @@ a reversal cannot be silent.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-21 | Widened from one rule to every field-*name* comparison, and the boundary against field *values* stated. **Why:** the decision was implemented in `field_is_declared` alone while `Header::get` still matched case-insensitively, so two rules disagreed about one field on the same record -- a decision the engine half-implemented, which is what `BUG-98` records about `ADR-50`. | **substantive** |
 > | 2026-09-21 | Initial decision, `Status: Accepted`. **Why:** `BUG-97` was filed expecting a one-line swap to a better case-insensitive comparison. The property suite found that no such comparison is correct in both directions, and measuring the corpus showed this one had never matched anything exact comparison would not have. Deleting it rather than improving it closes the bug and removes the surface it lived on. | **substantive** |

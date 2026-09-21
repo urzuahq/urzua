@@ -36,19 +36,25 @@ impl Header {
     /// violation the caller should check for separately via
     /// [`Header::duplicate_keys`] -- this method deliberately doesn't hide
     /// that by picking one silently.
+    ///
+    /// Exact (`ADR-57`): matching loosely here made two rules disagree about
+    /// one field -- `header.field-set-consistency` called `status` undeclared
+    /// while `header.required-fields` read it as satisfying `Status`.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
-            .find(|f| f.key.eq_ignore_ascii_case(key))
+            .find(|f| f.key == key)
             .map(|f| f.value.as_str())
     }
 
+    /// Exact (`ADR-57`): `Status` and `status` are two fields, so writing both
+    /// is not this defect. The undeclared one is reported by
+    /// `header.field-set-consistency`, which names the declared spelling.
     pub fn duplicate_keys(&self) -> Vec<String> {
         let mut seen = std::collections::HashSet::new();
         let mut dupes = Vec::new();
         for f in &self.fields {
-            let lower = f.key.to_ascii_lowercase();
-            if !seen.insert(lower.clone()) && !dupes.contains(&f.key) {
+            if !seen.insert(f.key.clone()) && !dupes.contains(&f.key) {
                 dupes.push(f.key.clone());
             }
         }

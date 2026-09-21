@@ -87,6 +87,12 @@ about behavior as true:
 - A new rule or fix needs a **planted-violation test, observed failing before the fix, then passing
   after** — not just a test that always passed. If you can't show it failing on the old code, it
   isn't verified yet.
+- A test written **after** the code it covers has no failing state to observe, so **break the code
+  and watch the test go red**, then restore. Same standard, opposite order. Three assertions in the
+  `0.4.0` work passed against the bug they were written for — a population pinned to 100%, an
+  `accepted || reported` pair that are exact complements, and a determinism check looping over one
+  `HashSet` whose order is fixed within a process. Each derived its expected value from the same
+  source as the thing under test, and reading them did not reveal it.
 - Don't assume a design decision matches what's actually implemented. Grep the code, don't just
   read the ADR.
 - When a change invalidates a claim in prose, grep the whole file (or corpus) for that claim's key
