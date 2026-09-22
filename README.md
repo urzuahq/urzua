@@ -89,10 +89,16 @@ Every command's stdout is one JSON object, always, on every invocation (ADR-23/2
 $ urzua check docs/
 {
   "status": "findings-present",
-  "files_examined": 98,
+  "files_examined": 322,
   "rules_executed": [
-    { "rule": "header.required-fields", "records_examined": 98 },
-    { "rule": "embodiment.consistency", "records_examined": 17 }
+    {
+      "rule": "header.required-fields",
+      "population": { "unit": "field", "eligible": 1063, "examined": 1063, "out_of_scope": 0 }
+    },
+    {
+      "rule": "embodiment.consistency",
+      "population": { "unit": "field", "eligible": 77, "examined": 39, "out_of_scope": 0 }
+    }
   ],
   "findings": [
     {
@@ -113,7 +119,7 @@ $ urzua check docs/
 $ urzua fix
 {
   "status": "repairs-available",
-  "records_examined": 6,
+  "population": { "unit": "record", "eligible": 322, "examined": 39, "out_of_scope": 0 },
   "repairs": [
     {
       "record": "docs/adr/ADR-42-example.md",

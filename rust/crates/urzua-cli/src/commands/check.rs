@@ -242,15 +242,6 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     if let Some(setting) = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT) {
         if setting.level != urzua_core::config::RuleLevel::Off {
             for prefix in setting.claim_paths.iter().flatten() {
-                // `is_dir()` folds an unreadable directory into "not a
-                // directory", which is the right verdict here: either way the
-                // rule cannot reach its input, and saying so beats reporting a
-                // clean run over files it never opened.
-                // `exists()` rather than `is_dir()`, and only a truly absent
-                // path aborts: git does not track empty directories, so a repo
-                // following the documented `claim_paths: [".changeset"]` pattern
-                // would otherwise lose `check` entirely the moment a release
-                // consumes the last fragment.
                 // A root symlinked to an ancestor escaped the declared prefix
                 // entirely (BUG-69). Rejecting every symlink also rejected a
                 // link to a legitimate directory, with a message saying it was
