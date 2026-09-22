@@ -23,36 +23,8 @@ mod property;
 pub mod record;
 pub mod report;
 pub mod rules;
+pub mod values;
 pub mod waiver;
-
-/// The decision axis: where a record sits in its own lifecycle.
-///
-/// Values are profile-specific in RFC-0001; this is the ADR set. Parsing must
-/// tolerate free-text annotation after the value — a rule written against an
-/// assumed canonical format can be invalidated by real corpus variance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Status {
-    Proposed,
-    Accepted,
-    Rejected,
-    Superseded,
-}
-
-/// The realization axis: was this actually built?
-///
-/// Orthogonal to [`Status`] by design (RFC-0001 §3). Computed from grep-able
-/// back-pointers, never inferred.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Embodiment {
-    NotStarted,
-    Specified,
-    Implemented,
-    Verified,
-    /// Alarm state, reachable from any other state.
-    DriftDetected,
-    /// Terminal, for decisions that will never be built (e.g. "we're not doing X").
-    Inactive,
-}
 
 /// Presence state of a field.
 ///

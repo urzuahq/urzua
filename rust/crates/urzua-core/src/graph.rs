@@ -6,9 +6,10 @@
 
 use crate::record::Record;
 use crate::rules::{
-    build_normalized_index, extract_references, normalize_id, parse_realized_by, record_id,
-    RelationKind, NARRATIVE, POINTER,
+    build_normalized_index, extract_references, parse_realized_by, record_id, RelationKind,
+    NARRATIVE, POINTER,
 };
+use crate::values::RecordId;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -121,7 +122,7 @@ pub fn graph(
                 edges.push(GraphEdge {
                     from: from.clone(),
                     relation: field_name.to_string(),
-                    dangling: !index.contains_key(&normalize_id(&to)),
+                    dangling: !index.contains_key(&RecordId::new(&to)),
                     to,
                     kind,
                 });

@@ -212,11 +212,11 @@ impl RecordTypeConfig {
     /// Every field this type declares, `required_fields` **or** `known_fields`
     /// (`BUG-106`): reading either alone silently drops the type that requires
     /// a field instead of merely permitting it.
-    pub fn declared_fields(&self) -> std::collections::HashSet<String> {
+    pub fn declared_fields(&self) -> std::collections::HashSet<crate::values::FieldName> {
         self.required_fields
             .iter()
             .chain(self.known_fields.iter().flatten())
-            .cloned()
+            .map(|s| crate::values::FieldName::new(s.as_str()))
             .collect()
     }
 }

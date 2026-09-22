@@ -4,7 +4,6 @@
 //! Never writes -- a bulk cross-reference rewrite is a real data-loss risk
 //! without a review step this command doesn't have.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -42,26 +41,10 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let mut pointer_fields_by_type = HashMap::new();
-    let mut narrative_fields_by_type = HashMap::new();
-    for (name, cfg) in &config.record_types {
-        if let Some(pointer_fields) = &cfg.pointer_fields {
-            pointer_fields_by_type.insert(name.clone(), pointer_fields.clone());
-        }
-        if let Some(narrative_fields) = &cfg.narrative_fields {
-            narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
-        }
-    }
-
     let record_index = rules::build_normalized_index(&records);
 
     let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-        rules::pointer_resolution(
-            &records,
-            &pointer_fields_by_type,
-            &narrative_fields_by_type,
-            &record_index,
-        )
+        rules::pointer_resolution(&records, &config, &record_index)
     });
     let (exec2, findings2) = crate::gate::gated(
         &config,

@@ -195,35 +195,6 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let in_scope: std::collections::HashSet<&std::path::Path> =
         scoped.iter().map(|p| p.as_path()).collect();
 
-    let mut required_by_type = HashMap::new();
-    let mut header_layout_by_type = HashMap::new();
-    let mut known_fields_by_type = HashMap::new();
-    let mut declared_fields_by_type: HashMap<String, std::collections::HashSet<String>> =
-        HashMap::new();
-    let mut pointer_fields_by_type = HashMap::new();
-    let mut narrative_fields_by_type = HashMap::new();
-    for (name, cfg) in &config.record_types {
-        required_by_type.insert(name.clone(), cfg.required_fields.clone());
-        if let Some(layout) = cfg.header_layout {
-            header_layout_by_type.insert(name.clone(), layout);
-        }
-        // Every declared name, for rules that judge a value rather than the
-        // field set. `known_fields_by_type` is absent for a type declaring only
-        // `required_fields`, because `header.field-set-consistency` skips such a
-        // type by design -- a rule reading that map would skip it too, silently.
-        let declared = cfg.declared_fields();
-        declared_fields_by_type.insert(name.clone(), declared.clone());
-        if cfg.known_fields.is_some() {
-            known_fields_by_type.insert(name.clone(), declared);
-        }
-        if let Some(pointer_fields) = &cfg.pointer_fields {
-            pointer_fields_by_type.insert(name.clone(), pointer_fields.clone());
-        }
-        if let Some(narrative_fields) = &cfg.narrative_fields {
-            narrative_fields_by_type.insert(name.clone(), narrative_fields.clone());
-        }
-    }
-
     // An unresolvable `claim_paths` entry left the rule reporting `ran` with
     // zero findings, indistinguishable from a clean corpus (BUG-56). Being
     // *visible* is what that bug asked for; aborting was one way to achieve it
@@ -327,15 +298,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
 
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
-            rules::header_required_fields(&records, &required_by_type)
+            rules::header_required_fields(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-            rules::pointer_resolution(
-                &records,
-                &pointer_fields_by_type,
-                &narrative_fields_by_type,
-                &record_index,
-            )
+            rules::pointer_resolution(&records, &config, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
             let not_in = config
@@ -343,19 +309,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 .get(rules::RULE_POINTER_TARGET_STATUS)
                 .and_then(|s| s.not_in.clone())
                 .unwrap_or_default();
-            rules::pointer_target_status(
-                &records,
-                &pointer_fields_by_type,
-                &narrative_fields_by_type,
-                &not_in,
-                &record_index,
-            )
+            rules::pointer_target_status(&records, &config, &not_in, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_QUALITY, || {
-            rules::field_quality(&records, &required_by_type)
+            rules::field_quality(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_PENDING, || {
-            rules::field_pending(&records, &required_by_type)
+            rules::field_pending(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_CLAIM_STATUS_AGREEMENT, || {
             let setting = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT);
@@ -406,16 +366,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             || rules::embodiment_locator_promotion_candidate(&records, &config),
         ),
         crate::gate::gated(&config, rules::RULE_HEADER_LAYOUT_CONSISTENCY, || {
-            rules::header_layout_consistency(&records, &header_layout_by_type)
+            rules::header_layout_consistency(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
-            rules::header_field_set_consistency(&records, &known_fields_by_type)
+            rules::header_field_set_consistency(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_UNTRIMMED_VALUE, || {
-            rules::field_untrimmed_value(&records, &declared_fields_by_type)
+            rules::field_untrimmed_value(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_HEADER_FIELD_CASE_MISMATCH, || {
-            rules::header_field_case_mismatch(&records, &declared_fields_by_type)
+            rules::header_field_case_mismatch(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             let terminal = config

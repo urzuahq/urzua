@@ -6,7 +6,7 @@
 /// relative to the whole document) for diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeaderField {
-    pub key: String,
+    pub key: crate::values::FieldName,
     pub value: String,
     pub line: usize,
 }
@@ -52,7 +52,7 @@ impl Header {
     pub fn get(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
-            .find(|f| f.key == key)
+            .find(|f| f.key.as_str() == key)
             .map(|f| f.value.as_str())
     }
 
@@ -74,7 +74,7 @@ impl Header {
     pub fn get_reserved(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
-            .find(|f| f.key.eq_ignore_ascii_case(key))
+            .find(|f| f.key.as_str().eq_ignore_ascii_case(key))
             .map(|f| f.value.as_str())
     }
 
@@ -98,8 +98,8 @@ impl Header {
         let mut seen = std::collections::HashSet::new();
         let mut dupes = Vec::new();
         for f in &self.fields {
-            if !seen.insert(f.key.clone()) && !dupes.contains(&f.key) {
-                dupes.push(f.key.clone());
+            if !seen.insert(&f.key) && !dupes.contains(&f.key.to_string()) {
+                dupes.push(f.key.to_string());
             }
         }
         dupes
@@ -324,7 +324,7 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
             let key = key.as_str()?.to_string();
             let line = find_key_line(&yaml_text, &key).unwrap_or(2);
             Some(HeaderField {
-                key,
+                key: crate::values::FieldName::new(key),
                 value: stringify_yaml_value(value),
                 line,
             })
@@ -401,7 +401,7 @@ fn parse_key_value(segment: &str, line_no: usize) -> Option<HeaderField> {
         return None;
     }
     Some(HeaderField {
-        key: key.to_string(),
+        key: crate::values::FieldName::new(key),
         value: value.trim().to_string(),
         line: line_no,
     })
