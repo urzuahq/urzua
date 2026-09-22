@@ -7,9 +7,11 @@ use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
+#[cfg(test)]
+use crate::report::Population;
 use crate::report::{
-    census, census_records, Finding, FindingSeverity, Outcome, Population, PopulationUnit,
-    RuleExecution, RuleStatus,
+    census, census_records, Finding, FindingSeverity, Outcome, PopulationUnit, RuleExecution,
+    RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
@@ -357,7 +359,6 @@ pub fn type_record_outside_declared_dir(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let dirs: Vec<std::path::PathBuf> = config
         .record_types
@@ -365,30 +366,33 @@ pub fn type_record_outside_declared_dir(
         .map(|t| std::path::PathBuf::from(&t.dir))
         .collect();
 
+    // Eligible: every tracked, record-shaped path below a declared dir. A
+    // markdown file elsewhere in the repo is a document, not an ungoverned
+    // record, and saying otherwise would flag every README.
+    let eligible_paths: Vec<&std::path::PathBuf> = candidates
+        .iter()
+        .filter(|path| {
+            let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+                return false;
+            };
+            if file_name.starts_with('_') || !file_name.ends_with(".md") {
+                return false;
+            }
+            dirs.iter().any(|d| path.starts_with(d))
+        })
+        .collect();
+
     let mut unowned: Vec<&std::path::PathBuf> = Vec::new();
-    for path in candidates {
-        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if file_name.starts_with('_') || !file_name.ends_with(".md") {
-            continue;
-        }
-        // Only below a declared dir. A markdown file elsewhere in the repo is a
-        // document, not an ungoverned record, and saying otherwise would flag
-        // every README.
-        if !dirs.iter().any(|d| path.starts_with(d)) {
-            continue;
-        }
-        examined += 1;
+    let population = census(PopulationUnit::Path, eligible_paths, |path| {
         // Ownership is decided by the path, which is what RFC-35 defines. It
         // was decided by the loaded record set, which also excludes a file the
         // loader could not read -- so a staged deletion directly inside a
         // declared dir was reported as sitting outside it (BUG-71).
-        if dirs.iter().any(|d| path.parent() == Some(d.as_path())) {
-            continue;
+        if !dirs.iter().any(|d| path.parent() == Some(d.as_path())) {
+            unowned.push(path);
         }
-        unowned.push(path);
-    }
+        Outcome::Examined
+    });
 
     unowned.sort();
     for path in unowned {
@@ -407,7 +411,7 @@ pub fn type_record_outside_declared_dir(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(PopulationUnit::Path, examined, examined)),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -442,45 +446,40 @@ pub fn type_dir_matches_nothing(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut names: Vec<&String> = config.record_types.keys().collect();
     names.sort();
-    for name in names {
-        examined += 1;
-        if matched.get(name).copied().unwrap_or(0) > 0 {
-            continue;
+
+    let population = census(PopulationUnit::RecordType, names, |name| {
+        if matched.get(*name).copied().unwrap_or(0) == 0 {
+            let dir = &config.record_types[*name].dir;
+            // A directory that exists and is empty is a type declared and not
+            // yet used, which is a legitimate state -- some types are expected
+            // to hold nothing most of the time. An *absent* directory is the
+            // misdeclaration this rule exists for. Git does not track empty
+            // directories, so declaring a type means committing a placeholder
+            // alongside it.
+            if !dir_exists(dir) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{name}' declares dir '{dir}', which does not exist -- \
+                         every rule for this type examines nothing"
+                    ),
+                });
+            }
         }
-        let dir = &config.record_types[name].dir;
-        // A directory that exists and is empty is a type declared and not yet
-        // used, which is a legitimate state -- some types are expected to hold
-        // nothing most of the time. An *absent* directory is the misdeclaration
-        // this rule exists for. Git does not track empty directories, so
-        // declaring a type means committing a placeholder alongside it.
-        if dir_exists(dir) {
-            continue;
-        }
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Warning,
-            file: config_path.to_path_buf(),
-            line: None,
-            waived: None,
-            message: format!(
-                "record type '{name}' declares dir '{dir}', which does not exist -- \
-                 every rule for this type examines nothing"
-            ),
-        });
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::RecordType,
-                config.record_types.len(),
-                examined,
-            )),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -494,14 +493,12 @@ pub fn type_no_declared_spec(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_TYPE_NO_DECLARED_SPEC;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut type_names: Vec<&String> = config.record_types.keys().collect();
     type_names.sort();
 
-    for type_name in type_names {
-        let type_config = &config.record_types[type_name];
-        examined += 1;
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
         if type_config.spec.is_none() {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
@@ -514,16 +511,13 @@ pub fn type_no_declared_spec(
                 ),
             });
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::RecordType,
-                config.record_types.len(),
-                examined,
-            )),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -544,14 +538,12 @@ pub fn header_deprecated_shape(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_HEADER_DEPRECATED_SHAPE;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut type_names: Vec<&String> = config.record_types.keys().collect();
     type_names.sort();
 
-    for type_name in type_names {
-        let type_config = &config.record_types[type_name];
-        examined += 1;
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
         if type_config.header_shape != crate::header::HeaderShape::YamlFrontmatter {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
@@ -564,16 +556,13 @@ pub fn header_deprecated_shape(
                 ),
             });
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::RecordType,
-                config.record_types.len(),
-                examined,
-            )),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -673,14 +662,12 @@ pub fn config_pointer_declaration_missing(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CONFIG_POINTER_DECLARATION_MISSING;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut type_names: Vec<&String> = config.record_types.keys().collect();
     type_names.sort();
 
-    for type_name in type_names {
-        let type_config = &config.record_types[type_name];
-        examined += 1;
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
         let declares_either =
             type_config.pointer_fields.is_some() || type_config.narrative_fields.is_some();
         if declares_either
@@ -697,16 +684,13 @@ pub fn config_pointer_declaration_missing(
                 ),
             });
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::RecordType,
-                config.record_types.len(),
-                examined,
-            )),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -718,22 +702,19 @@ pub fn config_pointer_declaration_missing(
 /// or `narrative_fields` must also appear in that type's own
 /// `required_fields`/`known_fields` -- a relationship field the schema
 /// inventory itself doesn't know about would silently never trip
-/// `header.field-set-consistency`. Case-insensitive, matching that rule's own
-/// convention.
+/// `header.field-set-consistency`. Compared exactly (`ADR-57`).
 pub fn config_pointer_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CONFIG_POINTER_FIELD_NOT_KNOWN;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut type_names: Vec<&String> = config.record_types.keys().collect();
     type_names.sort();
 
-    for type_name in type_names {
-        let type_config = &config.record_types[type_name];
-        examined += 1;
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
 
         let mut declared: HashSet<String> = type_config.required_fields.iter().cloned().collect();
         if let Some(known) = &type_config.known_fields {
@@ -762,16 +743,13 @@ pub fn config_pointer_field_not_known(
                 });
             }
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::RecordType,
-                config.record_types.len(),
-                examined,
-            )),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -789,18 +767,16 @@ pub fn config_pointer_narrative_overlap(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CONFIG_POINTER_NARRATIVE_OVERLAP;
     let mut findings = Vec::new();
-    let mut examined = 0;
 
     let mut type_names: Vec<&String> = config.record_types.keys().collect();
     type_names.sort();
 
-    for type_name in type_names {
-        let type_config = &config.record_types[type_name];
-        examined += 1;
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
         let (Some(pointer_fields), Some(narrative_fields)) =
             (&type_config.pointer_fields, &type_config.narrative_fields)
         else {
-            continue;
+            return Outcome::Examined;
         };
         let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
         for field in narrative_fields {
@@ -817,16 +793,13 @@ pub fn config_pointer_narrative_overlap(
                 });
             }
         }
-    }
+        Outcome::Examined
+    });
 
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(Population::of(
-                PopulationUnit::RecordType,
-                config.record_types.len(),
-                examined,
-            )),
+            population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
