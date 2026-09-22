@@ -47,6 +47,28 @@ impl Header {
             .map(|f| f.value.as_str())
     }
 
+    /// `get`, folding case. For the engine's own reserved keys --
+    /// `Stable-Id`, `Rule`, `Scope`, `Expires` -- never the adopter's
+    /// declared vocabulary.
+    ///
+    /// `ADR-57`'s exact match is about a field the *adopter* named, where two
+    /// spellings could be two different things (`Maße`/`Masse`) and folding
+    /// them is a guess the engine has no standing to make. A reserved key is
+    /// not adopter vocabulary at all: there is exactly one field named
+    /// `Stable-Id`, the engine itself invented the name, and a record
+    /// spelling it `stable-id` has made a typo, not declared a different
+    /// field. Reading it exactly here does not honour a declaration -- it
+    /// silently accepts a second, conflicting write (`migrate ids`) or drops
+    /// a waiver that should apply (`waiver::load_waivers`), which is the
+    /// defect class `ADR-57` was written to close, reopened for a case
+    /// `ADR-57`'s own reasoning never covered.
+    pub fn get_reserved(&self, key: &str) -> Option<&str> {
+        self.fields
+            .iter()
+            .find(|f| f.key.eq_ignore_ascii_case(key))
+            .map(|f| f.value.as_str())
+    }
+
     /// Exact (`ADR-57`): `Status` and `status` are two fields, so writing both
     /// is not this defect. The undeclared one is reported by
     /// `header.field-set-consistency`, which names the declared spelling.
@@ -394,6 +416,18 @@ mod tests {
         let h = parse(doc);
         assert_eq!(h.get("Status"), Some("Draft"));
         assert_eq!(h.region, Some((3, 3)));
+    }
+
+    #[test]
+    fn get_reserved_answers_for_a_differently_cased_key() {
+        // The opposite of `get`, deliberately: Stable-Id is not adopter
+        // vocabulary, there is exactly one field by that name, and a record
+        // spelling it `stable-id` has made a typo -- migrate_ids assigning a
+        // second id on top of it is BUG-97's shape reopened for a case
+        // ADR-57's own reasoning never covered.
+        let h = parse("# T\n\n> stable-id: 01ABC\n");
+        assert_eq!(h.get_reserved("Stable-Id"), Some("01ABC"));
+        assert_eq!(h.get_reserved("STABLE-ID"), Some("01ABC"));
     }
 
     #[test]

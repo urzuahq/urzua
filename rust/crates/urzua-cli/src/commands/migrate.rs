@@ -93,7 +93,10 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     };
     let missing: Vec<_> = records
         .iter()
-        .filter(|r| r.header.get("Stable-Id").is_none())
+        // Reserved (Header::get_reserved): a record spelling this
+        // `stable-id` has made a typo, not declared a second field, and
+        // reading it exactly would assign and write a conflicting second id.
+        .filter(|r| r.header.get_reserved("Stable-Id").is_none())
         .collect();
 
     if missing.is_empty() || !apply {
