@@ -78,6 +78,18 @@ impl PartialEq for RecordId {
 
 impl Eq for RecordId {}
 
+impl PartialOrd for RecordId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RecordId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.normalized.cmp(&other.normalized)
+    }
+}
+
 impl std::hash::Hash for RecordId {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.normalized.hash(state);

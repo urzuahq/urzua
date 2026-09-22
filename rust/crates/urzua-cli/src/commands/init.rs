@@ -111,7 +111,7 @@ fn proposed_name(dir: &Path) -> String {
 /// A leading underscore is a template, never a record. Everything else defers
 /// to the shared recogniser, so adopt mode and `new`'s numbering cannot accept
 /// disjoint sets. Deliberately stricter than `record::is_governed_record_filename`
-/// (`BUG-104`): a numberless file governs nothing for `check`, but adopt mode
+/// (`BUG-108`): a numberless file governs nothing for `check`, but adopt mode
 /// specifically needs a number to detect the corpus's own convention.
 fn is_record_shaped(file_name: &str) -> bool {
     !file_name.starts_with('_')

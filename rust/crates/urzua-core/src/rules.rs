@@ -129,25 +129,31 @@ fn pointer_and_narrative_slots<'a>(
         .collect()
 }
 
+/// One type's projection, by type name, wherever `f` returns `Some` (`ADR-59`):
+/// the shape every `*_by_type` projector below shares, so a seventh one is a
+/// one-line call instead of another hand-rolled `filter_map`.
+fn project_by_type<T>(
+    config: &Config,
+    f: impl Fn(&crate::config::RecordTypeConfig) -> Option<T>,
+) -> HashMap<String, T> {
+    config
+        .record_types
+        .iter()
+        .filter_map(|(name, cfg)| f(cfg).map(|v| (name.clone(), v)))
+        .collect()
+}
+
 /// A type's `required_fields`, by type name (`ADR-59`): projected inside the
 /// rule that needs it rather than built once and handed in as a bare
 /// collection indistinguishable at the call site from a different projection
 /// of the same shape.
 fn required_fields_by_type(config: &Config) -> HashMap<String, Vec<String>> {
-    config
-        .record_types
-        .iter()
-        .map(|(name, cfg)| (name.clone(), cfg.required_fields.clone()))
-        .collect()
+    project_by_type(config, |cfg| Some(cfg.required_fields.clone()))
 }
 
 /// A type's `header_layout`, by type name, when declared (`ADR-59`).
 fn header_layout_by_type(config: &Config) -> HashMap<String, HeaderLayout> {
-    config
-        .record_types
-        .iter()
-        .filter_map(|(name, cfg)| cfg.header_layout.map(|layout| (name.clone(), layout)))
-        .collect()
+    project_by_type(config, |cfg| cfg.header_layout)
 }
 
 /// A type's declared field set, by type name, only for a type that declares
@@ -155,40 +161,25 @@ fn header_layout_by_type(config: &Config) -> HashMap<String, HeaderLayout> {
 /// declaring only `required_fields` by design, and a map with an entry for
 /// every type would silently stop skipping it.
 fn known_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::values::FieldName>> {
-    config
-        .record_types
-        .iter()
-        .filter(|(_, cfg)| cfg.known_fields.is_some())
-        .map(|(name, cfg)| (name.clone(), cfg.declared_fields()))
-        .collect()
+    project_by_type(config, |cfg| {
+        cfg.known_fields.as_ref().map(|_| cfg.declared_fields())
+    })
 }
 
 /// Every field a type declares (`required_fields` ∪ `known_fields`), by type
 /// name (`ADR-59`, `BUG-106`).
 fn declared_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::values::FieldName>> {
-    config
-        .record_types
-        .iter()
-        .map(|(name, cfg)| (name.clone(), cfg.declared_fields()))
-        .collect()
+    project_by_type(config, |cfg| Some(cfg.declared_fields()))
 }
 
 /// A type's `pointer_fields`, by type name, when declared (`ADR-59`).
 fn pointer_fields_by_type(config: &Config) -> HashMap<String, Vec<String>> {
-    config
-        .record_types
-        .iter()
-        .filter_map(|(name, cfg)| cfg.pointer_fields.clone().map(|f| (name.clone(), f)))
-        .collect()
+    project_by_type(config, |cfg| cfg.pointer_fields.clone())
 }
 
 /// A type's `narrative_fields`, by type name, when declared (`ADR-59`).
 fn narrative_fields_by_type(config: &Config) -> HashMap<String, Vec<String>> {
-    config
-        .record_types
-        .iter()
-        .filter_map(|(name, cfg)| cfg.narrative_fields.clone().map(|f| (name.clone(), f)))
-        .collect()
+    project_by_type(config, |cfg| cfg.narrative_fields.clone())
 }
 
 pub fn header_required_fields(
@@ -1016,7 +1007,7 @@ pub(crate) fn build_index_reporting_collisions(
         .into_iter()
         .filter(|(_, rs)| rs.len() > 1)
         .collect();
-    collisions.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+    collisions.sort_by(|a, b| a.0.cmp(&b.0));
     (index, collisions)
 }
 
@@ -1073,9 +1064,7 @@ pub fn pointer_target_status(
                     continue;
                 };
                 // A lookup miss is unjudged, not a status match (BUG-100).
-                let crate::header::FieldRead::Present(status) =
-                    target.header.read_declared("Status")
-                else {
+                let Ok(status) = declared_value(target, "Status") else {
                     continue;
                 };
                 if not_in.iter().any(|s| s == status) {
@@ -1313,7 +1302,7 @@ pub fn narrative_field_stale(
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue; // pointer_resolution already reports a dangling reference
                 };
-                let Some(status) = target.header.get("Status") else {
+                let Ok(status) = declared_value(target, "Status") else {
                     continue;
                 };
                 if terminal_statuses.iter().any(|t| t == status) {
@@ -1604,8 +1593,7 @@ pub fn claim_status_agreement(
             continue;
         };
         // A lookup miss is unjudged, not a status match (BUG-100).
-        let crate::header::FieldRead::Present(status) = target.header.read_declared("Status")
-        else {
+        let Ok(status) = declared_value(target, "Status") else {
             continue;
         };
         if closed_statuses.iter().any(|s| s == status) {

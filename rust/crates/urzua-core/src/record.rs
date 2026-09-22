@@ -4,7 +4,7 @@
 use crate::header::{self, Header, HeaderShape};
 use std::path::PathBuf;
 
-/// A tracked, non-template markdown file below a declared `dir` (`BUG-104`):
+/// A tracked, non-template markdown file below a declared `dir` (`BUG-108`):
 /// governed by that type whether or not its filename carries a number.
 /// Deliberately looser than `new_record::parse_record_filename`, which asks a
 /// different question -- "is this evidence of a numbering convention" -- for
@@ -69,8 +69,8 @@ impl Record {
 mod tests {
     use super::*;
 
-    /// BUG-104: `discovery.rs` and `rules.rs` duplicated this predicate and
-    /// could drift; both now call the same function.
+    /// BUG-108: `discovery.rs` and `rules.rs` duplicated this predicate;
+    /// both call the same function.
     #[test]
     fn a_leading_underscore_is_a_template_not_a_record() {
         assert!(!is_governed_record_filename("_template.md"));
