@@ -37,6 +37,15 @@ pub fn run(
         )));
     };
 
+    // `none` declares this type has nowhere for a header, and therefore
+    // nowhere to write a `Stable-Id` -- generating a record with no identity
+    // would be worse than refusing (`ADR-50`).
+    if type_config.header_shape == urzua_core::header::HeaderShape::None {
+        return emit(&CouldNotRun::from(format!(
+            "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
+        )));
+    }
+
     let dir = repo_root.join(&type_config.dir);
     let filenames: Vec<String> = match std::fs::read_dir(&dir) {
         Ok(entries) => entries

@@ -231,8 +231,9 @@ impl<'de> Deserialize<'de> for HeaderShape {
             "blockquote" => Ok(HeaderShape::Blockquote),
             "bold-list" => Ok(HeaderShape::BoldList),
             "yaml-frontmatter" => Ok(HeaderShape::YamlFrontmatter),
+            "none" => Ok(HeaderShape::None),
             other => Err(serde::de::Error::custom(format!(
-                "unrecognized header_shape '{other}' -- expected \"blockquote\", \"bold-list\", or \"yaml-frontmatter\""
+                "unrecognized header_shape '{other}' -- expected \"blockquote\", \"bold-list\", \"yaml-frontmatter\", or \"none\""
             ))),
         }
     }
@@ -244,6 +245,7 @@ impl Serialize for HeaderShape {
             HeaderShape::Blockquote => "blockquote",
             HeaderShape::BoldList => "bold-list",
             HeaderShape::YamlFrontmatter => "yaml-frontmatter",
+            HeaderShape::None => "none",
         })
     }
 }
@@ -291,12 +293,61 @@ pub enum ConfigError {
     },
 }
 
+/// One option's name, the one rule it belongs to, and what happens if a rule
+/// that needs it is declared without it. The single source for three facts
+/// that used to be three independently hand-maintained lists with nothing
+/// enforcing they agreed: which rule an option is "misplaced" on if declared
+/// elsewhere, whether a rule "requires options" to load at all
+/// (`rule_requires_options`, below), and what a missing required option's
+/// consequence is (`parse`'s `OptionRequired` check). Adding a fifth
+/// option-taking rule is one entry here instead of three edits that could
+/// drift from each other.
+struct RuleOption {
+    name: &'static str,
+    owner: &'static str,
+    consequence_if_missing: &'static str,
+}
+
+const RULE_OPTIONS: &[RuleOption] = &[
+    RuleOption {
+        name: "not_in",
+        owner: crate::rules::RULE_POINTER_TARGET_STATUS,
+        consequence_if_missing: "examines every reference and can never report",
+    },
+    RuleOption {
+        name: "claim_paths",
+        owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+        consequence_if_missing: "scans nothing and can never report",
+    },
+    RuleOption {
+        name: "closed_statuses",
+        owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+        consequence_if_missing: "treats every claim as a violation, including correct ones",
+    },
+    RuleOption {
+        name: "terminal_statuses",
+        owner: crate::rules::RULE_NARRATIVE_FIELD_STALE,
+        consequence_if_missing: "examines every reference and can never report",
+    },
+];
+
+/// `RULE_OPTIONS`'s field, by name -- the one place that knows which
+/// `RuleSetting` field an option name maps to, so every check below reads it
+/// once instead of re-matching the name itself.
+fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<String>> {
+    match name {
+        "not_in" => setting.not_in.as_ref(),
+        "claim_paths" => setting.claim_paths.as_ref(),
+        "closed_statuses" => setting.closed_statuses.as_ref(),
+        "terminal_statuses" => setting.terminal_statuses.as_ref(),
+        _ => None,
+    }
+}
+
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    rule == crate::rules::RULE_CLAIM_STATUS_AGREEMENT
-        || rule == crate::rules::RULE_POINTER_TARGET_STATUS
-        || rule == crate::rules::RULE_NARRATIVE_FIELD_STALE
+    RULE_OPTIONS.iter().any(|o| o.owner == rule)
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
@@ -326,33 +377,12 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
     let declared = |v: &Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
 
     for (name, setting) in &config.rules {
-        let misplaced = [
-            (
-                setting.not_in.is_some(),
-                "not_in",
-                crate::rules::RULE_POINTER_TARGET_STATUS,
-            ),
-            (
-                setting.claim_paths.is_some(),
-                "claim_paths",
-                crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
-            ),
-            (
-                setting.closed_statuses.is_some(),
-                "closed_statuses",
-                crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
-            ),
-            (
-                setting.terminal_statuses.is_some(),
-                "terminal_statuses",
-                crate::rules::RULE_NARRATIVE_FIELD_STALE,
-            ),
-        ];
-        for (present, option, owner) in misplaced {
-            if present && name != owner {
+        for opt in RULE_OPTIONS {
+            let present = option_field(opt.name, setting).is_some();
+            if present && name != opt.owner {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
-                    option: option.to_string(),
+                    option: opt.name.to_string(),
                 });
             }
         }
@@ -361,50 +391,22 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
         // default -- it inverts or goes inert, and both report success
         // (BUG-44). `claim.status-agreement` with an empty `closed_statuses`
         // treats every claim as a violation; with no `claim_paths` it scans
-        // nothing forever.
-        let required: &[(bool, &str, &'static str)] =
-            if name == crate::rules::RULE_CLAIM_STATUS_AGREEMENT {
-                &[
-                    // Non-empty *and* no blank entries, not merely present. An
-                    // empty list is the harm these messages describe --
-                    // `closed_statuses: []` makes every claim a violation,
-                    // `claim_paths: []` scans nothing -- and a list of blanks is
-                    // the same list wearing a value.
-                    (
-                        setting.claim_paths.as_ref().is_some_and(declared),
-                        "claim_paths",
-                        "scans nothing and can never report",
-                    ),
-                    (
-                        setting.closed_statuses.as_ref().is_some_and(declared),
-                        "closed_statuses",
-                        "treats every claim as a violation, including correct ones",
-                    ),
-                ]
-            } else if name == crate::rules::RULE_NARRATIVE_FIELD_STALE {
-                &[(
-                    setting.terminal_statuses.as_ref().is_some_and(declared),
-                    "terminal_statuses",
-                    "examines every reference and can never report",
-                )]
-            } else if name == crate::rules::RULE_POINTER_TARGET_STATUS {
-                &[(
-                    setting.not_in.as_ref().is_some_and(declared),
-                    "not_in",
-                    "examines every reference and can never report",
-                )]
-            } else {
-                &[]
-            };
-        for (present, option, consequence) in required {
-            // A declined rule never runs, so `gated` never reads its options.
-            // Requiring them anyway would mean a rule could not be turned off
-            // without supplying values it will not use.
-            if setting.level != RuleLevel::Off && !present {
+        // nothing forever. A declined rule never runs, so `gated` never reads
+        // its options -- requiring them anyway would mean a rule could not be
+        // turned off without supplying values it will not use.
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        for opt in RULE_OPTIONS.iter().filter(|o| o.owner == name) {
+            // Non-empty *and* no blank entries, not merely present: an empty
+            // list is the harm each consequence describes, and a list of
+            // blanks is the same list wearing a value.
+            let ok = option_field(opt.name, setting).is_some_and(declared);
+            if !ok {
                 return Err(ConfigError::OptionRequired {
                     rule: name.clone(),
-                    option: option.to_string(),
-                    consequence,
+                    option: opt.name.to_string(),
+                    consequence: opt.consequence_if_missing,
                 });
             }
         }

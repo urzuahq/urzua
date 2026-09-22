@@ -881,7 +881,7 @@ fn a_claim_path_prefix_is_read_to_any_depth() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1003,7 +1003,7 @@ fn a_scope_keeps_a_finding_about_a_file_git_does_not_track() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1041,7 +1041,7 @@ fn a_claim_paths_entry_naming_a_file_does_not_load() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"NOTES.md\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(dir.join("NOTES.md"), "Fixes BUG-1.\n").unwrap();
@@ -1072,7 +1072,7 @@ fn a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: warn\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1183,6 +1183,48 @@ fn a_run_in_which_no_rule_examined_anything_is_not_ok() {
     );
 }
 
+/// `BUG-99`: `init` on a prefixless corpus proposes no identity-dependent
+/// rules, which happens to be `audit`'s entire rule set -- so the adopter's
+/// documented first two commands (`init` then `audit`) exit 2 immediately.
+/// Not a bug in `audit`'s exit-code policy (`BUG-77`, unchanged and still
+/// enforced below): `init` now discloses it up front instead of letting the
+/// adopter discover it from `audit`'s own exit code.
+#[test]
+fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
+    let dir = fixture_repo("init-prefixless-warns-about-audit");
+    std::fs::write(dir.join("docs/adr/0001-x.md"), "> Status: Accepted\n").unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["init"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        out.status.success(),
+        "init itself must still succeed: {stdout}"
+    );
+    assert!(
+        stdout.contains("rule-applicability"),
+        "a prefixless corpus must warn that audit's rule set is entirely undeclared: {stdout}"
+    );
+    assert!(
+        stdout.contains("audit"),
+        "the notice must name the affected command: {stdout}"
+    );
+
+    // BUG-77 still holds: audit itself is unchanged, and still reports
+    // not-run/exit non-zero on the config init just wrote.
+    let audit_out = run_urzua(&dir, &["audit"]);
+    let audit_stdout = String::from_utf8_lossy(&audit_out.stdout).to_string();
+    assert!(
+        audit_stdout.contains("\"status\": \"not-run\""),
+        "audit's own status must be unchanged by init's new disclosure: {audit_stdout}"
+    );
+    assert_ne!(
+        audit_out.status.code(),
+        Some(0),
+        "audit must still not exit 0: {audit_stdout}"
+    );
+}
+
 #[test]
 fn audit_with_neither_of_its_rules_declared_is_not_ok() {
     let dir = one_adr_repo(
@@ -1238,7 +1280,7 @@ fn two_records_claiming_one_identifier_are_reported() {
         dir.join(".urzua/config.yaml"),
         "schema_version: 2\nrules: {identity.collision: error}\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1274,7 +1316,7 @@ fn a_symlinked_claim_file_is_read_not_skipped() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1306,7 +1348,7 @@ fn a_claim_paths_root_symlinked_to_a_real_directory_is_usable() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1492,7 +1534,7 @@ fn a_directory_symlink_inside_claim_paths_is_treated_like_the_root() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"claims\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1746,7 +1788,7 @@ fn a_symlink_cycle_that_stays_inside_the_prefix_terminates() {
         "schema_version: 2\nrules:\n\
          \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
          record_types:\n\
-         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     std::fs::write(

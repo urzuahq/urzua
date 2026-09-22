@@ -34,6 +34,8 @@ pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
 pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
+pub const RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS: &str =
+    "config.header-none-has-no-required-fields";
 pub const RULE_POINTER_RESOLUTION: &str = "pointer.resolution";
 pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
 pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
@@ -80,6 +82,20 @@ pub const ALL_RULES: &[&str] = &[
     RULE_CONFIG_SCOPE_MATCHES_NOTHING,
     RULE_FIELD_UNTRIMMED_VALUE,
     RULE_HEADER_FIELD_CASE_MISMATCH,
+    RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+];
+
+/// Rules that derive a record's identity from its filename's type prefix
+/// (`ADR-36` declined the bare `NNNN-slug` shape), so a corpus with no prefix
+/// gives them nothing to examine. Single source of this fact: `init`'s
+/// adopt-mode proposal (`BUG-61`) is the only consumer today, but the fact
+/// belongs to the rules themselves, not to one command's module.
+pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
+    RULE_POINTER_RESOLUTION,
+    RULE_POINTER_TARGET_STATUS,
+    RULE_FILENAME_TITLE_CONSISTENCY,
+    RULE_RELATION_SUPERSESSION_RECIPROCITY,
+    RULE_NARRATIVE_FIELD_STALE,
 ];
 
 /// One `(record, field)` candidate per field a record's type declares in
@@ -200,6 +216,15 @@ pub fn header_required_fields(
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
         };
+        // A `none`-shaped type has nowhere for a header to be (`ADR-50`): a
+        // missing region here is the declared truth, not a defect to report.
+        if config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.header_shape == crate::header::HeaderShape::None)
+        {
+            continue;
+        }
 
         if record.header.region.is_none() {
             let detail = match &record.header.parse_error {
@@ -653,7 +678,17 @@ pub fn header_deprecated_shape(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-        if type_config.header_shape != crate::header::HeaderShape::YamlFrontmatter {
+        // Explicit enumeration, not `!= YamlFrontmatter` (`ADR-50`): a
+        // negative test reports every future shape as deprecated on sight,
+        // and `none` (no header at all) is a different axis, not a
+        // deprecated one. A `match`, not `matches!`, so a fifth `HeaderShape`
+        // variant forces a decision here instead of silently inheriting a
+        // default.
+        let deprecated = match type_config.header_shape {
+            crate::header::HeaderShape::Blockquote | crate::header::HeaderShape::BoldList => true,
+            crate::header::HeaderShape::YamlFrontmatter | crate::header::HeaderShape::None => false,
+        };
+        if deprecated {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Warning,
@@ -912,6 +947,50 @@ pub fn config_pointer_narrative_overlap(
     )
 }
 
+/// Rule (`ADR-50`): a type declaring `header_shape: none` has nowhere for a
+/// field to be, so a non-empty `required_fields` is a self-contradiction --
+/// the same shape as `config.pointer-narrative-overlap`.
+pub fn config_header_none_has_no_required_fields(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS;
+    let mut findings = Vec::new();
+
+    let mut type_names: Vec<&String> = config.record_types.keys().collect();
+    type_names.sort();
+
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
+        if type_config.header_shape == crate::header::HeaderShape::None
+            && !type_config.required_fields.is_empty()
+        {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: config_path.to_path_buf(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "record type '{type_name}' declares header_shape: none but required_fields {:?} -- a type with no header has nowhere for a required field to be",
+                    type_config.required_fields
+                ),
+            });
+        }
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
 /// Every record indexed by its normalized identifier (BUG-0002: keyed by
 /// numeric value, not the raw string, so a reference's padding never has to
 /// match the filename's exactly). Shared by `pointer_resolution`,
@@ -1067,7 +1146,7 @@ pub fn pointer_target_status(
                     continue;
                 };
                 // A lookup miss is unjudged, not a status match (BUG-100).
-                let Ok(status) = declared_value(target, "Status") else {
+                let Ok(status) = declared_cross_record_value(config, target, "Status") else {
                     continue;
                 };
                 if not_in.iter().any(|s| s == status) {
@@ -1311,7 +1390,7 @@ pub fn narrative_field_stale(
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue; // pointer_resolution already reports a dangling reference
                 };
-                let Ok(status) = declared_value(target, "Status") else {
+                let Ok(status) = declared_cross_record_value(config, target, "Status") else {
                     continue;
                 };
                 if terminal_statuses.iter().any(|t| t == status) {
@@ -1555,6 +1634,7 @@ fn claimed_closed(line: &str) -> Vec<String> {
 pub fn claim_status_agreement(
     claims: &[(String, String)],
     closed_statuses: &[String],
+    config: &Config,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
@@ -1602,7 +1682,7 @@ pub fn claim_status_agreement(
             continue;
         };
         // A lookup miss is unjudged, not a status match (BUG-100).
-        let Ok(status) = declared_value(target, "Status") else {
+        let Ok(status) = declared_cross_record_value(config, target, "Status") else {
             continue;
         };
         if closed_statuses.iter().any(|s| s == status) {
@@ -2215,6 +2295,29 @@ fn declared_value<'a>(record: &'a Record, key: &str) -> Result<&'a str, Outcome>
     }
 }
 
+/// `declared_value`, additionally gated on `record`'s own type declaring
+/// `key` at all (`ADR-60`): a type that never declares `Status` is not this
+/// rule's business to judge, the same as any other undeclared field --
+/// `Status` is adopter vocabulary like every other field `ADR-53` governs,
+/// not an engine-reserved one.
+fn declared_cross_record_value<'a>(
+    config: &Config,
+    record: &'a Record,
+    key: &str,
+) -> Result<&'a str, Outcome> {
+    let declared = config
+        .record_types
+        .get(&record.record_type)
+        .is_some_and(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::from(key))
+        });
+    if !declared {
+        return Err(Outcome::Absent);
+    }
+    declared_value(record, key)
+}
+
 /// A `Realized-by` locator naming a path that is not in the working tree.
 ///
 /// `Embodiment` is computed from these paths, so a locator naming nothing lets
@@ -2647,7 +2750,7 @@ mod tests {
         let target = record("docs/decisions/DEC-2-y.md", "dec", "> Status: Ratified\n");
         let config = config_with_types(vec![(
             "dec",
-            type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
+            type_config_pointer(&["Status"], None, None, Some(&["Blocked-on"])),
         )]);
 
         let records = [blocked, target];
@@ -2711,6 +2814,37 @@ mod tests {
         assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Deciders"));
+    }
+
+    /// `BUG-98`/`ADR-50`: a type declaring `header_shape: none` has no
+    /// header at all, by declaration -- a missing region there is the
+    /// declared truth, not a defect to report.
+    #[test]
+    fn a_type_declaring_no_header_is_not_reported_as_missing_one_observed_failing() {
+        let r = Record::parse_with_shape(
+            PathBuf::from("docs/decisions/0001-x.md"),
+            "dec".to_string(),
+            "Just prose. No header block anywhere in this file.\n",
+            crate::header::HeaderShape::None,
+        );
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                ..type_config(None)
+            },
+        )]);
+
+        let (exec, findings) = header_required_fields(&[r], &config);
+        assert_eq!(
+            examined(&exec),
+            0,
+            "a type with no header has nothing for this rule to examine"
+        );
+        assert!(
+            findings.is_empty(),
+            "a declared absence of a header must not be reported as a missing one: {findings:?}"
+        );
     }
 
     #[test]
@@ -3257,6 +3391,66 @@ mod tests {
         assert!(findings.is_empty());
     }
 
+    /// `ADR-50`: `none` is a different axis, not a deprecated shape.
+    #[test]
+    fn a_type_declaring_no_header_is_not_reported_as_deprecated() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                ..type_config(None)
+            },
+        )]);
+        let (exec, findings) =
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_blockquote_type_is_still_reported_as_deprecated_observed_failing() {
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (_, findings) =
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    /// `ADR-50`: a type with no header has nowhere for a required field to be.
+    #[test]
+    fn a_header_none_type_with_required_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                required_fields: vec!["Status".to_string()],
+                ..type_config(None)
+            },
+        )]);
+        let (exec, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Status"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_no_required_fields_is_not_a_contradiction() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     #[test]
     fn a_type_declaring_neither_list_is_not_missing() {
         let config = config_with_types(vec![("adr", type_config_pointer(&[], None, None, None))]);
@@ -3399,10 +3593,13 @@ mod tests {
         // produced 172 of 213 findings on this repo's own corpus.
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
         let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
-        let config = config_with_types(vec![(
-            "spec",
-            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
-        )]);
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            ("rfc", type_config_pointer(&["Status"], None, None, None)),
+        ]);
         let records = [target, source];
         let index = build_normalized_index(&records);
 
@@ -3716,10 +3913,13 @@ mod tests {
             "milestone",
             "> Status: Planned\n> Blocked-on: BUG-3\n",
         );
-        let config = config_with_types(vec![(
-            "milestone",
-            type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
-        )]);
+        let config = config_with_types(vec![
+            (
+                "milestone",
+                type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
+            ),
+            ("bug", type_config_pointer(&["Status"], None, None, None)),
+        ]);
         let records = [bug, milestone];
         let index = build_normalized_index(&records);
         let (exec, findings) =
@@ -3811,10 +4011,13 @@ mod tests {
             "rfc",
             "> Status: Draft\n> Motivated-by: BUG-7\n",
         );
-        let config = config_with_types(vec![(
-            "rfc",
-            type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
-        )]);
+        let config = config_with_types(vec![
+            (
+                "rfc",
+                type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
+            ),
+            ("bug", type_config_pointer(&["Status"], None, None, None)),
+        ]);
         let records = [bug, rfc];
         let index = build_normalized_index(&records);
         let (exec, findings) =
@@ -4109,7 +4312,8 @@ mod tests {
 
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (exec, findings) = claim_status_agreement(&claims, &closed, &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
@@ -4129,11 +4333,34 @@ mod tests {
 
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (exec, findings) = claim_status_agreement(&claims, &closed, &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
         assert_eq!(examined(&exec), 1);
         assert!(
             findings.is_empty(),
             "a lookup miss must not be reported as a status mismatch: {findings:?}"
+        );
+    }
+
+    /// `BUG-109`/`ADR-60`: a target record's `Status` is only judged when its
+    /// own type declares `Status` -- the same rule `header.field-case-mismatch`
+    /// already applies. A type that never declared it is not this rule's
+    /// business, the same as any other undeclared field.
+    #[test]
+    fn a_claim_against_a_target_whose_type_never_declares_status_is_not_judged_observed_failing() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36.".to_string())];
+        let closed = vec!["Fixed".to_string()];
+
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        // "bug" declares no fields at all -- Status included.
+        let config = config_for_required(vec![("bug", vec![])]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "a type that never declared Status must not have it judged: {findings:?}"
         );
     }
 
@@ -4182,7 +4409,9 @@ mod tests {
         let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36\n".to_string())];
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (_, findings) = claim_status_agreement(&claims, &["Fixed".to_string()], &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (_, findings) =
+            claim_status_agreement(&claims, &["Fixed".to_string()], &config, &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -4196,7 +4425,9 @@ mod tests {
         )];
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (_, findings) = claim_status_agreement(&claims, &["Fixed".to_string()], &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (_, findings) =
+            claim_status_agreement(&claims, &["Fixed".to_string()], &config, &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 

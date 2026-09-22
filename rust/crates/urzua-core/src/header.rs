@@ -170,6 +170,11 @@ pub enum HeaderShape {
     /// Urzua itself generates going forward; the other shapes remain what a
     /// pre-existing, adopted corpus is read as.
     YamlFrontmatter,
+    /// This type's records carry no header block at all (`ADR-50`): a
+    /// Nygard-style corpus whose metadata lives in prose, not a fourth
+    /// parseable shape. `header.required-fields` skips such a type rather
+    /// than reporting a missing region on every record.
+    None,
 }
 
 pub fn parse(content: &str) -> Header {
@@ -182,6 +187,16 @@ pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
     if shape == HeaderShape::YamlFrontmatter {
         return parse_yaml_frontmatter(content);
     }
+    // A `none`-shaped type declares it has nowhere for a header to be
+    // (`ADR-50`): no region, no fields, no parse error -- there is nothing
+    // here to have failed to parse.
+    if shape == HeaderShape::None {
+        return Header {
+            fields: Vec::new(),
+            region: None,
+            parse_error: None,
+        };
+    }
 
     let mut fields = Vec::new();
     let mut region: Option<(usize, usize)> = None;
@@ -189,7 +204,7 @@ pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
     let line_body: fn(&str) -> Option<&str> = match shape {
         HeaderShape::Blockquote => blockquote_body,
         HeaderShape::BoldList => bold_list_body,
-        HeaderShape::YamlFrontmatter => unreachable!("handled above"),
+        HeaderShape::YamlFrontmatter | HeaderShape::None => unreachable!("handled above"),
     };
 
     for (idx, raw_line) in content.lines().enumerate() {

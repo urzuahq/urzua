@@ -2,7 +2,7 @@
 Stable-Id: 01M30VE5PPB5TVTF85WW5BRH8H
 Status: Open
 Found-in: "Reviewing what the 0.4.0 population work did and did not fix; reproduced against a scratch repository built to the prefixless shape"
-Regression-test: "not yet written -- `init` then `audit` on a corpus with no type prefix must not exit 2"
+Regression-test: "init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared, check_integration.rs"
 Blocked-on: RFC-38
 ---
 # 99 — urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
@@ -88,5 +88,6 @@ arguing rather than assuming.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-22 | Mitigated, not closed: `init` now emits a `rule-applicability` notice when its proposed config leaves `audit`'s entire rule set undeclared, so the adopter learns this before running `audit` rather than from its exit code. **Why:** the user asked to fix this before release; this record's own diagnosis says the root cause is `audit` owning a rule set at all (`RFC-38`), which stays undecided, so `Status` stays `Open` and `Blocked-on: RFC-38` stays -- this is exactly the "warning from `init` is the cheapest patch" option the previous entry already named, applied now rather than left for `RFC-38`'s resolution. `audit`'s own exit-code behavior is deliberately unchanged (`BUG-77`'s regression test still passes, and a new test asserts it stays that way alongside the new notice). | **substantive** |
 > | 2026-09-21 | Re-diagnosed and `Blocked-on: RFC-38` declared. **Why:** filed as an empty-rule-set edge case with three candidate patches. Examining why `audit` has a rule set at all showed the edge case is a symptom of a read-only subset command that outlived `ADR-53`, and that `BUG-42` and `BUG-84` share that root. A bug record that misdiagnoses its own cause is the artifact this project keeps finding in review; corrected before it shipped rather than after. | **substantive** |
 > | 2026-09-21 | Filed, with a reproduction. **Why:** named during the 0.4.0 population planning as a live `BUG-84` variant "under investigation, to be filed separately" and then not filed, so it existed only in a plan document no rule reads. Reproduced before filing rather than carried forward on the original assertion. | **substantive** |

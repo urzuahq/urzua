@@ -142,7 +142,7 @@ fn read_claim_files(
         // Sorted so a finding's order does not depend on the filesystem.
         paths.sort();
         for path in paths {
-            let content = std::fs::read_to_string(&path)
+            let content = urzua_io::read_to_string(&path)
                 .map_err(|e| format!("claim_paths: could not read {}: {e}", path.display()))?;
             let shown = path
                 .strip_prefix(repo_root)
@@ -322,7 +322,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             let closed = setting
                 .and_then(|s| s.closed_statuses.clone())
                 .unwrap_or_default();
-            rules::claim_status_agreement(&claims, &closed, &record_index)
+            rules::claim_status_agreement(&claims, &closed, &config, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
             rules::filename_title_consistency(&records, &full_text)
@@ -422,6 +422,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             &config,
             rules::RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
             || rules::config_pointer_narrative_overlap(&config, &config_path),
+        ),
+        crate::gate::gated(
+            &config,
+            rules::RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+            || rules::config_header_none_has_no_required_fields(&config, &config_path),
         ),
     ];
 
