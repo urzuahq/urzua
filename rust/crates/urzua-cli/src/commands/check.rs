@@ -33,8 +33,20 @@ fn read_claim_files(
         // release consumes the last fragment, and treating that as an I/O
         // failure took the whole command down. The caller reports the absence
         // as a `Notice`; there is simply nothing here to read.
-        if !dir.exists() {
-            continue;
+        //
+        // `try_exists`, not `exists`: the latter swallows every error into
+        // `false`, including a permission failure on an ancestor, which would
+        // silently read this claim path as absent rather than unreadable --
+        // the caller's guard makes the same distinction for the same reason.
+        match dir.try_exists() {
+            Ok(false) => continue,
+            Ok(true) => {}
+            Err(e) => {
+                return Err(format!(
+                    "claim_paths: could not check {}: {e}",
+                    dir.display()
+                ))
+            }
         }
         // `claim_paths` is a path *prefix*, so the claims may sit any depth
         // below it: reading one level deep made a nested layout report a clean
@@ -245,7 +257,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // not readable when it was (BUG-80) -- so the target is
                 // resolved and required to stay inside the repository instead.
                 let declared = repo_root.join(prefix);
-                let resolved = declared.canonicalize().ok();
+                let resolved = declared.canonicalize();
                 // Both sides canonicalised: the repo root may itself reach
                 // through a link (macOS `/tmp`), and comparing a resolved path
                 // against an unresolved root reports every entry as outside.
@@ -258,27 +270,45 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                     // ceases to exist the moment a release consumes the last
                     // fragment, and aborting took `check` down with it. The rule
                     // has no input, which is reported rather than fatal.
-                    None => claim_path_notices.push(Notice {
-                        severity: NoticeSeverity::Warning,
-                        subject: rules::RULE_CLAIM_STATUS_AGREEMENT.to_string(),
-                        message: format!(
-                            "claim.status-agreement: claim_paths entry '{prefix}' does not exist -- the rule has no input"
-                        ),
-                    }),
+                    //
+                    // Only `NotFound`: an ancestor with its execute bit removed
+                    // returns `PermissionDenied` here, and `Path::exists()`
+                    // reports it as `false` too (it swallows every error, not
+                    // only absence) -- collapsing that into the same Notice
+                    // would report `check` clean over claim files it never had
+                    // permission to read, reintroducing `BUG-56` under a
+                    // permissions error instead of a typo.
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        claim_path_notices.push(Notice {
+                            severity: NoticeSeverity::Warning,
+                            subject: rules::RULE_CLAIM_STATUS_AGREEMENT.to_string(),
+                            message: format!(
+                                "claim.status-agreement: claim_paths entry '{prefix}' does not exist -- the rule has no input"
+                            ),
+                        })
+                    }
+                    // Any other I/O failure -- permission denied is the one
+                    // observed in practice -- is not absence and must not read
+                    // as it.
+                    Err(e) => {
+                        return emit(&CouldNotRun::from(format!(
+                            "claim.status-agreement: claim_paths entry '{prefix}' could not be read: {e}"
+                        )))
+                    }
                     // Actively wrong, rather than merely empty: a file where a
                     // directory was declared, or a link out of the repository
                     // (BUG-69). Neither is a state waiting to be filled in.
-                    Some(r) if !r.is_dir() => {
+                    Ok(r) if !r.is_dir() => {
                         return emit(&CouldNotRun::from(format!(
                             "claim.status-agreement: claim_paths entry '{prefix}' is not a directory"
                         )))
                     }
-                    Some(r) if !r.starts_with(&root) => {
+                    Ok(r) if !r.starts_with(&root) => {
                         return emit(&CouldNotRun::from(format!(
                             "claim.status-agreement: claim_paths entry '{prefix}' resolves outside the repository"
                         )))
                     }
-                    Some(_) => {}
+                    Ok(_) => {}
                 }
             }
         }

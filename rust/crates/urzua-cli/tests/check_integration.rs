@@ -1969,3 +1969,71 @@ fn an_absent_claim_paths_directory_is_reported_not_fatal() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[cfg(unix)]
+#[test]
+fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
+    // canonicalize() and exists() both fold a permission failure into the
+    // same signal as genuine absence, so the BUG-56 fix's Notice-not-abort
+    // path had to be checked against more than "the directory is missing" --
+    // otherwise an unreadable directory reads as an empty one and the rule
+    // silently examines nothing, which is BUG-56's own shape under a
+    // permissions error instead of a typo.
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = fixture_repo("claim-paths-permission-denied");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("locked/claims")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"locked/claims\"]\n\
+         \x20   closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "# 1 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let locked = dir.join("locked");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    // A sandbox running as root (or with an ACL bypassing the mode bits)
+    // would make this fixture assert nothing real. Detect that rather than
+    // let the test pass for the wrong reason.
+    let bypassed = locked.join("claims").try_exists().is_ok();
+    if bypassed {
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+        eprintln!(
+            "skipped: permission bits did not block access in this environment (running as root?)"
+        );
+        return;
+    }
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::remove_dir_all(&dir).ok();
+
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "a permission failure is not absence and must abort: {stdout}"
+    );
+    assert!(
+        !stdout.contains("does not exist"),
+        "a permission failure must not read as absence: {stdout}"
+    );
+    assert!(
+        stdout.contains("could not"),
+        "the abort must name what actually happened: {stdout}"
+    );
+}
