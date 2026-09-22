@@ -5,6 +5,7 @@
 //! is "a real Phase 1 feature" per ADR-0015, not a stub.
 
 use crate::record::Record;
+use crate::report::{census, Outcome, Population, PopulationUnit};
 use crate::rules::{compute_embodiment, find_revision_log_entries, parse_realized_by};
 
 /// One mechanically-detected disagreement between a record's stated value
@@ -29,22 +30,27 @@ pub struct Repair {
 /// knows about (ADR-0018). Every other field stays permanently
 /// hand-authored (RFC-0008 §1's eligibility test).
 ///
-/// Returns the count of records actually examined (both `Embodiment` and
-/// `Realized-by` present) alongside the repairs found, so a caller can
+/// The candidate is the *pair*: a repair needs both `Embodiment` and
+/// `Realized-by`, so a record carrying only one of them is handed to this
+/// function and reaches no verdict -- `Absent`, not a candidate that never
+/// existed. Every loaded record is eligible; `fix` has no config-declared
+/// field set to filter against the way `check`'s rules do, so unlike
+/// `embodiment_consistency` this reads every record rather than a declared
+/// slot.
+///
+/// Returns the population alongside the repairs found, so a caller can
 /// distinguish "examined some, found nothing to repair" from "examined
 /// nothing" -- the same no-silent-no-op discipline `check` follows.
-pub fn detect_repairs(records: &[Record]) -> (usize, Vec<Repair>) {
+pub fn detect_repairs(records: &[Record]) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
-    let mut examined = 0;
 
-    for record in records {
+    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         let Some(stated) = record.header.get("Embodiment") else {
-            continue;
+            return Outcome::Absent;
         };
         let Some(realized_by_value) = record.header.get("Realized-by") else {
-            continue;
+            return Outcome::Absent;
         };
-        examined += 1;
 
         // Drift (ADR-0032) is deliberately not checked here: it needs the
         // same git-history plumbing `check` gets from its caller, and
@@ -62,9 +68,10 @@ pub fn detect_repairs(records: &[Record]) -> (usize, Vec<Repair>) {
                 evidence: format!("Realized-by: {realized_by_value}"),
             });
         }
-    }
+        Outcome::Examined
+    });
 
-    (examined, repairs)
+    (population, repairs)
 }
 
 /// Computes the new file content for applying one Tier-1 repair. Pure --
@@ -131,8 +138,8 @@ mod tests {
             "docs/adr/0001-x.md",
             "> Embodiment: Not started\n> Realized-by: code:src/lib.rs\n",
         );
-        let (examined, repairs) = detect_repairs(&[r]);
-        assert_eq!(examined, 1);
+        let (population, repairs) = detect_repairs(&[r]);
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].field, "Embodiment");
         assert_eq!(repairs[0].current_value, "Not started");
@@ -146,16 +153,19 @@ mod tests {
             "docs/adr/0001-x.md",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (examined, repairs) = detect_repairs(&[r]);
-        assert_eq!(examined, 1);
+        let (population, repairs) = detect_repairs(&[r]);
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(repairs.is_empty());
     }
 
     #[test]
-    fn no_realized_by_produces_no_repair_and_is_not_examined() {
+    fn no_realized_by_leaves_the_record_eligible_but_unexamined() {
+        // Absent, not out of population: the record was handed to this
+        // function and reached no verdict, which is what `eligible() > 0`
+        // says and a bare examined-count could not.
         let r = record("docs/adr/0001-x.md", "> Embodiment: Not started\n");
-        let (examined, repairs) = detect_repairs(&[r]);
-        assert_eq!(examined, 0);
+        let (population, repairs) = detect_repairs(&[r]);
+        assert_eq!((population.eligible(), population.examined()), (1, 0));
         assert!(repairs.is_empty());
     }
 

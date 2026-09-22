@@ -56,6 +56,28 @@ impl Gen {
             .map(|_| ALPHABET[self.below(ALPHABET.len())])
             .collect()
     }
+
+    /// A path segment drawn from the same alphabet, filtered to characters
+    /// that survive as a filesystem component on every platform this project
+    /// runs on (no `/`, which `ALPHABET` never contains anyway, but kept
+    /// explicit as the property this generator exists to hold).
+    fn path_segment(&mut self) -> String {
+        let mut s = self.field_name();
+        s.retain(|c| c != '/');
+        if s.is_empty() {
+            s.push('x');
+        }
+        s
+    }
+
+    /// A record's own file-name stem, excluding a leading `_` -- the
+    /// generator's job is the ownership property, and `ALPHABET` includes
+    /// `_`, which names a template and is excluded from candidacy before
+    /// ownership is even asked (a different rule than the one under test).
+    fn file_stem(&mut self) -> String {
+        let s = self.path_segment();
+        s.trim_start_matches('_').to_string()
+    }
 }
 
 /// The property, stated once and checked against whatever matcher is passed in.
@@ -403,5 +425,63 @@ mod tests {
         let b = first_counterexample(case_insensitive_matcher, 500, 0xC0FFEE);
         assert_eq!(a, b);
         assert!(a.is_some());
+    }
+
+    /// A record directly inside a declared dir is owned; one nested any
+    /// deeper is not (`RFC-35`) -- generated over synthetic path segments
+    /// rather than the one fixture a human happened to write, because the
+    /// shipped defect this catches was a boolean inverted while rewriting a
+    /// loop into a census closure: a mistake inspection missed and the one
+    /// hand-written integration test happened to catch, not one the property
+    /// was built to find. It is here so the next inversion does not need the
+    /// same luck.
+    #[test]
+    fn a_record_is_owned_only_when_directly_inside_its_declared_dir() {
+        use crate::config::{Config, RecordTypeConfig};
+        use crate::rules::type_record_outside_declared_dir;
+        use std::path::PathBuf;
+
+        let mut gen = Gen(0xF00D);
+        for _ in 0..300 {
+            let dir_name = gen.path_segment();
+            let dir = format!("docs/{dir_name}");
+
+            let config = Config {
+                schema_version: 2,
+                rules: std::collections::HashMap::new(),
+                record_types: [(
+                    "note".to_string(),
+                    RecordTypeConfig {
+                        dir: dir.clone(),
+                        required_fields: Vec::new(),
+                        header_shape: Default::default(),
+                        prefix: None,
+                        header_layout: None,
+                        known_fields: None,
+                        pointer_fields: None,
+                        narrative_fields: None,
+                        spec: None,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            };
+
+            let file_name = format!("{}x.md", gen.file_stem());
+            let directly_owned = gen.below(2) == 0;
+            let path = if directly_owned {
+                PathBuf::from(format!("{dir}/{file_name}"))
+            } else {
+                let nested = gen.path_segment();
+                PathBuf::from(format!("{dir}/{nested}/{file_name}"))
+            };
+
+            let (_, findings) = type_record_outside_declared_dir(&config, &[path.clone()]);
+            let reported = findings.iter().any(|f| f.file == path);
+            assert_eq!(
+                reported, !directly_owned,
+                "dir={dir:?} path={path:?} directly_owned={directly_owned}:                  reported must be the opposite of directly-owned"
+            );
+        }
     }
 }

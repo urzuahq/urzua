@@ -293,8 +293,7 @@ impl Population {
         // Raise `eligible`, never lower `examined`. Clamping the other way
         // resolves a contradiction into `eligible == examined` -- "the rule
         // examined its whole population", the most reassuring wrong answer
-        // available -- and desynchronises this from the `records_examined` each
-        // rule sets from the unclamped local.
+        // available.
         Population {
             unit,
             eligible: eligible.max(examined),
@@ -511,7 +510,7 @@ impl Report for NewReport {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FixReport {
     pub status: FixStatus,
-    pub records_examined: usize,
+    pub population: Population,
     pub repairs: Vec<crate::fix::Repair>,
     pub failed: Vec<FixFailure>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -556,7 +555,7 @@ impl Report for FixReport {
 pub struct MigrateSchemaReport {
     pub status: ReportStatus,
     pub field: String,
-    pub records_examined: usize,
+    pub population: Population,
     pub would_fail: Vec<crate::migrate::SchemaReportEntry>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
