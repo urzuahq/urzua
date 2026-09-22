@@ -431,7 +431,7 @@ pub fn type_record_outside_declared_dir(
 /// A declared record type whose `dir` matches no record.
 ///
 /// `RFC-35` made `dir` mean *that directory* rather than that subtree, which is
-/// unambiguous but unforgiving: a `dir` one level off now matches nothing at
+/// unambiguous but unforgiving: a `dir` one level off matches nothing at
 /// all. Alone that degrades to `not-run`, which is visible; mixed with any
 /// working type it was silent -- `check` reported `ok` and exit 0 over a corpus
 /// it never examined. `claim_paths` got a load-time guard for the same hazard
@@ -1885,7 +1885,8 @@ pub fn revision_log_change_class(
     // *absent* from this rule's judgement, not outside its population -- and
     // absence is exactly what BUG-50 reports as indistinguishable from
     // compliance: SPEC-1 lost 18 revision rows by losing one line and the rule
-    // stayed green. The subtraction the report could not perform is now in it.
+    // stayed green. `eligible` minus `examined` is exactly that subtraction, expressed
+    // where `records_examined` alone could not carry it.
     let candidates: Vec<&Record> = records.iter().collect();
 
     let (population, examined_records) = census_records(

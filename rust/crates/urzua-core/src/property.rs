@@ -102,8 +102,9 @@ fn first_counterexample(
         let allowed: HashSet<String> = [declared.clone()].into_iter().collect();
 
         // Half the cases write the declared name back exactly and must match.
-        // The other half change its case, which is now a *different* name and
-        // must not: accepting it is how `Maße` and `Masse` become one field.
+        // The other half change its case, which is a different name under exact
+        // comparison and must not match: accepting it is how `Maße` and `Masse`
+        // become one field.
         let same_case = gen.below(2) == 0;
         let written = if same_case {
             declared.clone()
@@ -186,8 +187,8 @@ mod tests {
     ///
     /// The first version of this asserted `accepted || reported`, which are
     /// exact complements -- a tautology that could not fail, inside the suite
-    /// built to catch exactly that. It now predicts the finding count from the
-    /// declared name and holds the parser to recovering the key.
+    /// built to catch exactly that. It predicts the finding count from the declared
+    /// name and holds the parser to recovering the key.
     #[test]
     fn every_field_a_record_carries_is_either_accepted_or_reported() {
         use crate::rules::header_field_set_consistency;
