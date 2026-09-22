@@ -78,7 +78,7 @@ pub(crate) fn load_records(
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if file_name.starts_with('_') || !file_name.ends_with(".md") {
+            if !urzua_core::record::is_governed_record_filename(file_name) {
                 continue;
             }
             let full_path = repo_root.join(rel_path);

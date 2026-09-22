@@ -208,6 +208,19 @@ pub struct RecordTypeConfig {
     pub spec: Option<String>,
 }
 
+impl RecordTypeConfig {
+    /// Every field this type declares, `required_fields` **or** `known_fields`
+    /// (`BUG-106`): reading either alone silently drops the type that requires
+    /// a field instead of merely permitting it.
+    pub fn declared_fields(&self) -> std::collections::HashSet<String> {
+        self.required_fields
+            .iter()
+            .chain(self.known_fields.iter().flatten())
+            .cloned()
+            .collect()
+    }
+}
+
 impl<'de> Deserialize<'de> for HeaderShape {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -420,6 +433,27 @@ mod tests {
             let s = yaml_serde::to_string(&layout).unwrap();
             assert_eq!(layout, yaml_serde::from_str::<HeaderLayout>(&s).unwrap());
         }
+    }
+
+    /// BUG-106: three independent computations of this union existed;
+    /// `known_fields` alone must not drop a field only in `required_fields`.
+    #[test]
+    fn declared_fields_unions_required_and_known() {
+        let t = RecordTypeConfig {
+            dir: "docs/adr".to_string(),
+            required_fields: vec!["Status".to_string()],
+            header_shape: HeaderShape::default(),
+            prefix: None,
+            header_layout: None,
+            known_fields: Some(vec!["Embodiment".to_string()]),
+            pointer_fields: None,
+            narrative_fields: None,
+            spec: None,
+        };
+        let declared = t.declared_fields();
+        assert!(declared.contains("Status"));
+        assert!(declared.contains("Embodiment"));
+        assert_eq!(declared.len(), 2);
     }
 
     #[test]

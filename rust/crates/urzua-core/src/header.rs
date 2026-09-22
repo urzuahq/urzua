@@ -11,6 +11,15 @@ pub struct HeaderField {
     pub line: usize,
 }
 
+/// Not `Option<&str>`: that has an `.unwrap_or(...)` a caller can reach for
+/// without deciding what a miss means (`RFC-40`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldRead<'a> {
+    Present(&'a str),
+    Missing,
+    Unreadable,
+}
+
 /// The parsed header: an ordered list of fields plus the region's own
 /// boundaries, so closure questions (duplicate keys, "is this the whole
 /// header") have something to be asked about.
@@ -67,6 +76,19 @@ impl Header {
             .iter()
             .find(|f| f.key.eq_ignore_ascii_case(key))
             .map(|f| f.value.as_str())
+    }
+
+    /// `get`, with the miss case decided once (`RFC-40`) instead of per
+    /// caller. A differently-cased key is still `Missing`: `header
+    /// .field-case-mismatch` is the one place that reports it.
+    pub fn read_declared(&self, key: &str) -> FieldRead<'_> {
+        if self.region.is_none() {
+            return FieldRead::Unreadable;
+        }
+        match self.get(key) {
+            Some(value) => FieldRead::Present(value),
+            None => FieldRead::Missing,
+        }
     }
 
     /// Exact (`ADR-57`): `Status` and `status` are two fields, so writing both

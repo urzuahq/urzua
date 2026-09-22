@@ -4,6 +4,16 @@
 use crate::header::{self, Header, HeaderShape};
 use std::path::PathBuf;
 
+/// A tracked, non-template markdown file below a declared `dir` (`BUG-104`):
+/// governed by that type whether or not its filename carries a number.
+/// Deliberately looser than `new_record::parse_record_filename`, which asks a
+/// different question -- "is this evidence of a numbering convention" -- for
+/// `init`'s adopt-mode heuristic and `new`'s numbering, neither of which this
+/// answers.
+pub fn is_governed_record_filename(file_name: &str) -> bool {
+    !file_name.starts_with('_') && file_name.ends_with(".md")
+}
+
 #[derive(Debug, Clone)]
 pub struct Record {
     pub path: PathBuf,
@@ -52,5 +62,28 @@ impl Record {
             type_prefix,
             header: header::parse_with_shape(content, shape),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// BUG-104: `discovery.rs` and `rules.rs` duplicated this predicate and
+    /// could drift; both now call the same function.
+    #[test]
+    fn a_leading_underscore_is_a_template_not_a_record() {
+        assert!(!is_governed_record_filename("_template.md"));
+    }
+
+    #[test]
+    fn a_non_markdown_file_is_not_a_record() {
+        assert!(!is_governed_record_filename("README"));
+        assert!(!is_governed_record_filename("notes.txt"));
+    }
+
+    #[test]
+    fn an_unnumbered_markdown_file_is_still_governed() {
+        assert!(is_governed_record_filename("README.md"));
     }
 }

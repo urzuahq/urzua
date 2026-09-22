@@ -211,12 +211,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         // field set. `known_fields_by_type` is absent for a type declaring only
         // `required_fields`, because `header.field-set-consistency` skips such a
         // type by design -- a rule reading that map would skip it too, silently.
-        let declared: std::collections::HashSet<String> = cfg
-            .required_fields
-            .iter()
-            .chain(cfg.known_fields.iter().flatten())
-            .cloned()
-            .collect();
+        let declared = cfg.declared_fields();
         declared_fields_by_type.insert(name.clone(), declared.clone());
         if cfg.known_fields.is_some() {
             known_fields_by_type.insert(name.clone(), declared);
@@ -418,6 +413,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_UNTRIMMED_VALUE, || {
             rules::field_untrimmed_value(&records, &declared_fields_by_type)
+        }),
+        crate::gate::gated(&config, rules::RULE_HEADER_FIELD_CASE_MISMATCH, || {
+            rules::header_field_case_mismatch(&records, &declared_fields_by_type)
         }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             let terminal = config

@@ -1336,11 +1336,10 @@ fn a_config_scoped_rule_alone_discloses_that_it_read_no_record() {
     // them as `records_examined` -- so "some rule examined something" was
     // satisfied by a rule that had opened no file (BUG-81).
     //
-    // The count is now unit-bearing, so it cannot be mistaken for records, and
-    // the verdict no longer reads it: declaring only this rule is a thin config,
-    // which ADR-53 makes the adopter's call. What must not happen is the run
-    // reading as a clean corpus, and `records_read_by_any_rule: 0` is what
-    // prevents that.
+    // The count is unit-bearing, so it cannot be mistaken for records, and the
+    // verdict doesn't read it: declaring only this rule is a thin config, which
+    // ADR-53 makes the adopter's call. What must not happen is the run reading
+    // as a clean corpus, and `records_read_by_any_rule: 0` prevents that.
     let dir = fixture_repo("config-scope-only");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -1423,8 +1422,8 @@ fn a_path_scoped_rule_alone_discloses_that_it_read_no_record() {
     // a file, so it cannot establish anything about a record's contents -- yet
     // it reported those names as `records_examined` (BUG-83).
     //
-    // The unit now says `path`, and `records_read_by_any_rule: 0` says no
-    // record was judged, over a corpus whose one record is unparseable garbage.
+    // The unit says `path`, and `records_read_by_any_rule: 0` says no record
+    // was judged, over a corpus whose one record is unparseable garbage.
     let dir = fixture_repo("path-scope-only");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -1607,7 +1606,7 @@ fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
 fn a_record_with_no_revision_log_is_absent_not_outside_the_population() {
     // BUG-50: "absence is indistinguishable from compliance". SPEC-1 lost 18
     // revision rows by losing one marker line and the rule stayed green. The
-    // report now performs the subtraction it could not.
+    // report performs the subtraction the rule alone could not.
     let dir = one_adr_repo(
         "revision-log-absent",
         "{revision-log.change-class-required: error}",
@@ -1664,7 +1663,7 @@ fn a_type_declaring_no_layout_puts_its_records_outside_the_population() {
 fn a_field_rule_counts_declared_slots_not_records() {
     // BUG-40: field.quality reported 1023 against a 309-record corpus and the
     // number was never wrong -- it was 100% of declared field slots under a
-    // name claiming records. The slot list is now the population, so the
+    // name claiming records. The slot list is the population, so the
     // denominator cannot be mislabelled.
     let dir = fixture_repo("field-slot-population");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
