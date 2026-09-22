@@ -155,22 +155,24 @@ pub(crate) fn relative_scopes(
     Ok(out)
 }
 
+/// Takes the caller's already-resolved scopes rather than a raw path list
+/// and re-deriving them: this and `check.rs`'s own `requested_scopes` used to
+/// call `relative_scopes` independently on the same `paths`, each doing one
+/// `canonicalize()` per argument -- the same filesystem work twice for one
+/// invocation.
 pub(crate) fn scope_to_requested_paths(
-    repo_root: &Path,
     discovered: &[PathBuf],
-    requested: &[PathBuf],
-) -> Result<Vec<PathBuf>, String> {
-    if requested.is_empty() {
-        return Ok(discovered.to_vec());
+    relative_scopes: &[PathBuf],
+) -> Vec<PathBuf> {
+    if relative_scopes.is_empty() {
+        return discovered.to_vec();
     }
 
-    let relative_scopes = relative_scopes(repo_root, requested)?;
-
-    Ok(discovered
+    discovered
         .iter()
         .filter(|d| relative_scopes.iter().any(|s| d.starts_with(s)))
         .cloned()
-        .collect())
+        .collect()
 }
 
 /// Which records have at least one `Realized-by` locator that changed, per

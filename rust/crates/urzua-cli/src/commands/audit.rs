@@ -53,13 +53,20 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         }
     }
 
+    let record_index = rules::build_normalized_index(&records);
+
     let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-        rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type)
+        rules::pointer_resolution(
+            &records,
+            &pointer_fields_by_type,
+            &narrative_fields_by_type,
+            &record_index,
+        )
     });
     let (exec2, findings2) = crate::gate::gated(
         &config,
         rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-        || rules::supersession_reciprocity(&records, &config),
+        || rules::supersession_reciprocity(&records, &config, &record_index),
     );
     let mut findings = findings1;
     findings.extend(findings2);
