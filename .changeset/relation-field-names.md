@@ -9,11 +9,12 @@ record type — e.g. `relation_fields: { status: State }` for a type that calls 
 (`Status`/`Embodiment`/`Realized-by`/`Supersedes / Superseded-by`) when undeclared, so no existing
 config needs to change.
 
-Replaces six rules' hardcoded field-name literals (`claim_status_agreement`, `pointer_target_status`,
+Replaces seven rules' hardcoded field-name literals (`claim_status_agreement`, `pointer_target_status`,
 `narrative_field_stale`, `embodiment_consistency`, `embodiment_locator_exists`,
 `embodiment_locator_promotion_candidate`, `supersession_reciprocity`) with a lookup through the
-declared-or-defaulted name, closing `BUG-110` (`Status` hardcoded) and the same defect shape found
-recurring in `Embodiment`/`Realized-by`/`Supersedes / Superseded-by` during review. Adds
+declared-or-defaulted name, in both the gating logic and every finding message, closing `BUG-110`
+(`Status` hardcoded) and the same defect shape found recurring in
+`Embodiment`/`Realized-by`/`Supersedes / Superseded-by` during review. Adds
 `config.relation-field-not-known`, reporting a declared `relation_fields` override not also present in
 that type's `required_fields`/`known_fields`, mirroring `config.pointer-field-not-known`.
 

@@ -1204,15 +1204,13 @@ pub fn pointer_target_status(
                     continue;
                 };
                 // A lookup miss is unjudged, not a status match (BUG-100).
-                let Ok(status) = declared_cross_record_value(
+                let target_status_field = relation_field_name(
                     config,
-                    target,
-                    relation_field_name(
-                        config,
-                        &target.record_type,
-                        crate::config::RelationRole::Status,
-                    ),
-                ) else {
+                    &target.record_type,
+                    crate::config::RelationRole::Status,
+                );
+                let Ok(status) = declared_cross_record_value(config, target, target_status_field)
+                else {
                     continue;
                 };
                 if not_in.iter().any(|s| s == status) {
@@ -1223,7 +1221,7 @@ pub fn pointer_target_status(
                         line: None,
                         waived: None,
                         message: format!(
-                            "{field_name}: {reference} resolves, but its Status is {status}"
+                            "{field_name}: {reference} resolves, but its {target_status_field} is {status}"
                         ),
                     });
                 }
@@ -1432,18 +1430,21 @@ pub fn narrative_field_stale(
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue; // pointer_resolution already reports a dangling reference
                 };
-                let Ok(status) = declared_cross_record_value(
+                let target_status_field = relation_field_name(
                     config,
-                    target,
-                    relation_field_name(
-                        config,
-                        &target.record_type,
-                        crate::config::RelationRole::Status,
-                    ),
-                ) else {
+                    &target.record_type,
+                    crate::config::RelationRole::Status,
+                );
+                let Ok(status) = declared_cross_record_value(config, target, target_status_field)
+                else {
                     continue;
                 };
                 if terminal_statuses.iter().any(|t| t == status) {
+                    let source_status_field = relation_field_name(
+                        config,
+                        &record.record_type,
+                        crate::config::RelationRole::Status,
+                    );
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
@@ -1451,7 +1452,7 @@ pub fn narrative_field_stale(
                         line: None,
                         waived: None,
                         message: format!(
-                            "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's Status/{field_name} should update"
+                            "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's {source_status_field}/{field_name} should update"
                         ),
                     });
                 }
@@ -1734,15 +1735,12 @@ pub fn claim_status_agreement(
             continue;
         };
         // A lookup miss is unjudged, not a status match (BUG-100).
-        let Ok(status) = declared_cross_record_value(
+        let status_field = relation_field_name(
             config,
-            target,
-            relation_field_name(
-                config,
-                &target.record_type,
-                crate::config::RelationRole::Status,
-            ),
-        ) else {
+            &target.record_type,
+            crate::config::RelationRole::Status,
+        );
+        let Ok(status) = declared_cross_record_value(config, target, status_field) else {
             continue;
         };
         if closed_statuses.iter().any(|s| s == status) {
@@ -1754,7 +1752,9 @@ pub fn claim_status_agreement(
             file: PathBuf::from(path),
             line: Some(line),
             waived: None,
-            message: format!("claims to close {reference}, but {reference} has Status {status}"),
+            message: format!(
+                "claims to close {reference}, but {reference} has {status_field} {status}"
+            ),
         });
     }
 
@@ -2448,7 +2448,7 @@ pub fn embodiment_locator_exists(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
-                        message: "Realized-by has an empty locator".to_string(),
+                        message: format!("{field} has an empty locator"),
                     });
                     continue;
                 }
@@ -2461,9 +2461,7 @@ pub fn embodiment_locator_exists(
                     file: record.path.clone(),
                     line: None,
                     waived: None,
-                    message: format!(
-                        "Realized-by names '{locator}', which is not in the working tree"
-                    ),
+                    message: format!("{field} names '{locator}', which is not in the working tree"),
                 });
             }
             Outcome::Examined
@@ -2768,13 +2766,15 @@ pub fn supersession_reciprocity(
             for reference in extract_references(value) {
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
- waived: None,
-                    message: format!("Supersedes/Superseded-by: {reference} does not resolve to any discovered record"),
-                });
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "{field}: {reference} does not resolve to any discovered record"
+                        ),
+                    });
                     continue;
                 };
                 let target_field = relation_field_name(
@@ -2794,7 +2794,7 @@ pub fn supersession_reciprocity(
                     line: None,
  waived: None,
                     message: format!(
-                        "claims a Supersedes/Superseded-by relation with {reference}, but {reference} does not reciprocally name {id}"
+                        "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
                     ),
                 });
                 }
@@ -4218,6 +4218,39 @@ mod tests {
     }
 
     #[test]
+    fn narrative_field_stale_reads_a_custom_status_field_name_observed_failing() {
+        let bug = record("docs/bugs/BUG-8-x.md", "bug", "> State: Fixed\n");
+        let rfc = record(
+            "docs/rfc/RFC-2-x.md",
+            "rfc",
+            "> Status: Draft\n> Motivated-by: BUG-8\n",
+        );
+        let config = config_with_types(vec![
+            (
+                "rfc",
+                type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
+            ),
+            (
+                "bug",
+                crate::config::RecordTypeConfig {
+                    relation_fields: Some(crate::config::RelationFields {
+                        status: Some("State".to_string()),
+                        ..Default::default()
+                    }),
+                    ..type_config_pointer(&["State"], None, None, None)
+                },
+            ),
+        ]);
+        let records = [bug, rfc];
+        let index = build_normalized_index(&records);
+        let (exec, findings) =
+            narrative_field_stale(&records, &config, &terminal_for_tests(), &index);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Fixed"), "{findings:?}");
+    }
+
+    #[test]
     fn a_five_digit_filename_still_resolves_bug_0002_observed_failing() {
         // Before the fix, record_id() rejected any numeric prefix that
         // wasn't exactly 4 digits -- past 9999 records of one type,
@@ -4530,6 +4563,33 @@ mod tests {
             findings.is_empty(),
             "a lookup miss must not be reported as a status mismatch: {findings:?}"
         );
+    }
+
+    #[test]
+    fn claim_status_agreement_reads_a_custom_status_field_name_observed_failing() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> State: Open\n");
+        let claims = vec![(
+            ".changeset/x.md".to_string(),
+            "which also closes BUG-36.".to_string(),
+        )];
+        let closed = vec!["Fixed".to_string()];
+
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let config = config_with_types(vec![(
+            "bug",
+            crate::config::RecordTypeConfig {
+                relation_fields: Some(crate::config::RelationFields {
+                    status: Some("State".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&["State"], None, None, None)
+            },
+        )]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("State Open"), "{findings:?}");
     }
 
     /// `BUG-109`/`ADR-60`: a target record's `Status` is only judged when its

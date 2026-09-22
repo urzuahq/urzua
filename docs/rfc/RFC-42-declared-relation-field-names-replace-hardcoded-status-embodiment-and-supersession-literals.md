@@ -8,7 +8,7 @@ Author: beauwilliams
 
 ## Summary
 
-Six rule functions read a target record's lifecycle or relation field by a field-name string literal
+Seven rule functions read a target record's lifecycle or relation field by a field-name string literal
 baked into the rule body (`"Status"`, `"Embodiment"`, `"Realized-by"`, `"Supersedes / Superseded-by"`)
 instead of an adopter-declared name, unlike `pointer_fields`/`narrative_fields`, which are already
 declared config keys (`MILE-90`). This proposes one general mechanism — a per-type map from a fixed
@@ -31,7 +31,7 @@ shape recurring in four more places:
 - `embodiment_locator_exists` reads `"Realized-by"` (`rules.rs:2326`)
 - `supersession_reciprocity` reads `"Supersedes / Superseded-by"` (`rules.rs:2603`, `2656`)
 
-That is six rules across three relation families sharing one defect shape: an adopter whose corpus
+That is seven rules across three relation families sharing one defect shape: an adopter whose corpus
 calls these fields anything else gets silent non-detection, indistinguishable from a clean corpus —
 exactly the failure mode `ADR-55` exists to prevent, now hiding behind a literal rather than a missing
 gate. `ADR-60` fixed the adjacent, narrower question for `Status` (gate the read on the target type
@@ -73,10 +73,10 @@ keeps behaving exactly as today — this is additive, not a schema-version bump.
 `RecordTypeConfig` gains `pub relation_fields: Option<RelationFields>` (a small struct with four
 `Option<String>` fields, `#[serde(deny_unknown_fields)]` per the project's existing convention), and a
 `fn relation_field(&self, role: RelationRole) -> &str` accessor returning the declared name or the
-role's default. The six call sites (`claim_status_agreement`, `pointer_target_status`,
+role's default. The seven call sites (`claim_status_agreement`, `pointer_target_status`,
 `narrative_field_stale`, `embodiment_consistency`, `embodiment_locator_exists`,
-`embodiment_locator_promotion_candidate`, `supersession_reciprocity` — seven, not six; see Open
-questions) replace their literal argument to `declared_value`/`declared_cross_record_value` with
+`embodiment_locator_promotion_candidate`, `supersession_reciprocity`) replace their literal argument
+to `declared_value`/`declared_cross_record_value` with
 `type_config.relation_field(RelationRole::Status)` etc. `declared_cross_record_value`'s own
 declaration-gating (`ADR-60`) is unchanged — it already takes the key as a parameter, so this is a
 caller-side change only.
@@ -84,7 +84,7 @@ caller-side change only.
 A record whose type declares a non-default name for a role that another rule still reads under the
 default is exactly the divergence this RFC exists to prevent: `field.quality`/`field.pending`
 generically iterate `required_fields`/`known_fields` and already respect whatever name is declared
-there, so no additional wiring is needed beyond the six rule bodies above and their tests.
+there, so no additional wiring is needed beyond the seven rule bodies above and their tests.
 
 ## Open questions
 

@@ -10,7 +10,7 @@ Derives-from: RFC-42
 
 ## Context
 
-`RFC-42` proposed replacing six rule bodies' hardcoded field-name literals (`"Status"`, `"Embodiment"`,
+`RFC-42` proposed replacing seven rule bodies' hardcoded field-name literals (`"Status"`, `"Embodiment"`,
 `"Realized-by"`, `"Supersedes / Superseded-by"`) with a per-type declared `relation_fields` map,
 defaulted to today's literals, and left three questions open: whether `supersession_reciprocity` is in
 scope, whether a declared-but-not-`known_fields` name should get its own validation rule, and whether
@@ -26,7 +26,7 @@ the config surface should be one map or several separate keys.
 
 ## Decision
 
-In the context of six rules reading four field-name literals with no adopter-declared override, facing
+In the context of seven rules reading four field-name literals with no adopter-declared override, facing
 open questions about scope, validation, and config shape, **we decided to accept `RFC-42` in full**:
 
 - **Scope**: all four literals (`Status`, `Embodiment`, `Realized-by`,
@@ -50,8 +50,9 @@ different name — additive, not a schema-version bump.
 ## Reversibility
 
 Cheap to reverse for any single role (drop the accessor call, restore the literal at that call site).
-Reversing the whole mechanism means restoring six literals and deleting `config.relation-field-not-known`
-and its tests — mechanical, no data migration, since `relation_fields` is optional and additive.
+Reversing the whole mechanism means restoring the literal at each of the seven call sites and deleting
+`config.relation-field-not-known` and its tests — mechanical, no data migration, since `relation_fields`
+is optional and additive.
 
 ## Consequences
 

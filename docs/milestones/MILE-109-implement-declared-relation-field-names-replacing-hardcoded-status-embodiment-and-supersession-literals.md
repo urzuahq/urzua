@@ -22,18 +22,19 @@ rule, `config.relation-field-not-known`, reports a declared override not also pr
 ## Why
 
 `BUG-110` found `Status` hardcoded in three rules; a round-18 code review found the identical shape
-recurring in four more rules for `Embodiment`, `Realized-by`, and `Supersedes / Superseded-by`. Six
+recurring in four more rules for `Embodiment`, `Realized-by`, and `Supersedes / Superseded-by`. Seven
 rules, one defect shape, so `RFC-42` consolidated them into one config mechanism rather than four
 separate `status_field`-shaped patches, matching the precedent `MILE-90` already set for
 `pointer_fields`/`narrative_fields`.
 
 ## Verification
 
-Full test suite (217 tests, 8 new), `cargo fmt`, `clippy -D warnings`, `make ci`, and a real-corpus
+Full test suite (219 tests, 10 new), `cargo fmt`, `clippy -D warnings`, `make ci`, and a real-corpus
 `check` run reporting the same 70 findings before and after — this repository's own config declares no
 `relation_fields` override, so the change is a no-op on it by design. Each of the four resolved roles
 (`status`, `embodiment_state`+`embodiment_locator`, `supersession`) has its own planted-violation test,
-observed failing against the pre-fix literal and passing after.
+observed failing against the pre-fix literal and passing after, plus a CodeRabbit-review-prompted fix
+making every finding message report the resolved field name instead of the pre-`RFC-42` literal.
 
 > **Revision log**
 >
