@@ -51,9 +51,13 @@ pub fn load_waivers(records: &[Record]) -> Vec<Waiver> {
         .iter()
         .filter(|r| r.record_type == "waiver")
         .filter_map(|r| {
-            let rule = r.header.get("Rule")?.to_string();
-            let scope = r.header.get("Scope")?.to_string();
-            let expires = r.header.get("Expires").map(|s| s.to_string());
+            // Reserved keys (Header::get_reserved), not adopter vocabulary --
+            // a waiver record spelling these in another case has made a typo,
+            // not declared a different field, and reading them exactly would
+            // drop a waiver that should apply.
+            let rule = r.header.get_reserved("Rule")?.to_string();
+            let scope = r.header.get_reserved("Scope")?.to_string();
+            let expires = r.header.get_reserved("Expires").map(|s| s.to_string());
             Some(Waiver {
                 id: r.path.to_string_lossy().to_string(),
                 rule,
@@ -105,6 +109,29 @@ mod tests {
             message: "x".to_string(),
             waived: None,
         }
+    }
+
+    #[test]
+    fn a_waiver_with_lowercase_keys_still_loads_observed_failing() {
+        // Header::get went exact under ADR-57, and Rule/Scope/Expires are not
+        // adopter vocabulary -- there is exactly one field the engine calls
+        // Rule, so a hand-typed `rule:` is a typo, not a second field, and
+        // reading it exactly silently dropped an active waiver.
+        let r = Record::parse(
+            std::path::PathBuf::from("docs/waivers/WAIVER-1-x.md"),
+            "waiver".to_string(),
+            "> rule: header.required-fields
+> scope: docs/adr/ADR-1-x.md
+",
+        );
+        let waivers = load_waivers(&[r]);
+        assert_eq!(
+            waivers.len(),
+            1,
+            "a case-differing key must not drop the waiver"
+        );
+        assert_eq!(waivers[0].rule, "header.required-fields");
+        assert_eq!(waivers[0].scope, "docs/adr/ADR-1-x.md");
     }
 
     #[test]
