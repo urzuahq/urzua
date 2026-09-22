@@ -23,8 +23,8 @@
 /// and `ADR-1-slug.md` (`ADR-36`). Returns `None` for anything else.
 ///
 /// One definition, used by both `urzua new`'s numbering and `urzua init`'s
-/// adopt scan. They previously carried a recogniser each and accepted disjoint
-/// sets, so each was blind to exactly what the other required (BUG-37).
+/// adopt scan: two separate recognisers accepting disjoint sets makes each
+/// blind to exactly what the other requires (`BUG-37`).
 pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     let stem = file_name.strip_suffix(".md")?;
     let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());

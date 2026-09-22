@@ -1270,15 +1270,7 @@ pub fn header_pointer_field_clean(
     // Declared slots: a field the type says carries clean references. A slot
     // the record did not write is eligible and unexamined -- handed to the rule
     // and not judged -- rather than outside its population.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .filter_map(|record| {
-            clean_fields_by_type
-                .get(&record.record_type)
-                .map(|fields| (record, fields))
-        })
-        .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
-        .collect();
+    let slots = field_slots(records, &clean_fields_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -1360,15 +1352,7 @@ pub fn narrative_field_stale(
     // by watching this count move from 7 to 8. Counting a slot as examined
     // merely because it is present would pin the number and retire the
     // instrument that measured that fix.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .filter_map(|record| {
-            narrative_fields_by_type
-                .get(&record.record_type)
-                .map(|fields| (record, fields))
-        })
-        .flat_map(|(record, fields)| fields.iter().map(move |field| (record, field)))
-        .collect();
+    let slots = field_slots(records, &narrative_fields_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
