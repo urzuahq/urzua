@@ -1617,7 +1617,7 @@ pub fn field_untrimmed_value(
         |(record, _)| record.path.clone(),
         |(record, field)| {
             let Some(value) = record.header.get(field.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             if value != value.trim() {
                 findings.push(Finding {
