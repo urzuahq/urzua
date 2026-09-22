@@ -278,7 +278,12 @@ impl Population {
         examined: usize,
         out_of_scope: usize,
     ) -> Self {
-        debug_assert!(
+        // A real `assert!`, not `debug_assert!` (`BUG-113`): this runs once
+        // per rule per invocation, not a hot-path cost worth trading away,
+        // and a release build is exactly where this invariant silently
+        // laundering into `eligible.max(examined)` below would be worst --
+        // the shipped binary is what an adopter's CI actually runs.
+        assert!(
             examined <= eligible,
             "{unit:?}: examined {examined} exceeds eligible {eligible}"
         );
