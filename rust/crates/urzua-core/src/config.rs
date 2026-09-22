@@ -206,6 +206,51 @@ pub struct RecordTypeConfig {
     /// permanently have none declared"; nothing implemented that (ADR-0051).
     #[serde(default)]
     pub spec: Option<String>,
+    /// The field name that plays each fixed relation/status role for this
+    /// type (`RFC-42`/`ADR-61`), replacing what were six hardcoded literals
+    /// (`"Status"`, `"Embodiment"`, `"Realized-by"`,
+    /// `"Supersedes / Superseded-by"`) baked into rule bodies. Every role
+    /// defaults to its current literal when omitted, so an existing config
+    /// needs no change. A declared name not also present in this type's
+    /// `required_fields`/`known_fields` is reported by
+    /// `config.relation-field-not-known`, mirroring
+    /// `config.pointer-field-not-known`.
+    #[serde(default)]
+    pub relation_fields: Option<RelationFields>,
+}
+
+/// A fixed, small role set (`RFC-42`) -- not adopter-extensible like
+/// `pointer_fields`, because each role has role-specific behavior elsewhere
+/// in the engine (e.g. `embodiment_state`/`embodiment_locator` are read as a
+/// pair by `ADR-60`'s gating).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationRole {
+    Status,
+    EmbodimentState,
+    EmbodimentLocator,
+    Supersession,
+}
+
+impl RelationRole {
+    /// The pre-`RFC-42` literal this role reads when a type declares no
+    /// override.
+    pub fn default_field_name(self) -> &'static str {
+        match self {
+            RelationRole::Status => "Status",
+            RelationRole::EmbodimentState => "Embodiment",
+            RelationRole::EmbodimentLocator => "Realized-by",
+            RelationRole::Supersession => "Supersedes / Superseded-by",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct RelationFields {
+    pub status: Option<String>,
+    pub embodiment_state: Option<String>,
+    pub embodiment_locator: Option<String>,
+    pub supersession: Option<String>,
 }
 
 impl RecordTypeConfig {
@@ -218,6 +263,20 @@ impl RecordTypeConfig {
             .chain(self.known_fields.iter().flatten())
             .map(|s| crate::values::FieldName::new(s.as_str()))
             .collect()
+    }
+
+    /// The field name this type uses for `role`, declared or defaulted
+    /// (`RFC-42`/`ADR-61`). The default is today's pre-`RFC-42` literal, so
+    /// an existing config's behavior is unchanged until it opts into a
+    /// different name.
+    pub fn relation_field(&self, role: RelationRole) -> &str {
+        let declared = self.relation_fields.as_ref().and_then(|r| match role {
+            RelationRole::Status => r.status.as_deref(),
+            RelationRole::EmbodimentState => r.embodiment_state.as_deref(),
+            RelationRole::EmbodimentLocator => r.embodiment_locator.as_deref(),
+            RelationRole::Supersession => r.supersession.as_deref(),
+        });
+        declared.unwrap_or_else(|| role.default_field_name())
     }
 }
 
@@ -451,6 +510,7 @@ mod tests {
             pointer_fields: None,
             narrative_fields: None,
             spec: None,
+            relation_fields: None,
         };
         let declared = t.declared_fields();
         assert!(declared.contains("Status"));
@@ -670,6 +730,35 @@ record_types:
             config.record_types.get("bug").unwrap().narrative_fields,
             None
         );
+    }
+
+    #[test]
+    fn relation_fields_round_trip_and_default_when_undeclared() {
+        let yaml = r#"
+schema_version: 2
+record_types:
+  rfc:
+    dir: "docs/rfc"
+    required_fields: ["State"]
+    relation_fields:
+      status: State
+  bug:
+    dir: "docs/bugs"
+    required_fields: ["Status"]
+"#;
+        let config = parse(yaml).unwrap();
+        let rfc = config.record_types.get("rfc").unwrap();
+        assert_eq!(rfc.relation_field(RelationRole::Status), "State");
+        assert_eq!(
+            rfc.relation_field(RelationRole::EmbodimentState),
+            "Embodiment",
+            "an undeclared role still falls back to its pre-RFC-42 default"
+        );
+
+        // Undeclared `relation_fields` means every role falls back, same as
+        // an existing config with no changes needed.
+        let bug = config.record_types.get("bug").unwrap();
+        assert_eq!(bug.relation_field(RelationRole::Status), "Status");
     }
 
     #[test]

@@ -53,6 +53,7 @@ pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
+pub const RULE_CONFIG_RELATION_FIELD_NOT_KNOWN: &str = "config.relation-field-not-known";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -83,6 +84,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_FIELD_UNTRIMMED_VALUE,
     RULE_HEADER_FIELD_CASE_MISMATCH,
     RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+    RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -897,6 +899,60 @@ pub fn config_pointer_field_not_known(
     )
 }
 
+/// Rule (`RFC-42`/`ADR-61`): a declared `relation_fields` override must also
+/// appear in that type's own `required_fields`/`known_fields` -- otherwise
+/// `ADR-60`'s declaration gate silently never examines it, the same trap
+/// `BUG-109` closed for the unqualified `Status` case.
+pub fn config_relation_field_not_known(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CONFIG_RELATION_FIELD_NOT_KNOWN;
+    let mut findings = Vec::new();
+
+    let mut type_names: Vec<&String> = config.record_types.keys().collect();
+    type_names.sort();
+
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
+        let Some(relation_fields) = &type_config.relation_fields else {
+            return Outcome::Examined;
+        };
+        let declared = type_config.declared_fields();
+        for (role, field) in [
+            ("status", &relation_fields.status),
+            ("embodiment_state", &relation_fields.embodiment_state),
+            ("embodiment_locator", &relation_fields.embodiment_locator),
+            ("supersession", &relation_fields.supersession),
+        ] {
+            let Some(field) = field else { continue };
+            if !declared.contains(field.as_str()) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' declares '{field}' for relation_fields.{role}, but it isn't in required_fields or known_fields"
+                    ),
+                });
+            }
+        }
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
 /// Rule (MILE-0090/ADR-0044): a field must be exactly one kind -- named in
 /// both `pointer_fields` and `narrative_fields` for the same type is a
 /// contradiction (clean-format enforcement and staleness-checking would both
@@ -1148,7 +1204,15 @@ pub fn pointer_target_status(
                     continue;
                 };
                 // A lookup miss is unjudged, not a status match (BUG-100).
-                let Ok(status) = declared_cross_record_value(config, target, "Status") else {
+                let Ok(status) = declared_cross_record_value(
+                    config,
+                    target,
+                    relation_field_name(
+                        config,
+                        &target.record_type,
+                        crate::config::RelationRole::Status,
+                    ),
+                ) else {
                     continue;
                 };
                 if not_in.iter().any(|s| s == status) {
@@ -1368,7 +1432,15 @@ pub fn narrative_field_stale(
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue; // pointer_resolution already reports a dangling reference
                 };
-                let Ok(status) = declared_cross_record_value(config, target, "Status") else {
+                let Ok(status) = declared_cross_record_value(
+                    config,
+                    target,
+                    relation_field_name(
+                        config,
+                        &target.record_type,
+                        crate::config::RelationRole::Status,
+                    ),
+                ) else {
                     continue;
                 };
                 if terminal_statuses.iter().any(|t| t == status) {
@@ -1662,7 +1734,15 @@ pub fn claim_status_agreement(
             continue;
         };
         // A lookup miss is unjudged, not a status match (BUG-100).
-        let Ok(status) = declared_cross_record_value(config, target, "Status") else {
+        let Ok(status) = declared_cross_record_value(
+            config,
+            target,
+            relation_field_name(
+                config,
+                &target.record_type,
+                crate::config::RelationRole::Status,
+            ),
+        ) else {
             continue;
         };
         if closed_statuses.iter().any(|s| s == status) {
@@ -2237,16 +2317,21 @@ pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'s
     }
 }
 
-/// The records whose type declares *every* named field, as the rule's
-/// candidate slots. A rule needing two fields takes the pair as one candidate,
-/// so a record carrying only one of them is eligible and unexamined rather
-/// than outside the population.
+/// The records whose type declares *every* named role's field (resolved via
+/// `RecordTypeConfig::relation_field`, `RFC-42`/`ADR-61`), as the rule's
+/// candidate slots. A rule needing two fields takes the pair as one
+/// candidate, so a record carrying only one of them is eligible and
+/// unexamined rather than outside the population.
 ///
 /// Declared means `required_fields` **or** `known_fields`: the latter is
 /// documented as the fields a type carries *beyond* the former, so reading it
 /// alone silently drops every type that requires the field instead of merely
 /// permitting it. `config.pointer-field-not-known` already unions the two.
-fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -> Vec<&'a Record> {
+fn declared_slots_for_roles<'a>(
+    records: &'a [Record],
+    config: &Config,
+    roles: &[crate::config::RelationRole],
+) -> Vec<&'a Record> {
     records
         .iter()
         .filter(|record| {
@@ -2254,12 +2339,9 @@ fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -
                 .record_types
                 .get(&record.record_type)
                 .is_some_and(|t| {
-                    fields.iter().all(|wanted| {
-                        t.required_fields
-                            .iter()
-                            .chain(t.known_fields.iter().flatten())
-                            .any(|declared| declared == wanted)
-                    })
+                    roles
+                        .iter()
+                        .all(|role| t.declared_fields().contains(t.relation_field(*role)))
                 })
         })
         .collect()
@@ -2273,6 +2355,20 @@ fn declared_value<'a>(record: &'a Record, key: &str) -> Result<&'a str, Outcome>
         crate::header::FieldRead::Missing => Err(Outcome::Absent),
         crate::header::FieldRead::Unreadable => Err(Outcome::Unreadable),
     }
+}
+
+/// The field name `record`'s own type uses for `role` (`RFC-42`/`ADR-61`),
+/// or the role's pre-`RFC-42` default if the type isn't configured at all.
+fn relation_field_name<'a>(
+    config: &'a Config,
+    record_type: &str,
+    role: crate::config::RelationRole,
+) -> &'a str {
+    config
+        .record_types
+        .get(record_type)
+        .map(|t| t.relation_field(role))
+        .unwrap_or_else(|| role.default_field_name())
 }
 
 /// `declared_value`, additionally gated on `record`'s own type declaring
@@ -2316,14 +2412,23 @@ pub fn embodiment_locator_exists(
 
     // One candidate per declared slot, not per locator: the population is the
     // rule's input, not its work count.
-    let slots = declared_slots(records, config, &["Realized-by"]);
+    let slots = declared_slots_for_roles(
+        records,
+        config,
+        &[crate::config::RelationRole::EmbodimentLocator],
+    );
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
         |record| record.path.clone(),
         |record| {
-            let value = match declared_value(record, "Realized-by") {
+            let field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::EmbodimentLocator,
+            );
+            let value = match declared_value(record, field) {
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
@@ -2395,18 +2500,35 @@ pub fn embodiment_consistency(
     // The candidate is the *pair*: the rule needs both fields, so a record
     // carrying only one of them is handed to the rule and reaches no verdict.
     // Treating each field as its own slot would make that state unreportable.
-    let slots = declared_slots(records, config, &["Embodiment", "Realized-by"]);
+    let slots = declared_slots_for_roles(
+        records,
+        config,
+        &[
+            crate::config::RelationRole::EmbodimentState,
+            crate::config::RelationRole::EmbodimentLocator,
+        ],
+    );
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
         |record| record.path.clone(),
         |record| {
-            let stated = match declared_value(record, "Embodiment") {
+            let state_field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::EmbodimentState,
+            );
+            let locator_field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::EmbodimentLocator,
+            );
+            let stated = match declared_value(record, state_field) {
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
-            let realized_by_value = match declared_value(record, "Realized-by") {
+            let realized_by_value = match declared_value(record, locator_field) {
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
@@ -2423,7 +2545,7 @@ pub fn embodiment_consistency(
                     line: None,
                     waived: None,
                     message: format!(
-                    "stated Embodiment '{}' disagrees with '{computed}', computed from Realized-by",
+                    "stated {state_field} '{}' disagrees with '{computed}', computed from {locator_field}",
                     stated.trim()
                 ),
                 });
@@ -2460,7 +2582,11 @@ pub fn embodiment_locator_promotion_candidate(
         std::collections::BTreeSet<std::path::PathBuf>,
     > = std::collections::BTreeMap::new();
 
-    let slots = declared_slots(records, config, &["Realized-by"]);
+    let slots = declared_slots_for_roles(
+        records,
+        config,
+        &[crate::config::RelationRole::EmbodimentLocator],
+    );
 
     // Findings are emitted after the census, not inside it: this rule judges
     // locators across records, so no single candidate is at fault.
@@ -2469,7 +2595,12 @@ pub fn embodiment_locator_promotion_candidate(
         slots,
         |record| record.path.clone(),
         |record| {
-            let realized_by_value = match declared_value(record, "Realized-by") {
+            let field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::EmbodimentLocator,
+            );
+            let realized_by_value = match declared_value(record, field) {
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
@@ -2600,36 +2731,31 @@ pub fn supersession_reciprocity(
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
-    const FIELD: &str = "Supersedes / Superseded-by";
     let mut findings = Vec::new();
 
     // A record whose filename yields no id is eligible but unexaminable: the
     // reciprocity test is "does the target name *me* back", which needs an id.
-    let slots: Vec<&Record> = records
-        .iter()
-        .filter(|record| {
-            config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| {
-                    t.required_fields
-                        .iter()
-                        .chain(t.known_fields.iter().flatten())
-                        .any(|f| f == FIELD)
-                })
-        })
-        .collect();
+    let slots = declared_slots_for_roles(
+        records,
+        config,
+        &[crate::config::RelationRole::Supersession],
+    );
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
         |record| record.path.clone(),
         |record| {
+            let field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::Supersession,
+            );
             let Some(id) = record_id(record) else {
                 return Outcome::OutOfScope;
             };
             let normalized_id = crate::values::RecordId::new(&id);
-            let Some(value) = record.header.get(FIELD) else {
+            let Some(value) = record.header.get(field) else {
                 return Outcome::Absent;
             };
             // `—` is this corpus's written "nothing supersedes this", so the slot
@@ -2651,10 +2777,12 @@ pub fn supersession_reciprocity(
                 });
                     continue;
                 };
-                let target_value = target
-                    .header
-                    .get("Supersedes / Superseded-by")
-                    .unwrap_or("");
+                let target_field = relation_field_name(
+                    config,
+                    &target.record_type,
+                    crate::config::RelationRole::Supersession,
+                );
+                let target_value = target.header.get(target_field).unwrap_or("");
                 let target_names_back = extract_references(target_value)
                     .iter()
                     .any(|r| crate::values::RecordId::new(r) == normalized_id);
@@ -2982,6 +3110,7 @@ mod tests {
             pointer_fields: None,
             narrative_fields: None,
             spec: spec.map(|s| s.to_string()),
+            relation_fields: None,
         }
     }
 
@@ -3055,6 +3184,7 @@ mod tests {
             pointer_fields: None,
             narrative_fields: None,
             spec: None,
+            relation_fields: None,
         }
     }
 
@@ -3182,6 +3312,7 @@ mod tests {
             pointer_fields: pointer_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             narrative_fields: narrative_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             spec: None,
+            relation_fields: None,
         }
     }
 
@@ -3482,6 +3613,55 @@ mod tests {
     }
 
     #[test]
+    fn a_relation_field_absent_from_known_fields_is_a_finding_observed_failing() {
+        let config = config_with_types(vec![(
+            "rfc",
+            crate::config::RecordTypeConfig {
+                relation_fields: Some(crate::config::RelationFields {
+                    status: Some("State".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&["Date"], None, None, None)
+            },
+        )]);
+        let (exec, findings) =
+            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("State"));
+    }
+
+    #[test]
+    fn a_relation_field_present_in_known_fields_is_not_a_finding() {
+        let config = config_with_types(vec![(
+            "rfc",
+            crate::config::RecordTypeConfig {
+                relation_fields: Some(crate::config::RelationFields {
+                    status: Some("State".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&["State"], None, None, None)
+            },
+        )]);
+        let (exec, findings) =
+            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_type_with_no_declared_relation_fields_is_not_a_finding() {
+        let config = config_with_types(vec![(
+            "rfc",
+            type_config_pointer(&["Status"], None, None, None),
+        )]);
+        let (exec, findings) =
+            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
     fn pointer_and_narrative_names_differing_only_in_case_do_not_overlap() {
         let config = config_with_types(vec![(
             "adr",
@@ -3598,6 +3778,36 @@ mod tests {
         let (_, other) =
             pointer_target_status(&records, &config, &["Superseded".to_string()], &index);
         assert!(other.is_empty(), "{other:?}");
+    }
+
+    #[test]
+    fn a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing() {
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> State: Draft\n");
+        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            (
+                "rfc",
+                crate::config::RecordTypeConfig {
+                    relation_fields: Some(crate::config::RelationFields {
+                        status: Some("State".to_string()),
+                        ..Default::default()
+                    }),
+                    ..type_config_pointer(&["State"], None, None, None)
+                },
+            ),
+        ]);
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+
+        let (exec, findings) =
+            pointer_target_status(&records, &config, &["Draft".to_string()], &index);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Draft"));
     }
 
     #[test]
@@ -4524,6 +4734,32 @@ mod tests {
     }
 
     #[test]
+    fn a_type_declaring_a_custom_locator_field_name_is_read_by_that_name_observed_failing() {
+        let config = config_with_types(vec![(
+            "adr",
+            crate::config::RecordTypeConfig {
+                relation_fields: Some(crate::config::RelationFields {
+                    embodiment_locator: Some("Evidence".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&[], Some(&["Evidence"]), None, None)
+            },
+        )]);
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Evidence: code:src/gone.rs\n",
+        );
+        let present = |_: &str| false;
+
+        let (exec, findings) =
+            embodiment_locator_exists(std::slice::from_ref(&r), &config, &present);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
+    }
+
+    #[test]
     fn a_pending_field_belongs_to_field_pending_not_field_quality() {
         // BUG-38, observed on this repo's own corpus: `field.quality` held both
         // states, so a repository declaring it `error` had a deliberate
@@ -4654,6 +4890,31 @@ mod tests {
         );
         let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn a_type_declaring_custom_embodiment_field_names_is_read_by_those_names_observed_failing() {
+        let config = config_with_types(vec![(
+            "adr",
+            crate::config::RecordTypeConfig {
+                relation_fields: Some(crate::config::RelationFields {
+                    embodiment_state: Some("Phase".to_string()),
+                    embodiment_locator: Some("Evidence".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&[], Some(&["Phase", "Evidence"]), None, None)
+            },
+        )]);
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Phase: Verified\n> Evidence: code:src/lib.rs\n",
+        );
+        let (exec, findings) = embodiment_consistency(&[r], &config, &HashSet::new());
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Phase"));
+        assert!(findings[0].message.contains("Evidence"));
     }
 
     #[test]
@@ -4812,6 +5073,32 @@ mod tests {
             .expect("the rule must state what it was handed");
         assert_eq!((population.eligible(), population.examined()), (2, 2));
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn a_type_declaring_a_custom_supersession_field_name_is_read_by_that_name_observed_failing() {
+        let old = record("docs/adr/ADR-1-x.md", "adr", "> Replaces: —\n");
+        let new = record("docs/adr/ADR-2-y.md", "adr", "> Replaces: ADR-0001\n");
+
+        let config = config_with_types(vec![(
+            "adr",
+            crate::config::RecordTypeConfig {
+                relation_fields: Some(crate::config::RelationFields {
+                    supersession: Some("Replaces".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&[], Some(&["Replaces"]), None, None)
+            },
+        )]);
+        let records = [old, new];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.eligible(), 2, "both records declare the slot");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-0001"));
     }
 
     #[test]

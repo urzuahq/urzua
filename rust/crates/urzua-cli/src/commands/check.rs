@@ -447,6 +447,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
             || rules::config_header_none_has_no_required_fields(&config, &config_path),
         ),
+        crate::gate::gated(&config, rules::RULE_CONFIG_RELATION_FIELD_NOT_KNOWN, || {
+            rules::config_relation_field_not_known(&config, &config_path)
+        }),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());
