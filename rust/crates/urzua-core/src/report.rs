@@ -81,6 +81,24 @@ pub fn records_read_by_any_rule(executed: &[RuleExecution]) -> usize {
         .len()
 }
 
+/// `records_read_by_any_rule`, restricted to a reported-on set.
+///
+/// Rules run over the whole corpus because a reference resolves against records
+/// outside the scope (`BUG-67`). Counting those here would put this number on a
+/// different denominator from `files_examined` in the same report.
+pub fn records_read_by_any_rule_within(
+    executed: &[RuleExecution],
+    in_scope: &std::collections::HashSet<&std::path::Path>,
+) -> usize {
+    executed
+        .iter()
+        .filter(|e| e.status == RuleStatus::Ran)
+        .flat_map(|e| e.examined_records.iter())
+        .filter(|p| in_scope.contains(p.as_path()))
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
+}
+
 /// What a rule's population is counted in. A number without its unit is how
 /// `records_examined` came to mean records for one rule, configuration
 /// declarations for another and `(record, field)` pairs for a third, all under

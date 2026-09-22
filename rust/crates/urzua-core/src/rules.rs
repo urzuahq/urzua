@@ -47,6 +47,7 @@ pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
+pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -74,6 +75,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
     RULE_CONFIG_SCOPE_MATCHES_NOTHING,
+    RULE_FIELD_UNTRIMMED_VALUE,
 ];
 
 pub fn header_required_fields(
@@ -1245,7 +1247,7 @@ pub fn narrative_field_stale(
                 let Some(status) = target.header.get("Status") else {
                     continue;
                 };
-                if terminal_statuses.iter().any(|t| t == status.trim()) {
+                if terminal_statuses.iter().any(|t| t == status) {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
@@ -1577,6 +1579,69 @@ pub fn claim_status_agreement(
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
+/// A declared field whose value carries leading or trailing whitespace.
+///
+/// Every other rule compares a value exactly (`ADR-57`), so `"Superseded   "`
+/// is not `Superseded` and a status rule configured to report it stays silent.
+/// Trimming inside those rules would paper over it; this reports it instead --
+/// the split `yamllint` makes between formatting and meaning.
+///
+/// Only reachable through `yaml-frontmatter`: the blockquote parser trims at
+/// parse time and YAML trims an unquoted scalar, so it takes a quoted value to
+/// carry the space this far.
+pub fn field_untrimmed_value(
+    records: &[Record],
+    declared_by_type: &HashMap<String, HashSet<String>>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_FIELD_UNTRIMMED_VALUE;
+    let mut findings = Vec::new();
+
+    let slots: Vec<(&Record, &String)> = records
+        .iter()
+        .filter_map(|record| {
+            declared_by_type
+                .get(&record.record_type)
+                .map(|declared| (record, declared))
+        })
+        .flat_map(|(record, declared)| declared.iter().map(move |field| (record, field)))
+        .collect();
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            let Some(value) = record.header.get(field.as_str()) else {
+                return Outcome::Absent;
+            };
+            if value != value.trim() {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "field '{field}' is {value:?} -- the surrounding whitespace is part of the value, so any exact comparison against '{}' fails",
+                        value.trim()
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
         },
         findings,
     )
@@ -3307,6 +3372,89 @@ mod tests {
         )]);
         let (_, findings) = header_pointer_field_clean(&[r], &config);
         assert_eq!(findings.len(), 1);
+    }
+
+    #[test]
+    fn a_value_with_trailing_whitespace_is_reported_observed_failing() {
+        let r = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/adr/ADR-1-x.md"),
+            "adr".to_string(),
+            "---\nStatus: \"Superseded   \"\n---\n# 1 — X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "ADR".to_string(),
+        );
+        let declared: HashMap<String, HashSet<String>> =
+            [("adr".to_string(), HashSet::from(["Status".to_string()]))]
+                .into_iter()
+                .collect();
+
+        let (exec, findings) = field_untrimmed_value(&[r], &declared);
+        assert_eq!(examined(&exec), 1, "the slot is written, so it is judged");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Superseded"));
+    }
+
+    #[test]
+    fn a_clean_value_is_not_reported_as_untrimmed() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
+        let declared: HashMap<String, HashSet<String>> =
+            [("adr".to_string(), HashSet::from(["Status".to_string()]))]
+                .into_iter()
+                .collect();
+        let (exec, findings) = field_untrimmed_value(&[r], &declared);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_status_carrying_whitespace_does_not_silently_match_and_is_reported() {
+        // ADR-57 compares exactly, so "Superseded   " is not Superseded and the
+        // status rule is right to stay silent. Trimming inside it would paper
+        // over a value the author did not write; field.untrimmed-value reports
+        // the whitespace instead, which is where the adopter can act on it.
+        let yaml = |path: &str, content: &str| {
+            Record::parse_with_shape_and_prefix(
+                PathBuf::from(path),
+                "adr".to_string(),
+                content,
+                crate::header::HeaderShape::YamlFrontmatter,
+                "ADR".to_string(),
+            )
+        };
+        let target = yaml(
+            "docs/adr/ADR-1-x.md",
+            "---\nStatus: \"Superseded   \"\n---\n# 1 — X\n",
+        );
+        let source = yaml(
+            "docs/adr/ADR-2-y.md",
+            "---\nDerives-from: ADR-1\n---\n# 2 — Y\n",
+        );
+        let pointers: HashMap<String, Vec<String>> =
+            [("adr".to_string(), vec!["Derives-from".to_string()])]
+                .into_iter()
+                .collect();
+
+        let (_, status_findings) = pointer_target_status(
+            &[target.clone(), source],
+            &pointers,
+            &HashMap::new(),
+            &["Superseded".to_string()],
+        );
+        assert!(
+            status_findings.is_empty(),
+            "the value is not that status: {status_findings:?}"
+        );
+
+        let declared: HashMap<String, HashSet<String>> =
+            [("adr".to_string(), HashSet::from(["Status".to_string()]))]
+                .into_iter()
+                .collect();
+        let (_, whitespace) = field_untrimmed_value(&[target], &declared);
+        assert_eq!(
+            whitespace.len(),
+            1,
+            "and the whitespace must be reported, or nothing tells the author"
+        );
     }
 
     #[test]
