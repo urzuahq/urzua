@@ -1372,6 +1372,45 @@ fn a_claim_paths_root_symlinked_to_a_real_directory_is_usable() {
     );
 }
 
+/// `BUG-117`: a symlink resolving to exactly the declared prefix root (not a
+/// genuine ancestor) used to abort the whole run, even though `visited`
+/// already dedupes it silently -- no unbounded walk would occur.
+#[test]
+fn a_symlink_resolving_to_the_prefix_root_itself_is_deduped_not_rejected() {
+    let dir = fixture_repo("claim-self-referential-symlink");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join("changes")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 bug:\n    dir: \"docs/bugs\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("changes/0001-f.md"), "Fixes BUG-1.\n").unwrap();
+    // Resolves to `changes` itself, not an ancestor of it.
+    std::os::unix::fs::symlink(".", dir.join("changes/self")).unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        !stdout.contains("resolves to an ancestor"),
+        "a link to the prefix root itself is not an ancestor: {stdout}"
+    );
+    assert!(
+        stdout.contains("claims to close BUG-1"),
+        "the real claim file is still read: {stdout}"
+    );
+}
+
 #[test]
 fn a_config_scoped_rule_alone_discloses_that_it_read_no_record() {
     // type.no-declared-spec counts configured types, not records, and reported

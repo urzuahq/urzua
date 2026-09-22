@@ -69,12 +69,17 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     }
 
     // `ADR-2-slug`, and `DOC-ADR-2-slug`: every segment before the number is
-    // the prefix, and each must be upper-case.
+    // the prefix, and each must be upper-case -- digits allowed (`BUG-114`:
+    // `RecordTypeConfig.prefix` doesn't forbid a prefix like `V2`, and a
+    // segment reaching here is already guaranteed not all-digit, since `at`
+    // selects the *first* such segment, so a mixed prefix creates no
+    // ambiguity with which segment is the number).
     let prefix_end = stem.len() - (stem.len() - segments[..at].join("-").len());
-    if segments[..at]
-        .iter()
-        .all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_uppercase()))
-    {
+    if segments[..at].iter().all(|s| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    }) {
         return segments[at]
             .parse()
             .ok()
@@ -333,6 +338,14 @@ mod tests {
         assert_eq!(parse_record_filename("doc-ADR-2-x.md"), None);
         // A number with nothing after it is a fragment.
         assert_eq!(parse_record_filename("DOC-ADR-2.md"), None);
+        // A digit-bearing prefix is real (BUG-114): RecordTypeConfig.prefix
+        // doesn't forbid `V2`, and a mixed-alnum prefix segment is never
+        // confused with the number segment, since `at` already selects the
+        // first *all*-digit one.
+        assert_eq!(
+            parse_record_filename("V2-3-migrate.md"),
+            Some((Some("V2"), 3))
+        );
 
         let names = vec!["DOC-ADR-1-a.md".to_string(), "DOC-ADR-7-b.md".to_string()];
         assert_eq!(next_display_number(&names), 8);
