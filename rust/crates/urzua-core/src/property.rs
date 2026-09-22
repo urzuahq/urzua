@@ -364,6 +364,14 @@ mod tests {
             ("field.quality", rules::field_quality(&records, &config)),
             ("field.pending", rules::field_pending(&records, &config)),
             (
+                "field.untrimmed-value",
+                rules::field_untrimmed_value(&records, &config),
+            ),
+            (
+                "header.field-case-mismatch",
+                rules::header_field_case_mismatch(&records, &config),
+            ),
+            (
                 "filename.title-consistency",
                 rules::filename_title_consistency(&records, &full_text),
             ),

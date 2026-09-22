@@ -1051,6 +1051,9 @@ pub fn pointer_target_status(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1118,6 +1121,9 @@ pub fn pointer_resolution(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1290,6 +1296,9 @@ pub fn narrative_field_stale(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1643,6 +1652,9 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1700,10 +1712,19 @@ pub fn header_field_case_mismatch(
             if record.header.get(field.as_str()).is_some() {
                 return Outcome::Examined;
             }
-            let Some(found) = record.header.fields.iter().find(|f| {
-                f.key.as_str().eq_ignore_ascii_case(field.as_str())
-                    && f.key.as_str() != field.as_str()
-            }) else {
+            // `.min_by`, not `.find`: several header keys can differ from the
+            // declared name only in case, and a message that changes between
+            // runs on one corpus is `near_miss`'s own shape (`BUG-79`).
+            let Some(found) = record
+                .header
+                .fields
+                .iter()
+                .filter(|f| {
+                    f.key.as_str().eq_ignore_ascii_case(field.as_str())
+                        && f.key.as_str() != field.as_str()
+                })
+                .min_by(|a, b| a.key.cmp(&b.key))
+            else {
                 return Outcome::Absent;
             };
             findings.push(Finding {

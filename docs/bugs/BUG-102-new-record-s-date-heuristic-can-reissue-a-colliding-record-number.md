@@ -32,6 +32,13 @@ valid month and day.
 fails that bound, so the filename is correctly read as record `13`. A genuine dated filename
 (`2026-09-19-...`, `1999-01-01-...`) is unaffected: both parse well inside the bound.
 
+**Not fixed, because it can't be by shape alone:** a record number that itself reaches `1000-9999` —
+a genuinely plausible year — stays ambiguous. `2024-01-15-migrate-db.md` reads as a date under this
+heuristic whether it is one or is record `2024` with a date-shaped slug; no filename-shape rule
+resolves that, since the two are indistinguishable on their face. This bound narrows the false-positive
+window from "any 4-digit leading segment" to "a 4-digit leading segment that is also a plausible year,"
+which is the entire remaining ambiguity space, not a gap this fix left open by omission.
+
 ## References
 
 - `MILE-51`, `BUG-37` — the duplicate-numbering defect this heuristic exists to avoid re-triggering.

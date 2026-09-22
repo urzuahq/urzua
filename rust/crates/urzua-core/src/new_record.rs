@@ -45,7 +45,12 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
         // merely starts with two 2-digit segments stays a record. The year
         // itself must be plausible (BUG-102): `0013-01-15-use-postgres.md`
         // has a month- and day-shaped second and third segment too, but 13
-        // is not a year anyone dates a file with -- it is record 13.
+        // is not a year anyone dates a file with -- it is record 13. A record
+        // number that reaches 1000-9999 (a genuinely plausible year) is not
+        // resolvable by shape alone -- `2024-01-15-migrate-db.md` is
+        // ambiguous on its face, and this heuristic still reads it as a date.
+        // No filename-shape rule can close that; it is inherent to the
+        // convention, not a gap in this bound.
         let looks_dated = segments.len() >= 3
             && segments[0].len() == 4
             && matches!(segments[0].parse::<u32>(), Ok(1000..=9999))
