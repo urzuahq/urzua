@@ -813,7 +813,7 @@ pub fn config_pointer_narrative_overlap(
 /// `narrative_field_stale`, and `graph()` -- previously three near-identical
 /// copies of this same loop, one of which (`graph()`'s) never normalized at
 /// all (BUG-0011).
-pub(crate) fn build_normalized_index(records: &[Record]) -> HashMap<String, &Record> {
+pub fn build_normalized_index(records: &[Record]) -> HashMap<String, &Record> {
     build_index_reporting_collisions(records).0
 }
 
@@ -875,7 +875,7 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 }
 
 /// Records by normalized identifier.
-pub(crate) type RecordIndex<'a> = HashMap<String, &'a Record>;
+pub type RecordIndex<'a> = HashMap<String, &'a Record>;
 
 /// One identifier and every record claiming it.
 pub(crate) type IdentifierCollision<'a> = (String, Vec<&'a Record>);
@@ -926,11 +926,10 @@ pub fn pointer_target_status(
     pointer_fields_by_type: &HashMap<String, Vec<String>>,
     narrative_fields_by_type: &HashMap<String, Vec<String>>,
     not_in: &[String],
+    index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_TARGET_STATUS;
     let mut findings = Vec::new();
-
-    let index = build_normalized_index(records);
 
     // Declared slots: every pointer or narrative field the record's type
     // declares, whether or not the record wrote it. A slot left unwritten is
@@ -1002,11 +1001,10 @@ pub fn pointer_resolution(
     records: &[Record],
     pointer_fields_by_type: &HashMap<String, Vec<String>>,
     narrative_fields_by_type: &HashMap<String, Vec<String>>,
+    index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_RESOLUTION;
     let mut findings = Vec::new();
-
-    let index = build_normalized_index(records);
 
     // Declared slots: every pointer or narrative field the record's type
     // declares, whether or not the record wrote it. A slot left unwritten is
@@ -1177,12 +1175,12 @@ pub fn narrative_field_stale(
     records: &[Record],
     config: &Config,
     terminal_statuses: &[String],
+    index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_NARRATIVE_FIELD_STALE;
     let mut findings = Vec::new();
 
     let narrative_fields_by_type = fields_with_capability(config, |k| k.check_target_staleness);
-    let index = build_normalized_index(records);
 
     // Declared narrative slots. A slot the record did not write, or wrote as
     // prose yielding no reference, is eligible and unexamined: BUG-39 was the
@@ -1483,14 +1481,13 @@ fn claimed_closed(line: &str) -> Vec<String> {
 /// (`ADR-11`) is the intended escape for the former -- deliberately a record,
 /// so an exception is visible rather than a silent pattern tweak.
 pub fn claim_status_agreement(
-    records: &[Record],
     claims: &[(String, String)],
     closed_statuses: &[String],
+    index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
     let mut findings = Vec::new();
 
-    let index = build_normalized_index(records);
     // Present tense only: a claim is written in the present, while prose
     // *about* a past claim is written in the past. A narrowing, not a fix --
     // a present-tense sentence discussing a claim still matches.
@@ -2376,17 +2373,11 @@ pub fn config_scope_matches_nothing(
 pub fn supersession_reciprocity(
     records: &[Record],
     config: &Config,
+    index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
     const FIELD: &str = "Supersedes / Superseded-by";
     let mut findings = Vec::new();
-
-    let mut index: HashMap<String, &Record> = HashMap::new();
-    for record in records {
-        if let Some(id) = record_id(record) {
-            index.insert(normalize_id(&id), record);
-        }
-    }
 
     // A record whose filename yields no id is eligible but unexaminable: the
     // reciprocity test is "does the target name *me* back", which needs an id.
@@ -2532,8 +2523,10 @@ mod tests {
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
 
+        let records = [blocked, target];
+        let index = build_normalized_index(&records);
         let (exec, findings) =
-            narrative_field_stale(&[blocked, target], &config, &["Ratified".to_string()]);
+            narrative_field_stale(&records, &config, &["Ratified".to_string()], &index);
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -2888,7 +2881,9 @@ mod tests {
             type_config_pointer(&["Supersedes / Superseded-by"], None, None, None),
         )]);
 
-        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let records = [old, new];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -3250,12 +3245,14 @@ mod tests {
         let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
         let records = [target, source];
+        let index = build_normalized_index(&records);
 
         let (exec, findings) = pointer_target_status(
             &records,
             &pointer_fields,
             &HashMap::new(),
             &["Draft".to_string()],
+            &index,
         );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
@@ -3264,7 +3261,7 @@ mod tests {
         // Nothing declared unacceptable means nothing reported -- never a
         // built-in fallback list, which is how a rule silently stops applying.
         let (_, none_declared) =
-            pointer_target_status(&records, &pointer_fields, &HashMap::new(), &[]);
+            pointer_target_status(&records, &pointer_fields, &HashMap::new(), &[], &index);
         assert!(none_declared.is_empty(), "{none_declared:?}");
 
         // A status outside the declared set is not this rule's business.
@@ -3273,6 +3270,7 @@ mod tests {
             &pointer_fields,
             &HashMap::new(),
             &["Superseded".to_string()],
+            &index,
         );
         assert!(other.is_empty(), "{other:?}");
     }
@@ -3281,7 +3279,9 @@ mod tests {
     fn a_non_resolving_pointer_is_an_error() {
         let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-9999\n");
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
-        let (_, findings) = pointer_resolution(&[source], &pointer_fields, &HashMap::new());
+        let records = [source];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -3298,7 +3298,9 @@ mod tests {
             "> Parent: SPEC-1 (v0 CLI). Extra trailing prose that isn't a reference.\n",
         );
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
-        let (_, findings) = pointer_resolution(&[parent, child], &pointer_fields, &HashMap::new());
+        let records = [parent, child];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -3306,7 +3308,9 @@ mod tests {
     fn a_dangling_parent_pointer_is_an_error() {
         let child = record("docs/specs/SPEC-2-x.md", "spec", "> Parent: SPEC-9999\n");
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
-        let (_, findings) = pointer_resolution(&[child], &pointer_fields, &HashMap::new());
+        let records = [child];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));
@@ -3408,11 +3412,13 @@ mod tests {
                 .into_iter()
                 .collect();
 
+        let target_status_records = [target.clone(), source];
         let (_, status_findings) = pointer_target_status(
-            &[target.clone(), source],
+            &target_status_records,
             &pointers,
             &HashMap::new(),
             &["Superseded".to_string()],
+            &build_normalized_index(&target_status_records),
         );
         assert!(
             status_findings.is_empty(),
@@ -3533,8 +3539,10 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
+        let records = [bug, milestone];
+        let index = build_normalized_index(&records);
         let (exec, findings) =
-            narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
+            narrative_field_stale(&records, &config, &terminal_for_tests(), &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("BUG-3"));
@@ -3554,8 +3562,10 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
+        let records = [bug, milestone];
+        let index = build_normalized_index(&records);
         let (exec, findings) =
-            narrative_field_stale(&[bug, milestone], &config, &terminal_for_tests());
+            narrative_field_stale(&records, &config, &terminal_for_tests(), &index);
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
@@ -3571,7 +3581,10 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
+        let records = [milestone];
+        let index = build_normalized_index(&records);
+        let (exec, findings) =
+            narrative_field_stale(&records, &config, &terminal_for_tests(), &index);
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -3595,7 +3608,10 @@ mod tests {
             "milestone",
             type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[milestone], &config, &terminal_for_tests());
+        let records = [milestone];
+        let index = build_normalized_index(&records);
+        let (exec, findings) =
+            narrative_field_stale(&records, &config, &terminal_for_tests(), &index);
         assert_eq!(examined(&exec), 1);
         assert!(
             findings.is_empty(),
@@ -3618,7 +3634,10 @@ mod tests {
             "rfc",
             type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
         )]);
-        let (exec, findings) = narrative_field_stale(&[bug, rfc], &config, &terminal_for_tests());
+        let records = [bug, rfc];
+        let index = build_normalized_index(&records);
+        let (exec, findings) =
+            narrative_field_stale(&records, &config, &terminal_for_tests(), &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.starts_with("Motivated-by:"));
@@ -3636,7 +3655,9 @@ mod tests {
             "> Implements: RFC-10000\n",
         );
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
-        let (_, findings) = pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -3649,7 +3670,9 @@ mod tests {
         let target = record("docs/adr/ADR-0034-x.md", "adr", "> Status: Accepted\n");
         let source = record("docs/specs/SPEC-1-y.md", "spec", "> Implements: ADR-34\n");
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
-        let (_, findings) = pointer_resolution(&[target, source], &pointer_fields, &HashMap::new());
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -3672,8 +3695,9 @@ mod tests {
         let legacy_style = record("docs/adr/0037-y.md", "adr", "> Status: Accepted\n");
         let source = record("docs/specs/SPEC-1-z.md", "spec", "> Implements: ADR-37\n");
         let pointer_fields = field_map(&[("spec", &["Implements"])]);
-        let (_, findings) =
-            pointer_resolution(&[legacy_style, source], &pointer_fields, &HashMap::new());
+        let records = [legacy_style, source];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -3692,8 +3716,9 @@ mod tests {
         );
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: MILE-1\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let (_, findings) =
-            pointer_resolution(&[milestone, source], &pointer_fields, &HashMap::new());
+        let records = [milestone, source];
+        let index = build_normalized_index(&records);
+        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -3897,7 +3922,9 @@ mod tests {
         )];
         let closed = vec!["Fixed".to_string()];
 
-        let (exec, findings) = claim_status_agreement(&[bug], &claims, &closed);
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
@@ -3948,7 +3975,9 @@ mod tests {
     fn a_claim_to_close_an_already_closed_record_is_silent() {
         let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Fixed\n");
         let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36\n".to_string())];
-        let (_, findings) = claim_status_agreement(&[bug], &claims, &["Fixed".to_string()]);
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let (_, findings) = claim_status_agreement(&claims, &["Fixed".to_string()], &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -3960,7 +3989,9 @@ mod tests {
             ".changeset/x.md".to_string(),
             "see BUG-36 for the four hardcoded paths\n".to_string(),
         )];
-        let (_, findings) = claim_status_agreement(&[bug], &claims, &["Fixed".to_string()]);
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let (_, findings) = claim_status_agreement(&claims, &["Fixed".to_string()], &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -4301,7 +4332,9 @@ mod tests {
             "adr",
             type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
         )]);
-        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let records = [old, new];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -4332,7 +4365,9 @@ mod tests {
             "adr",
             type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
         )]);
-        let (exec, findings) = supersession_reciprocity(&[old, new], &config);
+        let records = [old, new];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -4351,7 +4386,9 @@ mod tests {
             "adr",
             type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
         )]);
-        let (exec, findings) = supersession_reciprocity(&[r], &config);
+        let records = [r];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
         let population = exec
             .population
             .expect("the rule must state what it was handed");

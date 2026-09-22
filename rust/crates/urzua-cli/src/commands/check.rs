@@ -177,10 +177,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Ok(s) => s,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let scoped = match scope_to_requested_paths(&repo_root, &discovered.paths, &paths) {
-        Ok(p) => p,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    let scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
 
     // A path argument narrows what is *reported on*. It must not narrow the
     // corpus a pointer resolves against: a target outside the requested path
@@ -241,6 +238,14 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let mut claim_path_notices: Vec<Notice> = Vec::new();
     if let Some(setting) = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT) {
         if setting.level != urzua_core::config::RuleLevel::Off {
+            // Both sides canonicalised: the repo root may itself reach through
+            // a link (macOS `/tmp`), and comparing a resolved path against an
+            // unresolved root reports every entry as outside. Computed once,
+            // outside the loop: it does not depend on which prefix is being
+            // checked.
+            let root = repo_root
+                .canonicalize()
+                .unwrap_or_else(|_| repo_root.clone());
             for prefix in setting.claim_paths.iter().flatten() {
                 // A root symlinked to an ancestor escaped the declared prefix
                 // entirely (BUG-69). Rejecting every symlink also rejected a
@@ -249,12 +254,6 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // resolved and required to stay inside the repository instead.
                 let declared = repo_root.join(prefix);
                 let resolved = declared.canonicalize();
-                // Both sides canonicalised: the repo root may itself reach
-                // through a link (macOS `/tmp`), and comparing a resolved path
-                // against an unresolved root reports every entry as outside.
-                let root = repo_root
-                    .canonicalize()
-                    .unwrap_or_else(|_| repo_root.clone());
                 match &resolved {
                     // Absent is the state this guard was written to tolerate and
                     // did not: git tracks no empty directory, so `.changeset`
@@ -323,12 +322,25 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // Each rule's (RuleExecution, Vec<Finding>) collected into one list --
     // rules_executed/findings both derive from it below, so there's no
     // second hand-written list that has to be kept in sync by hand.
+    // Built once and shared: pointer.resolution, pointer.target-status,
+    // narrative-field.stale, claim.status-agreement and
+    // relation.supersession-reciprocity each need to resolve a reference
+    // against every record, and independently rebuilding this from scratch
+    // for each was the same O(corpus) traversal five times over one `check`
+    // run.
+    let record_index = rules::build_normalized_index(&records);
+
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
             rules::header_required_fields(&records, &required_by_type)
         }),
         crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-            rules::pointer_resolution(&records, &pointer_fields_by_type, &narrative_fields_by_type)
+            rules::pointer_resolution(
+                &records,
+                &pointer_fields_by_type,
+                &narrative_fields_by_type,
+                &record_index,
+            )
         }),
         crate::gate::gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
             let not_in = config
@@ -341,6 +353,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 &pointer_fields_by_type,
                 &narrative_fields_by_type,
                 &not_in,
+                &record_index,
             )
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_QUALITY, || {
@@ -354,7 +367,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             let closed = setting
                 .and_then(|s| s.closed_statuses.clone())
                 .unwrap_or_default();
-            rules::claim_status_agreement(&records, &claims, &closed)
+            rules::claim_status_agreement(&claims, &closed, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
             rules::filename_title_consistency(&records, &full_text)
@@ -362,7 +375,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(
             &config,
             rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-            || rules::supersession_reciprocity(&records, &config),
+            || rules::supersession_reciprocity(&records, &config, &record_index),
         ),
         crate::gate::gated(
             &config,
@@ -412,7 +425,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 .get(rules::RULE_NARRATIVE_FIELD_STALE)
                 .and_then(|s| s.terminal_statuses.clone())
                 .unwrap_or_default();
-            rules::narrative_field_stale(&records, &config, &terminal)
+            rules::narrative_field_stale(&records, &config, &terminal, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_TYPE_DIR_MATCHES_NOTHING, || {
             let mut matched: HashMap<String, usize> = HashMap::new();

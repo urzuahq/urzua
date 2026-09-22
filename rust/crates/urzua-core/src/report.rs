@@ -159,14 +159,6 @@ pub enum Outcome {
     OutOfScope,
 }
 
-impl Outcome {
-    /// Whether this counts toward `examined`. The wire carries two numbers; the
-    /// collapse happens here, once.
-    pub fn is_examined(self) -> bool {
-        self == Outcome::Examined
-    }
-}
-
 /// Run `body` over a population and report what it judged.
 ///
 /// `eligible` is the candidate list's length, so it cannot drift from the

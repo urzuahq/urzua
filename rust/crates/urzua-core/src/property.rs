@@ -280,6 +280,7 @@ mod tests {
             header: crate::header::parse(body),
         };
         let records = [record];
+        let record_index = rules::build_normalized_index(&records);
 
         let fields =
             |names: &[&str]| -> Vec<String> { names.iter().map(|s| s.to_string()).collect() };
@@ -364,19 +365,19 @@ mod tests {
             ("identity.collision", rules::identity_collision(&records)),
             (
                 "pointer.resolution",
-                rules::pointer_resolution(&records, &pointers, &narratives),
+                rules::pointer_resolution(&records, &pointers, &narratives, &record_index),
             ),
             (
                 "pointer.target-status",
-                rules::pointer_target_status(&records, &pointers, &narratives, &[]),
+                rules::pointer_target_status(&records, &pointers, &narratives, &[], &record_index),
             ),
             (
                 "narrative-field.stale",
-                rules::narrative_field_stale(&records, &config, &[]),
+                rules::narrative_field_stale(&records, &config, &[], &record_index),
             ),
             (
                 "relation.supersession-reciprocity",
-                rules::supersession_reciprocity(&records, &config),
+                rules::supersession_reciprocity(&records, &config, &record_index),
             ),
             (
                 "embodiment.consistency",
