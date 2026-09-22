@@ -2,6 +2,27 @@
 default: major
 ---
 
+Fixes two opposite-direction defects in how a declared field's value is read when its exact-cased key
+is missing (`ADR-57`): `claim.status-agreement` and `pointer.target-status` used to fabricate a
+sentinel that turned every claim or pointer citing a mis-cased `Status` field into a false blocking
+finding; the embodiment rules used to silently drop a mis-cased `Realized-by`/`Embodiment`, hiding a
+real inconsistency. Both now skip the field (unjudged, not judged-and-wrong), and a new rule,
+`header.field-case-mismatch`, is the one place that reports a declared field written under a different
+case (`ADR-58`). Also fixes a duplicate record-number bug in `urzua new` (`0013-01-15-slug.md` used to
+parse as a date and skip record 13, which could then be reissued), consolidates three previously
+independently-computed "record-shaped file" definitions into one, and consolidates the `(record,
+field)` candidate-slot construction duplicated across five rules into two shared helpers.
+
+Implements `RFC-39`/`ADR-59`: `FieldName` and `RecordId` are now real types whose `Eq`/`Hash` encode
+their comparison rule (exact for field names per `ADR-57`, numeric-normalized for record identifiers
+per `BUG-2`), replacing bare `String` at the six field-name comparison sites and the shared record
+index. `RecordTypeConfig`'s own fields stay `Vec<String>` — the type boundary sits at
+`declared_fields()` and the header's comparison methods, not at config deserialization, since that is
+where every comparison bug in this family actually lived. The remaining ten rule functions that took a
+bare `HashMap` projection of configuration now take `&Config` directly, matching the fifteen that
+already did. Two enums that predate `ADR-53`'s move of status vocabulary to the adopter
+(`urzua_core::Status`, `urzua_core::Embodiment`) are removed; neither was ever constructed.
+
 Implements `ADR-50`, previously Accepted and unbuilt: `header_shape: "none"` declares a type whose
 records carry no header block at all. `header.required-fields` skips such a type instead of reporting
 every record as missing a header region; a new rule, `config.header-none-has-no-required-fields`,
@@ -34,4 +55,5 @@ option-taking rule is one entry instead of three edits that could disagree. `ini
 rules depend on filename identity moves from `urzua-cli` into the same crate as the rules themselves.
 
 No adopter-facing behavior changes beyond what's described above: verified with the full test suite,
-`make ci`, and a real-corpus `check` run reporting the same findings before and after.
+clippy, `make ci`, and a real-corpus `check` run reporting the same findings before and after each
+phase of this work landed.
