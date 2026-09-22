@@ -56,6 +56,28 @@ impl Gen {
             .map(|_| ALPHABET[self.below(ALPHABET.len())])
             .collect()
     }
+
+    /// A path segment drawn from the same alphabet, filtered to characters
+    /// that survive as a filesystem component on every platform this project
+    /// runs on (no `/`, which `ALPHABET` never contains anyway, but kept
+    /// explicit as the property this generator exists to hold).
+    fn path_segment(&mut self) -> String {
+        let mut s = self.field_name();
+        s.retain(|c| c != '/');
+        if s.is_empty() {
+            s.push('x');
+        }
+        s
+    }
+
+    /// A record's own file-name stem, excluding a leading `_` -- the
+    /// generator's job is the ownership property, and `ALPHABET` includes
+    /// `_`, which names a template and is excluded from candidacy before
+    /// ownership is even asked (a different rule than the one under test).
+    fn file_stem(&mut self) -> String {
+        let s = self.path_segment();
+        s.trim_start_matches('_').to_string()
+    }
 }
 
 /// The property, stated once and checked against whatever matcher is passed in.
@@ -80,8 +102,9 @@ fn first_counterexample(
         let allowed: HashSet<String> = [declared.clone()].into_iter().collect();
 
         // Half the cases write the declared name back exactly and must match.
-        // The other half change its case, which is now a *different* name and
-        // must not: accepting it is how `Maße` and `Masse` become one field.
+        // The other half change its case, which is a different name under exact
+        // comparison and must not match: accepting it is how `Maße` and `Masse`
+        // become one field.
         let same_case = gen.below(2) == 0;
         let written = if same_case {
             declared.clone()
@@ -164,8 +187,8 @@ mod tests {
     ///
     /// The first version of this asserted `accepted || reported`, which are
     /// exact complements -- a tautology that could not fail, inside the suite
-    /// built to catch exactly that. It now predicts the finding count from the
-    /// declared name and holds the parser to recovering the key.
+    /// built to catch exactly that. It predicts the finding count from the declared
+    /// name and holds the parser to recovering the key.
     #[test]
     fn every_field_a_record_carries_is_either_accepted_or_reported() {
         use crate::rules::header_field_set_consistency;
@@ -403,5 +426,63 @@ mod tests {
         let b = first_counterexample(case_insensitive_matcher, 500, 0xC0FFEE);
         assert_eq!(a, b);
         assert!(a.is_some());
+    }
+
+    /// A record directly inside a declared dir is owned; one nested any
+    /// deeper is not (`RFC-35`) -- generated over synthetic path segments
+    /// rather than the one fixture a human happened to write, because the
+    /// shipped defect this catches was a boolean inverted while rewriting a
+    /// loop into a census closure: a mistake inspection missed and the one
+    /// hand-written integration test happened to catch, not one the property
+    /// was built to find. It is here so the next inversion does not need the
+    /// same luck.
+    #[test]
+    fn a_record_is_owned_only_when_directly_inside_its_declared_dir() {
+        use crate::config::{Config, RecordTypeConfig};
+        use crate::rules::type_record_outside_declared_dir;
+        use std::path::PathBuf;
+
+        let mut gen = Gen(0xF00D);
+        for _ in 0..300 {
+            let dir_name = gen.path_segment();
+            let dir = format!("docs/{dir_name}");
+
+            let config = Config {
+                schema_version: 2,
+                rules: std::collections::HashMap::new(),
+                record_types: [(
+                    "note".to_string(),
+                    RecordTypeConfig {
+                        dir: dir.clone(),
+                        required_fields: Vec::new(),
+                        header_shape: Default::default(),
+                        prefix: None,
+                        header_layout: None,
+                        known_fields: None,
+                        pointer_fields: None,
+                        narrative_fields: None,
+                        spec: None,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            };
+
+            let file_name = format!("{}x.md", gen.file_stem());
+            let directly_owned = gen.below(2) == 0;
+            let path = if directly_owned {
+                PathBuf::from(format!("{dir}/{file_name}"))
+            } else {
+                let nested = gen.path_segment();
+                PathBuf::from(format!("{dir}/{nested}/{file_name}"))
+            };
+
+            let (_, findings) = type_record_outside_declared_dir(&config, &[path.clone()]);
+            let reported = findings.iter().any(|f| f.file == path);
+            assert_eq!(
+                reported, !directly_owned,
+                "dir={dir:?} path={path:?} directly_owned={directly_owned}:                  reported must be the opposite of directly-owned"
+            );
+        }
     }
 }

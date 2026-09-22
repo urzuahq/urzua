@@ -55,11 +55,11 @@ pub fn run(
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let (examined, repairs) = urzua_core::fix::detect_repairs(&records);
+    let (population, repairs) = urzua_core::fix::detect_repairs(&records);
 
     if !apply {
         return emit(&build_fix_report(
-            examined,
+            population,
             repairs,
             Vec::new(),
             None,
@@ -107,7 +107,7 @@ pub fn run(
     }
 
     emit(&build_fix_report(
-        examined,
+        population,
         applied,
         failed,
         identity.warning,
@@ -115,21 +115,21 @@ pub fn run(
     ))
 }
 
-/// `ran_apply` matters because the two modes disagree on what `examined ==
-/// 0` should mean for the exit code: detect mode treats it as `NotRun`
-/// (exit 2, nothing to report on); apply mode's exit code was always keyed
-/// only on `failed.is_empty()`, independent of `examined` -- an empty/
-/// undiscovered corpus with nothing to apply and nothing to fail on
-/// exits 0, not 2, matching the pre-existing behavior this refactor must
-/// not silently change.
+/// `ran_apply` matters because the two modes disagree on what
+/// `population.examined() == 0` should mean for the exit code: detect mode
+/// treats it as `NotRun` (exit 2, nothing to report on); apply mode's exit
+/// code was always keyed only on `failed.is_empty()`, independent of the
+/// count -- an empty/undiscovered corpus with nothing to apply and nothing
+/// to fail on exits 0, not 2, matching the pre-existing behavior this
+/// refactor must not silently change.
 fn build_fix_report(
-    examined: usize,
+    population: urzua_core::report::Population,
     repairs: Vec<urzua_core::fix::Repair>,
     failed: Vec<(PathBuf, String)>,
     warning: Option<String>,
     ran_apply: bool,
 ) -> FixReport {
-    let status = if examined == 0 && !ran_apply {
+    let status = if population.examined() == 0 && !ran_apply {
         FixStatus::NotRun
     } else if !failed.is_empty() {
         FixStatus::PartialFailure
@@ -143,7 +143,7 @@ fn build_fix_report(
 
     FixReport {
         status,
-        records_examined: examined,
+        population,
         repairs,
         failed: failed
             .into_iter()

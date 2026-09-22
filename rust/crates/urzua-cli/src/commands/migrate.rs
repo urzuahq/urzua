@@ -202,13 +202,13 @@ pub fn run_schema_report(config_path: Option<PathBuf>, field: String) -> ExitCod
         ));
     }
 
-    let would_fail = urzua_core::migrate::schema_report(&records, &field);
+    let (population, would_fail, notices) = urzua_core::migrate::schema_report(&records, &field);
 
     emit(&MigrateSchemaReport {
         status: ReportStatus::Ok,
-        records_examined: records.len(),
         field,
+        population,
         would_fail,
-        notices: Vec::new(),
+        notices,
     })
 }

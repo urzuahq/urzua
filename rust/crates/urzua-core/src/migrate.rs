@@ -6,6 +6,7 @@
 
 use crate::field_state::classify;
 use crate::record::Record;
+use crate::report::{census, Notice, NoticeSeverity, Outcome, Population, PopulationUnit};
 use crate::FieldState;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -18,18 +19,46 @@ pub struct SchemaReportEntry {
 /// Every record whose value for `field` is not a real, present value --
 /// exactly what would newly fail `header.required-fields`/`field.quality`
 /// if `field` were added to that record type's `required_fields` today.
-pub fn schema_report(records: &[Record], field: &str) -> Vec<SchemaReportEntry> {
-    records
-        .iter()
-        .filter_map(|record| {
-            let state = classify(record.header.get(field));
-            (state != FieldState::Present).then(|| SchemaReportEntry {
+///
+/// A record whose header did not parse is eligible and unexamined, not
+/// classified. `classify(None)` cannot distinguish "the header parsed and
+/// the field is absent" from "nothing in the header is readable at all" --
+/// both read as `Blank` -- so calling it on an unparsed header would tell
+/// the operator this field specifically will fail, when the real defect is
+/// broader and already has its own diagnosis (`header.required-fields`).
+/// Excluded records are still disclosed, as a `Notice`, so a preview run
+/// against a partially-broken corpus does not read as complete.
+pub fn schema_report(
+    records: &[Record],
+    field: &str,
+) -> (Population, Vec<SchemaReportEntry>, Vec<Notice>) {
+    let mut report = Vec::new();
+    let mut notices = Vec::new();
+
+    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        if record.header.region.is_none() || record.header.parse_error.is_some() {
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: "header-unreadable".to_string(),
+                message: format!(
+                    "{}: header did not parse -- excluded from this preview, not counted as failing",
+                    record.path.display()
+                ),
+            });
+            return Outcome::Unreadable;
+        }
+        let state = classify(record.header.get(field));
+        if state != FieldState::Present {
+            report.push(SchemaReportEntry {
                 record: record.path.clone(),
                 record_type: record.record_type.clone(),
                 state,
-            })
-        })
-        .collect()
+            });
+        }
+        Outcome::Examined
+    });
+
+    (population, report, notices)
 }
 
 #[cfg(test)]
@@ -44,9 +73,11 @@ mod tests {
     #[test]
     fn a_record_missing_the_candidate_field_is_reported_observed_failing() {
         let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
-        let report = schema_report(&[r], "Reviewers");
+        let (population, report, notices) = schema_report(&[r], "Reviewers");
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].state, FieldState::Blank);
+        assert!(notices.is_empty());
     }
 
     #[test]
@@ -56,8 +87,36 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Reviewers: alice\n",
         );
-        let report = schema_report(&[r], "Reviewers");
+        let (population, report, _notices) = schema_report(&[r], "Reviewers");
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(report.is_empty());
+    }
+
+    #[test]
+    fn an_unparsed_header_is_not_reported_as_blank_observed_failing() {
+        // A header that does not parse gives no way to know whether the
+        // candidate field is genuinely absent -- classify(None) would say
+        // Blank regardless, telling the operator "add this field and it
+        // will fail here" when the real defect is that nothing in the
+        // header is readable at all. header.required-fields already
+        // reports that; this must not guess a second, false diagnosis.
+        let r = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/adr/0001-x.md"),
+            "adr".to_string(),
+            "---\nStatus: Accepted\n  Date  :: broken\n---\n# 1 — X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "ADR".to_string(),
+        );
+        let (population, report, _notices) = schema_report(&[r], "Reviewers");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 0),
+            "handed to the report and not judged, not silently dropped"
+        );
+        assert!(
+            report.is_empty(),
+            "no state can be claimed for a field behind a header that did not parse: {report:?}"
+        );
     }
 
     #[test]
@@ -67,7 +126,8 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Reviewers: TBD\n",
         );
-        let report = schema_report(&[r], "Reviewers");
+        let (population, report, _notices) = schema_report(&[r], "Reviewers");
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].state, FieldState::Placeholder);
     }
