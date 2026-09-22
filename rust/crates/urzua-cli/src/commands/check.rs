@@ -405,6 +405,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         findings.extend(rule_findings);
     }
 
+    // Last, and over the executions rather than the corpus: it judges whether
+    // the configuration reached what it declared (MILE-106), which is only
+    // answerable once every other rule has reported.
+    let (scope_exec, scope_findings) =
+        crate::gate::gated(&config, rules::RULE_CONFIG_SCOPE_MATCHES_NOTHING, || {
+            rules::config_scope_matches_nothing(&rules_executed, &config_path)
+        });
+    rules_executed.push(scope_exec);
+    findings.extend(scope_findings);
+
     // Scoped against the requested prefixes themselves, never against the
     // discovered set: that set holds the *tracked* files under the scope, and a
     // rule may report on a file git does not track -- a claim file is read

@@ -101,21 +101,52 @@ pub enum PopulationUnit {
     Field,
     /// One closure assertion drawn from a declared `claim_paths` tree.
     Claim,
+    /// One other rule's execution. The unit of a rule that judges the run
+    /// rather than the corpus.
+    Rule,
 }
 
 /// What a rule decided about one candidate it was handed.
 ///
 /// There is no "not in the population" answer, deliberately: the candidate list
-/// *is* the population, built before the rule runs. A rule that could reduce
-/// its own denominator is the hand-maintained count this type replaces.
+/// *is* the population, built before the rule runs. A rule that could reduce its
+/// own denominator is the hand-maintained count this type replaces.
+///
+/// The variants below `Examined` all count as unexamined on the wire, where they
+/// collapse into `eligible - examined`. They are separate here because the
+/// reason a rule judged nothing decides what an adopter should do about it, and
+/// those actions are opposite: `Absent` means wait, `Unreadable` means fix the
+/// records, `OutOfScope` means fix the configuration. Collapsing them in the
+/// code rather than at the wire is what left `MILE-106` with no way to tell a
+/// fresh corpus from a misconfigured one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     /// The rule reached a verdict about this candidate.
     Examined,
-    /// The candidate was in the population and the rule did not judge it --
-    /// the declared slot is absent, or the header it needed did not parse.
-    /// `eligible > examined` is this, and it is the signal `MILE-106` reads.
-    NotExamined,
+    /// The declared slot or section is not there. Legitimate and common on a
+    /// corpus that has not adopted the convention yet.
+    Absent,
+    /// Present, and the rule could not read it -- a header that did not parse.
+    /// The corpus is malformed, not incomplete.
+    Unreadable,
+    /// The record does not match the shape the configuration declared, so no
+    /// amount of editing this record makes the rule apply: a filename yielding
+    /// no identifier under the declared `prefix` is the case `BUG-61` found,
+    /// where `init` wrote a prefix matching nothing and five rules silently
+    /// examined zero records.
+    ///
+    /// The one state whose subject is the configuration rather than the corpus,
+    /// and the reason a configurable engine needs this distinction at all --
+    /// a linter with compiled-in rules cannot reach it.
+    OutOfScope,
+}
+
+impl Outcome {
+    /// Whether this counts toward `examined`. The wire carries two numbers; the
+    /// collapse happens here, once.
+    pub fn is_examined(self) -> bool {
+        self == Outcome::Examined
+    }
 }
 
 /// Run `body` over a population and report what it judged.
@@ -130,11 +161,16 @@ pub fn census<T>(
     mut body: impl FnMut(&T) -> Outcome,
 ) -> Population {
     let eligible = candidates.len();
-    let examined = candidates
-        .iter()
-        .filter(|c| body(c) == Outcome::Examined)
-        .count();
-    Population::of(unit, eligible, examined)
+    let mut examined = 0;
+    let mut out_of_scope = 0;
+    for candidate in &candidates {
+        match body(candidate) {
+            Outcome::Examined => examined += 1,
+            Outcome::OutOfScope => out_of_scope += 1,
+            Outcome::Absent | Outcome::Unreadable => {}
+        }
+    }
+    Population::detailed(unit, eligible, examined, out_of_scope)
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -152,15 +188,23 @@ pub fn census_records<T>(
     let eligible = candidates.len();
     let mut examined_records = Vec::new();
     let mut examined = 0;
+    let mut out_of_scope = 0;
     for candidate in &candidates {
-        if body(candidate) == Outcome::Examined {
-            examined += 1;
-            examined_records.push(record_of(candidate));
+        match body(candidate) {
+            Outcome::Examined => {
+                examined += 1;
+                examined_records.push(record_of(candidate));
+            }
+            Outcome::OutOfScope => out_of_scope += 1,
+            Outcome::Absent | Outcome::Unreadable => {}
         }
     }
     examined_records.sort();
     examined_records.dedup();
-    (Population::of(unit, eligible, examined), examined_records)
+    (
+        Population::detailed(unit, eligible, examined, out_of_scope),
+        examined_records,
+    )
 }
 
 /// A rule's input population: what it was eligible to examine, and what it
@@ -185,6 +229,11 @@ pub struct Population {
     unit: PopulationUnit,
     eligible: usize,
     examined: usize,
+    /// Candidates the *configuration* does not reach, as distinct from ones the
+    /// corpus has not written yet. Always serialized, including as `0`: a
+    /// diagnostic that appears only when non-zero cannot be told from one
+    /// nothing computed.
+    out_of_scope: usize,
 }
 
 impl Population {
@@ -200,7 +249,25 @@ impl Population {
         self.examined
     }
 
+    /// How many candidates the configuration could not reach. Non-zero means
+    /// the configuration does not match this corpus, which is a different
+    /// problem from the corpus not having the content yet -- and the only one
+    /// of the two an adopter fixes by editing config (`BUG-61`).
+    pub fn out_of_scope(&self) -> usize {
+        self.out_of_scope
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
+        Population::detailed(unit, eligible, examined, 0)
+    }
+
+    /// `of`, naming how many candidates were beyond the configuration's reach.
+    pub fn detailed(
+        unit: PopulationUnit,
+        eligible: usize,
+        examined: usize,
+        out_of_scope: usize,
+    ) -> Self {
         debug_assert!(
             examined <= eligible,
             "{unit:?}: examined {examined} exceeds eligible {eligible}"
@@ -214,6 +281,7 @@ impl Population {
             unit,
             eligible: eligible.max(examined),
             examined,
+            out_of_scope,
         }
     }
 }

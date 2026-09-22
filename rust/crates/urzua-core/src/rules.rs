@@ -46,6 +46,7 @@ pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
+pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -72,6 +73,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_EMBODIMENT_LOCATOR_EXISTS,
     RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
+    RULE_CONFIG_SCOPE_MATCHES_NOTHING,
 ];
 
 pub fn header_required_fields(
@@ -142,7 +144,7 @@ pub fn header_required_fields(
             // rule was handed them and could not judge them. The record-scoped
             // finding above says why.
             if record.header.region.is_none() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_none() {
                 findings.push(Finding {
@@ -205,10 +207,10 @@ pub fn header_layout_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(&declared) = declared_by_type.get(&record.record_type) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let Some(actual) = record.header.layout() else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             if actual != declared {
@@ -292,7 +294,7 @@ pub fn header_field_set_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(allowed) = allowed_by_type.get(&record.record_type) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             // A record whose header region never parsed has an empty field list,
             // which is indistinguishable here from a record whose fields are all
@@ -300,7 +302,7 @@ pub fn header_field_set_consistency(
             // load-bearing; `header.required-fields` reports the unparsed header
             // (BUG-78).
             if record.header.region.is_none() || record.header.parse_error.is_some() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
 
             for field in &record.header.fields {
@@ -858,7 +860,7 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
             if record_id(record).is_some() {
                 Outcome::Examined
             } else {
-                Outcome::NotExamined
+                Outcome::OutOfScope
             }
         },
     );
@@ -981,11 +983,11 @@ pub fn pointer_target_status(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             }
 
             for reference in references {
@@ -1057,11 +1059,11 @@ pub fn pointer_resolution(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             }
 
             for reference in references {
@@ -1139,7 +1141,7 @@ pub fn header_pointer_field_clean(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             if value.trim() == "—" {
                 return Outcome::Examined;
@@ -1229,11 +1231,11 @@ pub fn narrative_field_stale(
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
             let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let references = extract_references(value);
             if references.is_empty() {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             }
 
             for reference in references {
@@ -1412,7 +1414,7 @@ pub fn field_pending(
         |(record, field)| {
             // Unreadable, not absent -- the same reason as `field.quality`.
             if record.header.region.is_none() || record.header.parse_error.is_some() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
             if classify(record.header.get(field.as_str())) == FieldState::Pending {
                 findings.push(Finding {
@@ -1545,7 +1547,7 @@ pub fn claim_status_agreement(
         if index.contains_key(*normalized) {
             Outcome::Examined
         } else {
-            Outcome::NotExamined
+            Outcome::Absent
         }
     });
 
@@ -1614,7 +1616,7 @@ pub fn field_quality(
             // not looking (ADR-55). `header.required-fields` reports the parse
             // error itself, once per record rather than once per slot.
             if record.header.region.is_none() || record.header.parse_error.is_some() {
-                return Outcome::NotExamined;
+                return Outcome::Unreadable;
             }
             let state = classify(record.header.get(field.as_str()));
             // `Pending` is `field.pending`'s subject, not this rule's: it means
@@ -1662,10 +1664,10 @@ pub fn filename_title_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(filename_number) = filename_number(record) else {
-                return Outcome::NotExamined;
+                return Outcome::OutOfScope;
             };
             let Some(content) = full_text.get(&record.path) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             let mut push = |line: Option<usize>, message: String| {
@@ -1854,10 +1856,10 @@ pub fn revision_log_change_class(
         |record| record.path.clone(),
         |record| {
             let Some(content) = full_text.get(&record.path) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let Some(entries) = find_revision_log_entries(content) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             for entry in entries {
@@ -2066,7 +2068,7 @@ pub fn embodiment_locator_exists(
         |record| record.path.clone(),
         |record| {
             let Some(value) = record.header.get("Realized-by") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let realized = parse_realized_by(value);
             for locator in realized
@@ -2144,10 +2146,10 @@ pub fn embodiment_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(stated) = record.header.get("Embodiment") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             let Some(realized_by_value) = record.header.get("Realized-by") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             let computed = compute_embodiment(
@@ -2209,7 +2211,7 @@ pub fn embodiment_locator_promotion_candidate(
         |record| record.path.clone(),
         |record| {
             let Some(realized_by_value) = record.header.get("Realized-by") else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
 
             let parsed = parse_realized_by(realized_by_value);
@@ -2263,6 +2265,71 @@ pub fn embodiment_locator_promotion_candidate(
     )
 }
 
+/// A declared rule whose candidates the configuration could not reach
+/// (`MILE-106`).
+///
+/// Fires on `out_of_scope > 0`, never on a merely empty result. Those are
+/// different problems with opposite fixes: a corpus that has not written a
+/// revision log yet is doing nothing wrong and time resolves it, while a
+/// `prefix` that matches no filename will examine zero records forever
+/// (`BUG-61`). `type.dir-matches-nothing` draws the same line between an
+/// absent directory and an empty one, and is the precedent this follows.
+///
+/// Deliberately silent on `Unreadable`: `header.required-fields` already
+/// reports the parse error, per record, with the parser's own message.
+///
+/// Judges the run rather than the corpus, so it reads the executions the other
+/// rules produced and never sees a record. It excludes itself -- judging its
+/// own execution while producing it is not a verdict anyone can act on.
+pub fn config_scope_matches_nothing(
+    executed: &[RuleExecution],
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CONFIG_SCOPE_MATCHES_NOTHING;
+    let mut findings = Vec::new();
+
+    let candidates: Vec<&RuleExecution> = executed
+        .iter()
+        .filter(|e| e.rule != RULE_ID && e.status == RuleStatus::Ran)
+        .collect();
+
+    let population = census(PopulationUnit::Rule, candidates, |exec| {
+        let Some(population) = &exec.population else {
+            return Outcome::Absent;
+        };
+        if population.out_of_scope() == 0 {
+            return Outcome::Examined;
+        }
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Warning,
+            file: config_path.to_path_buf(),
+            line: None,
+            waived: None,
+            message: format!(
+                "'{}' was handed {} candidate(s) the configuration does not reach -- \
+                 {} of {} are outside what this repository declared, so the rule cannot \
+                 apply to them however the records are edited",
+                exec.rule,
+                population.out_of_scope(),
+                population.out_of_scope(),
+                population.eligible()
+            ),
+        });
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
 /// Rule 5 (Phase 6): `Supersedes`/`Superseded-by` reciprocity. Checking only
 /// the forward claim leaves the reverse unguarded -- a record can claim to
 /// supersede something that doesn't reciprocally point back, sending a
@@ -2305,11 +2372,11 @@ pub fn supersession_reciprocity(
         |record| record.path.clone(),
         |record| {
             let Some(id) = record_id(record) else {
-                return Outcome::NotExamined;
+                return Outcome::OutOfScope;
             };
             let normalized_id = normalize_id(&id);
             let Some(value) = record.header.get(FIELD) else {
-                return Outcome::NotExamined;
+                return Outcome::Absent;
             };
             // `—` is this corpus's written "nothing supersedes this", so the slot
             // was answered. Skipping before counting left the reciprocating half of
@@ -2914,6 +2981,91 @@ mod tests {
         let (exec, findings) =
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty());
+    }
+
+    fn exec_with(
+        rule: &str,
+        eligible: usize,
+        examined: usize,
+        out_of_scope: usize,
+    ) -> RuleExecution {
+        RuleExecution {
+            rule: rule.to_string(),
+            population: Some(Population::detailed(
+                PopulationUnit::Record,
+                eligible,
+                examined,
+                out_of_scope,
+            )),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_scope_reaching_nothing_is_reported_observed_failing() {
+        // BUG-61's shape: init wrote a prefix matching no filename, so the rule
+        // examines zero records forever and no edit to a record changes that.
+        let executed = [exec_with("identity.collision", 2, 0, 2)];
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1, "the rule must judge the execution");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("identity.collision"));
+    }
+
+    #[test]
+    fn the_finding_names_the_configuration_the_caller_selected() {
+        // check's scoped filter keeps a config finding only when its path equals
+        // the selected config, so a hardcoded path makes this finding vanish
+        // under `--config` -- a finding that disappears rather than one that is
+        // wrong.
+        let executed = [exec_with("identity.collision", 2, 0, 2)];
+        let chosen = std::path::Path::new("custom/urzua.yaml");
+        let (_, findings) = config_scope_matches_nothing(&executed, chosen);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].file, chosen);
+    }
+
+    #[test]
+    fn a_rule_with_nothing_written_yet_is_not_reported() {
+        // Identical eligible/examined to the case above. The corpus simply has
+        // no revision logs, which time resolves and config cannot.
+        let executed = [exec_with("revision-log.change-class-required", 2, 0, 0)];
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "an empty corpus is not a misconfiguration: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn it_does_not_judge_its_own_execution() {
+        let executed = [exec_with(RULE_CONFIG_SCOPE_MATCHES_NOTHING, 3, 0, 3)];
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(
+            exec.population.expect("carries a population").eligible(),
+            0,
+            "its own execution is not a candidate"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_rule_that_did_not_run_is_not_a_candidate() {
+        let executed = [RuleExecution {
+            rule: "field.quality".to_string(),
+            population: None,
+            status: RuleStatus::NotEnabled,
+            examined_records: Vec::new(),
+        }];
+        let (exec, findings) =
+            config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(exec.population.expect("carries a population").eligible(), 0);
         assert!(findings.is_empty());
     }
 
