@@ -1925,3 +1925,47 @@ fn a_type_declaring_only_required_fields_is_still_checked_for_whitespace() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn an_absent_claim_paths_directory_is_reported_not_fatal() {
+    // Git keeps no empty directory, so a declared `.changeset` ceases to exist
+    // the moment a release consumes the last fragment. Aborting took `check`
+    // down with it. BUG-56 asked for the absence to be *visible*, which a
+    // Notice achieves without moving the exit code (ADR-46).
+    let dir = fixture_repo("absent-claim-paths");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n\
+         \x20   closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "# 1 — X\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_ne!(
+        parsed["status"], "not-run",
+        "an absent dir is not a failure: {stdout}"
+    );
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    let notices = parsed["notices"].as_array().expect("a notice names it");
+    assert!(
+        notices
+            .iter()
+            .any(|n| n["message"].as_str().unwrap_or("").contains(".changeset")),
+        "the absence must still be visible (BUG-56): {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

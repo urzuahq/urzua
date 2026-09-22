@@ -24,7 +24,7 @@ pub struct ProposedRecordType {
 
 /// Propose one record type per directory holding record-shaped files. Adopt
 /// mode: this only reads, it never writes or moves.
-pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
+pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
     let mut counts: std::collections::BTreeMap<PathBuf, usize> = std::collections::BTreeMap::new();
     let mut prefixes: std::collections::BTreeMap<PathBuf, Vec<Option<String>>> =
         std::collections::BTreeMap::new();
@@ -67,7 +67,6 @@ pub fn detect_record_types(repo_root: &Path, discovered: &[PathBuf]) -> Vec<Prop
         *names.entry(proposed_name(dir)).or_insert(0) += 1;
     }
 
-    let _ = repo_root;
     counts
         .into_iter()
         .map(|(dir, record_count)| {
@@ -246,7 +245,7 @@ pub fn run(dry_run: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let proposed = detect_record_types(&repo_root, &discovered.paths);
+    let proposed = detect_record_types(&discovered.paths);
     if proposed.is_empty() {
         return emit(&CouldNotRun::from(
             "no record-shaped files found in the tracked set -- nothing to adopt",
@@ -305,7 +304,7 @@ mod tests {
             PathBuf::from("README.md"),
             PathBuf::from("docs/adr/_template.md"),
         ];
-        let proposed = detect_record_types(&PathBuf::from("."), &discovered);
+        let proposed = detect_record_types(&discovered);
 
         let adr = proposed.iter().find(|p| p.name == "adr").unwrap();
         assert_eq!(adr.record_count, 2);
@@ -324,7 +323,7 @@ mod tests {
     #[test]
     fn specs_directory_proposes_singular_type_name() {
         let discovered = vec![PathBuf::from("docs/specs/0001-x.md")];
-        let proposed = detect_record_types(&PathBuf::from("."), &discovered);
+        let proposed = detect_record_types(&discovered);
         assert_eq!(proposed[0].name, "spec");
         assert_eq!(proposed[0].dir, "docs/specs");
     }
@@ -365,7 +364,7 @@ mod tests {
         .map(PathBuf::from)
         .collect();
 
-        let proposed = detect_record_types(Path::new("/repo"), &discovered);
+        let proposed = detect_record_types(&discovered);
         let mut got: Vec<(String, usize)> = proposed
             .iter()
             .map(|p| (p.dir.clone(), p.record_count))

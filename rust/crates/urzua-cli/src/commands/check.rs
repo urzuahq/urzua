@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::report::{
-    CheckReport, CouldNotRun, Finding, ReportStatus, RuleExecution, ScopeInfo,
+    CheckReport, CouldNotRun, Finding, Notice, NoticeSeverity, ReportStatus, RuleExecution,
+    ScopeInfo,
 };
 use urzua_core::rules;
 
@@ -27,6 +28,14 @@ fn read_claim_files(
         .unwrap_or_else(|_| repo_root.to_path_buf());
     for prefix in prefixes {
         let dir = repo_root.join(prefix);
+        // An absent prefix is not an unreadable one. Git keeps no empty
+        // directory, so a declared `.changeset` ceases to exist the moment a
+        // release consumes the last fragment, and treating that as an I/O
+        // failure took the whole command down. The caller reports the absence
+        // as a `Notice`; there is simply nothing here to read.
+        if !dir.exists() {
+            continue;
+        }
         // `claim_paths` is a path *prefix*, so the claims may sit any depth
         // below it: reading one level deep made a nested layout report a clean
         // run over an empty claim list (BUG-63).
@@ -211,12 +220,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }
     }
 
-    // A `claim_paths` entry that does not resolve is a typo, not an empty
-    // directory, and the rule reports `ran` with zero findings either way --
-    // indistinguishable from a clean corpus. `OptionRequired` stops this rule
-    // going inert when `claim_paths` is missing; a misspelled one must not get
-    // through the same door (BUG-56). Checked here because it is a config
-    // error, not a finding about a record.
+    // An unresolvable `claim_paths` entry left the rule reporting `ran` with
+    // zero findings, indistinguishable from a clean corpus (BUG-56). Being
+    // *visible* is what that bug asked for; aborting was one way to achieve it
+    // and took `check` down with a directory git cannot keep. A `Notice` is
+    // visible and never moves the exit code (ADR-46), so absence is reported
+    // and a path that is actively wrong still aborts.
+    let mut claim_path_notices: Vec<Notice> = Vec::new();
     if let Some(setting) = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT) {
         if setting.level != urzua_core::config::RuleLevel::Off {
             for prefix in setting.claim_paths.iter().flatten() {
@@ -242,18 +252,33 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 let root = repo_root
                     .canonicalize()
                     .unwrap_or_else(|_| repo_root.clone());
-                let inside = resolved
-                    .as_ref()
-                    .is_some_and(|r| r.starts_with(&root) && r.is_dir());
-                if !inside {
-                    let why = match &resolved {
-                        Some(r) if !r.is_dir() => "is not a directory",
-                        Some(_) => "resolves outside the repository",
-                        None => "does not resolve",
-                    };
-                    return emit(&CouldNotRun::from(format!(
-                        "claim.status-agreement: claim_paths entry '{prefix}' {why}"
-                    )));
+                match &resolved {
+                    // Absent is the state this guard was written to tolerate and
+                    // did not: git tracks no empty directory, so `.changeset`
+                    // ceases to exist the moment a release consumes the last
+                    // fragment, and aborting took `check` down with it. The rule
+                    // has no input, which is reported rather than fatal.
+                    None => claim_path_notices.push(Notice {
+                        severity: NoticeSeverity::Warning,
+                        subject: rules::RULE_CLAIM_STATUS_AGREEMENT.to_string(),
+                        message: format!(
+                            "claim.status-agreement: claim_paths entry '{prefix}' does not exist -- the rule has no input"
+                        ),
+                    }),
+                    // Actively wrong, rather than merely empty: a file where a
+                    // directory was declared, or a link out of the repository
+                    // (BUG-69). Neither is a state waiting to be filled in.
+                    Some(r) if !r.is_dir() => {
+                        return emit(&CouldNotRun::from(format!(
+                            "claim.status-agreement: claim_paths entry '{prefix}' is not a directory"
+                        )))
+                    }
+                    Some(r) if !r.starts_with(&root) => {
+                        return emit(&CouldNotRun::from(format!(
+                            "claim.status-agreement: claim_paths entry '{prefix}' resolves outside the repository"
+                        )))
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -487,7 +512,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         },
         blocking,
         findings,
-        notices: Vec::new(),
+        notices: claim_path_notices,
     };
 
     emit(&report)
