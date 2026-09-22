@@ -152,7 +152,15 @@ mod tests {
     /// The same property against the matcher the rules actually use.
     #[test]
     fn a_field_name_matches_its_declaration_exactly_and_only_exactly() {
-        if let Some((declared, written)) = first_counterexample(field_is_declared, 500, 0xC0FFEE) {
+        let matcher = |key: &str, allowed: &HashSet<String>| {
+            let key = crate::values::FieldName::from(key);
+            let allowed: HashSet<crate::values::FieldName> = allowed
+                .iter()
+                .map(|s| crate::values::FieldName::from(s.as_str()))
+                .collect();
+            field_is_declared(&key, &allowed)
+        };
+        if let Some((declared, written)) = first_counterexample(matcher, 500, 0xC0FFEE) {
             panic!(
                 "type declared {declared:?}, record wrote {written:?}, and the \
                  matcher disagreed with exact comparison"
@@ -191,6 +199,7 @@ mod tests {
     /// name and holds the parser to recovering the key.
     #[test]
     fn every_field_a_record_carries_is_either_accepted_or_reported() {
+        use crate::config::{Config, RecordTypeConfig};
         use crate::rules::header_field_set_consistency;
         use std::collections::HashMap;
 
@@ -199,11 +208,26 @@ mod tests {
             let declared = gen.field_name();
             let written = gen.field_name();
 
-            let mut allowed_by_type = HashMap::new();
-            allowed_by_type.insert(
-                "note".to_string(),
-                [declared.clone()].into_iter().collect::<HashSet<String>>(),
-            );
+            let config = Config {
+                schema_version: 2,
+                rules: HashMap::new(),
+                record_types: [(
+                    "note".to_string(),
+                    RecordTypeConfig {
+                        dir: "docs/notes".to_string(),
+                        required_fields: Vec::new(),
+                        header_shape: Default::default(),
+                        prefix: None,
+                        header_layout: None,
+                        known_fields: Some(vec![declared.clone()]),
+                        pointer_fields: None,
+                        narrative_fields: None,
+                        spec: None,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            };
 
             let body = format!("> {written}: x\n");
             let record = crate::record::Record {
@@ -222,9 +246,9 @@ mod tests {
                 "declared {declared:?}, wrote {written:?}: the parser did not \
                  recover the generated field"
             );
-            assert_eq!(record.header.fields[0].key, written);
+            assert_eq!(record.header.fields[0].key.as_str(), written);
 
-            let (_, findings) = header_field_set_consistency(&[record], &allowed_by_type);
+            let (_, findings) = header_field_set_consistency(&[record], &config);
 
             // Predicted from the declaration, not from the rule's own
             // output: a prediction the rule cannot influence is the only kind
@@ -293,10 +317,6 @@ mod tests {
             "Blocked-on",
         ]);
 
-        let by_type = |v: Vec<String>| -> HashMap<String, Vec<String>> {
-            [("note".to_string(), v)].into_iter().collect()
-        };
-
         let config = Config {
             schema_version: 2,
             rules: HashMap::new(),
@@ -320,17 +340,6 @@ mod tests {
 
         let full_text: HashMap<std::path::PathBuf, String> =
             [(path.clone(), body.to_string())].into_iter().collect();
-        let allowed: HashMap<String, std::collections::HashSet<String>> =
-            [("note".to_string(), declared.iter().cloned().collect())]
-                .into_iter()
-                .collect();
-        let layouts: HashMap<String, HeaderLayout> =
-            [("note".to_string(), HeaderLayout::OnePerLine)]
-                .into_iter()
-                .collect();
-        let pointers = by_type(fields(&["Derives-from"]));
-        let narratives = by_type(fields(&["Blocked-on"]));
-        let required = by_type(declared.clone());
 
         let cases: Vec<(
             &str,
@@ -338,22 +347,30 @@ mod tests {
         )> = vec![
             (
                 "header.required-fields",
-                rules::header_required_fields(&records, &required),
+                rules::header_required_fields(&records, &config),
             ),
             (
                 "header.layout-consistency",
-                rules::header_layout_consistency(&records, &layouts),
+                rules::header_layout_consistency(&records, &config),
             ),
             (
                 "header.field-set-consistency",
-                rules::header_field_set_consistency(&records, &allowed),
+                rules::header_field_set_consistency(&records, &config),
             ),
             (
                 "header.pointer-field-clean",
                 rules::header_pointer_field_clean(&records, &config),
             ),
-            ("field.quality", rules::field_quality(&records, &required)),
-            ("field.pending", rules::field_pending(&records, &required)),
+            ("field.quality", rules::field_quality(&records, &config)),
+            ("field.pending", rules::field_pending(&records, &config)),
+            (
+                "field.untrimmed-value",
+                rules::field_untrimmed_value(&records, &config),
+            ),
+            (
+                "header.field-case-mismatch",
+                rules::header_field_case_mismatch(&records, &config),
+            ),
             (
                 "filename.title-consistency",
                 rules::filename_title_consistency(&records, &full_text),
@@ -365,11 +382,11 @@ mod tests {
             ("identity.collision", rules::identity_collision(&records)),
             (
                 "pointer.resolution",
-                rules::pointer_resolution(&records, &pointers, &narratives, &record_index),
+                rules::pointer_resolution(&records, &config, &record_index),
             ),
             (
                 "pointer.target-status",
-                rules::pointer_target_status(&records, &pointers, &narratives, &[], &record_index),
+                rules::pointer_target_status(&records, &config, &[], &record_index),
             ),
             (
                 "narrative-field.stale",

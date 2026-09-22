@@ -34,6 +34,8 @@ pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
 pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
+pub const RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS: &str =
+    "config.header-none-has-no-required-fields";
 pub const RULE_POINTER_RESOLUTION: &str = "pointer.resolution";
 pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
 pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
@@ -50,6 +52,7 @@ pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
+pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -78,12 +81,129 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
     RULE_CONFIG_SCOPE_MATCHES_NOTHING,
     RULE_FIELD_UNTRIMMED_VALUE,
+    RULE_HEADER_FIELD_CASE_MISMATCH,
+    RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
 ];
+
+/// Rules that derive a record's identity from its filename's type prefix
+/// (`ADR-36` declined the bare `NNNN-slug` shape), so a corpus with no prefix
+/// gives them nothing to examine. Single source of this fact: `init`'s
+/// adopt-mode proposal (`BUG-61`) is the only consumer today, but the fact
+/// belongs to the rules themselves, not to one command's module.
+pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
+    RULE_POINTER_RESOLUTION,
+    RULE_POINTER_TARGET_STATUS,
+    RULE_FILENAME_TITLE_CONSISTENCY,
+    RULE_RELATION_SUPERSESSION_RECIPROCITY,
+    RULE_NARRATIVE_FIELD_STALE,
+];
+
+/// One `(record, field)` candidate per field a record's type declares in
+/// `fields_by_type` (`BUG-105`): the same construction four rules duplicated,
+/// against `HashMap`s of either `Vec<String>` or `HashSet<String>`.
+fn field_slots<'a, T, C>(
+    records: &'a [Record],
+    fields_by_type: &'a HashMap<String, C>,
+) -> Vec<(&'a Record, &'a T)>
+where
+    &'a C: IntoIterator<Item = &'a T>,
+{
+    records
+        .iter()
+        .filter_map(|record| {
+            fields_by_type
+                .get(&record.record_type)
+                .map(|fields| (record, fields))
+        })
+        .flat_map(|(record, fields)| fields.into_iter().map(move |field| (record, field)))
+        .collect()
+}
+
+/// One `(record, field)` candidate per pointer *or* narrative field a
+/// record's type declares (`BUG-105`): `pointer_target_status` duplicated
+/// `pointer_resolution`'s construction statement-for-statement.
+fn pointer_and_narrative_slots<'a>(
+    records: &'a [Record],
+    pointer_fields_by_type: &'a HashMap<String, Vec<String>>,
+    narrative_fields_by_type: &'a HashMap<String, Vec<String>>,
+) -> Vec<(&'a Record, &'a String)> {
+    records
+        .iter()
+        .flat_map(|record| {
+            pointer_fields_by_type
+                .get(&record.record_type)
+                .into_iter()
+                .flatten()
+                .chain(
+                    narrative_fields_by_type
+                        .get(&record.record_type)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(move |field| (record, field))
+        })
+        .collect()
+}
+
+/// One type's projection, by type name, wherever `f` returns `Some` (`ADR-59`):
+/// the shape every `*_by_type` projector below shares, so a seventh one is a
+/// one-line call instead of another hand-rolled `filter_map`.
+fn project_by_type<T>(
+    config: &Config,
+    f: impl Fn(&crate::config::RecordTypeConfig) -> Option<T>,
+) -> HashMap<String, T> {
+    config
+        .record_types
+        .iter()
+        .filter_map(|(name, cfg)| f(cfg).map(|v| (name.clone(), v)))
+        .collect()
+}
+
+/// A type's `required_fields`, by type name (`ADR-59`): projected inside the
+/// rule that needs it rather than built once and handed in as a bare
+/// collection indistinguishable at the call site from a different projection
+/// of the same shape.
+fn required_fields_by_type(config: &Config) -> HashMap<String, Vec<String>> {
+    project_by_type(config, |cfg| Some(cfg.required_fields.clone()))
+}
+
+/// A type's `header_layout`, by type name, when declared (`ADR-59`).
+fn header_layout_by_type(config: &Config) -> HashMap<String, HeaderLayout> {
+    project_by_type(config, |cfg| cfg.header_layout)
+}
+
+/// A type's declared field set, by type name, only for a type that declares
+/// `known_fields` (`ADR-59`): `header.field-set-consistency` skips a type
+/// declaring only `required_fields` by design, and a map with an entry for
+/// every type would silently stop skipping it.
+fn known_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::values::FieldName>> {
+    project_by_type(config, |cfg| {
+        cfg.known_fields.as_ref().map(|_| cfg.declared_fields())
+    })
+}
+
+/// Every field a type declares (`required_fields` ∪ `known_fields`), by type
+/// name (`ADR-59`, `BUG-106`).
+fn declared_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::values::FieldName>> {
+    project_by_type(config, |cfg| Some(cfg.declared_fields()))
+}
+
+/// A type's `pointer_fields`, by type name, when declared (`ADR-59`).
+fn pointer_fields_by_type(config: &Config) -> HashMap<String, Vec<String>> {
+    project_by_type(config, |cfg| cfg.pointer_fields.clone())
+}
+
+/// A type's `narrative_fields`, by type name, when declared (`ADR-59`).
+fn narrative_fields_by_type(config: &Config) -> HashMap<String, Vec<String>> {
+    project_by_type(config, |cfg| cfg.narrative_fields.clone())
+}
 
 pub fn header_required_fields(
     records: &[Record],
-    required_by_type: &HashMap<String, Vec<String>>,
+    config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
+    let required_by_type = required_fields_by_type(config);
+    let required_by_type = &required_by_type;
     const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
     let mut findings = Vec::new();
 
@@ -96,6 +216,15 @@ pub fn header_required_fields(
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
         };
+        // A `none`-shaped type has nowhere for a header to be (`ADR-50`): a
+        // missing region here is the declared truth, not a defect to report.
+        if config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.header_shape == crate::header::HeaderShape::None)
+        {
+            continue;
+        }
 
         if record.header.region.is_none() {
             let detail = match &record.header.parse_error {
@@ -129,15 +258,7 @@ pub fn header_required_fields(
 
     // The population is the declared slot: one `(record, required field)` pair
     // per field the record's type declares.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .filter_map(|record| {
-            required_by_type
-                .get(&record.record_type)
-                .map(|required| (record, required))
-        })
-        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
-        .collect();
+    let slots = field_slots(records, required_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -190,8 +311,10 @@ pub fn header_required_fields(
 /// migration.
 pub fn header_layout_consistency(
     records: &[Record],
-    declared_by_type: &HashMap<String, HeaderLayout>,
+    config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
+    let declared_by_type = header_layout_by_type(config);
+    let declared_by_type = &declared_by_type;
     const RULE_ID: &str = RULE_HEADER_LAYOUT_CONSISTENCY;
     let mut findings = Vec::new();
 
@@ -265,7 +388,10 @@ fn layout_label(layout: HeaderLayout) -> &'static str {
 /// *required*) don't all become false positives the moment this rule ships.
 /// Exact (`ADR-57`): matching case-insensitively would accept a name nobody
 /// declared -- `Maße` and `Masse` are different words.
-pub fn field_is_declared(key: &str, allowed: &HashSet<String>) -> bool {
+pub fn field_is_declared(
+    key: &crate::values::FieldName,
+    allowed: &HashSet<crate::values::FieldName>,
+) -> bool {
     allowed.contains(key)
 }
 
@@ -273,15 +399,23 @@ pub fn field_is_declared(key: &str, allowed: &HashSet<String>) -> bool {
 ///
 /// `min` rather than `find`: several declared names can differ only in case, and
 /// a message that changes between runs on one corpus is `BUG-79`'s shape.
-pub fn near_miss<'a>(key: &str, allowed: &'a HashSet<String>) -> Option<&'a String> {
-    let key = key.to_lowercase();
-    allowed.iter().filter(|d| d.to_lowercase() == key).min()
+pub fn near_miss<'a>(
+    key: &crate::values::FieldName,
+    allowed: &'a HashSet<crate::values::FieldName>,
+) -> Option<&'a crate::values::FieldName> {
+    let key = key.as_str().to_lowercase();
+    allowed
+        .iter()
+        .filter(|d| d.as_str().to_lowercase() == key)
+        .min()
 }
 
 pub fn header_field_set_consistency(
     records: &[Record],
-    allowed_by_type: &HashMap<String, HashSet<String>>,
+    config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
+    let allowed_by_type = known_fields_by_type(config);
+    let allowed_by_type = &allowed_by_type;
     const RULE_ID: &str = RULE_HEADER_FIELD_SET_CONSISTENCY;
     let mut findings = Vec::new();
 
@@ -375,7 +509,7 @@ pub fn type_record_outside_declared_dir(
             let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
                 return false;
             };
-            if file_name.starts_with('_') || !file_name.ends_with(".md") {
+            if !crate::record::is_governed_record_filename(file_name) {
                 return false;
             }
             dirs.iter().any(|d| path.starts_with(d))
@@ -430,12 +564,12 @@ pub fn type_record_outside_declared_dir(
 /// never a mandate to write one.
 /// A declared record type whose `dir` matches no record.
 ///
-/// `RFC-35` made `dir` mean *that directory* rather than that subtree, which is
-/// unambiguous but unforgiving: a `dir` one level off matches nothing at
+/// `RFC-35` defines `dir` as *that directory* rather than that subtree, which
+/// is unambiguous but unforgiving: a `dir` one level off matches nothing at
 /// all. Alone that degrades to `not-run`, which is visible; mixed with any
-/// working type it was silent -- `check` reported `ok` and exit 0 over a corpus
-/// it never examined. `claim_paths` got a load-time guard for the same hazard
-/// this release (BUG-56); `dir` had none.
+/// working type it is silent -- `check` reports `ok` and exit 0 over a corpus
+/// it never examined. `claim_paths` has a load-time guard for the same hazard
+/// (`BUG-56`); `dir` has none.
 ///
 /// `matched` is supplied by the caller, which is where discovery happens.
 pub fn type_dir_matches_nothing(
@@ -544,7 +678,17 @@ pub fn header_deprecated_shape(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-        if type_config.header_shape != crate::header::HeaderShape::YamlFrontmatter {
+        // Explicit enumeration, not `!= YamlFrontmatter` (`ADR-50`): a
+        // negative test reports every future shape as deprecated on sight,
+        // and `none` (no header at all) is a different axis, not a
+        // deprecated one. A `match`, not `matches!`, so a fifth `HeaderShape`
+        // variant forces a decision here instead of silently inheriting a
+        // default.
+        let deprecated = match type_config.header_shape {
+            crate::header::HeaderShape::Blockquote | crate::header::HeaderShape::BoldList => true,
+            crate::header::HeaderShape::YamlFrontmatter | crate::header::HeaderShape::None => false,
+        };
+        if deprecated {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Warning,
@@ -715,11 +859,7 @@ pub fn config_pointer_field_not_known(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-
-        let mut declared: HashSet<String> = type_config.required_fields.iter().cloned().collect();
-        if let Some(known) = &type_config.known_fields {
-            declared.extend(known.iter().cloned());
-        }
+        let declared = type_config.declared_fields();
 
         let mut relation_fields: Vec<&String> = Vec::new();
         if let Some(pointer_fields) = &type_config.pointer_fields {
@@ -730,7 +870,7 @@ pub fn config_pointer_field_not_known(
         }
 
         for field in relation_fields {
-            if !declared.contains(field) {
+            if !declared.contains(field.as_str()) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -807,13 +947,57 @@ pub fn config_pointer_narrative_overlap(
     )
 }
 
+/// Rule (`ADR-50`): a type declaring `header_shape: none` has nowhere for a
+/// field to be, so a non-empty `required_fields` is a self-contradiction --
+/// the same shape as `config.pointer-narrative-overlap`.
+pub fn config_header_none_has_no_required_fields(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS;
+    let mut findings = Vec::new();
+
+    let mut type_names: Vec<&String> = config.record_types.keys().collect();
+    type_names.sort();
+
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
+        if type_config.header_shape == crate::header::HeaderShape::None
+            && !type_config.required_fields.is_empty()
+        {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: config_path.to_path_buf(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "record type '{type_name}' declares header_shape: none but required_fields {:?} -- a type with no header has nowhere for a required field to be",
+                    type_config.required_fields
+                ),
+            });
+        }
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
 /// Every record indexed by its normalized identifier (BUG-0002: keyed by
 /// numeric value, not the raw string, so a reference's padding never has to
 /// match the filename's exactly). Shared by `pointer_resolution`,
 /// `narrative_field_stale`, and `graph()` -- previously three near-identical
 /// copies of this same loop, one of which (`graph()`'s) never normalized at
 /// all (BUG-0011).
-pub fn build_normalized_index(records: &[Record]) -> HashMap<String, &Record> {
+pub fn build_normalized_index(records: &[Record]) -> HashMap<crate::values::RecordId, &Record> {
     build_index_reporting_collisions(records).0
 }
 
@@ -875,10 +1059,10 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 }
 
 /// Records by normalized identifier.
-pub type RecordIndex<'a> = HashMap<String, &'a Record>;
+pub type RecordIndex<'a> = HashMap<crate::values::RecordId, &'a Record>;
 
 /// One identifier and every record claiming it.
-pub(crate) type IdentifierCollision<'a> = (String, Vec<&'a Record>);
+pub(crate) type IdentifierCollision<'a> = (crate::values::RecordId, Vec<&'a Record>);
 
 /// The index plus the identifiers more than one record claims. Collecting
 /// straight into a map kept whichever record sorted last and made the loser
@@ -887,13 +1071,14 @@ pub(crate) type IdentifierCollision<'a> = (String, Vec<&'a Record>);
 pub(crate) fn build_index_reporting_collisions(
     records: &[Record],
 ) -> (RecordIndex<'_>, Vec<IdentifierCollision<'_>>) {
-    let mut index: HashMap<String, &Record> = HashMap::new();
-    let mut claimants: HashMap<String, Vec<&Record>> = HashMap::new();
+    use crate::values::RecordId;
+    let mut index: HashMap<RecordId, &Record> = HashMap::new();
+    let mut claimants: HashMap<RecordId, Vec<&Record>> = HashMap::new();
     for record in records {
         let Some(id) = record_id(record) else {
             continue;
         };
-        let key = normalize_id(&id);
+        let key = RecordId::new(&id);
         claimants.entry(key.clone()).or_default().push(record);
         index.entry(key).or_insert(record);
     }
@@ -923,39 +1108,31 @@ pub(crate) fn build_index_reporting_collisions(
 /// silently stop applying to every corpus that names its types differently.
 pub fn pointer_target_status(
     records: &[Record],
-    pointer_fields_by_type: &HashMap<String, Vec<String>>,
-    narrative_fields_by_type: &HashMap<String, Vec<String>>,
+    config: &Config,
     not_in: &[String],
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
+    let pointer_fields_by_type = pointer_fields_by_type(config);
+    let pointer_fields_by_type = &pointer_fields_by_type;
+    let narrative_fields_by_type = narrative_fields_by_type(config);
+    let narrative_fields_by_type = &narrative_fields_by_type;
     const RULE_ID: &str = RULE_POINTER_TARGET_STATUS;
     let mut findings = Vec::new();
 
     // Declared slots: every pointer or narrative field the record's type
     // declares, whether or not the record wrote it. A slot left unwritten is
     // eligible and unexamined -- handed to the rule and not judged.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .flat_map(|record| {
-            pointer_fields_by_type
-                .get(&record.record_type)
-                .into_iter()
-                .flatten()
-                .chain(
-                    narrative_fields_by_type
-                        .get(&record.record_type)
-                        .into_iter()
-                        .flatten(),
-                )
-                .map(move |field| (record, field))
-        })
-        .collect();
+    let slots =
+        pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -965,10 +1142,13 @@ pub fn pointer_target_status(
             }
 
             for reference in references {
-                let Some(target) = index.get(&normalize_id(&reference)) else {
+                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue;
                 };
-                let status = target.header.get("Status").unwrap_or("(no Status field)");
+                // A lookup miss is unjudged, not a status match (BUG-100).
+                let Ok(status) = declared_cross_record_value(config, target, "Status") else {
+                    continue;
+                };
                 if not_in.iter().any(|s| s == status) {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
@@ -999,38 +1179,30 @@ pub fn pointer_target_status(
 
 pub fn pointer_resolution(
     records: &[Record],
-    pointer_fields_by_type: &HashMap<String, Vec<String>>,
-    narrative_fields_by_type: &HashMap<String, Vec<String>>,
+    config: &Config,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
+    let pointer_fields_by_type = pointer_fields_by_type(config);
+    let pointer_fields_by_type = &pointer_fields_by_type;
+    let narrative_fields_by_type = narrative_fields_by_type(config);
+    let narrative_fields_by_type = &narrative_fields_by_type;
     const RULE_ID: &str = RULE_POINTER_RESOLUTION;
     let mut findings = Vec::new();
 
     // Declared slots: every pointer or narrative field the record's type
     // declares, whether or not the record wrote it. A slot left unwritten is
     // eligible and unexamined -- handed to the rule and not judged.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .flat_map(|record| {
-            pointer_fields_by_type
-                .get(&record.record_type)
-                .into_iter()
-                .flatten()
-                .chain(
-                    narrative_fields_by_type
-                        .get(&record.record_type)
-                        .into_iter()
-                        .flatten(),
-                )
-                .map(move |field| (record, field))
-        })
-        .collect();
+    let slots =
+        pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1040,7 +1212,7 @@ pub fn pointer_resolution(
             }
 
             for reference in references {
-                if index.contains_key(&normalize_id(&reference)) {
+                if index.contains_key(&crate::values::RecordId::new(&reference)) {
                     continue;
                 }
                 findings.push(Finding {
@@ -1203,6 +1375,9 @@ pub fn narrative_field_stale(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1212,10 +1387,10 @@ pub fn narrative_field_stale(
             }
 
             for reference in references {
-                let Some(target) = index.get(&normalize_id(&reference)) else {
+                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue; // pointer_resolution already reports a dangling reference
                 };
-                let Some(status) = target.header.get("Status") else {
+                let Ok(status) = declared_cross_record_value(config, target, "Status") else {
                     continue;
                 };
                 if terminal_statuses.iter().any(|t| t == status) {
@@ -1272,21 +1447,6 @@ pub(crate) fn record_id(record: &Record) -> Option<String> {
         return None;
     }
     Some(format!("{type_prefix}-{number}"))
-}
-
-/// Numeric-value equality for an id/reference like `ADR-0034` or `ADR-34`
-/// (BUG-0002): strips the numeric part's leading zeros so a filename's
-/// padding and a hand-typed reference's padding never have to match
-/// exactly. Falls back to the original string unchanged if the numeric part
-/// doesn't parse (defensive only -- both callers already validated theirs).
-pub(crate) fn normalize_id(id: &str) -> String {
-    match id.split_once('-') {
-        Some((prefix, number)) => match number.parse::<u64>() {
-            Ok(n) => format!("{prefix}-{n}"),
-            Err(_) => id.to_string(),
-        },
-        None => id.to_string(),
-    }
 }
 
 /// Extract reference tokens like `RFC-0001` from a field value that may list
@@ -1362,23 +1522,14 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
 /// says someone decided the work is unfinished; a `Blank` one says someone
 /// forgot. A repository that does not declare this rule is not told about its
 /// own deliberate markers, which is the right default -- it wrote them.
-pub fn field_pending(
-    records: &[Record],
-    required_by_type: &HashMap<String, Vec<String>>,
-) -> (RuleExecution, Vec<Finding>) {
+pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+    let required_by_type = required_fields_by_type(config);
+    let required_by_type = &required_by_type;
     const RULE_ID: &str = RULE_FIELD_PENDING;
     let mut findings = Vec::new();
 
     // Same population as `field.quality`: one declared slot per required field.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .filter_map(|record| {
-            required_by_type
-                .get(&record.record_type)
-                .map(|required| (record, required))
-        })
-        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
-        .collect();
+    let slots = field_slots(records, required_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -1483,6 +1634,7 @@ fn claimed_closed(line: &str) -> Vec<String> {
 pub fn claim_status_agreement(
     claims: &[(String, String)],
     closed_statuses: &[String],
+    config: &Config,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
@@ -1495,7 +1647,7 @@ pub fn claim_status_agreement(
     for (path, content) in claims {
         for (idx, line) in content.lines().enumerate() {
             for reference in claimed_closed(line) {
-                let normalized = normalize_id(&reference);
+                let normalized = crate::values::RecordId::new(&reference).to_string();
                 occurrences.push((path, idx + 1, reference, normalized));
             }
         }
@@ -1526,10 +1678,13 @@ pub fn claim_status_agreement(
     // Findings are per occurrence, not per candidate: each place the claim is
     // written is its own thing to correct.
     for (path, line, reference, normalized) in occurrences {
-        let Some(target) = index.get(&normalized) else {
+        let Some(target) = index.get(normalized.as_str()) else {
             continue;
         };
-        let status = target.header.get("Status").unwrap_or("(no Status field)");
+        // A lookup miss is unjudged, not a status match (BUG-100).
+        let Ok(status) = declared_cross_record_value(config, target, "Status") else {
+            continue;
+        };
         if closed_statuses.iter().any(|s| s == status) {
             continue;
         }
@@ -1564,28 +1719,22 @@ pub fn claim_status_agreement(
 /// Only reachable through `yaml-frontmatter`: the blockquote parser trims at
 /// parse time and YAML trims an unquoted scalar, so it takes a quoted value to
 /// carry the space this far.
-pub fn field_untrimmed_value(
-    records: &[Record],
-    declared_by_type: &HashMap<String, HashSet<String>>,
-) -> (RuleExecution, Vec<Finding>) {
+pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
     const RULE_ID: &str = RULE_FIELD_UNTRIMMED_VALUE;
     let mut findings = Vec::new();
 
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .filter_map(|record| {
-            declared_by_type
-                .get(&record.record_type)
-                .map(|declared| (record, declared))
-        })
-        .flat_map(|(record, declared)| declared.iter().map(move |field| (record, field)))
-        .collect();
+    let slots = field_slots(records, declared_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1617,10 +1766,76 @@ pub fn field_untrimmed_value(
     )
 }
 
-pub fn field_quality(
+/// A declared field written under a different case than its declaration
+/// (`RFC-40`, `ADR-58`): `ADR-57` makes that a different name, so `read_declared`
+/// treats it as absent everywhere else, and this is the one place that says
+/// which absences are really this instead of non-adoption.
+pub fn header_field_case_mismatch(
     records: &[Record],
-    required_by_type: &HashMap<String, Vec<String>>,
+    config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
+    const RULE_ID: &str = RULE_HEADER_FIELD_CASE_MISMATCH;
+    let mut findings = Vec::new();
+
+    let slots = field_slots(records, declared_by_type);
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
+            if record.header.get(field.as_str()).is_some() {
+                return Outcome::Examined;
+            }
+            // `.min_by`, not `.find`: several header keys can differ from the
+            // declared name only in case, and a message that changes between
+            // runs on one corpus is `near_miss`'s own shape (`BUG-79`).
+            let Some(found) = record
+                .header
+                .fields
+                .iter()
+                .filter(|f| {
+                    f.key.as_str().eq_ignore_ascii_case(field.as_str())
+                        && f.key.as_str() != field.as_str()
+                })
+                .min_by(|a, b| a.key.cmp(&b.key))
+            else {
+                return Outcome::Absent;
+            };
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: Some(found.line),
+                waived: None,
+                message: format!(
+                    "declared field '{field}' found as '{}' -- field names compare exactly (ADR-57); rename it",
+                    found.key
+                ),
+            });
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+    let required_by_type = required_fields_by_type(config);
+    let required_by_type = &required_by_type;
     const RULE_ID: &str = RULE_FIELD_QUALITY;
     let mut findings = Vec::new();
 
@@ -1629,15 +1844,7 @@ pub fn field_quality(
     // so `eligible` is this list's length and cannot disagree with what the
     // body does. It is far larger than the record count and always was
     // (`BUG-40`); the unit is what makes that legible rather than alarming.
-    let slots: Vec<(&Record, &String)> = records
-        .iter()
-        .filter_map(|record| {
-            required_by_type
-                .get(&record.record_type)
-                .map(|required| (record, required))
-        })
-        .flat_map(|(record, required)| required.iter().map(move |field| (record, field)))
-        .collect();
+    let slots = field_slots(records, required_by_type);
 
     let (population, examined_records) = census_records(
         PopulationUnit::Field,
@@ -2078,6 +2285,39 @@ fn declared_slots<'a>(records: &'a [Record], config: &Config, fields: &[&str]) -
         .collect()
 }
 
+/// A declared field's value, or the `Outcome` its absence means (`RFC-40`):
+/// `Unreadable` if the header itself didn't parse, `Absent` otherwise.
+fn declared_value<'a>(record: &'a Record, key: &str) -> Result<&'a str, Outcome> {
+    match record.header.read_declared(key) {
+        crate::header::FieldRead::Present(value) => Ok(value),
+        crate::header::FieldRead::Missing => Err(Outcome::Absent),
+        crate::header::FieldRead::Unreadable => Err(Outcome::Unreadable),
+    }
+}
+
+/// `declared_value`, additionally gated on `record`'s own type declaring
+/// `key` at all (`ADR-60`): a type that never declares `Status` is not this
+/// rule's business to judge, the same as any other undeclared field --
+/// `Status` is adopter vocabulary like every other field `ADR-53` governs,
+/// not an engine-reserved one.
+fn declared_cross_record_value<'a>(
+    config: &Config,
+    record: &'a Record,
+    key: &str,
+) -> Result<&'a str, Outcome> {
+    let declared = config
+        .record_types
+        .get(&record.record_type)
+        .is_some_and(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::from(key))
+        });
+    if !declared {
+        return Err(Outcome::Absent);
+    }
+    declared_value(record, key)
+}
+
 /// A `Realized-by` locator naming a path that is not in the working tree.
 ///
 /// `Embodiment` is computed from these paths, so a locator naming nothing lets
@@ -2103,8 +2343,9 @@ pub fn embodiment_locator_exists(
         slots,
         |record| record.path.clone(),
         |record| {
-            let Some(value) = record.header.get("Realized-by") else {
-                return Outcome::Absent;
+            let value = match declared_value(record, "Realized-by") {
+                Ok(v) => v,
+                Err(outcome) => return outcome,
             };
             let realized = parse_realized_by(value);
             for locator in realized
@@ -2181,11 +2422,13 @@ pub fn embodiment_consistency(
         slots,
         |record| record.path.clone(),
         |record| {
-            let Some(stated) = record.header.get("Embodiment") else {
-                return Outcome::Absent;
+            let stated = match declared_value(record, "Embodiment") {
+                Ok(v) => v,
+                Err(outcome) => return outcome,
             };
-            let Some(realized_by_value) = record.header.get("Realized-by") else {
-                return Outcome::Absent;
+            let realized_by_value = match declared_value(record, "Realized-by") {
+                Ok(v) => v,
+                Err(outcome) => return outcome,
             };
 
             let computed = compute_embodiment(
@@ -2246,8 +2489,9 @@ pub fn embodiment_locator_promotion_candidate(
         slots,
         |record| record.path.clone(),
         |record| {
-            let Some(realized_by_value) = record.header.get("Realized-by") else {
-                return Outcome::Absent;
+            let realized_by_value = match declared_value(record, "Realized-by") {
+                Ok(v) => v,
+                Err(outcome) => return outcome,
             };
 
             let parsed = parse_realized_by(realized_by_value);
@@ -2404,7 +2648,7 @@ pub fn supersession_reciprocity(
             let Some(id) = record_id(record) else {
                 return Outcome::OutOfScope;
             };
-            let normalized_id = normalize_id(&id);
+            let normalized_id = crate::values::RecordId::new(&id);
             let Some(value) = record.header.get(FIELD) else {
                 return Outcome::Absent;
             };
@@ -2416,7 +2660,7 @@ pub fn supersession_reciprocity(
             }
 
             for reference in extract_references(value) {
-                let Some(target) = index.get(&normalize_id(&reference)) else {
+                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -2433,7 +2677,7 @@ pub fn supersession_reciprocity(
                     .unwrap_or("");
                 let target_names_back = extract_references(target_value)
                     .iter()
-                    .any(|r| normalize_id(r) == normalized_id);
+                    .any(|r| crate::values::RecordId::new(r) == normalized_id);
                 if !target_names_back {
                     findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -2482,20 +2726,6 @@ mod tests {
         )
     }
 
-    /// A `HashMap<String, Vec<String>>` from `(type, fields)` pairs -- the
-    /// shape `pointer_resolution`/`graph()` take directly (MILE-90).
-    fn field_map(entries: &[(&str, &[&str])]) -> HashMap<String, Vec<String>> {
-        entries
-            .iter()
-            .map(|(type_name, fields)| {
-                (
-                    type_name.to_string(),
-                    fields.iter().map(|f| f.to_string()).collect(),
-                )
-            })
-            .collect()
-    }
-
     /// A minimal `Config` from `(type, RecordTypeConfig)` pairs -- for the
     /// capability-driven rules (`header_pointer_field_clean`,
     /// `narrative_field_stale`) that read `pointer_fields`/`narrative_fields`
@@ -2520,7 +2750,7 @@ mod tests {
         let target = record("docs/decisions/DEC-2-y.md", "dec", "> Status: Ratified\n");
         let config = config_with_types(vec![(
             "dec",
-            type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
+            type_config_pointer(&["Status"], None, None, Some(&["Blocked-on"])),
         )]);
 
         let records = [blocked, target];
@@ -2550,14 +2780,8 @@ mod tests {
             "docs/adr/ADR-1-x.md",
             "---\nStatus: [unclosed\n---\n# 1 — X\n",
         );
-        let mut allowed = HashMap::new();
-        allowed.insert(
-            "adr".to_string(),
-            ["status".to_string()]
-                .into_iter()
-                .collect::<HashSet<String>>(),
-        );
-        let (exec, _) = header_field_set_consistency(&[r], &allowed);
+        let config = config_for_known(vec![("adr", vec!["status"])]);
+        let (exec, _) = header_field_set_consistency(&[r], &config);
         let population = exec.population.expect("the rule carries a population");
         assert_eq!(
             (population.eligible(), population.examined()),
@@ -2584,16 +2808,43 @@ mod tests {
     #[test]
     fn missing_required_field_is_a_finding() {
         let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
-        let mut required = HashMap::new();
-        required.insert(
-            "adr".to_string(),
-            vec!["Status".to_string(), "Deciders".to_string()],
-        );
+        let config = config_for_required(vec![("adr", vec!["Status", "Deciders"])]);
 
-        let (exec, findings) = header_required_fields(&[r], &required);
+        let (exec, findings) = header_required_fields(&[r], &config);
         assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Deciders"));
+    }
+
+    /// `BUG-98`/`ADR-50`: a type declaring `header_shape: none` has no
+    /// header at all, by declaration -- a missing region there is the
+    /// declared truth, not a defect to report.
+    #[test]
+    fn a_type_declaring_no_header_is_not_reported_as_missing_one_observed_failing() {
+        let r = Record::parse_with_shape(
+            PathBuf::from("docs/decisions/0001-x.md"),
+            "dec".to_string(),
+            "Just prose. No header block anywhere in this file.\n",
+            crate::header::HeaderShape::None,
+        );
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                ..type_config(None)
+            },
+        )]);
+
+        let (exec, findings) = header_required_fields(&[r], &config);
+        assert_eq!(
+            examined(&exec),
+            0,
+            "a type with no header has nothing for this rule to examine"
+        );
+        assert!(
+            findings.is_empty(),
+            "a declared absence of a header must not be reported as a missing one: {findings:?}"
+        );
     }
 
     #[test]
@@ -2608,10 +2859,9 @@ mod tests {
             "---\nSubject: `oops\nStatus: Draft\n---\n# Title\n",
             crate::header::HeaderShape::YamlFrontmatter,
         );
-        let mut required = HashMap::new();
-        required.insert("adr".to_string(), vec!["Status".to_string()]);
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
 
-        let (exec, findings) = header_required_fields(&[r], &required);
+        let (exec, findings) = header_required_fields(&[r], &config);
         let population = exec.population.expect("the rule carries a population");
         assert_eq!(
             (population.eligible(), population.examined()),
@@ -2633,13 +2883,9 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Deciders: someone\n",
         );
-        let mut required = HashMap::new();
-        required.insert(
-            "adr".to_string(),
-            vec!["Status".to_string(), "Deciders".to_string()],
-        );
+        let config = config_for_required(vec![("adr", vec!["Status", "Deciders"])]);
 
-        let (exec, findings) = header_required_fields(&[r], &required);
+        let (exec, findings) = header_required_fields(&[r], &config);
         assert_eq!(examined(&exec), 2, "both declared slots were read");
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
@@ -2653,10 +2899,9 @@ mod tests {
             "spec",
             "> Status: Draft\n> Embodiment: Not started\n",
         );
-        let mut required = HashMap::new();
-        required.insert("spec".to_string(), vec!["Version".to_string()]);
+        let config = config_for_required(vec![("spec", vec!["Version"])]);
 
-        let (_, findings) = header_required_fields(&[r], &required);
+        let (_, findings) = header_required_fields(&[r], &config);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Version"));
     }
@@ -2671,10 +2916,9 @@ mod tests {
             "spec",
             "> Version: 0.1\n> Status: Draft\n",
         );
-        let mut declared = HashMap::new();
-        declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
+        let config = config_for_layout(vec![("spec", HeaderLayout::PipeDelimited)]);
 
-        let (exec, findings) = header_layout_consistency(&[r], &declared);
+        let (exec, findings) = header_layout_consistency(&[r], &config);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("one-per-line"));
@@ -2688,10 +2932,9 @@ mod tests {
             "spec",
             "> Version: 0.1 | Status: Draft\n",
         );
-        let mut declared = HashMap::new();
-        declared.insert("spec".to_string(), HeaderLayout::PipeDelimited);
+        let config = config_for_layout(vec![("spec", HeaderLayout::PipeDelimited)]);
 
-        let (exec, findings) = header_layout_consistency(&[r], &declared);
+        let (exec, findings) = header_layout_consistency(&[r], &config);
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
@@ -2699,9 +2942,9 @@ mod tests {
     #[test]
     fn a_type_with_no_declared_layout_is_skipped_entirely() {
         let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
-        let declared = HashMap::new();
+        let config = config_with_types(vec![]);
 
-        let (exec, findings) = header_layout_consistency(&[r], &declared);
+        let (exec, findings) = header_layout_consistency(&[r], &config);
         assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
@@ -2716,13 +2959,9 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Date: 2026-09-07\n> Sponsor: someone\n",
         );
-        let mut allowed = HashMap::new();
-        allowed.insert(
-            "adr".to_string(),
-            HashSet::from(["Status".to_string(), "Date".to_string()]),
-        );
+        let config = config_for_known(vec![("adr", vec!["Status", "Date"])]);
 
-        let (exec, findings) = header_field_set_consistency(&[r], &allowed);
+        let (exec, findings) = header_field_set_consistency(&[r], &config);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Sponsor"));
@@ -2735,13 +2974,9 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Realized-by: code:x.rs\n",
         );
-        let mut allowed = HashMap::new();
-        allowed.insert(
-            "adr".to_string(),
-            HashSet::from(["Status".to_string(), "Realized-by".to_string()]),
-        );
+        let config = config_for_known(vec![("adr", vec!["Status", "Realized-by"])]);
 
-        let (exec, findings) = header_field_set_consistency(&[r], &allowed);
+        let (exec, findings) = header_field_set_consistency(&[r], &config);
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
@@ -2749,9 +2984,9 @@ mod tests {
     #[test]
     fn a_type_with_no_declared_known_fields_is_skipped_entirely() {
         let r = record("docs/specs/0001-x.md", "spec", "> Version: 0.1\n");
-        let allowed = HashMap::new();
+        let config = config_with_types(vec![]);
 
-        let (exec, findings) = header_field_set_consistency(&[r], &allowed);
+        let (exec, findings) = header_field_set_consistency(&[r], &config);
         assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
     }
@@ -2768,6 +3003,63 @@ mod tests {
             narrative_fields: None,
             spec: spec.map(|s| s.to_string()),
         }
+    }
+
+    /// A `Config` declaring `required_fields` per type (`ADR-59`), for the
+    /// rules that used to take a bare `required_by_type`/`declared_by_type`
+    /// map directly.
+    fn config_for_required(entries: Vec<(&str, Vec<&str>)>) -> Config {
+        config_with_types(
+            entries
+                .into_iter()
+                .map(|(name, fields)| {
+                    (
+                        name,
+                        crate::config::RecordTypeConfig {
+                            required_fields: fields.into_iter().map(String::from).collect(),
+                            ..type_config(None)
+                        },
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// A `Config` declaring `known_fields` per type (`ADR-59`), for
+    /// `header_field_set_consistency`'s `allowed_by_type`.
+    fn config_for_known(entries: Vec<(&str, Vec<&str>)>) -> Config {
+        config_with_types(
+            entries
+                .into_iter()
+                .map(|(name, fields)| {
+                    (
+                        name,
+                        crate::config::RecordTypeConfig {
+                            known_fields: Some(fields.into_iter().map(String::from).collect()),
+                            ..type_config(None)
+                        },
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// A `Config` declaring `header_layout` per type (`ADR-59`).
+    fn config_for_layout(entries: Vec<(&str, crate::header::HeaderLayout)>) -> Config {
+        config_with_types(
+            entries
+                .into_iter()
+                .map(|(name, layout)| {
+                    (
+                        name,
+                        crate::config::RecordTypeConfig {
+                            header_layout: Some(layout),
+                            ..type_config(None)
+                        },
+                    )
+                })
+                .collect(),
+        )
     }
 
     fn type_config_with_shape(
@@ -2802,13 +3094,9 @@ mod tests {
             "adr",
             "---\nStatus: Accepted\n  Date  :: nope\n---\n",
         );
-        let mut required = HashMap::new();
-        required.insert(
-            "adr".to_string(),
-            vec!["Status".to_string(), "Date".to_string()],
-        );
+        let config = config_for_required(vec![("adr", vec!["Status", "Date"])]);
 
-        let (exec, findings) = field_quality(&[r.clone()], &required);
+        let (exec, findings) = field_quality(&[r.clone()], &config);
         let population = exec.population.expect("the rule carries a population");
         assert_eq!(
             (population.eligible(), population.examined()),
@@ -2820,7 +3108,7 @@ mod tests {
             "no finding about a slot the rule could not read: {findings:?}"
         );
 
-        let (exec, findings) = field_pending(&[r], &required);
+        let (exec, findings) = field_pending(&[r], &config);
         let population = exec.population.expect("the rule carries a population");
         assert_eq!((population.eligible(), population.examined()), (2, 0));
         assert!(findings.is_empty(), "{findings:?}");
@@ -3103,6 +3391,66 @@ mod tests {
         assert!(findings.is_empty());
     }
 
+    /// `ADR-50`: `none` is a different axis, not a deprecated shape.
+    #[test]
+    fn a_type_declaring_no_header_is_not_reported_as_deprecated() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                ..type_config(None)
+            },
+        )]);
+        let (exec, findings) =
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_blockquote_type_is_still_reported_as_deprecated_observed_failing() {
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (_, findings) =
+            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    /// `ADR-50`: a type with no header has nowhere for a required field to be.
+    #[test]
+    fn a_header_none_type_with_required_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                required_fields: vec!["Status".to_string()],
+                ..type_config(None)
+            },
+        )]);
+        let (exec, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Status"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_no_required_fields_is_not_a_contradiction() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     #[test]
     fn a_type_declaring_neither_list_is_not_missing() {
         let config = config_with_types(vec![("adr", type_config_pointer(&[], None, None, None))]);
@@ -3118,12 +3466,14 @@ mod tests {
         // instance but fixed within one, so reusing a single set would pass
         // against an order-dependent implementation.
         for _ in 0..40 {
-            let allowed: HashSet<String> = ["Blocked-on", "Blocked-On", "BLOCKED-on"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
+            let allowed: HashSet<crate::values::FieldName> =
+                ["Blocked-on", "Blocked-On", "BLOCKED-on"]
+                    .iter()
+                    .map(|s| crate::values::FieldName::from(*s))
+                    .collect();
             assert_eq!(
-                near_miss("blocked-on", &allowed).map(String::as_str),
+                near_miss(&crate::values::FieldName::from("blocked-on"), &allowed)
+                    .map(|f| f.as_str()),
                 Some("BLOCKED-on"),
                 "the hint must not depend on which spelling the set yields first"
             );
@@ -3243,45 +3593,43 @@ mod tests {
         // produced 172 of 213 findings on this repo's own corpus.
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
         let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
-        let pointer_fields = field_map(&[("spec", &["Implements"])]);
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            ("rfc", type_config_pointer(&["Status"], None, None, None)),
+        ]);
         let records = [target, source];
         let index = build_normalized_index(&records);
 
-        let (exec, findings) = pointer_target_status(
-            &records,
-            &pointer_fields,
-            &HashMap::new(),
-            &["Draft".to_string()],
-            &index,
-        );
+        let (exec, findings) =
+            pointer_target_status(&records, &config, &["Draft".to_string()], &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Draft"));
 
         // Nothing declared unacceptable means nothing reported -- never a
         // built-in fallback list, which is how a rule silently stops applying.
-        let (_, none_declared) =
-            pointer_target_status(&records, &pointer_fields, &HashMap::new(), &[], &index);
+        let (_, none_declared) = pointer_target_status(&records, &config, &[], &index);
         assert!(none_declared.is_empty(), "{none_declared:?}");
 
         // A status outside the declared set is not this rule's business.
-        let (_, other) = pointer_target_status(
-            &records,
-            &pointer_fields,
-            &HashMap::new(),
-            &["Superseded".to_string()],
-            &index,
-        );
+        let (_, other) =
+            pointer_target_status(&records, &config, &["Superseded".to_string()], &index);
         assert!(other.is_empty(), "{other:?}");
     }
 
     #[test]
     fn a_non_resolving_pointer_is_an_error() {
         let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-9999\n");
-        let pointer_fields = field_map(&[("spec", &["Implements"])]);
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
         let records = [source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -3297,20 +3645,26 @@ mod tests {
             "spec",
             "> Parent: SPEC-1 (v0 CLI). Extra trailing prose that isn't a reference.\n",
         );
-        let pointer_fields = field_map(&[("spec", &["Parent"])]);
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Parent"]), Some(&[])),
+        )]);
         let records = [parent, child];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
     fn a_dangling_parent_pointer_is_an_error() {
         let child = record("docs/specs/SPEC-2-x.md", "spec", "> Parent: SPEC-9999\n");
-        let pointer_fields = field_map(&[("spec", &["Parent"])]);
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Parent"]), Some(&[])),
+        )]);
         let records = [child];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));
@@ -3361,12 +3715,9 @@ mod tests {
             crate::header::HeaderShape::YamlFrontmatter,
             "ADR".to_string(),
         );
-        let declared: HashMap<String, HashSet<String>> =
-            [("adr".to_string(), HashSet::from(["Status".to_string()]))]
-                .into_iter()
-                .collect();
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
 
-        let (exec, findings) = field_untrimmed_value(&[r], &declared);
+        let (exec, findings) = field_untrimmed_value(&[r], &config);
         assert_eq!(examined(&exec), 1, "the slot is written, so it is judged");
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Superseded"));
@@ -3375,12 +3726,44 @@ mod tests {
     #[test]
     fn a_clean_value_is_not_reported_as_untrimmed() {
         let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
-        let declared: HashMap<String, HashSet<String>> =
-            [("adr".to_string(), HashSet::from(["Status".to_string()]))]
-                .into_iter()
-                .collect();
-        let (exec, findings) = field_untrimmed_value(&[r], &declared);
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+        let (exec, findings) = field_untrimmed_value(&[r], &config);
         assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// BUG-101: a declared field written under a different case used to be
+    /// silently absent everywhere. This rule is the one place that names it.
+    #[test]
+    fn a_declared_field_written_under_a_different_case_is_reported_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> status: Accepted\n");
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+        let (exec, findings) = header_field_case_mismatch(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("'status'"), "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+    }
+
+    #[test]
+    fn a_declared_field_written_correctly_cased_is_not_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: Accepted\n");
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+        let (exec, findings) = header_field_case_mismatch(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_declared_field_never_written_at_all_is_absent_not_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Author: x\n");
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+        let (exec, findings) = header_field_case_mismatch(&[r], &config);
+        assert_eq!(
+            examined(&exec),
+            0,
+            "genuine non-adoption is Absent, not Examined"
+        );
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -3407,16 +3790,15 @@ mod tests {
             "docs/adr/ADR-2-y.md",
             "---\nDerives-from: ADR-1\n---\n# 2 — Y\n",
         );
-        let pointers: HashMap<String, Vec<String>> =
-            [("adr".to_string(), vec!["Derives-from".to_string()])]
-                .into_iter()
-                .collect();
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&["Status"], None, Some(&["Derives-from"]), Some(&[])),
+        )]);
 
         let target_status_records = [target.clone(), source];
         let (_, status_findings) = pointer_target_status(
             &target_status_records,
-            &pointers,
-            &HashMap::new(),
+            &config,
             &["Superseded".to_string()],
             &build_normalized_index(&target_status_records),
         );
@@ -3425,11 +3807,7 @@ mod tests {
             "the value is not that status: {status_findings:?}"
         );
 
-        let declared: HashMap<String, HashSet<String>> =
-            [("adr".to_string(), HashSet::from(["Status".to_string()]))]
-                .into_iter()
-                .collect();
-        let (_, whitespace) = field_untrimmed_value(&[target], &declared);
+        let (_, whitespace) = field_untrimmed_value(&[target], &config);
         assert_eq!(
             whitespace.len(),
             1,
@@ -3535,10 +3913,13 @@ mod tests {
             "milestone",
             "> Status: Planned\n> Blocked-on: BUG-3\n",
         );
-        let config = config_with_types(vec![(
-            "milestone",
-            type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
-        )]);
+        let config = config_with_types(vec![
+            (
+                "milestone",
+                type_config_pointer(&[], None, None, Some(&["Blocked-on"])),
+            ),
+            ("bug", type_config_pointer(&["Status"], None, None, None)),
+        ]);
         let records = [bug, milestone];
         let index = build_normalized_index(&records);
         let (exec, findings) =
@@ -3630,10 +4011,13 @@ mod tests {
             "rfc",
             "> Status: Draft\n> Motivated-by: BUG-7\n",
         );
-        let config = config_with_types(vec![(
-            "rfc",
-            type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
-        )]);
+        let config = config_with_types(vec![
+            (
+                "rfc",
+                type_config_pointer(&[], None, None, Some(&["Motivated-by"])),
+            ),
+            ("bug", type_config_pointer(&["Status"], None, None, None)),
+        ]);
         let records = [bug, rfc];
         let index = build_normalized_index(&records);
         let (exec, findings) =
@@ -3654,10 +4038,13 @@ mod tests {
             "spec",
             "> Implements: RFC-10000\n",
         );
-        let pointer_fields = field_map(&[("spec", &["Implements"])]);
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
         let records = [target, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -3669,20 +4056,16 @@ mod tests {
         // reference must resolve to the same record (BUG-0002).
         let target = record("docs/adr/ADR-0034-x.md", "adr", "> Status: Accepted\n");
         let source = record("docs/specs/SPEC-1-y.md", "spec", "> Implements: ADR-34\n");
-        let pointer_fields = field_map(&[("spec", &["Implements"])]);
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
         let records = [target, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
-    }
-
-    #[test]
-    fn normalize_id_strips_leading_zeros_but_leaves_non_numeric_ids_alone() {
-        assert_eq!(normalize_id("ADR-0034"), "ADR-34");
-        assert_eq!(normalize_id("ADR-34"), "ADR-34");
-        assert_eq!(normalize_id("not-an-id-at-all"), "not-an-id-at-all");
     }
 
     #[test]
@@ -3694,10 +4077,13 @@ mod tests {
         // dangling, not silently resolved.
         let legacy_style = record("docs/adr/0037-y.md", "adr", "> Status: Accepted\n");
         let source = record("docs/specs/SPEC-1-z.md", "spec", "> Implements: ADR-37\n");
-        let pointer_fields = field_map(&[("spec", &["Implements"])]);
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
         let records = [legacy_style, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -3715,10 +4101,13 @@ mod tests {
             "> Status: Planned\n",
         );
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: MILE-1\n");
-        let pointer_fields = field_map(&[("adr", &["Implements"])]);
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
         let records = [milestone, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &pointer_fields, &HashMap::new(), &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -3902,10 +4291,9 @@ mod tests {
         // A field present per Rule 1 (the key exists) but never actually
         // filled in -- Rule 1 alone would pass this record.
         let r = record("docs/adr/0001-x.md", "adr", "> Author: name\n");
-        let mut required = HashMap::new();
-        required.insert("adr".to_string(), vec!["Author".to_string()]);
+        let config = config_for_required(vec![("adr", vec!["Author"])]);
 
-        let (exec, findings) = field_quality(&[r], &required);
+        let (exec, findings) = field_quality(&[r], &config);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Placeholder"));
@@ -3924,12 +4312,56 @@ mod tests {
 
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (exec, findings) = claim_status_agreement(&claims, &closed, &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert_eq!(findings[0].line, Some(1));
         assert!(findings[0].message.contains("Status Open"), "{findings:?}");
+    }
+
+    /// BUG-100: a target record whose `Status` key is written under a
+    /// different case is not judged, not judged-and-wrong. Before the fix
+    /// this fabricated the sentinel `"(no Status field)"`, which matched no
+    /// configured closed status and pushed a blocking `Error` on every claim.
+    #[test]
+    fn a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> status: Open\n");
+        let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36.".to_string())];
+        let closed = vec!["Fixed".to_string()];
+
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "a lookup miss must not be reported as a status mismatch: {findings:?}"
+        );
+    }
+
+    /// `BUG-109`/`ADR-60`: a target record's `Status` is only judged when its
+    /// own type declares `Status` -- the same rule `header.field-case-mismatch`
+    /// already applies. A type that never declared it is not this rule's
+    /// business, the same as any other undeclared field.
+    #[test]
+    fn a_claim_against_a_target_whose_type_never_declares_status_is_not_judged_observed_failing() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36.".to_string())];
+        let closed = vec!["Fixed".to_string()];
+
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        // "bug" declares no fields at all -- Status included.
+        let config = config_for_required(vec![("bug", vec![])]);
+        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "a type that never declared Status must not have it judged: {findings:?}"
+        );
     }
 
     /// BUG-45, both shapes, each of which produced a blocking error on a
@@ -3977,7 +4409,9 @@ mod tests {
         let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36\n".to_string())];
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (_, findings) = claim_status_agreement(&claims, &["Fixed".to_string()], &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (_, findings) =
+            claim_status_agreement(&claims, &["Fixed".to_string()], &config, &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -3991,7 +4425,9 @@ mod tests {
         )];
         let records = [bug];
         let index = build_normalized_index(&records);
-        let (_, findings) = claim_status_agreement(&claims, &["Fixed".to_string()], &index);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (_, findings) =
+            claim_status_agreement(&claims, &["Fixed".to_string()], &config, &index);
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -4088,33 +4524,31 @@ mod tests {
         // `Pending` marker block CI, and declaring it `warn` stopped a genuinely
         // blank required field from blocking. No setting was correct.
         let r = record("docs/adr/0001-x.md", "adr", "> Deciders: Pending\n");
-        let mut required = HashMap::new();
-        required.insert("adr".to_string(), vec!["Deciders".to_string()]);
+        let config = config_for_required(vec![("adr", vec!["Deciders"])]);
 
-        let (_, quality) = field_quality(std::slice::from_ref(&r), &required);
+        let (_, quality) = field_quality(std::slice::from_ref(&r), &config);
         assert!(quality.is_empty(), "{quality:?}");
 
-        let (_, pending) = field_pending(std::slice::from_ref(&r), &required);
+        let (_, pending) = field_pending(std::slice::from_ref(&r), &config);
         assert_eq!(pending.len(), 1);
         assert!(pending[0].message.contains("pending"));
 
         // The forgotten case stays with field.quality, and field.pending
         // must not claim it.
         let blank = record("docs/adr/0002-y.md", "adr", "> Deciders:\n");
-        let (_, q2) = field_quality(std::slice::from_ref(&blank), &required);
+        let (_, q2) = field_quality(std::slice::from_ref(&blank), &config);
         assert_eq!(q2.len(), 1);
         assert_eq!(q2[0].severity, FindingSeverity::Error);
-        let (_, p2) = field_pending(&[blank], &required);
+        let (_, p2) = field_pending(&[blank], &config);
         assert!(p2.is_empty(), "{p2:?}");
     }
 
     #[test]
     fn field_quality_passes_a_real_value() {
         let r = record("docs/adr/0001-x.md", "adr", "> Author: someone\n");
-        let mut required = HashMap::new();
-        required.insert("adr".to_string(), vec!["Author".to_string()]);
+        let config = config_for_required(vec![("adr", vec!["Author"])]);
 
-        let (_, findings) = field_quality(&[r], &required);
+        let (_, findings) = field_quality(&[r], &config);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -4124,10 +4558,9 @@ mod tests {
         // convention and classified as Present -- field.quality never had a
         // chance to catch a regression back to it (the ADR-38 incident).
         let r = record("docs/adr/0001-x.md", "adr", "> Author: (project lead)\n");
-        let mut required = HashMap::new();
-        required.insert("adr".to_string(), vec!["Author".to_string()]);
+        let config = config_for_required(vec![("adr", vec!["Author"])]);
 
-        let (_, findings) = field_quality(&[r], &required);
+        let (_, findings) = field_quality(&[r], &config);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }

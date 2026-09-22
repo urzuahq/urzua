@@ -126,6 +126,7 @@ rules:
   field.quality: error
   field.pending: warn
   field.untrimmed-value: warn
+  header.field-case-mismatch: error
   filename.title-consistency: error
   relation.supersession-reciprocity: error
   revision-log.change-class-required: error

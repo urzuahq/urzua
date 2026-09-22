@@ -78,7 +78,7 @@ pub(crate) fn load_records(
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if file_name.starts_with('_') || !file_name.ends_with(".md") {
+            if !urzua_core::record::is_governed_record_filename(file_name) {
                 continue;
             }
             let full_path = repo_root.join(rel_path);
@@ -186,7 +186,12 @@ pub(crate) fn compute_drifted_records(repo_root: &Path, records: &[Record]) -> H
         let Some(realized_by_value) = record.header.get("Realized-by") else {
             continue;
         };
-        let Some(field) = record.header.fields.iter().find(|f| f.key == "Realized-by") else {
+        let Some(field) = record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.as_str() == "Realized-by")
+        else {
             continue;
         };
         let Ok(Some(reference_commit)) =

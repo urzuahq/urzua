@@ -42,9 +42,18 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
         // Padding is not load-bearing, but a date is not a number: a
         // `YYYY-MM-DD-` filename would parse as record YYYY and numbering
         // never comes back below it. Checked as a real date, so a slug that
-        // merely starts with two 2-digit segments stays a record.
+        // merely starts with two 2-digit segments stays a record. The year
+        // itself must be plausible (BUG-102): `0013-01-15-use-postgres.md`
+        // has a month- and day-shaped second and third segment too, but 13
+        // is not a year anyone dates a file with -- it is record 13. A record
+        // number that reaches 1000-9999 (a genuinely plausible year) is not
+        // resolvable by shape alone -- `2024-01-15-migrate-db.md` is
+        // ambiguous on its face, and this heuristic still reads it as a date.
+        // No filename-shape rule can close that; it is inherent to the
+        // convention, not a gap in this bound.
         let looks_dated = segments.len() >= 3
             && segments[0].len() == 4
+            && matches!(segments[0].parse::<u32>(), Ok(1000..=9999))
             && [1, 2]
                 .iter()
                 .all(|&i| segments[i].len() == 2 && digits(segments[i]))
@@ -338,6 +347,15 @@ mod tests {
         // month and day: an ADR titled "80-20 rule" is a record.
         assert_eq!(
             parse_record_filename("0013-80-20-rule.md"),
+            Some((None, 13))
+        );
+        // A record number whose slug happens to start with a plausible
+        // month and day is still a record: "13" is not a plausible year, so
+        // `0013-01-15-use-postgres.md` must parse as record 13, never as an
+        // unnumbered date (BUG-102) -- reissuing 13 collides with the file
+        // that already claims it.
+        assert_eq!(
+            parse_record_filename("0013-01-15-use-postgres.md"),
             Some((None, 13))
         );
         assert_eq!(

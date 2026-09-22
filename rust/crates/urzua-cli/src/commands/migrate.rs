@@ -134,6 +134,14 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
             HeaderShape::YamlFrontmatter => format!("Stable-Id: {}", id.as_str()),
             HeaderShape::BoldList => format!("- **Stable-Id:** {}", id.as_str()),
             HeaderShape::Blockquote => format!("> Stable-Id: {}", id.as_str()),
+            // `none` parses to `region: None` unconditionally (`ADR-50`), and
+            // the `let Some(region) = ... else { Skipped }` guard above
+            // already returned for exactly that case -- reaching here with
+            // `region: Some(_)` and `header_shape: None` would mean that
+            // invariant broke.
+            HeaderShape::None => {
+                unreachable!("a `none`-shaped record has no region to insert into")
+            }
         };
         let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
         // region.0 is the 1-indexed first header line (the opening `---`

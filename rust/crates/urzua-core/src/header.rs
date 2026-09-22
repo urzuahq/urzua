@@ -6,9 +6,18 @@
 /// relative to the whole document) for diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeaderField {
-    pub key: String,
+    pub key: crate::values::FieldName,
     pub value: String,
     pub line: usize,
+}
+
+/// Not `Option<&str>`: that has an `.unwrap_or(...)` a caller can reach for
+/// without deciding what a miss means (`RFC-40`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldRead<'a> {
+    Present(&'a str),
+    Missing,
+    Unreadable,
 }
 
 /// The parsed header: an ordered list of fields plus the region's own
@@ -43,7 +52,7 @@ impl Header {
     pub fn get(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
-            .find(|f| f.key == key)
+            .find(|f| f.key.as_str() == key)
             .map(|f| f.value.as_str())
     }
 
@@ -65,8 +74,21 @@ impl Header {
     pub fn get_reserved(&self, key: &str) -> Option<&str> {
         self.fields
             .iter()
-            .find(|f| f.key.eq_ignore_ascii_case(key))
+            .find(|f| f.key.as_str().eq_ignore_ascii_case(key))
             .map(|f| f.value.as_str())
+    }
+
+    /// `get`, with the miss case decided once (`RFC-40`) instead of per
+    /// caller. A differently-cased key is still `Missing`: `header
+    /// .field-case-mismatch` is the one place that reports it.
+    pub fn read_declared(&self, key: &str) -> FieldRead<'_> {
+        if self.region.is_none() {
+            return FieldRead::Unreadable;
+        }
+        match self.get(key) {
+            Some(value) => FieldRead::Present(value),
+            None => FieldRead::Missing,
+        }
     }
 
     /// Exact (`ADR-57`): `Status` and `status` are two fields, so writing both
@@ -76,8 +98,8 @@ impl Header {
         let mut seen = std::collections::HashSet::new();
         let mut dupes = Vec::new();
         for f in &self.fields {
-            if !seen.insert(f.key.clone()) && !dupes.contains(&f.key) {
-                dupes.push(f.key.clone());
+            if !seen.insert(&f.key) && !dupes.contains(&f.key.to_string()) {
+                dupes.push(f.key.to_string());
             }
         }
         dupes
@@ -148,6 +170,11 @@ pub enum HeaderShape {
     /// Urzua itself generates going forward; the other shapes remain what a
     /// pre-existing, adopted corpus is read as.
     YamlFrontmatter,
+    /// This type's records carry no header block at all (`ADR-50`): a
+    /// Nygard-style corpus whose metadata lives in prose, not a fourth
+    /// parseable shape. `header.required-fields` skips such a type rather
+    /// than reporting a missing region on every record.
+    None,
 }
 
 pub fn parse(content: &str) -> Header {
@@ -160,6 +187,16 @@ pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
     if shape == HeaderShape::YamlFrontmatter {
         return parse_yaml_frontmatter(content);
     }
+    // A `none`-shaped type declares it has nowhere for a header to be
+    // (`ADR-50`): no region, no fields, no parse error -- there is nothing
+    // here to have failed to parse.
+    if shape == HeaderShape::None {
+        return Header {
+            fields: Vec::new(),
+            region: None,
+            parse_error: None,
+        };
+    }
 
     let mut fields = Vec::new();
     let mut region: Option<(usize, usize)> = None;
@@ -167,7 +204,7 @@ pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
     let line_body: fn(&str) -> Option<&str> = match shape {
         HeaderShape::Blockquote => blockquote_body,
         HeaderShape::BoldList => bold_list_body,
-        HeaderShape::YamlFrontmatter => unreachable!("handled above"),
+        HeaderShape::YamlFrontmatter | HeaderShape::None => unreachable!("handled above"),
     };
 
     for (idx, raw_line) in content.lines().enumerate() {
@@ -302,7 +339,7 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
             let key = key.as_str()?.to_string();
             let line = find_key_line(&yaml_text, &key).unwrap_or(2);
             Some(HeaderField {
-                key,
+                key: crate::values::FieldName::new(key),
                 value: stringify_yaml_value(value),
                 line,
             })
@@ -379,7 +416,7 @@ fn parse_key_value(segment: &str, line_no: usize) -> Option<HeaderField> {
         return None;
     }
     Some(HeaderField {
-        key: key.to_string(),
+        key: crate::values::FieldName::new(key),
         value: value.trim().to_string(),
         line: line_no,
     })
