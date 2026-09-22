@@ -42,8 +42,8 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
         // Padding is not load-bearing, but a date is not a number: a
         // `YYYY-MM-DD-` filename would parse as record YYYY and numbering
         // never comes back below it. Checked as a real date, so a slug that
-        // merely starts with two 2-digit segments stays a record. The year
-        // itself must be plausible (BUG-102): `0013-01-15-use-postgres.md`
+        // merely starts with two digit-shaped segments stays a record. The
+        // year itself must be plausible (BUG-102): `0013-01-15-use-postgres.md`
         // has a month- and day-shaped second and third segment too, but 13
         // is not a year anyone dates a file with -- it is record 13. A record
         // number that reaches 1000-9999 (a genuinely plausible year) is not
@@ -51,12 +51,15 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
         // ambiguous on its face, and this heuristic still reads it as a date.
         // No filename-shape rule can close that; it is inherent to the
         // convention, not a gap in this bound.
+        //
+        // Month/day are not required to be zero-padded (BUG-112):
+        // `2026-9-19-notes.md` is as much a date as `2026-09-19-notes.md`,
+        // and the value range below already rejects anything that isn't a
+        // plausible month or day regardless of digit count.
         let looks_dated = segments.len() >= 3
             && segments[0].len() == 4
             && matches!(segments[0].parse::<u32>(), Ok(1000..=9999))
-            && [1, 2]
-                .iter()
-                .all(|&i| segments[i].len() == 2 && digits(segments[i]))
+            && [1, 2].iter().all(|&i| digits(segments[i]))
             && matches!(segments[1].parse::<u32>(), Ok(1..=12))
             && matches!(segments[2].parse::<u32>(), Ok(1..=31));
         if looks_dated {
@@ -339,6 +342,11 @@ mod tests {
     fn a_date_named_file_is_not_a_record_number_observed_failing() {
         assert_eq!(parse_record_filename("2026-09-19-meeting-notes.md"), None);
         assert_eq!(parse_record_filename("1999-01-01-x.md"), None);
+        // Unpadded month/day are still a date (BUG-112): `2026-9-19-x.md` is
+        // as much `2026-09-19-x.md` as it is, and pinning `next_display_number`
+        // above 2026 is the same defect `BUG-53`/`BUG-102` already cover for
+        // the padded shape.
+        assert_eq!(parse_record_filename("2026-9-19-meeting-notes.md"), None);
 
         // A four-digit bound cannot discriminate -- a year is four digits --
         // so these must still parse.

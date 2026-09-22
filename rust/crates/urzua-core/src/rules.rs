@@ -1286,15 +1286,7 @@ pub fn header_pointer_field_clean(
 
             for entry in value.split(',') {
                 let entry = entry.trim();
-                let is_clean_reference = entry
-                    .split_once('-')
-                    .map(|(prefix, num)| {
-                        !prefix.is_empty()
-                            && prefix.chars().all(|c| c.is_ascii_uppercase())
-                            && !num.is_empty()
-                            && num.chars().all(|c| c.is_ascii_digit())
-                    })
-                    .unwrap_or(false);
+                let is_clean_reference = is_record_reference(entry);
                 if !is_clean_reference {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
@@ -1453,6 +1445,24 @@ fn strip_possessive(token: &str) -> &str {
         .unwrap_or(token)
 }
 
+/// A record reference like `RFC-9` or `DOC-ADR-2` (a hyphenated type prefix,
+/// `parse_record_filename`'s own supported shape) -- every segment before
+/// the last is a non-empty, uppercase prefix component, and the last segment
+/// is the number. `split_once('-')` here would take only the first hyphen,
+/// which rejects a hyphenated prefix outright (`BUG-111`).
+fn is_record_reference(token: &str) -> bool {
+    let segments: Vec<&str> = token.split('-').collect();
+    let Some((num, prefix_segments)) = segments.split_last() else {
+        return false;
+    };
+    !num.is_empty()
+        && num.chars().all(|c| c.is_ascii_digit())
+        && !prefix_segments.is_empty()
+        && prefix_segments
+            .iter()
+            .all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_uppercase()))
+}
+
 pub(crate) fn scan_references(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     for token in line.split(|c: char| c.is_whitespace() || c == '(' || c == '[') {
@@ -1462,14 +1472,7 @@ pub(crate) fn scan_references(line: &str) -> Vec<String> {
         // A quoted reference in prose ('RFC-9') keeps its opening mark through
         // the trim above, which allows quotes so the possessive survives.
         let token = token.trim_matches(['\'', '\u{2019}']);
-        let Some((prefix, num)) = token.split_once('-') else {
-            continue;
-        };
-        if !prefix.is_empty()
-            && prefix.chars().all(|c| c.is_ascii_uppercase())
-            && !num.is_empty()
-            && num.chars().all(|c| c.is_ascii_digit())
-        {
+        if is_record_reference(token) {
             out.push(token.to_string());
         }
     }
@@ -1483,16 +1486,7 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
             let entry = entry.trim();
             let token = entry.split_whitespace().next()?;
             let token = strip_possessive(token.trim_end_matches(['.', ':']));
-            let is_reference = token
-                .split_once('-')
-                .map(|(prefix, num)| {
-                    !prefix.is_empty()
-                        && prefix.chars().all(|c| c.is_ascii_uppercase())
-                        && !num.is_empty()
-                        && num.chars().all(|c| c.is_ascii_digit())
-                })
-                .unwrap_or(false);
-            is_reference.then(|| token.to_string())
+            is_record_reference(token).then(|| token.to_string())
         })
         .collect()
 }
@@ -4355,6 +4349,32 @@ mod tests {
         assert!(claimed_closed("The path prefixes changed; see RFC-9 for why.").is_empty());
         assert!(claimed_closed("This discloses RFC-9's reasoning.").is_empty());
         assert!(claimed_closed("Suffixes and RFC-9 are unrelated.").is_empty());
+    }
+
+    /// `BUG-111`: `parse_record_filename` supports a hyphenated type prefix
+    /// (`DOC-ADR-2-x.md`), but the reference recognizer used to split on only
+    /// the first hyphen, rejecting `DOC-ADR-2` as not-a-reference everywhere
+    /// it's cited.
+    #[test]
+    fn a_hyphenated_type_prefix_is_a_recognized_reference_observed_failing() {
+        assert!(is_record_reference("DOC-ADR-2"));
+        assert!(is_record_reference("RFC-9"));
+        assert!(
+            !is_record_reference("DOC-adr-2"),
+            "a lowercase segment is not a prefix"
+        );
+        assert!(
+            !is_record_reference("DOC-ADR-"),
+            "nothing after the last hyphen is not a number"
+        );
+        assert_eq!(
+            scan_references("see DOC-ADR-2 for context"),
+            vec!["DOC-ADR-2".to_string()]
+        );
+        assert_eq!(
+            extract_references("DOC-ADR-2, RFC-9"),
+            vec!["DOC-ADR-2".to_string(), "RFC-9".to_string()]
+        );
     }
 
     #[test]
