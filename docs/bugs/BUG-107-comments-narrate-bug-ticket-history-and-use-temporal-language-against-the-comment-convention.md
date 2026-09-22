@@ -29,4 +29,4 @@ work, verified by direct inspection before making any further edit there.
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; wording-only, no behavior to verify beyond the existing test suite staying green. | **cosmetic** |
+> | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; wording-only, no behavior to verify beyond the existing test suite staying green. | **structural** |
