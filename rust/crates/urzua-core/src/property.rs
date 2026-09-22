@@ -379,7 +379,13 @@ mod tests {
                 "revision-log.change-class-required",
                 rules::revision_log_change_class(&records, &full_text),
             ),
-            ("identity.collision", rules::identity_collision(&records)),
+            (
+                "identity.collision",
+                rules::identity_collision(
+                    &records,
+                    rules::build_index_reporting_collisions(&records).1,
+                ),
+            ),
             (
                 "pointer.resolution",
                 rules::pointer_resolution(&records, &config, &record_index),

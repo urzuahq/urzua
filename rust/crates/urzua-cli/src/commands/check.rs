@@ -112,7 +112,12 @@ fn read_claim_files(
                             path.display()
                         ));
                     }
-                    if prefix_canonical.starts_with(&resolved) {
+                    // `starts_with` is reflexive (`BUG-117`): a link resolving
+                    // to exactly the prefix root, not a genuine ancestor,
+                    // causes no unbounded walk -- `visited` (seeded with the
+                    // prefix root before this loop starts) already dedupes it
+                    // silently below.
+                    if resolved != prefix_canonical && prefix_canonical.starts_with(&resolved) {
                         return Err(format!(
                             "claim_paths: {} resolves to an ancestor of the declared prefix, which would read the whole tree",
                             path.display()
@@ -283,7 +288,19 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }
     };
 
-    let drifted = compute_drifted_records(&repo_root, &records);
+    // `compute_drifted_records` spawns several `git` subprocesses per
+    // `Realized-by`-carrying record; skip that work entirely when its only
+    // consumer, `embodiment.consistency`, won't read the result (`BUG-115`),
+    // matching the `claim_paths` gate just above.
+    let drifted = if config
+        .rules
+        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
+    {
+        compute_drifted_records(&repo_root, &records)
+    } else {
+        std::collections::HashSet::new()
+    };
 
     // Each rule's (RuleExecution, Vec<Finding>) collected into one list --
     // rules_executed/findings both derive from it below, so there's no
@@ -293,8 +310,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // relation.supersession-reciprocity each need to resolve a reference
     // against every record, and independently rebuilding this from scratch
     // for each was the same O(corpus) traversal five times over one `check`
-    // run.
-    let record_index = rules::build_normalized_index(&records);
+    // run. identity.collision needs the collisions this same build already
+    // computes, so it's built once here rather than a second time inside
+    // that rule (`BUG-116`).
+    let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
 
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
@@ -394,7 +413,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists)
         }),
         crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
-            rules::identity_collision(&records)
+            rules::identity_collision(&records, identity_collisions)
         }),
         crate::gate::gated(
             &config,

@@ -1005,9 +1005,11 @@ pub fn build_normalized_index(records: &[Record]) -> HashMap<crate::values::Reco
 /// represent: it keeps one and the other stops existing for every rule that
 /// resolves a reference. Reported here rather than papered over, because the
 /// tool knows both records are there (BUG-79).
-pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
+pub fn identity_collision(
+    records: &[Record],
+    collisions: Vec<IdentifierCollision<'_>>,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_IDENTITY_COLLISION;
-    let (_, collisions) = build_index_reporting_collisions(records);
 
     // A record whose filename yields no identifier is eligible and unexamined:
     // it was handed to the rule, and the rule has no identity to collide.
@@ -1062,13 +1064,13 @@ pub fn identity_collision(records: &[Record]) -> (RuleExecution, Vec<Finding>) {
 pub type RecordIndex<'a> = HashMap<crate::values::RecordId, &'a Record>;
 
 /// One identifier and every record claiming it.
-pub(crate) type IdentifierCollision<'a> = (crate::values::RecordId, Vec<&'a Record>);
+pub type IdentifierCollision<'a> = (crate::values::RecordId, Vec<&'a Record>);
 
 /// The index plus the identifiers more than one record claims. Collecting
 /// straight into a map kept whichever record sorted last and made the loser
 /// invisible to every rule that resolves a reference -- so the verdict on a
 /// corpus depended on filename order (BUG-79).
-pub(crate) fn build_index_reporting_collisions(
+pub fn build_index_reporting_collisions(
     records: &[Record],
 ) -> (RecordIndex<'_>, Vec<IdentifierCollision<'_>>) {
     use crate::values::RecordId;
