@@ -1432,6 +1432,8 @@ pub fn pointer_target_status(
     let pointer_fields_by_type = &pointer_fields_by_type;
     let narrative_fields_by_type = narrative_fields_by_type(config);
     let narrative_fields_by_type = &narrative_fields_by_type;
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
     const RULE_ID: &str = RULE_POINTER_TARGET_STATUS;
     let mut findings = Vec::new();
 
@@ -1467,7 +1469,8 @@ pub fn pointer_target_status(
                     &target.record_type,
                     crate::config::RelationRole::Status,
                 );
-                let Ok(status) = declared_cross_record_value(config, target, target_status_field)
+                let Ok(status) =
+                    declared_cross_record_value(declared_by_type, target, target_status_field)
                 else {
                     continue;
                 };
@@ -1664,6 +1667,8 @@ pub fn narrative_field_stale(
     const RULE_ID: &str = RULE_NARRATIVE_FIELD_STALE;
     let mut findings = Vec::new();
 
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
     let narrative_fields_by_type = fields_with_capability(config, |k| k.check_target_staleness);
 
     // Declared narrative slots. A slot the record did not write, or wrote as
@@ -1699,7 +1704,8 @@ pub fn narrative_field_stale(
                     &target.record_type,
                     crate::config::RelationRole::Status,
                 );
-                let Ok(status) = declared_cross_record_value(config, target, target_status_field)
+                let Ok(status) =
+                    declared_cross_record_value(declared_by_type, target, target_status_field)
                 else {
                     continue;
                 };
@@ -1962,6 +1968,8 @@ pub fn claim_status_agreement(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
     let mut findings = Vec::new();
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
 
     // Present tense only: a claim is written in the present, while prose
     // *about* a past claim is written in the past. A narrowing, not a fix --
@@ -2010,7 +2018,7 @@ pub fn claim_status_agreement(
             &target.record_type,
             crate::config::RelationRole::Status,
         );
-        let Ok(status) = declared_cross_record_value(config, target, status_field) else {
+        let Ok(status) = declared_cross_record_value(declared_by_type, target, status_field) else {
             continue;
         };
         if closed_statuses.iter().any(|s| s == status) {
@@ -2600,6 +2608,7 @@ fn declared_slots_for_roles<'a>(
     config: &Config,
     roles: &[crate::config::RelationRole],
 ) -> Vec<&'a Record> {
+    let declared_by_type = declared_fields_by_type(config);
     records
         .iter()
         .filter(|record| {
@@ -2607,9 +2616,12 @@ fn declared_slots_for_roles<'a>(
                 .record_types
                 .get(&record.record_type)
                 .is_some_and(|t| {
+                    let Some(declared) = declared_by_type.get(&record.record_type) else {
+                        return false;
+                    };
                     roles
                         .iter()
-                        .all(|role| t.declared_fields().contains(t.relation_field(*role)))
+                        .all(|role| declared.contains(t.relation_field(*role)))
                 })
         })
         .collect()
@@ -2645,17 +2657,13 @@ pub fn relation_field_name<'a>(
 /// `Status` is adopter vocabulary like every other field `ADR-53` governs,
 /// not an engine-reserved one.
 fn declared_cross_record_value<'a>(
-    config: &Config,
+    declared_by_type: &HashMap<String, std::collections::BTreeSet<crate::values::FieldName>>,
     record: &'a Record,
     key: &str,
 ) -> Result<&'a str, Outcome> {
-    let declared = config
-        .record_types
+    let declared = declared_by_type
         .get(&record.record_type)
-        .is_some_and(|t| {
-            t.declared_fields()
-                .contains(&crate::values::FieldName::from(key))
-        });
+        .is_some_and(|fields| fields.contains(&crate::values::FieldName::from(key)));
     if !declared {
         return Err(Outcome::Absent);
     }
