@@ -875,7 +875,14 @@ pub fn config_known_fields_declaration_missing(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-        if type_config.known_fields.is_none() {
+        // A `none`-shaped type has nowhere for a header field to be (`ADR-50`):
+        // `known_fields` governs which fields are permitted beyond
+        // `required_fields`, which is meaningless when no field can exist at
+        // all, the same reasoning `config.header-none-has-no-required-fields`
+        // already applies to `required_fields` itself.
+        if type_config.header_shape != crate::header::HeaderShape::None
+            && type_config.known_fields.is_none()
+        {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Error,
@@ -3498,6 +3505,23 @@ mod tests {
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("spec"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_no_known_fields_is_not_a_missing_declaration_observed_failing() {
+        let config = config_with_types(vec![(
+            "waiver",
+            type_config_with_shape(crate::header::HeaderShape::None),
+        )]);
+        let (exec, findings) = config_known_fields_declaration_missing(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "a type with no header has nowhere for known_fields to govern: {findings:?}"
+        );
     }
 
     #[test]
