@@ -450,6 +450,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_CONFIG_RELATION_FIELD_NOT_KNOWN, || {
             rules::config_relation_field_not_known(&config, &config_path)
         }),
+        crate::gate::gated(
+            &config,
+            rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+            || rules::config_known_fields_declaration_missing(&config, &config_path),
+        ),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());

@@ -34,6 +34,34 @@ that claim; read it before assuming a change is obviously fine.
   says. Weigh new work against whether it moves toward an adopter deleting their own linter, not
   just toward more checks existing.
 
+## A narrower rule population is usually policy, not a regression
+
+The single most common false-positive in this project's own code reviews: a rule now examines fewer
+records/types than an earlier version did, and that reads as a silent coverage loss. Before filing it
+as a bug, check whether it's actually one of these already-decided, intentionally applied principles:
+
+- **`ADR-53` — declared, not voted.** A rule only judges what a type's config *declares* it should
+  judge (`required_fields`/`known_fields`/`pointer_fields`/`relation_fields`/etc.). A type that never
+  declares a field is not this engine's business to check on that field, full stop — this is not an
+  oversight, it is the founding governance model. `ADR-60`, `ADR-61`, and every `declared_slots`/
+  `field_slots`-based rule apply this identically. If a finding's failure scenario is "a type doesn't
+  declare X, so a record using X by convention goes unchecked," it is describing this principle
+  working as designed, not a defect — unless the specific rule in question is *supposed* to be
+  declaration-independent and isn't (check its own doc comment first).
+- **`ADR-57` — field names compare exactly.** Two differently-cased spellings of a field name are two
+  different fields, not a duplicate or an ambiguity. `Header::duplicate_keys`'s own doc comment
+  answers the "isn't `Status`/`status` an obvious collision?" question directly — read it before
+  reporting a case-variant scenario as an unguarded regression.
+- **`ADR-54` — a break ships no migration diagnostic.** A format or schema change that makes an old
+  config/record unreadable does not get a special error message pointing at the old format, as a
+  general policy decided with real adoption data, not per-instance. A generic parse/version error on
+  an unsupported input is the intended behavior, not a gap.
+
+Before filing a finding of this shape: `grep` `docs/adr/` for the field, rule, or file-format
+involved. If an `Accepted` ADR already names the exact tradeoff the finding describes, it is not a bug
+-- it's `AGENTS.md`'s own "verify before trusting" applied to the reviewer's own claim, not just the
+author's.
+
 ## Git workflow
 
 Never commit directly to `main`. Create a feature branch and open a PR for every change, however
