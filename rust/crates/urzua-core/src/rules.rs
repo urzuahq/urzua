@@ -50,6 +50,7 @@ pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
+pub const RULE_RELATION_TARGET_STATUS_UNDECLARED: &str = "relation.target-status-undeclared";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
@@ -88,6 +89,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
     RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
     RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+    RULE_RELATION_TARGET_STATUS_UNDECLARED,
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -2889,6 +2891,87 @@ pub fn supersession_reciprocity(
     )
 }
 
+/// Rule (`RFC-45`/`ADR-63`): a resolved pointer/narrative reference's target
+/// may not declare `Status` at all (`ADR-60`'s gate then silently excludes
+/// it from every rule that reads it -- `pointer.target-status`,
+/// `narrative-field.stale`). The one place this is diagnosed, rather than
+/// each consuming rule inventing its own check, the same shape
+/// `header.field-case-mismatch` already is for a declared-field case
+/// mismatch (`RFC-40`/`ADR-58`).
+pub fn relation_target_status_undeclared(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_RELATION_TARGET_STATUS_UNDECLARED;
+    let mut findings = Vec::new();
+
+    let pointer_fields_by_type = pointer_fields_by_type(config);
+    let pointer_fields_by_type = &pointer_fields_by_type;
+    let narrative_fields_by_type = narrative_fields_by_type(config);
+    let narrative_fields_by_type = &narrative_fields_by_type;
+
+    let slots =
+        pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            if record.header.region.is_none() {
+                return Outcome::Unreadable;
+            }
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::Absent;
+            };
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::Absent;
+            }
+
+            for reference in references {
+                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
+                    continue; // pointer_resolution already reports a dangling reference
+                };
+                let target_status_field = relation_field_name(
+                    config,
+                    &target.record_type,
+                    crate::config::RelationRole::Status,
+                );
+                let declared = config
+                    .record_types
+                    .get(&target.record_type)
+                    .is_some_and(|t| t.declared_fields().contains(target_status_field));
+                if !declared {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
+                            target.record_type
+                        ),
+                    });
+                }
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3308,6 +3391,13 @@ mod tests {
             .examined()
     }
 
+    fn unreadable(exec: &RuleExecution) -> usize {
+        exec.population
+            .as_ref()
+            .expect("every rule carries a population")
+            .unreadable()
+    }
+
     #[test]
     fn a_slot_declared_only_as_required_is_still_a_declared_slot() {
         // `known_fields` is documented as the fields a type carries *beyond*
@@ -3551,6 +3641,7 @@ mod tests {
                 eligible,
                 examined,
                 out_of_scope,
+                0,
             )),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
@@ -4643,6 +4734,21 @@ mod tests {
         assert!(findings[0].message.contains("Placeholder"));
     }
 
+    /// `BUG-125`: a rule's silence about an unreadable header used to depend
+    /// on `header.required-fields` being separately enabled to disclose it --
+    /// a pairing `ADR-53` never guarantees. `Population` now discloses
+    /// `unreadable` on its own, regardless of what else is enabled.
+    #[test]
+    fn field_quality_discloses_unreadable_on_its_own_observed_failing() {
+        let r = record("docs/adr/0001-x.md", "adr", "this is not a header at all");
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+
+        let (exec, findings) = field_quality(&[r], &config);
+        assert_eq!(examined(&exec), 0, "{exec:?}");
+        assert_eq!(unreadable(&exec), 1, "{exec:?}");
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     /// Observed failing against the real defect: a changeset in this repository
     /// announced it closed `BUG-36` while `BUG-36` said `Open`, and shipped.
     #[test]
@@ -5305,5 +5411,49 @@ mod tests {
             "the em dash is a written answer, not an unfilled slot"
         );
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn relation_target_status_undeclared_flags_a_resolving_reference_to_an_undeclaring_type_observed_failing(
+    ) {
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Date: 2026-01-01\n");
+        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-1\n");
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            // "rfc" declares no Status at all -- ADR-60's gate would silently
+            // exclude any rule reading it, which is exactly what this rule
+            // exists to surface.
+            ("rfc", type_config_pointer(&["Date"], None, None, None)),
+        ]);
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+
+        let (exec, findings) = relation_target_status_undeclared(&records, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("RFC-1"), "{findings:?}");
+        assert!(findings[0].message.contains("Status"), "{findings:?}");
+    }
+
+    #[test]
+    fn relation_target_status_undeclared_is_silent_when_the_target_declares_status() {
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
+        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-1\n");
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            ("rfc", type_config_pointer(&["Status"], None, None, None)),
+        ]);
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+
+        let (exec, findings) = relation_target_status_undeclared(&records, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }

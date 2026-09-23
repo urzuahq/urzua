@@ -172,6 +172,11 @@ pub(crate) fn resolve_argv_overrides(
         .filter(|scope| !tracked.contains(scope))
         .filter_map(|scope| {
             let full = repo_root.join(scope);
+            // `symlink_metadata`, not `metadata`: harmless either way in
+            // practice, since `scope` already came through `relative_scopes`'
+            // own `canonicalize()`, which resolves every symlink before this
+            // function ever runs (`BUG-127`, investigated and found
+            // unreachable through the only real call site).
             match std::fs::symlink_metadata(&full) {
                 Ok(meta) if meta.is_file() => Some(Ok(scope.clone())),
                 Ok(_) => None,

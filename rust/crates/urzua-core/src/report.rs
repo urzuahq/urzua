@@ -173,14 +173,16 @@ pub fn census<T>(
     let eligible = candidates.len();
     let mut examined = 0;
     let mut out_of_scope = 0;
+    let mut unreadable = 0;
     for candidate in &candidates {
         match body(candidate) {
             Outcome::Examined => examined += 1,
             Outcome::OutOfScope => out_of_scope += 1,
-            Outcome::Absent | Outcome::Unreadable => {}
+            Outcome::Unreadable => unreadable += 1,
+            Outcome::Absent => {}
         }
     }
-    Population::detailed(unit, eligible, examined, out_of_scope)
+    Population::detailed(unit, eligible, examined, out_of_scope, unreadable)
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -199,6 +201,7 @@ pub fn census_records<T>(
     let mut examined_records = Vec::new();
     let mut examined = 0;
     let mut out_of_scope = 0;
+    let mut unreadable = 0;
     for candidate in &candidates {
         match body(candidate) {
             Outcome::Examined => {
@@ -206,13 +209,14 @@ pub fn census_records<T>(
                 examined_records.push(record_of(candidate));
             }
             Outcome::OutOfScope => out_of_scope += 1,
-            Outcome::Absent | Outcome::Unreadable => {}
+            Outcome::Unreadable => unreadable += 1,
+            Outcome::Absent => {}
         }
     }
     examined_records.sort();
     examined_records.dedup();
     (
-        Population::detailed(unit, eligible, examined, out_of_scope),
+        Population::detailed(unit, eligible, examined, out_of_scope, unreadable),
         examined_records,
     )
 }
@@ -244,6 +248,11 @@ pub struct Population {
     /// diagnostic that appears only when non-zero cannot be told from one
     /// nothing computed.
     out_of_scope: usize,
+    /// Present, but the header didn't parse (`Outcome::Unreadable`). Disclosed
+    /// on its own so a rule's honesty about a malformed record never depends
+    /// on a *different*, independently opt-in rule also being enabled to
+    /// surface it (`ADR-53`, `BUG-125`, `ADR-63`).
+    unreadable: usize,
 }
 
 impl Population {
@@ -267,16 +276,24 @@ impl Population {
         self.out_of_scope
     }
 
-    pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
-        Population::detailed(unit, eligible, examined, 0)
+    /// How many candidates were present but unreadable (a header that didn't
+    /// parse). See the field's own doc comment for why this is never folded
+    /// into `examined`'s shortfall silently.
+    pub fn unreadable(&self) -> usize {
+        self.unreadable
     }
 
-    /// `of`, naming how many candidates were beyond the configuration's reach.
+    pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
+        Population::detailed(unit, eligible, examined, 0, 0)
+    }
+
+    /// `of`, naming every non-`Absent` reason a candidate went unexamined.
     pub fn detailed(
         unit: PopulationUnit,
         eligible: usize,
         examined: usize,
         out_of_scope: usize,
+        unreadable: usize,
     ) -> Self {
         // A real `assert!`, not `debug_assert!` (`BUG-113`): this runs once
         // per rule per invocation, not a hot-path cost worth trading away,
@@ -296,6 +313,7 @@ impl Population {
             eligible: eligible.max(examined),
             examined,
             out_of_scope,
+            unreadable,
         }
     }
 }
