@@ -2276,6 +2276,59 @@ fn drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_fai
     );
 }
 
+/// `BUG-135`: `compute_drifted_records` memoizes `last_commit_for_path` and
+/// `commit_strictly_before` per locator/commit pair rather than re-running
+/// the underlying `git` subprocess for every citing record. Two records
+/// citing the *same* locator must both still be detected as drifted --
+/// the case a caching bug (stale entry, wrong cache key) would break first.
+#[test]
+fn two_records_citing_the_same_locator_are_both_detected_as_drifted() {
+    let dir = fixture_repo("shared-locator-drift");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {embodiment.consistency: error}\n\n\
+         record_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
+         \x20   known_fields: [\"Embodiment\", \"Realized-by\"]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("shared.rs"), "fn shared() {}\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Embodiment: Implemented\n> Realized-by: code:shared.rs\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0002-y.md"),
+        "# 0002 — Y\n\n> Embodiment: Implemented\n> Realized-by: code:shared.rs\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    // Touch the shared locator in a later commit, without touching either
+    // record -- both records' `Realized-by` lines predate this commit.
+    std::fs::write(dir.join("shared.rs"), "fn shared() { println!(\"x\"); }\n").unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let drift_findings: Vec<&str> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "embodiment.consistency")
+        .filter(|f| f["message"].as_str().unwrap().contains("Drift detected"))
+        .map(|f| f["file"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        drift_findings.len(),
+        2,
+        "both citers of the shared locator must be independently detected as drifted: {parsed}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `BUG-24`: SPEC-2's Discovery contract says an explicit argv path
 /// overrides discovery and is used as given -- an untracked file named
 /// directly must still be examined, not silently reported as

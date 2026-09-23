@@ -224,6 +224,13 @@ pub(crate) fn compute_drifted_records(
 ) -> HashSet<PathBuf> {
     let mut drifted = HashSet::new();
 
+    // A locator cited by several records (a shared implementation module, a
+    // shared test file) would otherwise re-run the same `git log`/`merge-base`
+    // subprocess once per citing record -- both memoized here across the
+    // whole corpus (`BUG-135`).
+    let mut last_commit_for_path: HashMap<PathBuf, Option<String>> = HashMap::new();
+    let mut strictly_before: HashMap<(String, String), bool> = HashMap::new();
+
     for record in records {
         let locator_field = rules::relation_field_name(
             config,
@@ -249,11 +256,20 @@ pub(crate) fn compute_drifted_records(
 
         for locator in rules::realized_by_locator_paths(realized_by_value) {
             let locator_path = PathBuf::from(&locator);
-            let Ok(Some(locator_commit)) = urzua_io::last_commit_for_path(repo_root, &locator_path)
+            let Some(locator_commit) = last_commit_for_path
+                .entry(locator_path.clone())
+                .or_insert_with(|| {
+                    urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or(None)
+                })
             else {
                 continue;
             };
-            if urzua_io::commit_strictly_before(repo_root, &reference_commit, &locator_commit) {
+            let drifted_pair = *strictly_before
+                .entry((reference_commit.clone(), locator_commit.clone()))
+                .or_insert_with(|| {
+                    urzua_io::commit_strictly_before(repo_root, &reference_commit, locator_commit)
+                });
+            if drifted_pair {
                 drifted.insert(record.path.clone());
                 break;
             }
