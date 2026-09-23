@@ -255,7 +255,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // and took `check` down with a directory git cannot keep. A `Notice` is
     // visible and never moves the exit code (ADR-46), so absence is reported
     // and a path that is actively wrong still aborts.
-    let mut claim_path_notices: Vec<Notice> = Vec::new();
+    let mut notices: Vec<Notice> = Vec::new();
     if let Some(setting) = claim_status_agreement_setting(&config) {
         // Both sides canonicalised: the repo root may itself reach through
         // a link (macOS `/tmp`), and comparing a resolved path against an
@@ -288,7 +288,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                 // permission to read, reintroducing `BUG-56` under a
                 // permissions error instead of a typo.
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    claim_path_notices.push(Notice {
+                    notices.push(Notice {
                         severity: NoticeSeverity::Warning,
                         subject: rules::RULE_CLAIM_STATUS_AGREEMENT.to_string(),
                         message: format!(
@@ -358,6 +358,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // computes, so it's built once here rather than a second time inside
     // that rule (`BUG-116`).
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
+    notices.extend(rules::identity_collision_notices(&identity_collisions));
 
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
@@ -604,7 +605,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         },
         blocking,
         findings,
-        notices: claim_path_notices,
+        notices,
     };
 
     emit(&report)

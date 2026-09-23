@@ -42,6 +42,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     };
 
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
+    let notices = rules::identity_collision_notices(&identity_collisions);
 
     let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
         rules::pointer_resolution(&records, &config, &record_index)
@@ -86,7 +87,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         },
         blocking,
         findings,
-        notices: Vec::new(),
+        notices,
     };
 
     emit(&report)
