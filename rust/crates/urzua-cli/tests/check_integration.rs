@@ -678,6 +678,52 @@ fn init_real_write_omits_config_yaml_from_the_report() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// BUG-132: `x/y` and `z/y` share a base name and disambiguate to `x-y` and
+/// `z-y` -- but an unrelated `x-y` directory already proposes that exact
+/// name, and nothing after disambiguation checks for it. `render_config_yaml`
+/// silently overwrites one type's entry with the other's, so the config
+/// still loads and `init` reports `ok` while an entire directory's records
+/// go ungoverned from the first run.
+#[test]
+fn a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing() {
+    let dir = fixture_repo("init-disambiguation-collision");
+    std::fs::create_dir_all(dir.join("x/y")).unwrap();
+    std::fs::create_dir_all(dir.join("z/y")).unwrap();
+    std::fs::create_dir_all(dir.join("x-y")).unwrap();
+    std::fs::write(
+        dir.join("x/y/0001-a.md"),
+        "# 0001 — A\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("z/y/0001-b.md"),
+        "# 0001 — B\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("x-y/0001-c.md"),
+        "# 0001 — C\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["init", "--dry-run"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a genuine post-disambiguation collision must refuse, not report ok over a dropped type: {stdout}"
+    );
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
+    assert!(
+        !dir.join(".urzua/config.yaml").exists(),
+        "must not write a config that would silently drop a proposed type"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `urzua migrate ids`'s real report shape (BUG-20): `missing`/`results`
 /// with a real per-file outcome, not `[OK]`/`[SKIPPED]`/`[FAILED]` prose
 /// lines.
