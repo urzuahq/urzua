@@ -113,8 +113,15 @@ impl std::borrow::Borrow<str> for RecordId {
 /// padding and a hand-typed reference's padding never have to match exactly.
 /// Falls back to the original string unchanged if the numeric part doesn't
 /// parse (defensive only -- callers already validate theirs).
+///
+/// Splits at the *last* hyphen, not the first: a multi-segment prefix like
+/// `DOC-ADR` (`BUG-111`/`BUG-114`, already supported by
+/// `parse_record_filename`/`is_record_reference`) puts the number after
+/// every prefix hyphen, not just the first one -- splitting on the first
+/// hyphen left `DOC-ADR-02` and `DOC-ADR-2` normalizing to two different,
+/// unequal strings instead of the same id.
 fn normalize(id: &str) -> String {
-    match id.split_once('-') {
+    match id.rsplit_once('-') {
         Some((prefix, number)) => match number.parse::<u64>() {
             Ok(n) => format!("{prefix}-{n}"),
             Err(_) => id.to_string(),
@@ -150,5 +157,15 @@ mod tests {
             RecordId::new("not-an-id-at-all").to_string(),
             "not-an-id-at-all"
         );
+    }
+
+    /// `BUG-111`/`BUG-114`: a multi-segment prefix like `DOC-ADR` is already
+    /// a supported shape elsewhere (`parse_record_filename`,
+    /// `is_record_reference`). The number always follows the *last* hyphen,
+    /// so a zero-padded and unpadded reference to the same such record must
+    /// still normalize equal.
+    #[test]
+    fn record_id_compares_by_numeric_value_with_a_hyphenated_prefix_observed_failing() {
+        assert_eq!(RecordId::new("DOC-ADR-02"), RecordId::new("DOC-ADR-2"));
     }
 }
