@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use urzua_core::report::{CouldNotRun, GraphReport, Notice, NoticeSeverity, ReportStatus};
+use urzua_core::report::{CouldNotRun, GraphReport, ReportStatus};
 use urzua_core::rules;
 
 use crate::discovery::{find_repo_root, load_config, load_records};
@@ -57,29 +57,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         &narrative_fields_by_type,
     );
 
-    // The index this graph is built from silently keeps one of several
-    // colliding records (first-seen-wins) -- an edge naming that identifier
-    // may point at the arbitrary winner, not the record a reference actually
-    // meant. Disclosed regardless of whether `identity.collision` is
-    // enabled: this is the engine's own computation being honest about an
-    // ambiguity it had to resolve (`ADR-55`), not a judgment about the
-    // corpus `ADR-53` reserves for a declared rule.
-    let mut notices: Vec<Notice> = Vec::new();
-    for (id, claimants) in collisions {
-        let mut paths: Vec<String> = claimants
-            .iter()
-            .map(|r| r.path.display().to_string())
-            .collect();
-        paths.sort();
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: rules::RULE_IDENTITY_COLLISION.to_string(),
-            message: format!(
-                "{id} resolves to more than one record ({}) -- any edge naming it may point at an arbitrary one of them, not necessarily the one a reference meant",
-                paths.join(", ")
-            ),
-        });
-    }
+    let notices = rules::identity_collision_notices(&collisions);
 
     emit(&GraphReport {
         status: ReportStatus::Ok,

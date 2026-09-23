@@ -563,6 +563,65 @@ fn graph_discloses_an_identity_collision_as_a_notice_observed_failing() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `BUG-131`'s primary scope: `check` and `audit` build the collision-aware
+/// index for the six rules that resolve a reference against it, but never
+/// disclosed a collision when `identity.collision` itself is disabled -- so
+/// a real collision silently resolved first-seen-wins with no way to know,
+/// exactly the gap `graph`'s sibling copy of this bug already fixed.
+#[test]
+fn check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_observed_failing() {
+    let dir = fixture_repo("check-collision-notice");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
+    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    let notices = parsed["notices"].as_array().unwrap();
+    assert!(
+        notices.iter().any(|n| n["subject"] == "identity.collision"
+            && n["message"].as_str().unwrap().contains("DOC-1")),
+        "identity.collision is not-enabled here, but the collision is still real: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_observed_failing() {
+    let dir = fixture_repo("audit-collision-notice");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
+    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["audit"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    let notices = parsed["notices"].as_array().unwrap();
+    assert!(
+        notices.iter().any(|n| n["subject"] == "identity.collision"
+            && n["message"].as_str().unwrap().contains("DOC-1")),
+        "identity.collision is not-enabled here, but the collision is still real: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `doctor`'s missing-config path builds its own richer `DoctorReport`
 /// (with the `checks` array intact) rather than the shared `CouldNotRun` --
 /// still real, parseable JSON, with the 2/1/0 exit-code split preserved.

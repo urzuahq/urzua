@@ -10,8 +10,8 @@ use crate::record::Record;
 #[cfg(test)]
 use crate::report::Population;
 use crate::report::{
-    census, census_records, Finding, FindingSeverity, Outcome, PopulationUnit, RuleExecution,
-    RuleStatus,
+    census, census_records, Finding, FindingSeverity, Notice, NoticeSeverity, Outcome,
+    PopulationUnit, RuleExecution, RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
@@ -1404,6 +1404,38 @@ pub fn build_index_reporting_collisions(
         .collect();
     collisions.sort_by(|a, b| a.0.cmp(&b.0));
     (index, collisions)
+}
+
+/// One `Notice` per collision `build_index_reporting_collisions` found,
+/// disclosed regardless of whether `identity.collision` is enabled: the
+/// index every reference-resolving rule reads silently keeps one of several
+/// colliding records (first-seen-wins), so a rule resolving that identifier
+/// may examine the arbitrary winner, not the record a reference actually
+/// meant. This is the engine's own computation being honest about an
+/// ambiguity it had to resolve (`ADR-55`), not a judgment about the corpus
+/// `ADR-53` reserves for a declared rule (`BUG-131`) --
+/// `identity.collision`'s own blocking `Finding` stays exactly as opt-in as
+/// before. Shared by `check`, `audit` and `graph`, each of which reads this
+/// same index.
+pub fn identity_collision_notices(collisions: &[IdentifierCollision<'_>]) -> Vec<Notice> {
+    collisions
+        .iter()
+        .map(|(id, claimants)| {
+            let mut paths: Vec<String> = claimants
+                .iter()
+                .map(|r| r.path.display().to_string())
+                .collect();
+            paths.sort();
+            Notice {
+                severity: NoticeSeverity::Warning,
+                subject: RULE_IDENTITY_COLLISION.to_string(),
+                message: format!(
+                    "{id} resolves to more than one record ({}) -- any rule resolving a reference to it may examine an arbitrary one of them, not necessarily the one a reference meant",
+                    paths.join(", ")
+                ),
+            }
+        })
+        .collect()
 }
 
 /// Rule 2 (config-driven per type since MILE-0090/ADR-0044): a

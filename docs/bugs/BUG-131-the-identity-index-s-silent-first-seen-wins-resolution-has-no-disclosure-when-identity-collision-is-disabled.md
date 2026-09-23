@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M36PD918XPGFGAPRCK161BE5
-Status: Open
+Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 23"
-Regression-test: "not yet written -- Status: Open, no fix decided yet"
+Regression-test: check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_observed_failing, audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_observed_failing (rust/crates/urzua-cli/tests/check_integration.rs)
 ---
 # 131 — the identity index's silent first-seen-wins resolution has no disclosure when identity.collision is disabled
 
@@ -39,6 +39,18 @@ the ambiguity. Plausible shapes for a fix, each with a real tradeoff:
   correct but repeats the same check six times, the "every caller invents its own version" shape this
   project has already rejected once for `RFC-45` Part 1.
 
+## Fix
+
+`check` and `audit` now disclose every identity collision `build_index_reporting_collisions` finds as
+an unconditional `Notice`, via the same `rules::identity_collision_notices` helper the `graph.rs` fix
+introduced (extracted from that fix's own inline logic once a third call site needed it, rather than a
+third copy). `identity.collision`'s own blocking `Finding` is unaffected -- exactly as opt-in as
+before; the disclosure is `ADR-55` engine honesty about an ambiguity the shared index resolved, not an
+`ADR-53` policy judgment about the corpus.
+
+Two regression tests (`check`, `audit`) with `identity.collision` left disabled were verified
+genuinely failing pre-fix (`notices` array absent, `Option::unwrap()` panic) and passing after.
+
 ## References
 
 - `BUG-125`/`RFC-45`/`ADR-63` -- the precedent for disclosure that doesn't depend on a sibling opt-in
@@ -52,3 +64,4 @@ the ambiguity. Plausible shapes for a fix, each with a real tradeoff:
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified the index is built unconditionally and shared by six independently-gated rules with no disclosure path when `identity.collision` itself is off. Left `Status: Open` -- the right fix shape is a real design question, not a one-line change. | **substantive** |
 > | 2026-09-23 | Reframed while working through this with the user: the earlier "the other six rules' own correctness depends on `identity.collision`" framing was imprecise and caused real confusion -- the six rules don't depend on `identity.collision` *the rule* at all; they depend on a corpus-level invariant (no two records share an ID) that `identity.collision` is merely the one mechanism that checks. The disclosure question is `ADR-55`'s (engine honesty about an ambiguity it had to resolve), not `ADR-53`'s (which rules to apply) -- an unconditional disclosure doesn't override the adopter's declared rule policy, since `identity.collision`'s own blocking `Finding` stays exactly as opt-in as before. A sibling gap found in the same investigation (`urzua graph` used the plain, non-collision-reporting index builder and disclosed nothing at all) is fixed in this same change, disclosing via `GraphReport`'s existing `notices` field. `check.rs`/`audit.rs`'s own disclosure (this bug's original scope) is still open -- `graph.rs`'s fix doesn't presuppose or complete it. | **substantive** |
+> | 2026-09-23 | Fixed. `check` and `audit` now disclose collisions the same way `graph` does, via a helper extracted once three call sites needed the identical logic. Both regression tests verified genuinely failing pre-fix. | **substantive** |
