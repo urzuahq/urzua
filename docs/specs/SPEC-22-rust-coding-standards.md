@@ -1,7 +1,7 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-09-23
-Status: Draft
+Status: Accepted
 Author: beauwilliams
 Stable-Id: 01M367MCQSWWBSJBJFYQZ12ZXD
 Subject: 'Rust coding conventions actually already in force in this codebase, backlinked to where each was decided or landed.'
@@ -63,18 +63,32 @@ times in one release (`BUG-78`, `BUG-81`, `BUG-83`, `BUG-90`). `Population`, bui
 the same candidate list the rule body iterates, has not been wrong once. Landed as "convert the last
 seven hand-built populations to census" (`2e39054`) and carried into `fix`/`migrate` (`64e61d5`).
 
-### Duplicated candidate-selection logic gets one shared function, not a copy per rule
+### Duplicated logic is extracted on its second occurrence, not its third
 
 `field_slots`, `declared_slots_for_roles`, and `pointer_and_narrative_slots` are the one definition
 each of "which `(record, field)` pairs are this rule's candidates," shared across 8+ rule functions
-that used to each hand-roll the same `filter_map`/`flat_map` chain. Extracted only after duplication
-caused a real, shipped defect (`BUG-105`/`BUG-106`) — not speculatively.
+that used to each hand-roll the same `filter_map`/`flat_map` chain. `census`/`census_records`,
+`Config::sorted_type_names`, `resolve_inside_repo`, `RecordTypeConfig::has_no_header`, and
+`claim_status_agreement_setting` are the same fix, each closing a different pair of hand-rolled
+copies once found.
 
-**Why:** `field_pending`'s own comment says it plainly: *"Same population as `field.quality`"* — two
-rules meant to examine identical input had, at different points, drifted onto near-identical but
-independently-maintained code. Landed as "Finish the slot-construction consolidation" (`2e4b235`,
-`d30d647`). The companion rule for this is `AGENTS.md`'s "don't build speculative capability" —
-consolidate once real duplication has caused a real bug, not in anticipation of one.
+**Why the rule changed, not just the examples**: this section originally said "consolidate once real
+duplication has caused a real bug, not in anticipation of one" — extract on the *third* copy, after
+the first drift is already shipped. That was `BUG-105`/`BUG-106`'s own lesson, applied literally. It
+was the wrong lesson. In the same review cycle that produced every example above, two *more*
+instances of the identical shape were found and left unfixed rather than rushed (`BUG-133`:
+`is_record_reference`/`parse_record_filename` re-implementing the same identifier grammar in two
+places, already caught drifting once by `BUG-114`; `BUG-134`: two functions rebuilding a per-type
+constant `declared_fields_by_type` already caches). A rule that waits for the second drift to happen
+before naming the first copy as the problem will keep producing `BUG-105`/`106`/`114`-shaped defects
+indefinitely — the fix has to fire when the *duplicate* is written, not when it disagrees.
+
+**The rule now**: when a second call site needs logic a first one already has, extract a shared
+function in the same change, before either site is touched again — don't wait for a third copy or a
+live bug to justify it. This doesn't relax `AGENTS.md`'s "don't build speculative capability": that
+principle is about not building a *capability* nothing has asked for yet; this is about not leaving a
+*fact already stated once* restated a second time, which is never speculative — the second call site
+is real, present evidence the fact needs a name.
 
 ### One index, one normalization pass, per run
 
@@ -180,8 +194,13 @@ would be unused structure.
 - `RFC-40`/`ADR-58` — `FieldRead`, the declared-field-miss contract.
 - `ADR-57` — exact field-name comparison.
 - `BUG-78`, `BUG-81`, `BUG-83`, `BUG-90` — the hand-maintained-population defects `census` replaced.
-- `BUG-105`, `BUG-106`, `BUG-116` — the duplicated-selection-logic and duplicated-index defects the
-  shared-helper convention exists to prevent recurring.
+- `BUG-105`, `BUG-106`, `BUG-116`, `BUG-114`, `BUG-133`, `BUG-134` — the duplicated-selection-logic
+  and duplicated-index defects the shared-helper convention exists to prevent recurring; the last
+  three are the evidence the convention's own timing rule was too late.
+- `RFC-7` §7 — first named this same shape ("duplicated logic across near-identical tooling
+  functions is itself an unenforced drift risk"), inside a proposal about a different, still-`Draft`
+  subject (a pre-write enforcement harness for decision-record fields). Moved here rather than left
+  there, since this is a coding convention, not part of that harness decision.
 - `BUG-100` — the fabricated-sentinel defect `FieldRead` closes.
 - `BUG-107` — the temporal-language comment defect.
 - `ADR-5`, `ADR-6` — the pure-core / impure-`urzua-io` split, and shelling out to `git`.
@@ -192,3 +211,4 @@ would be unused structure.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** asked directly whether this codebase's Rust conventions were ever written down; a full search of commit history, `AGENTS.md`, and every `ADR`/`RFC`/`SPEC` found nothing. Every convention here was surveyed from code already in `main` and backlinked to the commit or record that introduced it, not proposed fresh. | **substantive** |
+> | 2026-09-23 | `Status: Draft` → `Accepted`. Tightened "Duplicated candidate-selection logic gets one shared function, not a copy per rule" (renamed to state the timing rule directly) from "extract after a real bug, not speculatively" to "extract on the second occurrence, not the third" — the same review cycle that produced this spec's own examples also found two more instances of the identical shape and left them unfixed rather than rushed (`BUG-133`, `BUG-134`), which is exactly the reactive rule failing to prevent its own next instance. Absorbed `RFC-7` §7 (the same principle, first named inside an unrelated, still-`Draft` proposal) rather than leaving the same fact stated in two places. **Why:** the user asked directly whether this recurring pattern needed an RFC or ADR of its own; it doesn't — it's a coding convention with no alternatives being weighed, and this spec already existed as its right home. | **substantive** |
