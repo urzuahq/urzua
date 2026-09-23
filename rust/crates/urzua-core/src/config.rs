@@ -22,6 +22,20 @@ pub struct Config {
     pub rules: HashMap<String, RuleSetting>,
 }
 
+impl Config {
+    /// Every declared record type's name, sorted -- `record_types` is a
+    /// `HashMap`, whose own iteration order is randomized per process. A
+    /// rule or discovery pass iterating it unsorted can feed a
+    /// first-seen-wins merge (`build_index_reporting_collisions`) a
+    /// different candidate order on every run, making its result
+    /// nondeterministic across otherwise-identical invocations.
+    pub fn sorted_type_names(&self) -> Vec<&String> {
+        let mut names: Vec<&String> = self.record_types.keys().collect();
+        names.sort();
+        names
+    }
+}
+
 /// What a repository declared about one rule. Written either as a bare level
 /// (`field.quality: error`) or as a table when a rule takes options.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -200,10 +214,9 @@ pub struct RecordTypeConfig {
     /// `type.no-declared-spec` surfaces every run.
     ///
     /// Unlike `header_layout`, omission is not a way to opt out: there is no
-    /// value meaning "decided, none needed", so the signal cannot be answered
-    /// -- only silenced per-repo once rule severity is configurable
-    /// (MILE-0080). An earlier version of this comment claimed a type "can
-    /// permanently have none declared"; nothing implemented that (ADR-0051).
+    /// value meaning "decided, none needed" (`ADR-0051`), so the signal
+    /// cannot be answered -- only silenced per-repo once rule severity is
+    /// configurable (MILE-0080).
     #[serde(default)]
     pub spec: Option<String>,
     /// The field name that plays each fixed relation/status role for this

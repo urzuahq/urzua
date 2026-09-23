@@ -117,7 +117,9 @@ pub fn run() -> ExitCode {
         });
     }
 
-    for (name, cfg) in &config.record_types {
+    let type_names = config.sorted_type_names();
+    for name in type_names {
+        let cfg = &config.record_types[name];
         let dir_path = repo_root.join(&cfg.dir);
         if dir_path.is_dir() {
             checks.push(DoctorCheck {

@@ -74,7 +74,7 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     // segment reaching here is already guaranteed not all-digit, since `at`
     // selects the *first* such segment, so a mixed prefix creates no
     // ambiguity with which segment is the number).
-    let prefix_end = stem.len() - (stem.len() - segments[..at].join("-").len());
+    let prefix_end = segments[..at].join("-").len();
     if segments[..at].iter().all(|s| {
         !s.is_empty()
             && s.chars()

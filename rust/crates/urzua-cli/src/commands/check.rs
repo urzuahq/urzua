@@ -15,6 +15,29 @@ use crate::discovery::{
 };
 use crate::emit;
 
+/// Canonicalizes `candidate` and confirms it stays inside `repo_canonical` --
+/// the one check `claim_paths`' directory and file branches both need, so a
+/// future change to the symlink/containment policy has one place to land
+/// rather than two that can drift apart.
+fn resolve_inside_repo(
+    repo_canonical: &std::path::Path,
+    candidate: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    let resolved = candidate.canonicalize().map_err(|e| {
+        format!(
+            "claim_paths: could not resolve {}: {e}",
+            candidate.display()
+        )
+    })?;
+    if !resolved.starts_with(repo_canonical) {
+        return Err(format!(
+            "claim_paths: {} resolves outside the repository",
+            candidate.display()
+        ));
+    }
+    Ok(resolved)
+}
+
 /// Reads the files a repository pointed `claim.status-agreement` at. Kept in
 /// the CLI because `urzua-core` is pure (ADR-5) -- the rule is given file
 /// contents, never a path to open.
@@ -103,15 +126,7 @@ fn read_claim_files(
                     // link made the two paths disagree about one symlink
                     // (BUG-85). `visited` is what actually stops the unbounded
                     // walk a link to an ancestor produces (BUG-69).
-                    let resolved = path.canonicalize().map_err(|e| {
-                        format!("claim_paths: could not resolve {}: {e}", path.display())
-                    })?;
-                    if !resolved.starts_with(&repo_canonical) {
-                        return Err(format!(
-                            "claim_paths: {} resolves outside the repository",
-                            path.display()
-                        ));
-                    }
+                    let resolved = resolve_inside_repo(&repo_canonical, &path)?;
                     // `starts_with` is reflexive (`BUG-117`): a link resolving
                     // to exactly the prefix root, not a genuine ancestor,
                     // causes no unbounded walk -- `visited` (seeded with the
@@ -131,15 +146,7 @@ fn read_claim_files(
                     // inside the repository: a symlink named `.md` otherwise
                     // feeds an arbitrary file on the machine to the claim
                     // scanner, and its contents steer the findings.
-                    let resolved = path.canonicalize().map_err(|e| {
-                        format!("claim_paths: could not resolve {}: {e}", path.display())
-                    })?;
-                    if !resolved.starts_with(&repo_canonical) {
-                        return Err(format!(
-                            "claim_paths: {} resolves outside the repository",
-                            path.display()
-                        ));
-                    }
+                    resolve_inside_repo(&repo_canonical, &path)?;
                     paths.push(path);
                 }
             }

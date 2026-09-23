@@ -598,8 +598,7 @@ pub fn type_dir_matches_nothing(
     const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
     let mut findings = Vec::new();
 
-    let mut names: Vec<&String> = config.record_types.keys().collect();
-    names.sort();
+    let names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, names, |name| {
         if matched.get(*name).copied().unwrap_or(0) == 0 {
@@ -645,8 +644,7 @@ pub fn type_no_declared_spec(
     const RULE_ID: &str = RULE_TYPE_NO_DECLARED_SPEC;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -690,8 +688,7 @@ pub fn header_deprecated_shape(
     const RULE_ID: &str = RULE_HEADER_DEPRECATED_SHAPE;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -824,8 +821,7 @@ pub fn config_pointer_declaration_missing(
     const RULE_ID: &str = RULE_CONFIG_POINTER_DECLARATION_MISSING;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -872,8 +868,7 @@ pub fn config_known_fields_declaration_missing(
     const RULE_ID: &str = RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -941,8 +936,7 @@ pub fn config_pointer_field_not_known(
     const RULE_ID: &str = RULE_CONFIG_POINTER_FIELD_NOT_KNOWN;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -992,8 +986,7 @@ pub fn config_relation_field_not_known(
     const RULE_ID: &str = RULE_CONFIG_RELATION_FIELD_NOT_KNOWN;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -1041,8 +1034,7 @@ pub fn config_pointer_narrative_overlap(
     const RULE_ID: &str = RULE_CONFIG_POINTER_NARRATIVE_OVERLAP;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
@@ -1100,8 +1092,7 @@ pub fn config_header_none_has_no_required_fields(
     const RULE_ID: &str = RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS;
     let mut findings = Vec::new();
 
-    let mut type_names: Vec<&String> = config.record_types.keys().collect();
-    type_names.sort();
+    let type_names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];

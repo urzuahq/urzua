@@ -197,28 +197,17 @@ pub fn census_records<T>(
     record_of: impl Fn(&T) -> PathBuf,
     mut body: impl FnMut(&T) -> Outcome,
 ) -> (Population, Vec<PathBuf>) {
-    let eligible = candidates.len();
     let mut examined_records = Vec::new();
-    let mut examined = 0;
-    let mut out_of_scope = 0;
-    let mut unreadable = 0;
-    for candidate in &candidates {
-        match body(candidate) {
-            Outcome::Examined => {
-                examined += 1;
-                examined_records.push(record_of(candidate));
-            }
-            Outcome::OutOfScope => out_of_scope += 1,
-            Outcome::Unreadable => unreadable += 1,
-            Outcome::Absent => {}
+    let population = census(unit, candidates, |candidate| {
+        let outcome = body(candidate);
+        if outcome == Outcome::Examined {
+            examined_records.push(record_of(candidate));
         }
-    }
+        outcome
+    });
     examined_records.sort();
     examined_records.dedup();
-    (
-        Population::detailed(unit, eligible, examined, out_of_scope, unreadable),
-        examined_records,
-    )
+    (population, examined_records)
 }
 
 /// A rule's input population: what it was eligible to examine, and what it
