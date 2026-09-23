@@ -2117,3 +2117,52 @@ fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
         "the abort must name what actually happened: {stdout}"
     );
 }
+
+/// `BUG-120`: `compute_drifted_records` matched the pre-`RFC-42` literal
+/// `Realized-by` instead of resolving `RelationRole::EmbodimentLocator`, so
+/// a type declaring `relation_fields.embodiment_locator` never had drift
+/// detected for it -- `embodiment.consistency` could never see `Drift
+/// detected` disagree with a stale stated value for such a type.
+#[test]
+fn drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_failing() {
+    let dir = fixture_repo("custom-locator-drift");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {embodiment.consistency: error}\n\n\
+         record_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
+         \x20   known_fields: [\"Phase\", \"Evidence\"]\n\
+         \x20   relation_fields:\n      embodiment_state: \"Phase\"\n      embodiment_locator: \"Evidence\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src.rs"), "fn main() {}\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\n> Phase: Implemented\n> Evidence: code:src.rs\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    // Touch the evidence file in a later commit, without touching the
+    // record -- the exact shape `commit_strictly_before` looks for.
+    std::fs::write(dir.join("src.rs"), "fn main() { println!(\"x\"); }\n").unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let findings = parsed["findings"].as_array().unwrap();
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|f| f["rule"] == "embodiment.consistency")
+            .count(),
+        1,
+        "{parsed}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|f| f["message"].as_str().unwrap().contains("Drift detected")),
+        "{parsed}"
+    );
+}

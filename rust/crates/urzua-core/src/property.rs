@@ -223,6 +223,7 @@ mod tests {
                         pointer_fields: None,
                         narrative_fields: None,
                         spec: None,
+                        relation_fields: None,
                     },
                 )]
                 .into_iter()
@@ -332,6 +333,7 @@ mod tests {
                     pointer_fields: Some(fields(&["Derives-from"])),
                     narrative_fields: Some(fields(&["Blocked-on"])),
                     spec: None,
+                    relation_fields: None,
                 },
             )]
             .into_iter()
@@ -486,6 +488,7 @@ mod tests {
                         pointer_fields: None,
                         narrative_fields: None,
                         spec: None,
+                        relation_fields: None,
                     },
                 )]
                 .into_iter()

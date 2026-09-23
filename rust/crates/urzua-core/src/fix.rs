@@ -4,9 +4,12 @@
 //! revision-log write-path, each its own piece of work. Detect mode alone
 //! is "a real Phase 1 feature" per ADR-0015, not a stub.
 
+use crate::config::{Config, RelationRole};
 use crate::record::Record;
 use crate::report::{census, Outcome, Population, PopulationUnit};
-use crate::rules::{compute_embodiment, find_revision_log_entries, parse_realized_by};
+use crate::rules::{
+    compute_embodiment, find_revision_log_entries, parse_realized_by, relation_field_name,
+};
 
 /// One mechanically-detected disagreement between a record's stated value
 /// and what the tool computes -- the same shape RFC-0008 §3 specifies for
@@ -41,14 +44,18 @@ pub struct Repair {
 /// Returns the population alongside the repairs found, so a caller can
 /// distinguish "examined some, found nothing to repair" from "examined
 /// nothing" -- the same no-silent-no-op discipline `check` follows.
-pub fn detect_repairs(records: &[Record]) -> (Population, Vec<Repair>) {
+pub fn detect_repairs(records: &[Record], config: &Config) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
 
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
-        let Some(stated) = record.header.get("Embodiment") else {
+        let state_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentState);
+        let locator_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
+        let Some(stated) = record.header.get(state_field) else {
             return Outcome::Absent;
         };
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
+        let Some(realized_by_value) = record.header.get(locator_field) else {
             return Outcome::Absent;
         };
 
@@ -61,11 +68,11 @@ pub fn detect_repairs(records: &[Record]) -> (Population, Vec<Repair>) {
         if stated != computed {
             repairs.push(Repair {
                 record: record.path.clone(),
-                field: "Embodiment".to_string(),
+                field: state_field.to_string(),
                 current_value: stated.to_string(),
                 computed_value: computed.to_string(),
                 tier: 1,
-                evidence: format!("Realized-by: {realized_by_value}"),
+                evidence: format!("{locator_field}: {realized_by_value}"),
             });
         }
         Outcome::Examined
@@ -132,13 +139,21 @@ mod tests {
         Record::parse(PathBuf::from(path), "adr".to_string(), content)
     }
 
+    fn no_relation_field_overrides() -> Config {
+        Config {
+            schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            rules: std::collections::HashMap::new(),
+            record_types: std::collections::HashMap::new(),
+        }
+    }
+
     #[test]
     fn a_mismatched_embodiment_is_a_tier_1_repair_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
             "> Embodiment: Not started\n> Realized-by: code:src/lib.rs\n",
         );
-        let (population, repairs) = detect_repairs(&[r]);
+        let (population, repairs) = detect_repairs(&[r], &no_relation_field_overrides());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].field, "Embodiment");
@@ -153,9 +168,48 @@ mod tests {
             "docs/adr/0001-x.md",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (population, repairs) = detect_repairs(&[r]);
+        let (population, repairs) = detect_repairs(&[r], &no_relation_field_overrides());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(repairs.is_empty());
+    }
+
+    #[test]
+    fn a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing()
+    {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "> Phase: Not started\n> Evidence: code:src/lib.rs\n",
+        );
+        let config = Config {
+            schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            rules: std::collections::HashMap::new(),
+            record_types: [(
+                "adr".to_string(),
+                crate::config::RecordTypeConfig {
+                    dir: "docs/adr".to_string(),
+                    required_fields: vec![],
+                    header_shape: crate::header::HeaderShape::default(),
+                    prefix: None,
+                    header_layout: None,
+                    known_fields: Some(vec!["Phase".to_string(), "Evidence".to_string()]),
+                    pointer_fields: None,
+                    narrative_fields: None,
+                    spec: None,
+                    relation_fields: Some(crate::config::RelationFields {
+                        embodiment_state: Some("Phase".to_string()),
+                        embodiment_locator: Some("Evidence".to_string()),
+                        ..Default::default()
+                    }),
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+        let (population, repairs) = detect_repairs(&[r], &config);
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
+        assert_eq!(repairs.len(), 1, "{repairs:?}");
+        assert_eq!(repairs[0].field, "Phase");
+        assert_eq!(repairs[0].computed_value, "Implemented");
     }
 
     #[test]
@@ -164,7 +218,7 @@ mod tests {
         // function and reached no verdict, which is what `eligible() > 0`
         // says and a bare examined-count could not.
         let r = record("docs/adr/0001-x.md", "> Embodiment: Not started\n");
-        let (population, repairs) = detect_repairs(&[r]);
+        let (population, repairs) = detect_repairs(&[r], &no_relation_field_overrides());
         assert_eq!((population.eligible(), population.examined()), (1, 0));
         assert!(repairs.is_empty());
     }

@@ -49,8 +49,12 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         }
     }
 
-    let edges =
-        urzua_core::graph::graph(&records, &pointer_fields_by_type, &narrative_fields_by_type);
+    let edges = urzua_core::graph::graph(
+        &records,
+        &config,
+        &pointer_fields_by_type,
+        &narrative_fields_by_type,
+    );
 
     emit(&GraphReport {
         status: ReportStatus::Ok,

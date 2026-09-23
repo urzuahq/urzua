@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M34BEPVA9BX031V41XEENVZ5
-Status: Open
+Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "not yet written -- needs a design decision first, see below"
+Regression-test: "a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing, rules.rs"
 ---
 # 110 — Status is a hardcoded field name literal in three rules instead of adopter-declared vocabulary
 
@@ -28,12 +28,14 @@ live in.
 `"Status"` read on declaration — and that fix's own tests all use corpora that happen to name the field
 `Status`, so nothing exercised a corpus that doesn't.
 
-## What this needs before a fix
+## What changed
 
-A design decision: a config-declared field name (e.g. `status_field: "State"`, defaulting to
-`"Status"` so an existing config needs no change) threaded to all three call sites, replacing the
-hardcoded literal — the same shape `MILE-90` already used to make `pointer_fields`/`narrative_fields`
-declared instead of a hardcoded `"Blocked-on"`.
+A round-18 code review found the identical hardcoded-literal shape recurring in four more rules
+(`Embodiment`, `Realized-by`, `Supersedes / Superseded-by`), so the fix was scoped to all four
+literals in one design rather than a `Status`-only patch: `RFC-42`/`ADR-61` add a per-type
+`relation_fields` map (`status`, `embodiment_state`, `embodiment_locator`, `supersession`), each
+defaulting to its pre-`RFC-42` literal, threaded through all seven call sites this bug and the round-18
+review together identified.
 
 ## References
 
@@ -43,9 +45,12 @@ declared instead of a hardcoded `"Blocked-on"`.
   same shape this bug proposes for the status field name.
 - `ADR-60` — decided the adjacent, narrower question (gate the read on declaration) without deciding
   this one (make the field name itself declared).
+- `RFC-42`/`ADR-61` — the general mechanism this bug's fix is implemented as, superseding this
+  record's narrower `status_field`-only framing.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed, not fixed. **Why:** found by a full-release code review; the fix needs a config-schema decision (a new declared key, its default, and migration for the three call sites) that shouldn't be picked under review pressure. | **substantive** |
+> | 2026-09-23 | Fixed via `RFC-42`/`ADR-61`. **Why:** a follow-up review found the same shape recurring in four more rules, so the design was broadened to a general `relation_fields` mechanism covering all of them rather than a `Status`-only patch. | **substantive** |

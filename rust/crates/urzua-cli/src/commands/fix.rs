@@ -55,7 +55,7 @@ pub fn run(
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let (population, repairs) = urzua_core::fix::detect_repairs(&records);
+    let (population, repairs) = urzua_core::fix::detect_repairs(&records, &config);
 
     if !apply {
         return emit(&build_fix_report(
