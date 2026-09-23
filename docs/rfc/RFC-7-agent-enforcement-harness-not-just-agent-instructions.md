@@ -168,17 +168,6 @@ absent required document silently producing zero freshness errors, or a title fi
 matching pattern silently becoming an empty string that propagates downstream, are the shape of bug
 this guards against.
 
-### 7. Duplicated logic across near-identical tooling functions is itself an unenforced drift risk
-
-The same filter predicate (e.g. "what counts as a real document in this directory, vs. an
-index/template/README file") independently restated as an inline literal in several different
-functions is the same class of problem as everything else in this RFC — a fact stated once now has
-as many places to silently drift as it has copies, and nothing in the tooling itself would catch
-it. A lint rule flagging a repeated non-trivial boolean expression appearing more than once is a
-plausible mechanical backstop, but the more durable fix is upstream of tooling: when adding a
-second copy of logic that already exists once, default to extracting a shared function immediately,
-not after a third or later copy accumulates.
-
 ## Open questions
 
 - What's the actual UX when a pre-write hook fires mid-edit for an agent (not a human)? Blocking
@@ -246,3 +235,4 @@ not after a third or later copy accumulates.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | §3 broadened from two integration points to three, adding drafting-assistance skills explicitly in scope alongside enforcement hooks, and named Codex alongside Claude Code/Cursor as harnesses this RFC targets, not just the two already discussed. **Why:** the user clarified this RFC's scope already covers skills, hooks, and every major harness — not only editor/CI hooks for Claude Code and Cursor — and asked for that to be stated explicitly rather than left implicit. | **substantive** |
+> | 2026-09-23 | Removed §7 ("Duplicated logic across near-identical tooling functions is itself an unenforced drift risk"), moved to `SPEC-22`. **Why:** the user asked directly whether this recurring pattern needed its own RFC or ADR; it doesn't — it's a coding convention with no alternatives being weighed between, unrelated to this RFC's actual subject (a pre-write enforcement harness for decision-record fields). `SPEC-22` already exists as the right home and now states the tightened rule, with this session's fresh evidence. Not a removal of substance, a relocation -- this RFC's own remaining proposals (§§1-6, the open questions) are untouched and still `Draft`. | **substantive** |
