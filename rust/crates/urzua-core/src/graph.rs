@@ -7,8 +7,8 @@
 use crate::config::{Config, RelationRole};
 use crate::record::Record;
 use crate::rules::{
-    build_normalized_index, extract_references, parse_realized_by, record_id, relation_field_name,
-    RelationKind, NARRATIVE, POINTER,
+    build_index_reporting_collisions, extract_references, parse_realized_by, record_id,
+    relation_field_name, IdentifierCollision, RelationKind, NARRATIVE, POINTER,
 };
 use crate::values::RecordId;
 use std::collections::HashMap;
@@ -76,16 +76,18 @@ pub struct GraphEdge {
 /// every record with a resolvable identity. Config-driven since
 /// MILE-0090/ADR-0044 -- no hardcoded field list, so a type's own `Parent`
 /// or any other declared relationship field appears here for free.
-/// Normalized via `build_normalized_index`, closing BUG-0011 (this
-/// function's own index used to skip normalization, unlike
-/// `pointer_resolution`'s).
-pub fn graph(
-    records: &[Record],
+/// Normalized via `build_index_reporting_collisions`, closing `BUG-0011`
+/// (this function's own index used to skip normalization, unlike
+/// `pointer_resolution`'s) and matching `check`/`audit` (a plain
+/// `build_normalized_index` silently picks one of two colliding records with
+/// no way for a caller to know an edge might point at the arbitrary winner).
+pub fn graph<'a>(
+    records: &'a [Record],
     config: &Config,
     pointer_fields_by_type: &HashMap<String, Vec<String>>,
     narrative_fields_by_type: &HashMap<String, Vec<String>>,
-) -> Vec<GraphEdge> {
-    let index = build_normalized_index(records);
+) -> (Vec<GraphEdge>, Vec<IdentifierCollision<'a>>) {
+    let (index, collisions) = build_index_reporting_collisions(records);
 
     let mut edges = Vec::new();
     for record in records {
@@ -134,7 +136,7 @@ pub fn graph(
             }
         }
     }
-    edges
+    (edges, collisions)
 }
 
 #[cfg(test)]
@@ -245,7 +247,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let edges = graph(&[old, new], &config, &HashMap::new(), &HashMap::new());
+        let (edges, _collisions) = graph(&[old, new], &config, &HashMap::new(), &HashMap::new());
         assert_eq!(edges.len(), 1, "{edges:?}");
         assert_eq!(edges[0].relation, "Replaces");
         assert_eq!(edges[0].kind, RelationKind::Pointer);
@@ -256,7 +258,7 @@ mod tests {
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-1\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[target, source],
             &no_relation_field_overrides(),
             &pointer_fields,
@@ -272,7 +274,7 @@ mod tests {
     fn graph_marks_a_non_resolving_reference_as_dangling_observed_failing() {
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-9999\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[source],
             &no_relation_field_overrides(),
             &pointer_fields,
@@ -291,7 +293,7 @@ mod tests {
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-0001\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[target, source],
             &no_relation_field_overrides(),
             &pointer_fields,
@@ -313,7 +315,7 @@ mod tests {
         let target = record("docs/specs/SPEC-1-x.md", "spec", "> Status: Accepted\n");
         let source = record("docs/specs/SPEC-2-y.md", "spec", "> Parent: SPEC-1\n");
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[target, source],
             &no_relation_field_overrides(),
             &pointer_fields,
@@ -333,7 +335,7 @@ mod tests {
             "> Blocked-on: BUG-1\n",
         );
         let narrative_fields = field_map(&[("milestone", &["Blocked-on"])]);
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[bug, milestone],
             &no_relation_field_overrides(),
             &HashMap::new(),
@@ -351,7 +353,7 @@ mod tests {
             "adr",
             "> Supersedes / Superseded-by: ADR-1\n",
         );
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[old, new],
             &no_relation_field_overrides(),
             &HashMap::new(),
@@ -375,7 +377,7 @@ mod tests {
             "> Supersedes / Superseded-by: ADR-1\n",
         );
         let pointer_fields = field_map(&[("adr", &["Supersedes / Superseded-by"])]);
-        let edges = graph(
+        let (edges, _collisions) = graph(
             &[old, new],
             &no_relation_field_overrides(),
             &pointer_fields,

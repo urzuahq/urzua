@@ -532,6 +532,37 @@ fn graph_could_not_run_emits_json() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// A found-in-review gap: `graph` used to build its index with the lossy
+/// `build_normalized_index` and never disclosed a collision at all, unlike
+/// `check`/`audit`. An edge naming a colliding identifier could silently
+/// point at the arbitrary winner with no way to know.
+#[test]
+fn graph_discloses_an_identity_collision_as_a_notice_observed_failing() {
+    let dir = fixture_repo("graph-collision");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
+    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["graph"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    let notices = parsed["notices"].as_array().unwrap();
+    assert!(
+        notices.iter().any(|n| n["subject"] == "identity.collision"
+            && n["message"].as_str().unwrap().contains("DOC-1")),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `doctor`'s missing-config path builds its own richer `DoctorReport`
 /// (with the `checks` array intact) rather than the shared `CouldNotRun` --
 /// still real, parseable JSON, with the 2/1/0 exit-code split preserved.
