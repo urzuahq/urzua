@@ -474,10 +474,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // rule may report on a file git does not track -- a claim file is read
     // straight off disk -- whose finding then belonged to no scope at all and
     // was dropped, so `check .` passed a corpus `check` blocked (BUG-67).
-    // A finding about the config survives every scope, being outside all of them.
+    // A finding about the config survives every scope, being outside all of
+    // them, and so does one from a rule declared in
+    // `RULES_REPORTING_OUTSIDE_THE_CORPUS`: `claim.status-agreement`'s claim
+    // file lives under `claim_paths`, which no record-type `dir` scope covers,
+    // and a narrower-than-unscoped `check <path>` silently dropping a real
+    // finding is `BUG-86`'s own recurrence, not a new defect (`BUG-121`).
     if !requested_scopes.is_empty() {
         findings.retain(|f| {
             f.file == config_path.as_path()
+                || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
                 || requested_scopes.iter().any(|s| f.file.starts_with(s))
         });
     }

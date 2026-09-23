@@ -912,6 +912,53 @@ fn a_claim_path_prefix_is_read_to_any_depth() {
     );
 }
 
+/// `BUG-121`: `BUG-67`'s path-prefix scope filter is correct for a rule
+/// reporting on a record, but `claim.status-agreement`'s findings name a
+/// claim file under `claim_paths`, which no record-type `dir` scope covers
+/// -- so a scoped invocation (`check docs/adr`, not unscoped `check`)
+/// silently dropped a real false-claim finding, the same shape `BUG-86`
+/// named for this repository's own `make records` before that fix changed
+/// the *caller* to stop scoping rather than fixing the filter itself.
+#[test]
+fn a_scoped_invocation_still_reports_a_claim_finding_observed_failing() {
+    let dir = fixture_repo("claim-outside-scope");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("changes")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("changes/0001-x.md"),
+        "---\ndefault: patch\n---\n\nCloses ADR-1.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check", "docs/adr"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("claim.status-agreement"),
+        "a scoped invocation must still report the claim finding: {stdout}"
+    );
+    assert!(
+        stdout.contains("ADR-1"),
+        "the finding must still name the falsely-claimed record: {stdout}"
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(parsed["blocking"], true, "{parsed}");
+}
+
 #[test]
 fn a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped() {
     let dir = fixture_repo("unowned");

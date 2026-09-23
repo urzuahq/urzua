@@ -92,6 +92,16 @@ pub const ALL_RULES: &[&str] = &[
 /// gives them nothing to examine. Single source of this fact: `init`'s
 /// adopt-mode proposal (`BUG-61`) is the only consumer today, but the fact
 /// belongs to the rules themselves, not to one command's module.
+/// Rules whose findings name a file outside the corpus a `check <path>`
+/// invocation scopes against -- `claim.status-agreement` reads a claim file
+/// under `claim_paths`, which a record-type `dir` never covers. `BUG-67`'s
+/// path-prefix scoping is correct for every rule reporting on a record; a
+/// rule like this one needs the same unconditional exemption `check.rs`
+/// already gives a finding about the config file itself, or `BUG-86`'s
+/// "scoped invocation silently drops a real finding" recurs for any narrower
+/// scope than the one that repository's own Makefile was changed to use.
+pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[RULE_CLAIM_STATUS_AGREEMENT];
+
 pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
     RULE_POINTER_RESOLUTION,
     RULE_POINTER_TARGET_STATUS,
