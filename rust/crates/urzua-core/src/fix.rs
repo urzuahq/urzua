@@ -142,8 +142,8 @@ mod tests {
     fn no_relation_field_overrides() -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
-            rules: std::collections::HashMap::new(),
-            record_types: std::collections::HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
+            record_types: std::collections::BTreeMap::new(),
         }
     }
 
@@ -182,7 +182,7 @@ mod tests {
         );
         let config = Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
-            rules: std::collections::HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),
                 crate::config::RecordTypeConfig {

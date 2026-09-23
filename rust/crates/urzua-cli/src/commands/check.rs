@@ -25,6 +25,19 @@ fn path_is_inside_repo(repo_canonical: &std::path::Path, resolved: &std::path::P
     resolved.starts_with(repo_canonical)
 }
 
+/// `claim.status-agreement`'s own setting, only when the rule is actually
+/// enabled -- the one place that decides "on", shared by the pre-flight
+/// `claim_paths` validation and the read step, so the two cannot disagree
+/// about whether the rule is running.
+fn claim_status_agreement_setting(
+    config: &urzua_core::config::Config,
+) -> Option<&urzua_core::config::RuleSetting> {
+    config
+        .rules
+        .get(rules::RULE_CLAIM_STATUS_AGREEMENT)
+        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+}
+
 /// Canonicalizes `candidate` and confirms it stays inside `repo_canonical` --
 /// the one check `claim_paths`' directory and file branches both need, so a
 /// future change to the symlink/containment policy has one place to land
@@ -243,79 +256,74 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // visible and never moves the exit code (ADR-46), so absence is reported
     // and a path that is actively wrong still aborts.
     let mut claim_path_notices: Vec<Notice> = Vec::new();
-    if let Some(setting) = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT) {
-        if setting.level != urzua_core::config::RuleLevel::Off {
-            // Both sides canonicalised: the repo root may itself reach through
-            // a link (macOS `/tmp`), and comparing a resolved path against an
-            // unresolved root reports every entry as outside. Computed once,
-            // outside the loop: it does not depend on which prefix is being
-            // checked.
-            let root = repo_root
-                .canonicalize()
-                .unwrap_or_else(|_| repo_root.clone());
-            for prefix in setting.claim_paths.iter().flatten() {
-                // A root symlinked to an ancestor escaped the declared prefix
-                // entirely (BUG-69). Rejecting every symlink also rejected a
-                // link to a legitimate directory, with a message saying it was
-                // not readable when it was (BUG-80) -- so the target is
-                // resolved and required to stay inside the repository instead.
-                let declared = repo_root.join(prefix);
-                let resolved = declared.canonicalize();
-                match &resolved {
-                    // Absent is the state this guard was written to tolerate and
-                    // did not: git tracks no empty directory, so `.changeset`
-                    // ceases to exist the moment a release consumes the last
-                    // fragment, and aborting took `check` down with it. The rule
-                    // has no input, which is reported rather than fatal.
-                    //
-                    // Only `NotFound`: an ancestor with its execute bit removed
-                    // returns `PermissionDenied` here, and `Path::exists()`
-                    // reports it as `false` too (it swallows every error, not
-                    // only absence) -- collapsing that into the same Notice
-                    // would report `check` clean over claim files it never had
-                    // permission to read, reintroducing `BUG-56` under a
-                    // permissions error instead of a typo.
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                        claim_path_notices.push(Notice {
-                            severity: NoticeSeverity::Warning,
-                            subject: rules::RULE_CLAIM_STATUS_AGREEMENT.to_string(),
-                            message: format!(
-                                "claim.status-agreement: claim_paths entry '{prefix}' does not exist -- the rule has no input"
-                            ),
-                        })
-                    }
-                    // Any other I/O failure -- permission denied is the one
-                    // observed in practice -- is not absence and must not read
-                    // as it.
-                    Err(e) => {
-                        return emit(&CouldNotRun::from(format!(
-                            "claim.status-agreement: claim_paths entry '{prefix}' could not be read: {e}"
-                        )))
-                    }
-                    // Actively wrong, rather than merely empty: a file where a
-                    // directory was declared, or a link out of the repository
-                    // (BUG-69). Neither is a state waiting to be filled in.
-                    Ok(r) if !r.is_dir() => {
-                        return emit(&CouldNotRun::from(format!(
-                            "claim.status-agreement: claim_paths entry '{prefix}' is not a directory"
-                        )))
-                    }
-                    Ok(r) if !path_is_inside_repo(&root, r) => {
-                        return emit(&CouldNotRun::from(format!(
-                            "claim.status-agreement: claim_paths entry '{prefix}' resolves outside the repository"
-                        )))
-                    }
-                    Ok(_) => {}
+    if let Some(setting) = claim_status_agreement_setting(&config) {
+        // Both sides canonicalised: the repo root may itself reach through
+        // a link (macOS `/tmp`), and comparing a resolved path against an
+        // unresolved root reports every entry as outside. Computed once,
+        // outside the loop: it does not depend on which prefix is being
+        // checked.
+        let root = repo_root
+            .canonicalize()
+            .unwrap_or_else(|_| repo_root.clone());
+        for prefix in setting.claim_paths.iter().flatten() {
+            // A root symlinked to an ancestor escaped the declared prefix
+            // entirely (BUG-69). Rejecting every symlink also rejected a
+            // link to a legitimate directory, with a message saying it was
+            // not readable when it was (BUG-80) -- so the target is
+            // resolved and required to stay inside the repository instead.
+            let declared = repo_root.join(prefix);
+            let resolved = declared.canonicalize();
+            match &resolved {
+                // Absent is the state this guard was written to tolerate and
+                // did not: git tracks no empty directory, so `.changeset`
+                // ceases to exist the moment a release consumes the last
+                // fragment, and aborting took `check` down with it. The rule
+                // has no input, which is reported rather than fatal.
+                //
+                // Only `NotFound`: an ancestor with its execute bit removed
+                // returns `PermissionDenied` here, and `Path::exists()`
+                // reports it as `false` too (it swallows every error, not
+                // only absence) -- collapsing that into the same Notice
+                // would report `check` clean over claim files it never had
+                // permission to read, reintroducing `BUG-56` under a
+                // permissions error instead of a typo.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    claim_path_notices.push(Notice {
+                        severity: NoticeSeverity::Warning,
+                        subject: rules::RULE_CLAIM_STATUS_AGREEMENT.to_string(),
+                        message: format!(
+                            "claim.status-agreement: claim_paths entry '{prefix}' does not exist -- the rule has no input"
+                        ),
+                    })
                 }
+                // Any other I/O failure -- permission denied is the one
+                // observed in practice -- is not absence and must not read
+                // as it.
+                Err(e) => {
+                    return emit(&CouldNotRun::from(format!(
+                        "claim.status-agreement: claim_paths entry '{prefix}' could not be read: {e}"
+                    )))
+                }
+                // Actively wrong, rather than merely empty: a file where a
+                // directory was declared, or a link out of the repository
+                // (BUG-69). Neither is a state waiting to be filled in.
+                Ok(r) if !r.is_dir() => {
+                    return emit(&CouldNotRun::from(format!(
+                        "claim.status-agreement: claim_paths entry '{prefix}' is not a directory"
+                    )))
+                }
+                Ok(r) if !path_is_inside_repo(&root, r) => {
+                    return emit(&CouldNotRun::from(format!(
+                        "claim.status-agreement: claim_paths entry '{prefix}' resolves outside the repository"
+                    )))
+                }
+                Ok(_) => {}
             }
         }
     }
 
     let claims = {
-        let paths = config
-            .rules
-            .get(rules::RULE_CLAIM_STATUS_AGREEMENT)
-            .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+        let paths = claim_status_agreement_setting(&config)
             .and_then(|s| s.claim_paths.clone())
             .unwrap_or_default();
         match read_claim_files(&repo_root, &paths) {
