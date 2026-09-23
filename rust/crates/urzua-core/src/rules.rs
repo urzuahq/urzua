@@ -1789,23 +1789,20 @@ fn strip_possessive(token: &str) -> &str {
 /// the last is a non-empty, uppercase prefix component, and the last segment
 /// is the number. `split_once('-')` here would take only the first hyphen,
 /// which rejects a hyphenated prefix outright (`BUG-111`).
+///
+/// Shares its segment grammar with [`crate::new_record::parse_record_filename`]
+/// (`BUG-133`): two independent copies of "is this a valid record identifier"
+/// is how they drifted apart once already (`BUG-114`).
 fn is_record_reference(token: &str) -> bool {
+    use crate::new_record::{is_digit_segment, is_prefix_segment};
+
     let segments: Vec<&str> = token.split('-').collect();
     let Some((num, prefix_segments)) = segments.split_last() else {
         return false;
     };
-    // Digits allowed in a prefix segment (`BUG-114`: a type may declare a
-    // prefix like `V2`), same grammar `parse_record_filename` already uses --
-    // the two "is this a valid record identifier" recognizers must agree, or
-    // a mention of a digit-bearing-prefix record in prose never resolves.
-    !num.is_empty()
-        && num.chars().all(|c| c.is_ascii_digit())
+    is_digit_segment(num)
         && !prefix_segments.is_empty()
-        && prefix_segments.iter().all(|s| {
-            !s.is_empty()
-                && s.chars()
-                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-        })
+        && prefix_segments.iter().all(|s| is_prefix_segment(s))
 }
 
 pub(crate) fn scan_references(line: &str) -> Vec<String> {
@@ -5240,6 +5237,27 @@ mod tests {
             extract_references("V2-3, RFC-9"),
             vec!["V2-3".to_string(), "RFC-9".to_string()]
         );
+    }
+
+    /// `BUG-133`: `is_record_reference` and `parse_record_filename`
+    /// independently re-implemented the same segment grammar, and that
+    /// duplication is exactly how `BUG-111`/`BUG-114` drifted apart. Now that
+    /// both call `new_record::{is_digit_segment, is_prefix_segment}`, a
+    /// prefix+number token this recognizes as a reference must also parse as
+    /// a filename carrying the same prefix, by construction -- this pins that
+    /// down rather than re-deriving it by hand for each case.
+    #[test]
+    fn a_recognized_reference_parses_as_the_same_filename_prefix() {
+        for token in ["RFC-9", "DOC-ADR-2", "V2-3"] {
+            assert!(is_record_reference(token), "{token}");
+            let filename = format!("{token}-slug.md");
+            let (prefix, num) = crate::new_record::parse_record_filename(&filename)
+                .unwrap_or_else(|| panic!("{token}-slug.md must parse"));
+            let expected_prefix = token.rsplit_once('-').unwrap().0;
+            assert_eq!(prefix, Some(expected_prefix), "{token}");
+            let expected_num: u32 = token.rsplit_once('-').unwrap().1.parse().unwrap();
+            assert_eq!(num, expected_num, "{token}");
+        }
     }
 
     #[test]
