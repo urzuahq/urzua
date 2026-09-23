@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M3630KTMZ3JT51978GPKVW5X
-Status: Open
+Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "not yet written -- a benchmark or allocation-count assertion over a synthetic large corpus, since this repo's own corpus is too small to observe the cost"
+Regression-test: "none -- performance-only, no behavior change; full suite and real-corpus finding count unchanged. No benchmark added; the fix removes a bulk final sort in favor of incremental BTreeSet inserts, which needs no corpus larger than this repo's own to be correct by construction."
 ---
 # 122 — census_records clones and sorts a PathBuf per examined slot instead of per record
 
@@ -32,6 +32,14 @@ large enough to measure the difference, per this project's own precedent (`BUG-1
 runs once per rule per invocation, not a hot-path cost worth trading away"). Filed to track rather
 than fixed now, since fixing it today would be optimizing against a benchmark that doesn't exist.
 
+## Fix
+
+`examined_records` is now a `BTreeSet<PathBuf>`, inserted into as candidates are examined rather than
+pushed to a `Vec` and sorted/deduped once at the end. The final `sort`+`dedup` pass over up to `N*F`
+elements is gone; the set's own tree structure keeps it sorted and deduped incrementally, and
+`into_iter().collect()` at the end is the only remaining pass, over the deduped set (bounded by the
+record count) rather than the full candidate list. No behavior change.
+
 ## References
 
 - `BUG-40` -- established that a `Field`-unit population is routinely far larger than the record
@@ -43,3 +51,4 @@ than fixed now, since fixing it today would be optimizing against a benchmark th
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed, not fixed. **Why:** found by a full-release code review; real but measured as negligible on this repository's own corpus, so left open to track rather than fixed under review pressure with no benchmark to verify against. | **substantive** |
+> | 2026-09-23 | Fixed. The user asked for this class of filed-but-deferred defect to be closed before 0.4.0 regardless of benchmark pressure. `examined_records` is now a `BTreeSet`, dedupe done incrementally rather than in a final sort pass. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
