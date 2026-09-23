@@ -4,6 +4,7 @@
 //! classification `field.quality` already applies to declared required
 //! fields, just against a candidate field that isn't declared yet.
 
+use crate::config::Config;
 use crate::field_state::classify;
 use crate::record::Record;
 use crate::report::{census, Notice, NoticeSeverity, Outcome, Population, PopulationUnit};
@@ -31,11 +32,24 @@ pub struct SchemaReportEntry {
 pub fn schema_report(
     records: &[Record],
     field: &str,
+    config: &Config,
 ) -> (Population, Vec<SchemaReportEntry>, Vec<Notice>) {
     let mut report = Vec::new();
     let mut notices = Vec::new();
 
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        // `ADR-50`: a `header_shape: none` type has nowhere for a header to
+        // be, so `region` is always absent by construction -- not a parse
+        // failure, and `config.header-none-has-no-required-fields` already
+        // forbids such a type from ever declaring the candidate field, so no
+        // amount of editing this record could make it apply.
+        if config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.has_no_header())
+        {
+            return Outcome::OutOfScope;
+        }
         if record.header.is_unreadable() {
             notices.push(Notice {
                 severity: NoticeSeverity::Warning,
@@ -70,10 +84,38 @@ mod tests {
         Record::parse(PathBuf::from(path), record_type.to_string(), content)
     }
 
+    fn config_with_header_shape(
+        record_type: &str,
+        header_shape: crate::header::HeaderShape,
+    ) -> crate::config::Config {
+        crate::config::Config {
+            schema_version: 2,
+            rules: std::collections::BTreeMap::new(),
+            record_types: [(
+                record_type.to_string(),
+                crate::config::RecordTypeConfig {
+                    dir: format!("docs/{record_type}"),
+                    required_fields: Vec::new(),
+                    header_shape,
+                    prefix: None,
+                    header_layout: None,
+                    known_fields: None,
+                    pointer_fields: None,
+                    narrative_fields: None,
+                    spec: None,
+                    relation_fields: None,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        }
+    }
+
     #[test]
     fn a_record_missing_the_candidate_field_is_reported_observed_failing() {
         let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
-        let (population, report, notices) = schema_report(&[r], "Reviewers");
+        let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
+        let (population, report, notices) = schema_report(&[r], "Reviewers", &config);
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].state, FieldState::Blank);
@@ -87,7 +129,8 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Reviewers: alice\n",
         );
-        let (population, report, _notices) = schema_report(&[r], "Reviewers");
+        let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
+        let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(report.is_empty());
     }
@@ -107,7 +150,8 @@ mod tests {
             crate::header::HeaderShape::YamlFrontmatter,
             "ADR".to_string(),
         );
-        let (population, report, _notices) = schema_report(&[r], "Reviewers");
+        let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
+        let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
         assert_eq!(
             (population.eligible(), population.examined()),
             (1, 0),
@@ -119,6 +163,34 @@ mod tests {
         );
     }
 
+    /// `ADR-50`: a `header_shape: none` type has nowhere for a header to be,
+    /// so `region` is always `None` by construction and `is_unreadable()` is
+    /// always true -- not a parse failure to report. `header_required_fields`
+    /// already gates on `has_no_header()` before checking `is_unreadable()`;
+    /// this function did not.
+    #[test]
+    fn a_header_none_type_is_not_reported_as_unreadable_observed_failing() {
+        let r = Record::parse_with_shape_and_prefix(
+            PathBuf::from("code/src.rs"),
+            "code".to_string(),
+            "fn main() {}\n",
+            crate::header::HeaderShape::None,
+            "CODE".to_string(),
+        );
+        let config = config_with_header_shape("code", crate::header::HeaderShape::None);
+        let (population, report, notices) = schema_report(&[r], "Reviewers", &config);
+        assert_eq!(
+            (population.eligible(), population.examined(), population.out_of_scope()),
+            (1, 0, 1),
+            "ADR-50 forbids this type from ever declaring the field -- not examined, not unreadable: {population:?}"
+        );
+        assert!(report.is_empty(), "{report:?}");
+        assert!(
+            notices.is_empty(),
+            "not a defect to disclose -- the config declared this type has no header: {notices:?}"
+        );
+    }
+
     #[test]
     fn placeholder_text_is_reported_distinctly_from_blank() {
         let r = record(
@@ -126,7 +198,8 @@ mod tests {
             "adr",
             "> Status: Accepted\n> Reviewers: TBD\n",
         );
-        let (population, report, _notices) = schema_report(&[r], "Reviewers");
+        let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
+        let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].state, FieldState::Placeholder);

@@ -1643,7 +1643,7 @@ pub fn header_pointer_field_clean(
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
-            if value.trim() == "—" {
+            if crate::values::is_no_value_sentinel(value) {
                 return Outcome::Examined;
             }
 
@@ -3070,7 +3070,7 @@ pub fn supersession_reciprocity(
             // `—` is this corpus's written "nothing supersedes this", so the slot
             // was answered. Skipping before counting left the reciprocating half of
             // a correct pair uncounted.
-            if value.trim() == "—" {
+            if crate::values::is_no_value_sentinel(value) {
                 return Outcome::Examined;
             }
 
@@ -3088,6 +3088,15 @@ pub fn supersession_reciprocity(
                     });
                     continue;
                 };
+                // The target's header not parsing is its own defect, already
+                // disclosed by that record's own `Unreadable` population entry
+                // (and `header.required-fields`) -- `.get()` returns `None` for
+                // an unreadable header exactly as it would for a genuinely
+                // absent field, so reading it unguarded would blame the citer
+                // for a failure that is entirely the target's.
+                if target.header.is_unreadable() {
+                    continue;
+                }
                 let target_field = relation_field_name(
                     config,
                     &target.record_type,
@@ -5279,13 +5288,13 @@ mod tests {
         );
     }
 
-    /// `BUG-133`: `is_record_reference` and `parse_record_filename`
-    /// independently re-implemented the same segment grammar, and that
-    /// duplication is exactly how `BUG-111`/`BUG-114` drifted apart. Now that
-    /// both call `new_record::{is_digit_segment, is_prefix_segment}`, a
-    /// prefix+number token this recognizes as a reference must also parse as
-    /// a filename carrying the same prefix, by construction -- this pins that
-    /// down rather than re-deriving it by hand for each case.
+    /// `is_record_reference` and `parse_record_filename` share their segment
+    /// grammar (`new_record::{is_digit_segment, is_prefix_segment}`,
+    /// `BUG-133`) rather than each re-implementing it, the exact duplication
+    /// `BUG-111`/`BUG-114` drifted apart on. A prefix+number token this
+    /// recognizes as a reference must also parse as a filename carrying the
+    /// same prefix, by construction -- this pins that down rather than
+    /// re-deriving it by hand for each case.
     #[test]
     fn a_recognized_reference_parses_as_the_same_filename_prefix() {
         for token in ["RFC-9", "DOC-ADR-2", "V2-3"] {
@@ -5805,6 +5814,36 @@ mod tests {
         assert_eq!(population.examined(), 0, "{population:?}");
         assert_eq!(population.unreadable(), 1, "{population:?}");
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// The citing record's own header being unreadable is already covered
+    /// (`supersession_reciprocity_discloses_unreadable_on_its_own_observed_failing`).
+    /// This is the *target*'s header being unreadable: `target.header.get()`
+    /// returns `None` for that just as readily as for a genuinely absent
+    /// field, so an un-gated `.unwrap_or("")` blamed the citing record for
+    /// the target's own parse failure instead of skipping a judgment neither
+    /// side's data supports.
+    #[test]
+    fn a_target_with_an_unreadable_header_is_not_blamed_for_failing_to_reciprocate_observed_failing(
+    ) {
+        let citer = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: ADR-0002\n",
+        );
+        let target = record("docs/adr/ADR-2-y.md", "adr", "this is not a header at all");
+
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let records = [citer, target];
+        let index = build_normalized_index(&records);
+        let (_exec, findings) = supersession_reciprocity(&records, &config, &index);
+        assert!(
+            findings.is_empty(),
+            "the target's own parse failure is not the citer's fault: {findings:?}"
+        );
     }
 
     #[test]

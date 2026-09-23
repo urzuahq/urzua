@@ -130,6 +130,13 @@ fn normalize(id: &str) -> String {
     }
 }
 
+/// This corpus's written "nothing here" for a relation/pointer field --
+/// distinct from the field being unwritten at all. A field holding this is
+/// `Examined`, not `Absent`: the slot was answered, just answered "none".
+pub fn is_no_value_sentinel(value: &str) -> bool {
+    value.trim() == "—"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

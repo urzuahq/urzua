@@ -407,14 +407,13 @@ pub enum ConfigError {
 }
 
 /// One option's name, the one rule it belongs to, and what happens if a rule
-/// that needs it is declared without it. The single source for three facts
-/// that used to be three independently hand-maintained lists with nothing
-/// enforcing they agreed: which rule an option is "misplaced" on if declared
-/// elsewhere, whether a rule "requires options" to load at all
-/// (`rule_requires_options`, below), and what a missing required option's
-/// consequence is (`parse`'s `OptionRequired` check). Adding a fifth
-/// option-taking rule is one entry here instead of three edits that could
-/// drift from each other.
+/// that needs it is declared without it. The single source for three facts a
+/// hand-maintained list per fact would let drift apart: which rule an option
+/// is "misplaced" on if declared elsewhere, whether a rule "requires options"
+/// to load at all (`rule_requires_options`, below), and what a missing
+/// required option's consequence is (`parse`'s `OptionRequired` check).
+/// Adding a fifth option-taking rule is one entry here instead of three edits
+/// that could drift from each other.
 struct RuleOption {
     name: &'static str,
     owner: &'static str,
