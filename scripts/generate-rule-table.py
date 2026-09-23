@@ -54,11 +54,13 @@ def main() -> int:
 
     root = repo_root()
     binary = urzua_binary(root)
-    result = subprocess.run([str(binary), "rules"], capture_output=True, text=True, check=True)
+    result = subprocess.run(
+        [str(binary), "rules"], capture_output=True, text=True, encoding="utf-8", check=True
+    )
     rules = json.loads(result.stdout)["rules"]
 
     spec_path = root / SPEC_PATH
-    content = spec_path.read_text()
+    content = spec_path.read_text(encoding="utf-8")
     if START_MARKER not in content or END_MARKER not in content:
         raise SystemExit(f"{SPEC_PATH} is missing {START_MARKER}/{END_MARKER}")
 
@@ -72,7 +74,7 @@ def main() -> int:
             return 1
         return 0
 
-    spec_path.write_text(new_content)
+    spec_path.write_text(new_content, encoding="utf-8")
     return 0
 
 

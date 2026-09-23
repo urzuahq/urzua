@@ -119,7 +119,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_TYPE_DIR_MATCHES_NOTHING,
-        description: "A type's declared `dir` matched no discovered path at all (`BUG-56`'s hazard for `dir`, no load-time guard).",
+        description: "A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged.",
     },
     RuleMeta {
         id: RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
@@ -147,7 +147,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_POINTER_RESOLUTION,
-        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one; the target's status is surfaced, never judged (RFC-12 stays the policy owner of whether a `Draft` target is acceptable). No hardcoded field list — an undeclared type is skipped, not defaulted.",
+        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted.",
     },
     RuleMeta {
         id: RULE_POINTER_TARGET_STATUS,
@@ -159,7 +159,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_NARRATIVE_FIELD_STALE,
-        description: "A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine, distinct from `pointer.resolution`'s routine \"resolves; target Status = X\" surfacing (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44).",
+        description: "A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44). `terminal_statuses` is declared per repository.",
     },
     RuleMeta {
         id: RULE_FIELD_QUALITY,
@@ -175,7 +175,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_FILENAME_TITLE_CONSISTENCY,
-        description: "Filename \u{2194} H1 title \u{2194} display number \u{2194} stable ID agree (ADR-3).",
+        description: "The filename's display number and the H1's display number agree (ADR-3).",
     },
     RuleMeta {
         id: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
