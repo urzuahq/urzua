@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records ci release-guard release-invariants hooks-install \
+.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants hooks-install \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint rust-clean
 
 help: ## Show available commands
@@ -29,7 +29,7 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint rust-build test records release-guard release-invariants ## Run exactly what CI runs, locally
+ci: fmt-check lint rust-build test records rule-table-check release-guard release-invariants ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
 hooks-install: ## Install the pre-push hook (fmt + clippy, not the full suite)
@@ -64,6 +64,12 @@ rust-clean: ## Remove the Rust target directory
 
 records: rust-build ## Validate this repo's own governance records
 	@$(RUST_DIR)/target/release/urzua check
+
+rule-table: rust-build ## Regenerate SPEC-2's rule table from the shipped rule set
+	@python3 scripts/generate-rule-table.py
+
+rule-table-check: rust-build ## Fail if SPEC-2's committed rule table is stale
+	@python3 scripts/generate-rule-table.py --check
 
 release-guard: ## Exercise the release guard's planted-violation cases
 	@.github/scripts/release-guard.test.sh

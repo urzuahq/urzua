@@ -92,6 +92,141 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
 ];
 
+/// One rule's id and its adopter-facing description -- the single place this
+/// text lives; `SPEC-2`'s own rule table is generated from it.
+pub struct RuleMeta {
+    pub id: &'static str,
+    pub description: &'static str,
+}
+
+/// One entry per `ALL_RULES` member, same order.
+pub const RULE_METADATA: &[RuleMeta] = &[
+    RuleMeta {
+        id: RULE_HEADER_REQUIRED_FIELDS,
+        description: "Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here.",
+    },
+    RuleMeta {
+        id: RULE_HEADER_LAYOUT_CONSISTENCY,
+        description: "A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38).",
+    },
+    RuleMeta {
+        id: RULE_HEADER_FIELD_SET_CONSISTENCY,
+        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39).",
+    },
+    RuleMeta {
+        id: RULE_TYPE_NO_DECLARED_SPEC,
+        description: "Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared.",
+    },
+    RuleMeta {
+        id: RULE_TYPE_DIR_MATCHES_NOTHING,
+        description: "A type's declared `dir` matched no discovered path at all (`BUG-56`'s hazard for `dir`, no load-time guard).",
+    },
+    RuleMeta {
+        id: RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+        description: "A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise.",
+    },
+    RuleMeta {
+        id: RULE_IDENTITY_COLLISION,
+        description: "Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`).",
+    },
+    RuleMeta {
+        id: RULE_HEADER_DEPRECATED_SHAPE,
+        description: "Which configured types still declare a deprecated `header_shape` (`blockquote`/`bold-list`) instead of `yaml-frontmatter` (ADR-33). Parsing support for the deprecated shapes stays; this rule only surfaces which types haven't migrated.",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_POINTER_DECLARATION_MISSING,
+        description: "A type declaring either `pointer_fields` or `narrative_fields` must declare both explicitly, even as `[]` (MILE-90/ADR-44) — omitting one is not the same as declaring zero fields of that kind.",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
+        description: "Every field named in a type's `pointer_fields`/`narrative_fields` must also appear in that type's own `required_fields`/`known_fields` (MILE-90/ADR-44) — otherwise `header.field-set-consistency` would never have heard of it.",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
+        description: "A field must be exactly one kind: named in both `pointer_fields` and `narrative_fields` for the same type is a contradiction (MILE-90/ADR-44).",
+    },
+    RuleMeta {
+        id: RULE_POINTER_RESOLUTION,
+        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one; the target's status is surfaced, never judged (RFC-12 stays the policy owner of whether a `Draft` target is acceptable). No hardcoded field list — an undeclared type is skipped, not defaulted.",
+    },
+    RuleMeta {
+        id: RULE_POINTER_TARGET_STATUS,
+        description: "A reference resolves, but its target's `Status` is one the repository declared unacceptable (`not_in`). Split from `pointer.resolution` in `MILE-80`.",
+    },
+    RuleMeta {
+        id: RULE_HEADER_POINTER_FIELD_CLEAN,
+        description: "A type's `pointer_fields` entries are clean, comma-separated references only, format-enforced (MILE-90/ADR-44) — an empty entry between commas or freeform trailing prose is flagged. Never applies to `narrative_fields`, which tolerate prose.",
+    },
+    RuleMeta {
+        id: RULE_NARRATIVE_FIELD_STALE,
+        description: "A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine, distinct from `pointer.resolution`'s routine \"resolves; target Status = X\" surfacing (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44).",
+    },
+    RuleMeta {
+        id: RULE_FIELD_QUALITY,
+        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three.",
+    },
+    RuleMeta {
+        id: RULE_FIELD_PENDING,
+        description: "A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`.",
+    },
+    RuleMeta {
+        id: RULE_CLAIM_STATUS_AGREEMENT,
+        description: "A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared.",
+    },
+    RuleMeta {
+        id: RULE_FILENAME_TITLE_CONSISTENCY,
+        description: "Filename \u{2194} H1 title \u{2194} display number \u{2194} stable ID agree (ADR-3).",
+    },
+    RuleMeta {
+        id: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking.",
+    },
+    RuleMeta {
+        id: RULE_EMBODIMENT_CONSISTENCY,
+        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (`test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to `Drift detected` unconditionally (RFC-5 tier 1, ADR-18/ADR-32). Requires full git history — a shallow checkout makes this rule silently unable to detect anything.",
+    },
+    RuleMeta {
+        id: RULE_EMBODIMENT_LOCATOR_EXISTS,
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
+    },
+    RuleMeta {
+        id: RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+        description: "The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18).",
+    },
+    RuleMeta {
+        id: RULE_RELATION_SUPERSESSION_RECIPROCITY,
+        description: "If A supersedes B, B points back; status-aware (a claim only binds once the claiming record is itself terminal-accepted). Shared with `audit` (ADR-30) — `check` runs it too, not only `audit`.",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_SCOPE_MATCHES_NOTHING,
+        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`).",
+    },
+    RuleMeta {
+        id: RULE_FIELD_UNTRIMMED_VALUE,
+        description: "A field value carrying leading/trailing whitespace, reachable only through `yaml-frontmatter` — disclosed rather than silently trimmed.",
+    },
+    RuleMeta {
+        id: RULE_HEADER_FIELD_CASE_MISMATCH,
+        description: "A declared field written under a different case than its declaration (`RFC-40`/`ADR-58`) — the one place a case-only miss is distinguished from genuine non-adoption.",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+        description: "A type declaring `header_shape: none` has nowhere for a field to be, so a non-empty `required_fields`, `known_fields`, `pointer_fields`, `narrative_fields`, or `relation_fields` is a self-contradiction (`ADR-50`).",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
+        description: "Every field named in a type's `relation_fields` (`RFC-42`/`ADR-61`) must also appear in that type's own `required_fields`/`known_fields`, the same shape as `config.pointer-field-not-known`.",
+    },
+    RuleMeta {
+        id: RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+        description: "A type declaring no `known_fields` at all gets no field-set governance from `header.field-set-consistency` (`ADR-53`'s \"declared, not voted\" default) — opt-in, so a repository can require the choice be made explicit rather than left ambiguous by omission (`RFC-43`/`ADR-62`).",
+    },
+    RuleMeta {
+        id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
+        description: "A resolved pointer or narrative reference whose target type never declares `Status` at all — `ADR-60`'s gate would otherwise silently exclude it from every status-reading rule, with no disclosure of why (`RFC-45`/`ADR-63`).",
+    },
+];
+
 /// Rules that derive a record's identity from its filename's type prefix
 /// (`ADR-36` declined the bare `NNNN-slug` shape), so a corpus with no prefix
 /// gives them nothing to examine. Single source of this fact: `init`'s
@@ -3039,6 +3174,26 @@ mod tests {
     use super::*;
     use crate::record::Record;
     use std::path::PathBuf;
+
+    /// `RULE_METADATA` feeds a generator, not a rule -- nothing else would
+    /// catch it silently under- or over-reporting the rule set it's supposed
+    /// to describe completely.
+    #[test]
+    fn every_rule_in_all_rules_has_metadata_in_the_same_order() {
+        let all_rules_order: Vec<&str> = ALL_RULES.to_vec();
+        let metadata_order: Vec<&str> = RULE_METADATA.iter().map(|m| m.id).collect();
+        assert_eq!(
+            all_rules_order, metadata_order,
+            "RULE_METADATA must list every ALL_RULES entry, in the same order"
+        );
+        for meta in RULE_METADATA {
+            assert!(
+                !meta.description.trim().is_empty(),
+                "{} has an empty description",
+                meta.id
+            );
+        }
+    }
 
     fn record(path: &str, record_type: &str, content: &str) -> Record {
         Record::parse(PathBuf::from(path), record_type.to_string(), content)
