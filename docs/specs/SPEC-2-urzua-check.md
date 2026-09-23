@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -232,45 +232,58 @@ caller's choice and lives in `blocking`.
 
 ## Output contract
 
-Implements RFC-3. Human format on stderr; the machine channel is stdout and carries nothing else,
-so a consumer never has to find the JSON inside prose.
+Implements RFC-3, as amended by ADR-7 (real field names, not RFC-3's illustrative casing) and
+ADR-26/ADR-46 (stdout is the only stream; there is no stderr rendering at all). Stdout carries nothing
+but the JSON object below, so a consumer never has to find it inside prose.
 
 ```json
 {
-  "status": "ok | warn | error | not-run",
-  "filesExamined": 91,
-  "rulesExecuted": 14,
-  "scope": { "source": "tracked-sweep", "base": null },
+  "status": "ok",
+  "files_examined": 51,
+  "records_read_by_any_rule": 51,
+  "rules_executed": [
+    {
+      "rule": "header.required-fields",
+      "population": { "unit": "field", "eligible": 1248, "examined": 1248, "out_of_scope": 0, "unreadable": 0 },
+      "status": "ran"
+    },
+    {
+      "rule": "claim.status-agreement",
+      "status": "not-enabled"
+    }
+  ],
+  "scope": { "source": "tracked-sweep", "record_types": ["adr", "bug", "rfc"] },
   "blocking": false,
   "findings": [
     {
-      "rule": "header.duplicate-key",
-      "severity": "error",
-      "file": "docs/adr/ADR-42-a-record.md",
-      "line": 14,
-      "message": "...",
-      "suggestedAction": "..."
+      "rule": "pointer.target-status",
+      "severity": "warning",
+      "file": "docs/adr/ADR-48-x.md",
+      "line": null,
+      "message": "Derives-from: ADR-29 resolves, but its Status is Superseded"
     }
+  ],
+  "notices": [
+    { "severity": "warning", "subject": "identity.collision", "message": "..." }
   ]
 }
 ```
 
-`rulesExecuted` is the field that distinguishes this from every check in the source corpora.
-`filesExamined` alone answers "did it read anything"; it does not answer "did it *check* anything",
-and a rule set narrowed by a config error yields a confident zero over a swept corpus.
+(`rules_executed`/`findings` truncated above for length; a real run lists every declared rule and every
+finding.)
 
-`status` is `not-run` — never `ok` — when zero files were selected. Keyed on the file count, not on
-a missing `base`.
+`rules_executed` is the field that distinguishes this from every check in the source corpora --
+`files_examined` alone answers "did it read anything," not "did it *check* anything," and a rule set
+narrowed by a config error yields a confident zero over a swept corpus. Each entry's `status` is
+`"ran"` or `"not-enabled"` (`RuleStatus`); a `"ran"` entry carries `population` (`eligible`/`examined`,
+plus `out_of_scope`/`unreadable` -- `ADR-55`'s disclosure of what the rule was handed versus what it
+judged), a `"not-enabled"` entry carries none.
 
-**The block above is illustrative (RFC-3's original camelCase framing), not the shipped shape** --
-the real field names are `snake_case` (`files_examined`, `rules_executed`), `status` is the real
-`ReportStatus` enum (`ok | findings-present | not-run`, not the four values shown above), and there
-is no stderr rendering at all (ADR-26/46: stdout is the only stream, unconditionally). This drift
-predates this revision and is filed separately (see the new bug this revision's own change references
-in `docs/bugs/`) rather than fixed here. What IS new in this revision: the real, shipped shape also
-carries an optional `notices: [{severity, subject, message}]` array (ADR-46) -- non-fatal
-observations (`Info`/`Warning` only) that never affect `status`/exit code, omitted entirely when
-empty.
+`status` is the real `ReportStatus` enum: `"ok"`, `"findings-present"`, or `"not-run"` -- never `"ok"`
+when zero files were selected, keyed on the file count, not on a missing scope. `notices` (`ADR-46`)
+is non-fatal observations (`Info`/`Warning` only) that never affect `status` or the exit code, omitted
+entirely when empty -- the same is true of a `Finding`'s own `waived` field, omitted unless a waiver
+covers it.
 
 ## Exit codes
 
@@ -337,6 +350,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-23 | Bumped to `0.10` (`BUG-21`). §Output contract's JSON block rewritten to the real shipped shape: `snake_case` fields, the real 3-value `ReportStatus`, `rules_executed` as the real per-rule array (not a count) with its `population`/`status` shape, `records_read_by_any_rule`, `notices`, and a `Finding`'s real fields (no `suggestedAction`, which never existed). The 2026-09-11 entry below named this drift and filed it rather than fixing it; this revision is that fix. | **substantive** |
 > | 2026-09-21 | Criterion 2 no longer says "in both output formats", and re-keyed the zero-population rule in §Acceptance. **Why:** two claims that had gone untrue. There is one output format -- `ADR-23` and `ADR-26` removed the second -- so the criterion was unsatisfiable as written and no amount of correct implementation could have met it. And "a rule reporting a zero population is `not-run`" was written when a rule reported one number; now that a population carries `eligible` and `examined` separately, the two zeros mean opposite things, and treating `eligible: 0` as a fault makes enabling a rule before its scope exists fail the build (`BUG-84`). The criterion also now requires the unit, because a count without one held three different denominators (`BUG-40`). | **substantive** |
 > | 2026-08-20 | Split out of SPEC-1, which retains the cross-cutting rules. | **structural** |
 > | 2026-09-07 | Added the Embodiment consistency, drift, and locator-promotion rules (ADR-18/ADR-32) to the rule set — previously implemented but never listed here. Noted that the rest of this section's rule names predate and don't match the actual shipped rule ids, as a named gap rather than silently compounding it. | **substantive** |

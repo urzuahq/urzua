@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M286MP5PYPBAS2BZ4PXEJ00C
-Status: Open
+Status: Fixed
 Found-in: 'adding notices to SPEC-2''s example JSON block for ADR-46 -- the block was already wrong in three other, unrelated ways before this change touched it'
-Regression-test: 'not yet written -- no rule checks a spec''s documented example JSON against the real shipped shape'
+Regression-test: 'none -- a documentation correction, not a rule/behavior defect. No mechanical check verifies a spec''s example JSON against the real shipped shape (see Fix below for why that is not built here).'
 ---
 # 21 — SPEC-2 documents an illustrative shape that doesn't match what `check` ships
 
@@ -34,6 +34,19 @@ class of drift once (rule names in prose not matching shipped rule ids) and fixe
 without a general rule following from it -- the output-contract block was simply a second instance
 nobody had reason to look at until this change touched the same section for something else.
 
+## Fix
+
+Rewrote the `## Output contract` JSON block to the real shipped shape: `snake_case` fields, the real
+3-value `ReportStatus` (`ok`/`findings-present`/`not-run`), `rules_executed` as the actual per-rule
+array (`{rule, population?, status}`, not a bare count), `records_read_by_any_rule`, an accurate
+`Finding` shape (no `suggestedAction`, which never existed in `Finding` at all -- a fourth inaccuracy
+this record's own investigation hadn't named), and `notices`. Bumped `SPEC-2` to `0.10`.
+
+A mechanical check that a spec's documented JSON matches its source type's real shape (the second
+option this record's own text considered) is not built here -- it would need its own design for what
+"matches" means against an illustrative, necessarily-truncated example, and this fix closes the
+immediate defect (a wrong, stale illustration) without that larger investment.
+
 ## References
 
 - `docs/specs/SPEC-2-urzua-check.md` -- `## Output contract`.
@@ -46,3 +59,4 @@ nobody had reason to look at until this change touched the same section for some
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right fix is rewriting the block to the real shape, or a mechanical check that a spec's documented JSON matches its source type, is not yet decided. | **structural** |
+> | 2026-09-23 | Fixed by rewriting the block to the real shape (the first option), decided against building the mechanical check (the second) as its own, larger investment. Found a fourth inaccuracy along the way: `suggestedAction` never existed on `Finding` at all. `Status: Fixed`. | **substantive** |
