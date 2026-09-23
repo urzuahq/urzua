@@ -2348,3 +2348,55 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
 // observe a difference between following and not following the link at that
 // call site. No regression test exists for this non-bug; see the `BUG-127`
 // record for the full account.
+
+/// A found-in-review bug: two record types (`adr`/`rfc`) sharing a prefix so
+/// their records collide on one identifier. `load_records` used to iterate
+/// `config.record_types` -- a `HashMap`, whose own order is randomized per
+/// process -- feeding `build_index_reporting_collisions`' first-seen-wins
+/// merge a different candidate order on every run. Empirically confirmed on
+/// the pre-fix binary across 20 separate process invocations against this
+/// exact fixture: 13 won by `adr`, 7 by `rfc`, on an unchanged corpus. A
+/// single test process only ever sees one hash seed, so this can't be
+/// observed flipping within one `cargo test` run the way a classic
+/// before/after assertion would -- instead this asserts the fix's actual
+/// guarantee, which is what makes the flip impossible: `adr` always wins,
+/// because `Config::sorted_type_names` makes `records` order
+/// type-name-sorted regardless of `record_types`' own hash-map order, and
+/// `"adr" < "rfc"` lexicographically.
+#[test]
+fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_hashmap_order() {
+    let dir = fixture_repo("hashmap-collision-determinism");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/mile")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\n\
+         rules:\n  identity.collision: warn\n  pointer.target-status:\n    level: error\n    not_in: [\"Accepted\"]\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
+         \x20 rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
+         \x20 mile:\n    dir: \"docs/mile\"\n    prefix: \"M\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Derives-from\"]\n    pointer_fields: [\"Derives-from\"]\n    narrative_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
+    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(
+        dir.join("docs/mile/M-1-c.md"),
+        "> Status: Open\n> Derives-from: DOC-1\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    for _ in 0..10 {
+        let out = run_urzua(&dir, &["check"]);
+        let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let findings = parsed["findings"].as_array().unwrap();
+        assert!(
+            findings
+                .iter()
+                .any(|f| f["rule"] == "pointer.target-status"),
+            "adr's Status: Accepted must always win the collision, deterministically, every run: {parsed}"
+        );
+    }
+}

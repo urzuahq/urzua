@@ -65,7 +65,14 @@ pub(crate) fn load_records(
     let mut records = Vec::new();
     let mut full_text = HashMap::new();
     let mut unreadable: Vec<String> = Vec::new();
-    for (type_name, type_config) in &config.record_types {
+    // Sorted, not `config.record_types`' own HashMap order: a cross-type ID
+    // collision's first-seen-wins index slot (`build_index_reporting_collisions`)
+    // would otherwise depend on the per-process hash-map seed, so which of
+    // two colliding records other rules resolve against could flip between
+    // runs of the same unchanged corpus.
+    let type_names = config.sorted_type_names();
+    for type_name in type_names {
+        let type_config = &config.record_types[type_name];
         let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
             // This directory, not this subtree (RFC-35). Prefix matching let
