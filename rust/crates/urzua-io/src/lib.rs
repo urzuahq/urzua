@@ -51,6 +51,9 @@ pub struct DiscoveredFiles {
 pub enum DiscoverySource {
     /// The union of `git ls-files` (tracked) and staged files.
     GitTracked,
+    /// Explicit paths on argv, read as given (`BUG-24`): git-tracked status
+    /// is not consulted at all, unlike `GitTracked`'s default sweep.
+    Argv,
 }
 
 /// Discover files git tracks or has staged, at or below `repo_root`. Never a

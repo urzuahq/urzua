@@ -327,6 +327,9 @@ pub enum ReportStatus {
 #[serde(rename_all = "kebab-case")]
 pub enum ScopeSource {
     TrackedSweep,
+    /// Explicit paths on argv, read as given (`BUG-24`) -- distinct from
+    /// `TrackedSweep` because a path git does not track is still examined.
+    Argv,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

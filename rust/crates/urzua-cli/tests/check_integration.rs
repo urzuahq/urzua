@@ -2213,3 +2213,79 @@ fn drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_fai
         "{parsed}"
     );
 }
+
+/// `BUG-24`: SPEC-2's Discovery contract says an explicit argv path
+/// overrides discovery and is used as given -- an untracked file named
+/// directly must still be examined, not silently reported as
+/// `files_examined: 0`.
+#[test]
+fn an_untracked_file_named_explicitly_is_examined_not_silently_dropped_observed_failing() {
+    let dir = fixture_repo("argv-override-untracked");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {header.required-fields: error}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    // Written after the fixture's own commit, and never staged -- genuinely
+    // untracked, the exact shape `urzua new` leaves behind since it doesn't
+    // stage what it writes.
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-untracked.md"),
+        "---\n---\n# 2 — Untracked\n",
+    )
+    .unwrap();
+
+    let out = run_urzua(&dir, &["check", "docs/adr/ADR-2-untracked.md"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(parsed["files_examined"], 1, "{parsed}");
+    assert_eq!(parsed["scope"]["source"], "argv", "{parsed}");
+    let findings = parsed["findings"].as_array().unwrap();
+    assert!(
+        findings
+            .iter()
+            .any(|f| f["rule"] == "header.required-fields"),
+        "the untracked record's missing Status must actually be checked: {parsed}"
+    );
+}
+
+/// The override is file-only, not a directory walk: an untracked file
+/// merely sitting under an explicitly-requested *directory* stays invisible,
+/// the same guarantee `an_untracked_scratch_file_is_never_examined` already
+/// gives the unscoped sweep (`ADR-6`'s "never a raw directory walk").
+#[test]
+fn an_untracked_file_below_an_explicitly_requested_directory_is_not_examined() {
+    let dir = fixture_repo("argv-override-dir");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {header.required-fields: error}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    std::fs::write(
+        dir.join("docs/adr/ADR-3-untracked.md"),
+        "---\n---\n# 3 — Untracked\n",
+    )
+    .unwrap();
+
+    let out = run_urzua(&dir, &["check", "docs/adr"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(parsed["files_examined"], 1, "{parsed}");
+    assert_eq!(
+        parsed["scope"]["source"], "tracked-sweep",
+        "no override applies to a directory argument: {parsed}"
+    );
+}

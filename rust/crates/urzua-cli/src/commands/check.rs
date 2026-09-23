@@ -173,7 +173,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+    let mut discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
@@ -182,6 +182,25 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Ok(s) => s,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+
+    // Argv paths override discovery (SPEC-2, BUG-24) -- see resolve_argv_overrides.
+    if !requested_scopes.is_empty() {
+        let extra = match crate::discovery::resolve_argv_overrides(
+            &repo_root,
+            &requested_scopes,
+            &discovered.paths,
+        ) {
+            Ok(e) => e,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+        if !extra.is_empty() {
+            discovered.paths.extend(extra);
+            discovered.paths.sort();
+            discovered.paths.dedup();
+            discovered.source = urzua_io::DiscoverySource::Argv;
+        }
+    }
+
     let scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
 
     // A path argument narrows what is *reported on*. It must not narrow the
