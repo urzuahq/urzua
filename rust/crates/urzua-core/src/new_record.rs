@@ -27,12 +27,11 @@
 /// blind to exactly what the other requires (`BUG-37`).
 pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     let stem = file_name.strip_suffix(".md")?;
-    let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
 
     let segments: Vec<&str> = stem.split('-').collect();
     // The number is the first all-digit segment, wherever it sits: a type
     // prefix may contain hyphens, so its position is not fixed.
-    let at = segments.iter().position(|s| digits(s))?;
+    let at = segments.iter().position(|s| is_digit_segment(s))?;
     // Something must follow the number: a bare `ADR-2.md` is a fragment.
     if at + 1 >= segments.len() || segments[at + 1..].iter().all(|s| s.is_empty()) {
         return None;
@@ -59,7 +58,7 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
         let looks_dated = segments.len() >= 3
             && segments[0].len() == 4
             && matches!(segments[0].parse::<u32>(), Ok(1000..=9999))
-            && [1, 2].iter().all(|&i| digits(segments[i]))
+            && [1, 2].iter().all(|&i| is_digit_segment(segments[i]))
             && matches!(segments[1].parse::<u32>(), Ok(1..=12))
             && matches!(segments[2].parse::<u32>(), Ok(1..=31));
         if looks_dated {
@@ -75,17 +74,32 @@ pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
     // selects the *first* such segment, so a mixed prefix creates no
     // ambiguity with which segment is the number).
     let prefix_end = segments[..at].join("-").len();
-    if segments[..at].iter().all(|s| {
-        !s.is_empty()
-            && s.chars()
-                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-    }) {
+    if segments[..at].iter().all(|s| is_prefix_segment(s)) {
         return segments[at]
             .parse()
             .ok()
             .map(|n| (Some(&stem[..prefix_end]), n));
     }
     None
+}
+
+/// A record identifier's number segment: non-empty, all ASCII digits.
+///
+/// Shared with [`crate::rules::is_record_reference`] (`BUG-133`): the two "is
+/// this a valid record identifier" recognisers -- one for a filename, one for
+/// a bare reference token in prose -- must agree on this grammar, and a
+/// second copy is how they drifted once already (`BUG-114`).
+pub(crate) fn is_digit_segment(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
+}
+
+/// A record identifier's prefix segment: non-empty, ASCII upper-case or
+/// digit (`BUG-114`: a type may declare a prefix like `V2`). Shared with
+/// [`crate::rules::is_record_reference`]; see [`is_digit_segment`].
+pub(crate) fn is_prefix_segment(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
 /// The next unclaimed number for a type, across **both** filename conventions.
