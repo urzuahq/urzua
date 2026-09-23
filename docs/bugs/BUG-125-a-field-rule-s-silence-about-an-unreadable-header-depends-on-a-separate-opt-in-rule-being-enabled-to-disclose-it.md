@@ -45,10 +45,11 @@ actually required by the code, only assumed by convention.
 
 Verified after the fix, not just assumed: every rule function in `rules.rs` that touches
 `record.header` at all also routes through `census`/`census_records` (checked programmatically, zero
-exceptions). Fixing the shared machinery once — rather than `field.quality` individually — closes this
-for `field.pending`, `field.untrimmed-value`, `header.field-case-mismatch`,
-`header.pointer-field-clean`, `narrative-field.stale`, and every other current and future rule built
-the same way, with no per-rule migration needed.
+exceptions). **That check was necessary but not sufficient** — see the Amendment below:
+`census`/`census_records` only tallies whatever `Outcome` a rule's own body reports for a candidate,
+so a rule still has to classify a parse failure as `Unreadable` itself. Fixing the shared machinery
+closes the *disclosure* half of this bug (a rule that does say `Unreadable` is now heard, without a
+second rule enabled); it does not, on its own, guarantee every rule says it correctly.
 
 ## The design principle this violates
 
@@ -79,3 +80,4 @@ count, alongside `eligible`/`examined`/`out_of_scope`. Fixed once, in `report.rs
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** the user asked whether silently folding `Absent`/`Unreadable` together was itself a design problem; investigating surfaced a live, reproducible instance of `ADR-55`'s core defect class reachable through an ordinary single-rule config, not a hypothetical. | **substantive** |
 > | 2026-09-23 | Fixed via `RFC-45`/`ADR-63`: `unreadable` disclosed by `census`/`census_records` structurally. Verified against the exact scratch reproduction above, and verified programmatically that every header-reading rule routes through the fixed machinery. | **substantive** |
+> | 2026-09-23 | Amended same day: a `/code-review` pass on the PR shipping this fix (round 21) found `header.pointer-field-clean` still missing the per-body `Unreadable` guard `field.quality` has -- routing through the fixed `census_records` was not, by itself, enough to catch a rule whose own closure never says `Unreadable`. Fixed with the same guard, verified observed-failing then passing. A follow-up sweep of every `record.header.get(...)` call site in `rules.rs`, checking the guard's actual presence rather than only whether the enclosing function calls `census`/`census_records`, found one further instance in `supersession_reciprocity`'s own candidate check; fixed the same way, same verification. **Why:** the earlier "verified programmatically, zero exceptions" claim checked only that every rule *calls* `census`/`census_records`, not that every rule's own `Outcome` classification is correct -- a narrower guarantee than the prose implied. Restated above rather than left standing. | **substantive** |

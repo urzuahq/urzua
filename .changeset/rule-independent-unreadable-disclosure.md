@@ -9,11 +9,12 @@ rules." `Population` now discloses its own `unreadable()` count directly, and th
 shared `census`/`census_records` machinery, so it covers every current and future rule that reads
 `record.header` with no exceptions (verified programmatically against every such rule in `rules.rs`).
 
-`RFC-45`/`ADR-63`/`MILE-111` also adds `relation.target-status-undeclared`: a resolving pointer or
+`RFC-45`/`ADR-63`/`MILE-111` also adds `relation.target-status-undeclared`: a resolved pointer or
 narrative reference whose target type never declares `Status` is now flagged by one dedicated rule
-(matching `header.field-case-mismatch`'s precedent), rather than `pointer.target-status`,
-`narrative-field.stale`, and `claim.status-agreement` each inventing its own version of the same
-check.
+(matching `header.field-case-mismatch`'s precedent), rather than `pointer.target-status` and
+`narrative-field.stale` each inventing its own version of the same check. `claim.status-agreement`
+resolves claim-sourced references, a different source the new rule does not cover; it still silently
+skips a target whose type doesn't declare `Status`, unchanged and out of scope for this round.
 
 Fixes `BUG-126`: `type.record-outside-declared-dir` no longer warns about a record staged for
 deletion that sits below (not directly in) a declared dir.

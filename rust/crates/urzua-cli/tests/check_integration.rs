@@ -2310,6 +2310,14 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
         "> Status: Accepted\n",
     )
     .unwrap();
+    // A live sibling, left in place: proves the filter drops only the staged
+    // deletion, not every candidate below `docs/adr/archive` (a positive
+    // control CodeRabbit's review of round 21 asked for).
+    std::fs::write(
+        dir.join("docs/adr/archive/0002-y.md"),
+        "> Status: Accepted\n",
+    )
+    .unwrap();
     commit_all(&dir);
 
     git(&dir, &["rm", "-q", "docs/adr/archive/0001-x.md"]);
@@ -2320,8 +2328,16 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
     assert!(
         findings
             .iter()
-            .all(|f| f["rule"] != "type.record-outside-declared-dir"),
+            .all(|f| f["rule"] != "type.record-outside-declared-dir"
+                || f["file"] != "docs/adr/archive/0001-x.md"),
         "a file being deleted is not an ownership question: {parsed}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|f| f["rule"] == "type.record-outside-declared-dir"
+                && f["file"] == "docs/adr/archive/0002-y.md"),
+        "a live sibling in the same spot must still be reported: {parsed}"
     );
 }
 

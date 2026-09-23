@@ -67,10 +67,12 @@ Non-goals) — a distinct data shape, not evidenced as a live gap.
 
 ## Reversibility
 
-The `Outcome` variant and `Population` fields are additive to the type and the report schema — no
-existing consumer's currently-read fields change meaning. Reverting means removing the two counts and
-returning to the prior collapse, which reopens `BUG-125` and the original review ambiguity; cheap
-structurally, expensive in the defect it reopens.
+Two independent, separately reversible changes. `Population.unreadable` is additive to the report
+schema — no existing consumer's currently-read fields change meaning. Reverting it means removing the
+one count and returning to the prior collapse, which reopens `BUG-125` and the original review
+ambiguity; cheap structurally, expensive in the defect it reopens. `relation.target-status-undeclared`
+is a new, opt-in rule: reverting it means deleting the rule and its config entry, with no effect on
+`Population` or on the three original rules it does not modify.
 
 ## Consequences
 

@@ -1418,6 +1418,12 @@ pub fn header_pointer_field_clean(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            // Unreadable, not absent: the header did not parse, so this slot
+            // has no value to classify (BUG-125's shape, `field_quality`'s
+            // same guard).
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -2830,6 +2836,12 @@ pub fn supersession_reciprocity(
                 return Outcome::OutOfScope;
             };
             let normalized_id = crate::values::RecordId::new(&id);
+            // Unreadable, not absent: the header did not parse, so this slot
+            // has no value to classify (BUG-125's shape, `field_quality`'s
+            // same guard).
+            if record.header.region.is_none() || record.header.parse_error.is_some() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field) else {
                 return Outcome::Absent;
             };
@@ -4091,6 +4103,22 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("RFC-1 (Accepted)"));
         assert_eq!(findings[0].severity, FindingSeverity::Warning);
+    }
+
+    /// `BUG-125`'s shape, found by CodeRabbit in this same rule after the
+    /// `field.quality` fix: an unparsed header must disclose `unreadable`,
+    /// not fold silently into `absent`.
+    #[test]
+    fn header_pointer_field_clean_discloses_unreadable_on_its_own_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "this is not a header at all");
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], None, Some(&["Derives-from"]), None),
+        )]);
+        let (exec, findings) = header_pointer_field_clean(&[r], &config);
+        assert_eq!(examined(&exec), 0, "{exec:?}");
+        assert_eq!(unreadable(&exec), 1, "{exec:?}");
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -5360,6 +5388,27 @@ mod tests {
             .expect("the rule must state what it was handed");
         assert_eq!((population.eligible(), population.examined()), (2, 2));
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    /// `BUG-125`'s shape, a second instance found alongside
+    /// `header_pointer_field_clean`'s by the same review: an unparsed header
+    /// must disclose `unreadable`, not fold silently into `absent`.
+    #[test]
+    fn supersession_reciprocity_discloses_unreadable_on_its_own_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "this is not a header at all");
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let records = [r];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.examined(), 0, "{population:?}");
+        assert_eq!(population.unreadable(), 1, "{population:?}");
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
