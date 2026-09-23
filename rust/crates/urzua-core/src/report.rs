@@ -197,17 +197,23 @@ pub fn census_records<T>(
     record_of: impl Fn(&T) -> PathBuf,
     mut body: impl FnMut(&T) -> Outcome,
 ) -> (Population, Vec<PathBuf>) {
-    let mut examined_records = Vec::new();
+    // A `BTreeSet`, not a `Vec` clone-and-sort-at-the-end: for a `Field`-unit
+    // rule, a candidate is a slot, not a record, so a record with many
+    // declared fields would otherwise contribute one clone per examined slot
+    // (up to `eligible`, routinely far larger than the record count --
+    // `BUG-40`) before the same set collapses out of a single sort pass
+    // (`BUG-122`). Inserting into the set as candidates are examined does the
+    // same collapse incrementally, one path at a time.
+    let mut examined_records: std::collections::BTreeSet<PathBuf> =
+        std::collections::BTreeSet::new();
     let population = census(unit, candidates, |candidate| {
         let outcome = body(candidate);
         if outcome == Outcome::Examined {
-            examined_records.push(record_of(candidate));
+            examined_records.insert(record_of(candidate));
         }
         outcome
     });
-    examined_records.sort();
-    examined_records.dedup();
-    (population, examined_records)
+    (population, examined_records.into_iter().collect())
 }
 
 /// A rule's input population: what it was eligible to examine, and what it
