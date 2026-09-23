@@ -1082,7 +1082,17 @@ pub fn config_pointer_narrative_overlap(
 
 /// Rule (`ADR-50`): a type declaring `header_shape: none` has nowhere for a
 /// field to be, so a non-empty `required_fields` is a self-contradiction --
-/// the same shape as `config.pointer-narrative-overlap`.
+/// the same shape as `config.pointer-narrative-overlap`. `known_fields`,
+/// `pointer_fields`, `narrative_fields`, and `relation_fields` are the exact
+/// same contradiction, one level over: each names a field (or a field-name
+/// override) that a `none`-shaped type has nowhere to hold. Without this, a
+/// type declaring `header_shape: none` and `pointer_fields: ["Parent"]`
+/// passes config validation, and every rule reading that slot
+/// (`header.pointer-field-clean`, `pointer.resolution`, ...) reports every
+/// one of that type's records as `Outcome::Unreadable` via
+/// `Header::is_unreadable()` -- true in the narrowest sense (there is no
+/// header) but a misleading diagnosis for a config mistake, not a defect in
+/// any record.
 pub fn config_header_none_has_no_required_fields(
     config: &Config,
     config_path: &std::path::Path,
@@ -1095,21 +1105,64 @@ pub fn config_header_none_has_no_required_fields(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-        if type_config.header_shape == crate::header::HeaderShape::None
-            && !type_config.required_fields.is_empty()
-        {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "record type '{type_name}' declares header_shape: none but required_fields {:?} -- a type with no header has nowhere for a required field to be",
-                    type_config.required_fields
-                ),
-            });
+        if type_config.header_shape != crate::header::HeaderShape::None {
+            return Outcome::Examined;
         }
+
+        let mut contradiction = |declared: bool, field: &str, detail: String| {
+            if declared {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
+                    ),
+                });
+            }
+        };
+
+        contradiction(
+            !type_config.required_fields.is_empty(),
+            "required_fields",
+            format!("{:?}", type_config.required_fields),
+        );
+        contradiction(
+            type_config
+                .known_fields
+                .as_ref()
+                .is_some_and(|f| !f.is_empty()),
+            "known_fields",
+            format!("{:?}", type_config.known_fields),
+        );
+        contradiction(
+            type_config
+                .pointer_fields
+                .as_ref()
+                .is_some_and(|f| !f.is_empty()),
+            "pointer_fields",
+            format!("{:?}", type_config.pointer_fields),
+        );
+        contradiction(
+            type_config
+                .narrative_fields
+                .as_ref()
+                .is_some_and(|f| !f.is_empty()),
+            "narrative_fields",
+            format!("{:?}", type_config.narrative_fields),
+        );
+        contradiction(
+            type_config.relation_fields.as_ref().is_some_and(|r| {
+                crate::config::RelationRole::ALL
+                    .iter()
+                    .any(|role| r.get(*role).is_some())
+            }),
+            "relation_fields",
+            format!("{:?}", type_config.relation_fields),
+        );
+
         Outcome::Examined
     });
 
@@ -3784,6 +3837,109 @@ mod tests {
             std::path::Path::new(".urzua/config.yaml"),
         );
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// A type with no header has nowhere for *any* field-shaped declaration
+    /// to be, not only `required_fields` -- the same contradiction one level
+    /// over. Without this, `header_shape: none` plus `pointer_fields:
+    /// ["Parent"]` passes config validation, and every rule reading that
+    /// slot then reports every one of that type's records as
+    /// `Outcome::Unreadable`, a misleading diagnosis for a config mistake.
+    #[test]
+    fn a_header_none_type_with_known_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                known_fields: Some(vec!["Status".to_string()]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("known_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_pointer_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                pointer_fields: Some(vec!["Parent".to_string()]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("pointer_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_narrative_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                narrative_fields: Some(vec!["Blocked-on".to_string()]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("narrative_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_a_relation_field_override_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                relation_fields: Some(crate::config::RelationFields {
+                    status: Some("Status".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("relation_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_an_empty_pointer_fields_list_is_not_a_contradiction() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                pointer_fields: Some(vec![]),
+                narrative_fields: Some(vec![]),
+                known_fields: Some(vec![]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(
+            findings.is_empty(),
+            "declaring an empty list is a conscious 'zero fields' choice, not a contradiction: {findings:?}"
+        );
     }
 
     #[test]
