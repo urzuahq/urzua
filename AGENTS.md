@@ -64,13 +64,16 @@ it realizes); a defect found along the way becomes a `bug`; a `spec` is created 
 resulting schema/behavior is real and needs documenting as current truth. Not every change visits
 every stage — a same-turn bugfix still gets a `bug` record even though no RFC preceded it.
 
-`Implements`/`Derives-from`/`Amends`/`Parent` are **pointer fields**: they name another record and
-are checked live (`pointer.resolution`, `pointer.target-status`) — a stale or unresolvable reference
-is a finding, not just a broken link. `Blocked-on` is a **narrative field**: free prose referencing a
-record, checked for staleness (`narrative-field.stale`) once that reference reaches a terminal
-status, but not resolved the same strict way a pointer is. Use a pointer field when the relationship
-should be enforced; narrative when it's descriptive context that may need re-reading later, not a
-hard dependency.
+`Implements`/`Derives-from`/`Amends`/`Parent` are **pointer fields**; `Blocked-on` is a **narrative
+field**. Both are resolved by `pointer.resolution` the same way — a stale or unresolvable reference
+is a finding either way, not just a broken link. The real difference is format and what else runs on
+top: a pointer field must hold clean, comma-separated references only (`header.pointer-field-clean`
+enforces this; it never applies to narrative fields, which tolerate free prose around the reference),
+and a narrative field gets one more check narrative fields don't: `narrative-field.stale` flags it
+specifically once the record it names reaches a terminal status, a stronger, more specific signal
+than `pointer.resolution`'s routine "resolves; target status = X". Use a pointer field for a
+relationship that should read as a clean, enforced reference; narrative when it's prose that happens
+to name a record, with staleness worth flagging once that record is done.
 
 ## Git workflow
 
@@ -113,9 +116,11 @@ much as to a change's own author. The loop:
    three times at the call sites. Two independent findings with the same underlying shape is a signal
    to fix the mechanism (or at least name the pattern to the user) rather than patch each instance and
    move on.
-5. **Ship each round as one PR**: fresh branch off `origin/main`, one changeset (`.changeset/*.md`)
-   per PR describing what an adopter would care about, `gh pr comment <n> --body "@coderabbitai
-   review"` after pushing, `gh pr checks <n>` polled until resolved. **Never merge or force-push** —
+5. **Ship each round as one PR**: fresh branch off `origin/main`, a changeset (`.changeset/*.md`)
+   per PR describing what an adopter would care about — skip it for the same cases "Before calling
+   anything done" already exempts (CI config, internal refactors, docs-only changes) — then `gh pr
+   comment <n> --body "@coderabbitai review"` after pushing, `gh pr checks <n>` polled until
+   resolved. **Never merge or force-push** —
    that action belongs to the human running the session, every time, with no standing exception.
 
 ## Use the tool on itself
