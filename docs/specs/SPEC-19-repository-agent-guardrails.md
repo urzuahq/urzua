@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.6'
+Version: '0.7'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` alone.'
 Implements: MILE-36
@@ -126,3 +126,4 @@ same pattern applied to a different feature area).
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-23 | Added "A narrower rule population is usually policy, not a regression", naming `ADR-53`/`ADR-57`/`ADR-54` by name as the settled decisions a reviewing agent should check before filing a coverage-narrowing or missing-diagnostic finding as a bug. **Why:** three consecutive `/code-review` rounds against this release independently re-flagged the exact same already-decided tradeoffs as defects, each requiring a fresh manual refutation; naming the pattern once, with the specific ADRs to check, is cheaper than refuting it a fourth time. | **substantive** |
 > | 2026-09-23 | Removed the section added the same day, above. **Why:** the user rejected a prose fix for a code-review false-positive pattern as insufficient — a reviewer having to consult a policy note is weaker than the code making the distinction self-evident. `RFC-45`/`ADR-63` closed the specific `ADR-60` cross-record instance structurally (a dedicated rule, `relation.target-status-undeclared`, plus `Population`'s new `unreadable` disclosure); the prose stopgap is superseded, not left standing beside its structural replacement (`ADR-54`'s own reasoning, applied to this file). | **substantive** |
+> | 2026-09-23 | Added two new sections: "The record-type workflow" (what each of the six record types is for, how they relate, and the pointer-vs-narrative field distinction) and "The review loop" (the fix/file/refute triage for a review finding, the repeating-shape escalation signal, and the branch/PR mechanics), plus a note in "Git workflow" to cut branches from an up-to-date `origin/main`. **Why:** the user asked directly whether `AGENTS.md` actually specified the operational workflow this session had been running, not just scattered pieces of it — it didn't; the record-type taxonomy and the review loop were both real, repeated, load-bearing parts of this project's own process that had never been written down in one place. | **substantive** |

@@ -74,10 +74,12 @@ This is deliberately **not** "run a full CI pipeline on every keystroke" — it'
 (the same `detectRealizedByDrift`-shaped computation RFC-2 already designed) scoped specifically
 to the field being edited, cheap enough to run synchronously in an editing session.
 
-### 3. Two real integration points exist today; this RFC targets both, not a hypothetical third
+### 3. Three real integration points exist today, across more than one harness; this RFC targets all
+   of them, not a hypothetical fourth
 
-The *mechanism* this RFC needs already has two real, existing homes to live in — this RFC is about
-wiring detection into them, not inventing a new enforcement substrate:
+The *mechanism* this RFC needs already has real, existing homes to live in, across the major agent
+harnesses in use today (Claude Code, Cursor, Codex, and any future one shaped the same way) — this
+RFC is about wiring detection into them, not inventing a new enforcement substrate:
 
 - **Editor/agent-runtime hooks** — Claude Code's own hook system (`PreToolUse`/`PostToolUse`,
   matched by tool name, able to block via exit code) is a direct, already-existing mechanism for
@@ -85,17 +87,31 @@ wiring detection into them, not inventing a new enforcement substrate:
   could run detect and block or warn before the write lands. Cursor's `.cursor/rules` MDC
   mechanism is the closest existing cross-editor precedent, but it's instruction-shaped (a rule the
   agent is told to follow), not enforcement-shaped (a hook that runs regardless of whether the
-  agent remembers). The gap this RFC targets is specifically closing that instruction-vs-enforcement
-  distinction, not building a new hook mechanism from nothing.
+  agent remembers). Codex has its own comparable hook/config surface. The gap this RFC targets is
+  specifically closing that instruction-vs-enforcement distinction per harness, not building one new
+  hook mechanism from nothing nor picking a single harness to support.
+- **Drafting-assistance skills** — a packaged skill/slash-command (Claude Code's skill format,
+  Cursor's and Codex's equivalents) that helps an agent *author* a new decision record — scaffolding
+  the right fields, prompting for the right cross-links — is explicitly in scope alongside the
+  enforcement hooks above, not a separate initiative. The distinction this RFC's own Motivation
+  section already draws (Cursor's MDC + AgDR pairing, and Claude Code ADR-capture skills, are
+  "single-agent, single-session capture tools" with "no validation beyond the agent's own
+  compliance") is about a drafting skill used **as the entire governance mechanism, on its own** —
+  it is not an argument against building one at all. A drafting skill whose output is still
+  independently checked by `urzua check` (never trusted on the strength of having come from the
+  skill) doesn't have that gap: the skill helps an agent get the record right the first time; the
+  engine, not the skill, is still the thing that verifies it.
 - **Pre-commit / pre-push git hooks and CI** — the same detect computation, run as a blocking check
   (not a warn-only audit report) specifically on Embodiment-field diffs, catches the case an
   editor-level hook was bypassed, disabled, or simply not installed — a second, independent layer,
   matching a belt-and-suspenders posture (RFC-2's `--force` requiring an identity even for an
   explicit override).
 
-Both matter because they catch different failure modes: an editor hook catches the mistake before
-it's ever written to disk; a git/CI-level check catches it if that first layer was skipped,
-misconfigured, or run by a tool with no hook wired at all.
+All three matter because they catch different failure modes, and none substitutes for another: a
+drafting skill helps get a record's shape right at creation time but doesn't stop a later, unrelated
+edit from drifting; an editor hook catches a drifting edit before it's ever written to disk; a
+git/CI-level check catches it if that first layer was skipped, misconfigured, disabled, or run by a
+tool or harness with no hook wired at all.
 
 ### 4. A second, distinct enforcement case: scope-mismatch detection between a branch's stated purpose and its real diff
 
@@ -224,3 +240,9 @@ not after a third or later copy accumulates.
   stdout/status convention when surfaced back to an agent.
 - RFC-5 — the Embodiment/`realized_by` model whose fields this RFC's first concrete
   application targets.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-09-23 | §3 broadened from two integration points to three, adding drafting-assistance skills explicitly in scope alongside enforcement hooks, and named Codex alongside Claude Code/Cursor as harnesses this RFC targets, not just the two already discussed. **Why:** the user clarified this RFC's scope already covers skills, hooks, and every major harness — not only editor/CI hooks for Claude Code and Cursor — and asked for that to be stated explicitly rather than left implicit. | **substantive** |
