@@ -242,6 +242,23 @@ pub fn run(dry_run: bool) -> ExitCode {
         ));
     }
 
+    // Disambiguation (above, on base name only) can still collide: a
+    // disambiguated name can match an unrelated directory that already
+    // proposes it (BUG-132). `render_config_yaml`'s `Mapping::insert` would
+    // silently overwrite one type's entry with the other's, so refuse rather
+    // than write a config that drops an entire directory's records with no
+    // error.
+    let mut names_to_dirs: std::collections::BTreeMap<&str, &str> =
+        std::collections::BTreeMap::new();
+    for rt in &proposed {
+        if let Some(other_dir) = names_to_dirs.insert(rt.name.as_str(), rt.dir.as_str()) {
+            return emit(&CouldNotRun::from(format!(
+                "{} and {other_dir} both propose the record type name '{}' after disambiguation -- adopt cannot generate a config that would silently drop one. Reorganize one of these directories, or write .urzua/config.yaml by hand for now.",
+                rt.dir, rt.name
+            )));
+        }
+    }
+
     let rendered = render_config_yaml(&proposed);
     let relative_config_path = config_path
         .strip_prefix(&repo_root)
@@ -322,6 +339,25 @@ mod tests {
             proposed.len(),
             2,
             "README.md and the template must not create a type"
+        );
+    }
+
+    /// BUG-132: disambiguation only compares base names, never the joined
+    /// name it produces -- so a disambiguated name can still collide with an
+    /// unrelated directory that already happens to be named that.
+    #[test]
+    fn a_disambiguated_name_can_still_collide_with_an_unrelated_directory_observed_failing() {
+        let discovered: Vec<PathBuf> = ["x/y/0001-a.md", "z/y/0001-b.md", "x-y/0001-c.md"]
+            .iter()
+            .map(PathBuf::from)
+            .collect();
+
+        let proposed = detect_record_types(&discovered);
+        let names: Vec<&str> = proposed.iter().map(|p| p.name.as_str()).collect();
+        let collided = names.iter().filter(|n| **n == "x-y").count();
+        assert_eq!(
+            collided, 2,
+            "x/y disambiguates to x-y, colliding with the unrelated x-y directory: {names:?}"
         );
     }
 

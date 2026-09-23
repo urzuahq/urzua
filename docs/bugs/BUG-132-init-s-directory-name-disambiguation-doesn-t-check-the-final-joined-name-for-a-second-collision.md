@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M36PD9E50TMPKS818MB7DWRX
-Status: Open
+Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 23"
-Regression-test: "not yet written -- Status: Open, no fix decided yet"
+Regression-test: a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing (rust/crates/urzua-cli/tests/check_integration.rs)
 ---
 # 132 — init's directory-name disambiguation doesn't check the final joined name for a second collision
 
@@ -33,6 +33,17 @@ detected, there's a real question of what `init` should do about it: refuse to a
 adopter reorganizes, or find a further disambiguation strategy (a numeric suffix?) that has its own
 edge cases. Not rushed here.
 
+## Fix
+
+The signature question turned out to be moot: `run()` already holds the fully-disambiguated
+`Vec<ProposedRecordType>` after calling `detect_record_types`, so the uniqueness check does not need
+`detect_record_types` itself to become fallible -- it runs in `run()`, over data it already has,
+before `render_config_yaml` is called. On a genuine post-disambiguation collision, `init` now refuses
+(`CouldNotRun`, exit 2) naming both colliding directories and the shared name, rather than picking a
+further disambiguation strategy -- consistent with this command's existing refusals (an existing
+config, zero record-shaped files) and with `ADR-55`: silently dropping a proposed type is a worse
+outcome than asking the adopter to reorganize or hand-write the config for this one case.
+
 ## References
 
 - The "duplicated type name" comment already in `detect_record_types`, which handles the *first-order*
@@ -46,3 +57,4 @@ edge cases. Not rushed here.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified `render_config_yaml`'s `types.insert` has no uniqueness guard and the existing disambiguation logic only checks base-name collisions, not the disambiguated name it produces. Left `Status: Open` -- the fix needs deciding `detect_record_types`'s error-reporting shape and what `init` does once a genuine collision is found, not just adding an assertion. | **substantive** |
+> | 2026-09-23 | Fixed. The signature concern was overstated: `run()` already has the disambiguated `Vec<ProposedRecordType>` in hand, so the uniqueness check lives there, not in `detect_record_types`. `init` refuses with a named-directories error rather than choosing a further disambiguation strategy. Regression test verified genuinely failing pre-fix (config written with one type silently dropped, exit 0) and passing after. | **substantive** |
