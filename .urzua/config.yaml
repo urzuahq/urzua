@@ -122,6 +122,7 @@ rules:
   config.pointer-field-not-known: error
   config.relation-field-not-known: error
   config.known-fields-declaration-missing: error
+  config.header-none-has-no-required-fields: error
   config.scope-matches-nothing: warn
   config.pointer-narrative-overlap: error
   pointer.resolution: error
@@ -131,6 +132,7 @@ rules:
   header.field-case-mismatch: error
   filename.title-consistency: error
   relation.supersession-reciprocity: error
+  relation.target-status-undeclared: error
   revision-log.change-class-required: error
   narrative-field.stale:
     level: warn

@@ -50,6 +50,7 @@ pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
+pub const RULE_RELATION_TARGET_STATUS_UNDECLARED: &str = "relation.target-status-undeclared";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
@@ -88,6 +89,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
     RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
     RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+    RULE_RELATION_TARGET_STATUS_UNDECLARED,
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -241,7 +243,7 @@ pub fn header_required_fields(
             continue;
         }
 
-        if record.header.region.is_none() {
+        if record.header.is_unreadable() {
             let detail = match &record.header.parse_error {
                 Some(e) => format!(" -- YAML parse error: {e}"),
                 None => String::new(),
@@ -283,7 +285,7 @@ pub fn header_required_fields(
             // An unparsed header leaves every slot of that record unreadable: the
             // rule was handed them and could not judge them. The record-scoped
             // finding above says why.
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_none() {
@@ -454,7 +456,7 @@ pub fn header_field_set_consistency(
             // allowed. Counting it as examined inflated the one signal ADR-55 makes
             // load-bearing; `header.required-fields` reports the unparsed header
             // (BUG-78).
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
 
@@ -1080,7 +1082,17 @@ pub fn config_pointer_narrative_overlap(
 
 /// Rule (`ADR-50`): a type declaring `header_shape: none` has nowhere for a
 /// field to be, so a non-empty `required_fields` is a self-contradiction --
-/// the same shape as `config.pointer-narrative-overlap`.
+/// the same shape as `config.pointer-narrative-overlap`. `known_fields`,
+/// `pointer_fields`, `narrative_fields`, and `relation_fields` are the exact
+/// same contradiction, one level over: each names a field (or a field-name
+/// override) that a `none`-shaped type has nowhere to hold. Without this, a
+/// type declaring `header_shape: none` and `pointer_fields: ["Parent"]`
+/// passes config validation, and every rule reading that slot
+/// (`header.pointer-field-clean`, `pointer.resolution`, ...) reports every
+/// one of that type's records as `Outcome::Unreadable` via
+/// `Header::is_unreadable()` -- true in the narrowest sense (there is no
+/// header) but a misleading diagnosis for a config mistake, not a defect in
+/// any record.
 pub fn config_header_none_has_no_required_fields(
     config: &Config,
     config_path: &std::path::Path,
@@ -1093,21 +1105,64 @@ pub fn config_header_none_has_no_required_fields(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-        if type_config.header_shape == crate::header::HeaderShape::None
-            && !type_config.required_fields.is_empty()
-        {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "record type '{type_name}' declares header_shape: none but required_fields {:?} -- a type with no header has nowhere for a required field to be",
-                    type_config.required_fields
-                ),
-            });
+        if type_config.header_shape != crate::header::HeaderShape::None {
+            return Outcome::Examined;
         }
+
+        let mut contradiction = |declared: bool, field: &str, detail: String| {
+            if declared {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
+                    ),
+                });
+            }
+        };
+
+        contradiction(
+            !type_config.required_fields.is_empty(),
+            "required_fields",
+            format!("{:?}", type_config.required_fields),
+        );
+        contradiction(
+            type_config
+                .known_fields
+                .as_ref()
+                .is_some_and(|f| !f.is_empty()),
+            "known_fields",
+            format!("{:?}", type_config.known_fields),
+        );
+        contradiction(
+            type_config
+                .pointer_fields
+                .as_ref()
+                .is_some_and(|f| !f.is_empty()),
+            "pointer_fields",
+            format!("{:?}", type_config.pointer_fields),
+        );
+        contradiction(
+            type_config
+                .narrative_fields
+                .as_ref()
+                .is_some_and(|f| !f.is_empty()),
+            "narrative_fields",
+            format!("{:?}", type_config.narrative_fields),
+        );
+        contradiction(
+            type_config.relation_fields.as_ref().is_some_and(|r| {
+                crate::config::RelationRole::ALL
+                    .iter()
+                    .any(|role| r.get(*role).is_some())
+            }),
+            "relation_fields",
+            format!("{:?}", type_config.relation_fields),
+        );
+
         Outcome::Examined
     });
 
@@ -1263,7 +1318,7 @@ pub fn pointer_target_status(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1339,7 +1394,7 @@ pub fn pointer_resolution(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1416,6 +1471,12 @@ pub fn header_pointer_field_clean(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            // Unreadable, not absent: the header did not parse, so this slot
+            // has no value to classify (BUG-125's shape, `field_quality`'s
+            // same guard).
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
@@ -1490,7 +1551,7 @@ pub fn narrative_field_stale(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1665,7 +1726,7 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
         |(record, _)| record.path.clone(),
         |(record, field)| {
             // Unreadable, not absent -- the same reason as `field.quality`.
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             if classify(record.header.get(field.as_str())) == FieldState::Pending {
@@ -1867,7 +1928,7 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field.as_str()) else {
@@ -1921,7 +1982,7 @@ pub fn header_field_case_mismatch(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_some() {
@@ -1992,7 +2053,7 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
             // `examined` can never fall short of `eligible` can never be caught
             // not looking (ADR-55). `header.required-fields` reports the parse
             // error itself, once per record rather than once per slot.
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let state = classify(record.header.get(field.as_str()));
@@ -2828,6 +2889,12 @@ pub fn supersession_reciprocity(
                 return Outcome::OutOfScope;
             };
             let normalized_id = crate::values::RecordId::new(&id);
+            // Unreadable, not absent: the header did not parse, so this slot
+            // has no value to classify (BUG-125's shape, `field_quality`'s
+            // same guard).
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
             let Some(value) = record.header.get(field) else {
                 return Outcome::Absent;
             };
@@ -2872,6 +2939,87 @@ pub fn supersession_reciprocity(
                         "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
                     ),
                 });
+                }
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// Rule (`RFC-45`/`ADR-63`): a resolved pointer/narrative reference's target
+/// may not declare `Status` at all (`ADR-60`'s gate then silently excludes
+/// it from every rule that reads it -- `pointer.target-status`,
+/// `narrative-field.stale`). The one place this is diagnosed, rather than
+/// each consuming rule inventing its own check, the same shape
+/// `header.field-case-mismatch` already is for a declared-field case
+/// mismatch (`RFC-40`/`ADR-58`).
+pub fn relation_target_status_undeclared(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_RELATION_TARGET_STATUS_UNDECLARED;
+    let mut findings = Vec::new();
+
+    let pointer_fields_by_type = pointer_fields_by_type(config);
+    let pointer_fields_by_type = &pointer_fields_by_type;
+    let narrative_fields_by_type = narrative_fields_by_type(config);
+    let narrative_fields_by_type = &narrative_fields_by_type;
+
+    let slots =
+        pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field_name)| {
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
+            let Some(value) = record.header.get(field_name.as_str()) else {
+                return Outcome::Absent;
+            };
+            let references = extract_references(value);
+            if references.is_empty() {
+                return Outcome::Absent;
+            }
+
+            for reference in references {
+                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
+                    continue; // pointer_resolution already reports a dangling reference
+                };
+                let target_status_field = relation_field_name(
+                    config,
+                    &target.record_type,
+                    crate::config::RelationRole::Status,
+                );
+                let declared = config
+                    .record_types
+                    .get(&target.record_type)
+                    .is_some_and(|t| t.declared_fields().contains(target_status_field));
+                if !declared {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
+                            target.record_type
+                        ),
+                    });
                 }
             }
             Outcome::Examined
@@ -3308,6 +3456,13 @@ mod tests {
             .examined()
     }
 
+    fn unreadable(exec: &RuleExecution) -> usize {
+        exec.population
+            .as_ref()
+            .expect("every rule carries a population")
+            .unreadable()
+    }
+
     #[test]
     fn a_slot_declared_only_as_required_is_still_a_declared_slot() {
         // `known_fields` is documented as the fields a type carries *beyond*
@@ -3551,6 +3706,7 @@ mod tests {
                 eligible,
                 examined,
                 out_of_scope,
+                0,
             )),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
@@ -3681,6 +3837,109 @@ mod tests {
             std::path::Path::new(".urzua/config.yaml"),
         );
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// A type with no header has nowhere for *any* field-shaped declaration
+    /// to be, not only `required_fields` -- the same contradiction one level
+    /// over. Without this, `header_shape: none` plus `pointer_fields:
+    /// ["Parent"]` passes config validation, and every rule reading that
+    /// slot then reports every one of that type's records as
+    /// `Outcome::Unreadable`, a misleading diagnosis for a config mistake.
+    #[test]
+    fn a_header_none_type_with_known_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                known_fields: Some(vec!["Status".to_string()]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("known_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_pointer_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                pointer_fields: Some(vec!["Parent".to_string()]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("pointer_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_narrative_fields_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                narrative_fields: Some(vec!["Blocked-on".to_string()]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("narrative_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_a_relation_field_override_is_a_contradiction_observed_failing() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                relation_fields: Some(crate::config::RelationFields {
+                    status: Some("Status".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("relation_fields"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_an_empty_pointer_fields_list_is_not_a_contradiction() {
+        let config = config_with_types(vec![(
+            "dec",
+            crate::config::RecordTypeConfig {
+                header_shape: crate::header::HeaderShape::None,
+                pointer_fields: Some(vec![]),
+                narrative_fields: Some(vec![]),
+                known_fields: Some(vec![]),
+                ..type_config(None)
+            },
+        )]);
+        let (_, findings) = config_header_none_has_no_required_fields(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(
+            findings.is_empty(),
+            "declaring an empty list is a conscious 'zero fields' choice, not a contradiction: {findings:?}"
+        );
     }
 
     #[test]
@@ -4000,6 +4259,22 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("RFC-1 (Accepted)"));
         assert_eq!(findings[0].severity, FindingSeverity::Warning);
+    }
+
+    /// `BUG-125`'s shape, found by CodeRabbit in this same rule after the
+    /// `field.quality` fix: an unparsed header must disclose `unreadable`,
+    /// not fold silently into `absent`.
+    #[test]
+    fn header_pointer_field_clean_discloses_unreadable_on_its_own_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "this is not a header at all");
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], None, Some(&["Derives-from"]), None),
+        )]);
+        let (exec, findings) = header_pointer_field_clean(&[r], &config);
+        assert_eq!(examined(&exec), 0, "{exec:?}");
+        assert_eq!(unreadable(&exec), 1, "{exec:?}");
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -4643,6 +4918,21 @@ mod tests {
         assert!(findings[0].message.contains("Placeholder"));
     }
 
+    /// `BUG-125`: a rule's silence about an unreadable header used to depend
+    /// on `header.required-fields` being separately enabled to disclose it --
+    /// a pairing `ADR-53` never guarantees. `Population` now discloses
+    /// `unreadable` on its own, regardless of what else is enabled.
+    #[test]
+    fn field_quality_discloses_unreadable_on_its_own_observed_failing() {
+        let r = record("docs/adr/0001-x.md", "adr", "this is not a header at all");
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+
+        let (exec, findings) = field_quality(&[r], &config);
+        assert_eq!(examined(&exec), 0, "{exec:?}");
+        assert_eq!(unreadable(&exec), 1, "{exec:?}");
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     /// Observed failing against the real defect: a changeset in this repository
     /// announced it closed `BUG-36` while `BUG-36` said `Open`, and shipped.
     #[test]
@@ -5256,6 +5546,27 @@ mod tests {
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
+    /// `BUG-125`'s shape, a second instance found alongside
+    /// `header_pointer_field_clean`'s by the same review: an unparsed header
+    /// must disclose `unreadable`, not fold silently into `absent`.
+    #[test]
+    fn supersession_reciprocity_discloses_unreadable_on_its_own_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "this is not a header at all");
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], Some(&["Supersedes / Superseded-by"]), None, None),
+        )]);
+        let records = [r];
+        let index = build_normalized_index(&records);
+        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(population.examined(), 0, "{population:?}");
+        assert_eq!(population.unreadable(), 1, "{population:?}");
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     #[test]
     fn a_type_declaring_a_custom_supersession_field_name_is_read_by_that_name_observed_failing() {
         let old = record("docs/adr/ADR-1-x.md", "adr", "> Replaces: —\n");
@@ -5305,5 +5616,49 @@ mod tests {
             "the em dash is a written answer, not an unfilled slot"
         );
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn relation_target_status_undeclared_flags_a_resolving_reference_to_an_undeclaring_type_observed_failing(
+    ) {
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Date: 2026-01-01\n");
+        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-1\n");
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            // "rfc" declares no Status at all -- ADR-60's gate would silently
+            // exclude any rule reading it, which is exactly what this rule
+            // exists to surface.
+            ("rfc", type_config_pointer(&["Date"], None, None, None)),
+        ]);
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+
+        let (exec, findings) = relation_target_status_undeclared(&records, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("RFC-1"), "{findings:?}");
+        assert!(findings[0].message.contains("Status"), "{findings:?}");
+    }
+
+    #[test]
+    fn relation_target_status_undeclared_is_silent_when_the_target_declares_status() {
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
+        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-1\n");
+        let config = config_with_types(vec![
+            (
+                "spec",
+                type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+            ),
+            ("rfc", type_config_pointer(&["Status"], None, None, None)),
+        ]);
+        let records = [target, source];
+        let index = build_normalized_index(&records);
+
+        let (exec, findings) = relation_target_status_undeclared(&records, &config, &index);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }

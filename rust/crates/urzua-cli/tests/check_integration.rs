@@ -2289,3 +2289,62 @@ fn an_untracked_file_below_an_explicitly_requested_directory_is_not_examined() {
         "no override applies to a directory argument: {parsed}"
     );
 }
+
+/// `BUG-126`: a record staged for deletion (`git rm`, not committed) that
+/// sits below a declared type's `dir` without being directly in it must not
+/// be reported as sitting outside it -- it's leaving, not misplaced.
+#[test]
+fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed_failing() {
+    let dir = fixture_repo("staged-deletion-outside-dir");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr/archive")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {type.record-outside-declared-dir: warn}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/archive/0001-x.md"),
+        "> Status: Accepted\n",
+    )
+    .unwrap();
+    // A live sibling, left in place: proves the filter drops only the staged
+    // deletion, not every candidate below `docs/adr/archive` (a positive
+    // control CodeRabbit's review of round 21 asked for).
+    std::fs::write(
+        dir.join("docs/adr/archive/0002-y.md"),
+        "> Status: Accepted\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    git(&dir, &["rm", "-q", "docs/adr/archive/0001-x.md"]);
+
+    let out = run_urzua(&dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let findings = parsed["findings"].as_array().unwrap();
+    assert!(
+        findings
+            .iter()
+            .all(|f| f["rule"] != "type.record-outside-declared-dir"
+                || f["file"] != "docs/adr/archive/0001-x.md"),
+        "a file being deleted is not an ownership question: {parsed}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|f| f["rule"] == "type.record-outside-declared-dir"
+                && f["file"] == "docs/adr/archive/0002-y.md"),
+        "a live sibling in the same spot must still be reported: {parsed}"
+    );
+}
+
+// `BUG-127`: a reviewer flagged `resolve_argv_overrides`' `symlink_metadata`
+// check as silently dropping a symlinked argv path. Investigated and found
+// unreachable: `relative_scopes` canonicalizes (and thus dereferences) every
+// argv path before `resolve_argv_overrides` ever sees it, so no test can
+// observe a difference between following and not following the link at that
+// call site. No regression test exists for this non-bug; see the `BUG-127`
+// record for the full account.

@@ -36,7 +36,7 @@ pub fn schema_report(
     let mut notices = Vec::new();
 
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
-        if record.header.region.is_none() || record.header.parse_error.is_some() {
+        if record.header.is_unreadable() {
             notices.push(Notice {
                 severity: NoticeSeverity::Warning,
                 subject: "header-unreadable".to_string(),

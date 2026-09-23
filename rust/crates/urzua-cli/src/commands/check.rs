@@ -372,6 +372,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         ),
         crate::gate::gated(
             &config,
+            rules::RULE_RELATION_TARGET_STATUS_UNDECLARED,
+            || rules::relation_target_status_undeclared(&records, &config, &record_index),
+        ),
+        crate::gate::gated(
+            &config,
             rules::RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
             || rules::revision_log_change_class(&records, &full_text),
         ),
@@ -437,7 +442,20 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(
             &config,
             rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
-            || rules::type_record_outside_declared_dir(&config, &discovered.paths),
+            || {
+                // A staged deletion is going away, not a real ownership
+                // question to raise (`BUG-71`/`BUG-82`'s shape, one level up:
+                // those fixed a staged deletion being wrongly judged *inside*
+                // its dir; this is the same file wrongly judged *outside* one
+                // it's leaving).
+                let live_paths: Vec<std::path::PathBuf> = discovered
+                    .paths
+                    .iter()
+                    .filter(|p| !discovered.staged_deletions.contains(*p))
+                    .cloned()
+                    .collect();
+                rules::type_record_outside_declared_dir(&config, &live_paths)
+            },
         ),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)

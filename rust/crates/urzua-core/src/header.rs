@@ -41,6 +41,16 @@ pub struct Header {
 }
 
 impl Header {
+    /// No header-shaped region was found, or it was but failed to parse
+    /// (`region: None` covers both -- see the field's own doc comment). A
+    /// candidate in this state has no value to classify: `Outcome::Unreadable`,
+    /// never `Outcome::Absent` (`BUG-125`). One method rather than each rule
+    /// re-deriving the same check keeps the nine call sites that need it from
+    /// drifting apart.
+    pub fn is_unreadable(&self) -> bool {
+        self.region.is_none()
+    }
+
     /// First value for `key`, if present. A repeated key is a closure
     /// violation the caller should check for separately via
     /// [`Header::duplicate_keys`] -- this method deliberately doesn't hide
@@ -82,7 +92,7 @@ impl Header {
     /// caller. A differently-cased key is still `Missing`: `header
     /// .field-case-mismatch` is the one place that reports it.
     pub fn read_declared(&self, key: &str) -> FieldRead<'_> {
-        if self.region.is_none() {
+        if self.is_unreadable() {
             return FieldRead::Unreadable;
         }
         match self.get(key) {
