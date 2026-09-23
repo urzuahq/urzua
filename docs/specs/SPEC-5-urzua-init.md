@@ -1,9 +1,11 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-08-20
-Status: Draft
+Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
-Subject: '`urzua init` -- record-type selection, `.urzua/` layout, and the adopt-existing-corpus path.'
+Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
 Parent: SPEC-1
 ---
@@ -12,53 +14,44 @@ Parent: SPEC-1
 ## Purpose
 
 `init` is where a repository acquires a governed corpus, and it is the first sixty seconds of the
-product. It selects which record types a repository keeps, writes the layout for them, and produces
-the configuration every other command reads.
+product. Today that means adopt: it infers which record types already exist from the tree and
+produces the configuration every other command reads. Choosing record types for a repository that has
+none yet is `MILE-114`'s scope.
 
-It is also where the multi-document-type position becomes visible. Nearly every tool in the
-landscape is ADR-only; RFC-1's core+profile model spans types by design, and `init` is the
-surface where a user sees that they may have ADRs, RFCs, specs and PRDs under one schema. `init`
-instantiates profiles — it does not invent a second concept.
+Adopt is also where the multi-document-type position becomes visible for an existing corpus. Nearly
+every tool in the landscape is ADR-only; RFC-1's core+profile model spans types by design, and adopt
+proposes one type per directory it finds, whatever mix a repository already has.
 
-**This spec's `Status` is `Draft` for a reason: only adopt mode, with `--dry-run`, is actually
-built.** `## Output (shipped)`/`## Exit codes (shipped)` describe exactly what exists today.
-Everything else below -- greenfield mode, `--types`/`--dir` flags, built-in profiles,
-unclassified-file tracking, the exit-1 case -- is the target design this spec argues for, not
-current behavior. Read the rest of this document as a proposal, not a manual.
+**Adopt is the primary case regardless.** Every codebase this project was extracted from already had
+records before it had tooling, and a tool whose setup path assumes an empty repository asks its most
+likely user to migrate before they can evaluate it.
 
-## The two modes, and which one matters (Draft -- only adopt is built)
-
-| Mode | Trigger | What it does |
-|---|---|---|
-| **Adopt** | record-shaped files already exist | proposes a config describing what is already there; moves nothing |
-| **Greenfield** | no records found | creates directories and templates for the selected types |
-
-**Adopt is the primary case.** Every codebase this project was extracted from already had records
-before it had tooling, and a tool whose setup path assumes an empty repository asks its most likely
-user to migrate before they can evaluate it. Greenfield is the easy case and is not the interesting
-one.
-
-Adopt **never moves a file.** It reads the tree, proposes a config, and reports what it found and
-what it could not classify. Restructuring is `migrate`'s job and carries a reverse-reference scan;
-folding that into `init` would put a corpus-wide move behind a command whose name promises setup.
+Adopt **never moves a file.** It reads the tree and proposes a config describing what is already
+there. Restructuring is `migrate`'s job and carries a reverse-reference scan; folding that into `init`
+would put a corpus-wide move behind a command whose name promises setup.
 
 ## Layout
 
-Everything the tool owns lives under `.urzua/`:
+Everything the tool owns lives under `.urzua/`, which is a directory rather than a root `urzua.yaml`
+because more than config lives there (below) -- scattering config, templates and derived state across
+the root, the corpus, and a cache directory is how each ends up governed by a different rule:
 
 ```
 .urzua/
-  config.yaml           tracked — the one config
-  templates/            tracked — one per selected type
-    adr.md
+  config.yaml           tracked — the one config; written by init (shipped)
+  templates/            tracked — a hand-authored starting point per type, read by `new` (SPEC-12)
+    adr.md                if present; init does not generate one
     rfc.md
-  cache/                gitignored — derived, never authoritative
-.gitignore              gains .urzua/cache/
+  cache/                intended gitignored — derived, never authoritative; not yet used by any command
 ```
 
-**Why a directory rather than a root `urzua.yaml`.** Config alone would not need one; config plus
-templates plus derived state does, and scattering those three across the root, the corpus, and a
-cache directory is how each ends up governed by a different rule.
+(`.gitignore` gaining `.urzua/cache/` is not yet built either -- `init` does not touch `.gitignore`
+today.)
+
+`init` writes only `.urzua/config.yaml` today. `templates/` and `cache/` are part of `.urzua/`'s
+settled shape -- `new` already reads a template from `templates/<type>.md` when a repository hand-
+authors one (`SPEC-12`) -- but nothing in the write path generates either, and `MILE-114`'s greenfield
+mode is the natural place for `init` to start writing starter templates once it exists.
 
 **Why templates leave the corpus.** This is the load-bearing reason, and it comes from this
 repository. `docs/adr/_template.md` and `docs/rfc/_template.md` are git-tracked, sit inside the
@@ -68,49 +61,25 @@ a *template*. A checker that discovers them reports errors on files that are exa
 
 The reflex is an ignore list. An ignore list is an ad-hoc exclusion that grows without bound, is
 invisible to the reader who has the question, and is the same anti-pattern RFC-11 rejects for
-boundaries and RFC-13 rejects for numbering gaps. Moving templates out of the corpus removes the
+boundaries and RFC-13 rejects for numbering gaps. Keeping templates out of the corpus removes the
 question instead of suppressing it: the template is not a record, so it does not live where records
 live, and no rule needs to know it exists.
 
-`cache/` is gitignored because derived state that is committed becomes a thing to reconcile. Nothing
-in `cache/` may be required for a correct run — a fresh clone with no cache produces identical
-results, only slower.
-
-## Type selection (Draft -- not built)
-
-`init` today takes only `--dry-run`; none of the flags below exist, and there is no interactive
-mode or built-in profile set. Adopt infers types from what's already on disk instead.
-
-```
-urzua init                          # interactive: pick types
-urzua init --types adr,rfc,spec     # non-interactive
-urzua init --types adr --dir docs   # layout root
-```
-
-Built-in profiles ship for `adr`, `rfc`, `spec` and `prd`. Each supplies a directory, a template,
-a status enum, required fields per status, and role requirements — the per-type half of RFC-1's
-core+profile model, with the core fixed across all of them.
-
-A profile is a **starting point that is written out, not a hidden default.** `init` materializes the
-profile's rules into `config.yaml` rather than referencing a built-in by name. A user who disagrees
-with a required field edits a visible line; a built-in referenced by name is a rule nobody can see
-and nobody reviewed, which is the failure this project exists to remove.
-
-Non-interactive must be first-class, not an afterthought: `init` runs in CI, in containers, and
-under agents, and an interactive-only setup path is unusable by exactly the callers this product is
-for.
+`init` takes only `--dry-run` and the global `--config`; adopt infers types from what's already on
+disk rather than taking a `--types` selection. Type selection, built-in profiles, and non-interactive
+setup for a repository with no records yet are `MILE-114`'s scope, not this spec's current subject.
 
 ## Safety
 
-- **Never clobber.** (Built.) An existing `.urzua/config.yaml` is not overwritten. `init` reports
-  what exists and exits 2.
-- **Idempotent.** (Built, via the never-clobber refusal above -- a re-run exits 2, not 0.) A
-  re-run against an initialized repository changes nothing.
-- **`--dry-run` prints the plan and writes nothing** (built), and is the documented way to see what
-  adopt inferred before committing to it.
-- **Adopt reports what it could not classify**, by path. (Draft -- not built.) A file under a
-  record directory that does not parse would be surfaced rather than silently excluded; today adopt
-  reports only what it did classify.
+- **Never clobber.** An existing `.urzua/config.yaml` is not overwritten. `init` reports what exists
+  and exits 2.
+- **Idempotent, via the never-clobber refusal above.** A re-run against an initialized repository
+  exits 2 and changes nothing.
+- **`--dry-run` prints the plan and writes nothing**, and is the documented way to see what adopt
+  inferred before committing to it.
+
+Reporting a record-shaped file adopt could not classify, by path, rather than silently excluding it
+is `MILE-114`'s scope: today adopt reports only what it did classify.
 
 ## Output (shipped)
 
@@ -137,45 +106,35 @@ established convention (SPEC-12): the caller reads the file at `config_path` if 
 | 0 | proposal computed (dry-run) or config written |
 | 2 | refused via `CouldNotRun` -- existing config, no record-shaped files found, unwritable path |
 
-Exit `1` ("adopt completed with unclassified files") is part of the Draft design, not built --
-adopt today classifies every record-shaped file it finds by directory; nothing is reported as
-unclassified.
+Exit `1` ("adopt completed with unclassified files") is `MILE-114`'s scope, not built -- adopt today
+classifies every record-shaped file it finds by directory; nothing is reported as unclassified.
 
-## Success criteria (Draft -- criteria 1 and 2 describe unbuilt behavior)
+## Success criteria
 
-1. `urzua init --types adr,rfc,spec` on this repository produces a config under which
-   `urzua check` runs, with both templates reported as unclassified rather than as errors.
-   (`--types` and unclassified-reporting are both unbuilt.)
-2. Re-running changes nothing and exits 0. (Today it exits 2 -- the never-clobber refusal. Whether
-   a no-op re-run should exit 0 instead is an open question this spec hasn't resolved.)
-3. `--dry-run` output matches what a real run then does, byte for byte.
-4. Adopt moves no files, and a `git status` after it shows only `.urzua/` and `.gitignore`.
+1. `--dry-run` output matches what a real run then does, byte for byte.
+2. Adopt moves no files, and a `git status` after it shows only `.urzua/` and `.gitignore`.
 
-Criterion 4 is the one to hold. The moment `init` moves a file it becomes a migration, and a
+Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
 migration without a reverse-reference scan is the documented data-loss shape.
+
+A `urzua init --types adr,rfc,spec` run producing a checkable config with unclassified files reported
+rather than errored, and a no-op re-run exiting 0 rather than 2, are `MILE-114`'s success criteria, not
+this spec's current subject.
 
 ## Open questions
 
-- **Does `init` wire CI and hooks?** Enormous convenience, and it writes to files it does not own
-  (`.github/workflows/`, `.husky/`). Leaning opt-in behind `--with-ci` and printing the snippet
-  otherwise — a tool that silently edits a workflow is a tool nobody trusts in a shared repo.
-- **Where does the display-number scheme get chosen?** Zero-padded width, per-type or global
-  sequence, and whether stable IDs are visible in filenames are all init-time choices that are
-  expensive to change later, and ADR-3 has not settled the encoding.
-- **Should adopt infer rules, or only structure?** Inferring that every existing ADR has a
-  `Deciders` field and therefore requiring it is powerful and quietly encodes today's corpus as
-  policy, including its accidents.
-- **Is `.urzua/` right when a repo holds several unrelated corpora?** One config per repo is
-  SPEC-3's position; a monorepo with genuinely independent products is the case that tests it,
-  and scope (RFC-11 §6) may already be the answer.
+None currently open for the adopt path this spec describes. `MILE-114` carries the open questions
+that depend on greenfield mode existing first (CI/hooks wiring, the display-number scheme, whether
+adopt should infer rules or only structure, and multi-corpus-per-repo).
 
 ## References
 
 - SPEC-2 — `check`, the consumer of what this writes.
 - SPEC-3 — configuration; amended by this spec to live at `.urzua/config.yaml`.
-- RFC-1 — core+profile, which type selection instantiates.
+- RFC-1 — core+profile, which `MILE-114`'s type selection will instantiate.
 - RFC-11 — why an ignore list is the wrong answer to the template problem.
-- ADR-3 — identifiers; the unsettled encoding behind open question 2.
+- MILE-114 — greenfield mode, `--types`/`--dir`, built-in profiles, and unclassified-file reporting,
+  relocated from this spec's own Draft sections (`BUG-26`).
 
 > **Revision log**
 >
@@ -187,3 +146,4 @@ migration without a reverse-reference scan is the documented data-loss shape.
 > | 2026-09-11 | Added `## Output (shipped)`/`## Exit codes (shipped)` documenting the real, narrower `InitReport` shape (BUG-20, ADR-46), separated from the Draft's own richer aspirational design (greenfield mode, `--types`/`--dir`, `unclassified` tracking, exit 1) so a reader can tell which parts are built. | **substantive** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-18 | Stays `Draft`, deliberately, and is the genuinely mixed case `BUG-26` identified. **Why:** the adopt path is built and tested -- `BUG-36`/`BUG-37` closed yesterday and `init` now adopts a real foreign corpus end to end. The rest is not: `init`'s only command-specific flag is `--dry-run` (`--config` is global, declared `#[arg(long, global = true)]`), so §"Type selection"'s `--types adr,rfc,spec`, its built-in `adr`/`rfc`/`spec`/`prd` profiles and its interactive mode do not exist, §Safety claims a re-run exits 0 when it exits 2, and §Success criteria depends on unclassified-file reporting that was never built. Flipping it would make the spec assert commands that error; leaving it `Draft` understates the half that ships. The aspirational sections need to move to a record that can hold unbuilt design before the flip -- that move is the remaining work on `BUG-26`. | **structural** |
+> | 2026-09-24 | Bumped to `0.5`, flipped to `Accepted` with `Embodiment: Verified`, closing `BUG-26`. **Why:** relocated every aspirational section (greenfield mode, `--types`/`--dir`, built-in profiles, unclassified-file reporting, the two unbuilt success criteria, all four open questions) to the new `MILE-114`, then re-verified every remaining claim against the binary rather than assuming the previous Draft/shipped split was already complete. Found two more inaccuracies the same pass: the Layout diagram implied `init` writes `templates/`/`cache/`/`.gitignore`, none of which it touches -- only `.urzua/config.yaml` is written today; corrected rather than carried forward silently. | **substantive** |

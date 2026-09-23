@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2M4GYH2DPTYDC01ZXQAKQBS
-Status: Open
+Status: Fixed
 Found-in: 'asked why SPEC-5 was still Draft while describing a shipped command; checking every spec''s Status found a clean date split -- the five oldest are all Draft, everything written later is Accepted'
-Regression-test: 'not yet written -- blocked on RFC-28, which proposes the rule that would catch this class mechanically rather than by inspection'
+Regression-test: 'none -- corpus-content and documentation defect, not a rule/behavior defect. The mechanical detection RFC-28 proposes remains its own, separate, undecided proposal (see Fix below); this record does not depend on it landing.'
 ---
 # 26 — Five specs are marked Draft while their subject is built and shipped
 
@@ -60,12 +60,26 @@ only mechanical evidence those specs are implemented is the `Implements:` commen
 source, and `check` does not read source files. `RFC-28` is the proposal to close that gap; this bug
 is the corpus half and does not depend on it landing.
 
+## Fix
+
+`SPEC-5`, the last of the five and the genuinely mixed case: relocated every aspirational section
+(greenfield mode, `--types`/`--dir`, built-in profiles, unclassified-file reporting, its two unbuilt
+success criteria, all four open questions) to a new milestone, `MILE-114`, then flipped to `Accepted`
+with `Embodiment: Verified`. Re-verifying every remaining claim against the binary (not assuming the
+prior Draft/shipped split was already complete) found two more inaccuracies in the same pass: the
+Layout section's diagram implied `init` writes `templates/`, `cache/`, and `.gitignore`; it writes only
+`.urzua/config.yaml` today. Corrected rather than carried forward silently.
+
+`SPEC-4` stays `Draft`, correctly -- its subject (`manifest.yaml`) still does not exist, per the
+2026-09-18 entry below. Five specs found, four flipped, one correctly not; that is this bug's full
+resolution.
+
 ## References
 
 - RFC-28 — proposes the config-declared status lifecycle and the source-claim rule that would catch
-  this class mechanically.
-- `docs/specs/SPEC-5-urzua-init.md` — the mixed case; §"Type selection" documents flags that do not
-  exist.
+  this class mechanically. Its own proposal, undecided, and not a dependency of this bug's closure.
+- `docs/specs/SPEC-5-urzua-init.md` — the mixed case, now `Accepted`; its own aspirational content
+  lives in `MILE-114`.
 - `docs/specs/SPEC-2-urzua-check.md` — version 0.8, subject fully shipped, still Draft.
 - `rust/crates/urzua-core/src/rules.rs` — `is_terminal_status`, which already knows `Accepted` is
   terminal for a spec.
@@ -77,3 +91,4 @@ is the corpus half and does not depend on it landing.
 > | 2026-09-16 | Initial bug record, `Status: Open`. Not yet fixed -- four specs look like straight flips but each needs its own read first, and SPEC-5 needs its unbuilt sections relocated before it can be accepted honestly. | **structural** |
 > | 2026-09-18 | Three of five flipped; two deliberately not. **Why:** `SPEC-1`, `2` and `3` were verified against the binary first -- every command and flag they name ships -- and now carry `Embodiment: Verified` with real locators, which also brings them into `embodiment.consistency`'s scope for the first time (`BUG-40`). `SPEC-4` stays `Draft` because its subject genuinely does not exist: nothing reads `manifest.yaml`. `SPEC-5` stays `Draft` as the mixed case this record identified -- its adopt path ships, its flags and profiles do not. Remaining work is moving `SPEC-5`'s aspirational sections somewhere that can hold unbuilt design; the mechanical cost this record cited is already gone, since `MILE-80` deleted `pointer.resolution`'s success-reporting half and the 27 `Parent: SPEC-1 ... Status = Draft` warnings with it. | **substantive** |
 > | 2026-09-18 | `Realized-by` added to the `spec` type's `known_fields`. **Why:** `Embodiment` was declared and `Realized-by` was not, which is an incoherent pair -- `embodiment.consistency` reads both and skips any record missing either, so a spec could declare an embodiment state that nothing could ever check. Not a list widened to quiet a diff: the field is the companion to one already declared, and without it the three specs accepted here would have claimed `Verified` with nothing able to verify them. `embodiment.consistency` now examines 36 records, up from 33. | **substantive** |
+> | 2026-09-24 | Fixed. `SPEC-5`'s aspirational sections relocated to `MILE-114`; flipped to `Accepted` with `Embodiment: Verified`. Two more inaccuracies found and corrected in the same pass (the Layout section overclaimed what `init` writes). `SPEC-4` confirmed still correctly `Draft`. All five specs this record found now have a settled, verified `Status`. | **substantive** |
