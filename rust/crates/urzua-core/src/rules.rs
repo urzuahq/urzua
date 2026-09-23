@@ -776,40 +776,56 @@ pub fn type_dir_matches_nothing(
     )
 }
 
-pub fn type_no_declared_spec(
+/// A config-schema inventory rule: examines `Config::record_types` itself,
+/// one type at a time, never a record. Shared by every rule below that
+/// reports a contradiction or omission in the schema's own declarations --
+/// several of these functions' own doc comments already named each other as
+/// "the same shape," which is what this extracts. `type_dir_matches_nothing`
+/// doesn't fit: it needs `matched`/`dir_exists`, data this shape has no room
+/// for.
+fn schema_inventory_rule(
     config: &Config,
-    config_path: &std::path::Path,
+    rule_id: &'static str,
+    mut check: impl FnMut(&str, &crate::config::RecordTypeConfig, &mut Vec<Finding>),
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_TYPE_NO_DECLARED_SPEC;
     let mut findings = Vec::new();
-
     let type_names = config.sorted_type_names();
-
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        if type_config.spec.is_none() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
-                ),
-            });
-        }
+        check(type_name, &config.record_types[*type_name], &mut findings);
         Outcome::Examined
     });
-
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: rule_id.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
         findings,
+    )
+}
+
+pub fn type_no_declared_spec(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    schema_inventory_rule(
+        config,
+        RULE_TYPE_NO_DECLARED_SPEC,
+        |type_name, type_config, findings| {
+            if type_config.spec.is_none() {
+                findings.push(Finding {
+                    rule: RULE_TYPE_NO_DECLARED_SPEC.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
+                    ),
+                });
+            }
+        },
     )
 }
 
@@ -824,46 +840,36 @@ pub fn header_deprecated_shape(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_HEADER_DEPRECATED_SHAPE;
-    let mut findings = Vec::new();
-
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        // Explicit enumeration, not `!= YamlFrontmatter` (`ADR-50`): a
-        // negative test reports every future shape as deprecated on sight,
-        // and `none` (no header at all) is a different axis, not a
-        // deprecated one. A `match`, not `matches!`, so a fifth `HeaderShape`
-        // variant forces a decision here instead of silently inheriting a
-        // default.
-        let deprecated = match type_config.header_shape {
-            crate::header::HeaderShape::Blockquote | crate::header::HeaderShape::BoldList => true,
-            crate::header::HeaderShape::YamlFrontmatter | crate::header::HeaderShape::None => false,
-        };
-        if deprecated {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "record type '{type_name}' declares a deprecated header shape -- migrate to `header_shape = \"yaml-frontmatter\"` (ADR-33)"
-                ),
-            });
-        }
-        Outcome::Examined
-    });
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
+    schema_inventory_rule(
+        config,
+        RULE_HEADER_DEPRECATED_SHAPE,
+        |type_name, type_config, findings| {
+            // Explicit enumeration, not `!= YamlFrontmatter` (`ADR-50`): a
+            // negative test reports every future shape as deprecated on
+            // sight, and `none` (no header at all) is a different axis, not
+            // a deprecated one. A `match`, not `matches!`, so a fifth
+            // `HeaderShape` variant forces a decision here instead of
+            // silently inheriting a default.
+            let deprecated =
+                match type_config.header_shape {
+                    crate::header::HeaderShape::Blockquote
+                    | crate::header::HeaderShape::BoldList => true,
+                    crate::header::HeaderShape::YamlFrontmatter
+                    | crate::header::HeaderShape::None => false,
+                };
+            if deprecated {
+                findings.push(Finding {
+                    rule: RULE_HEADER_DEPRECATED_SHAPE.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' declares a deprecated header shape -- migrate to `header_shape = \"yaml-frontmatter\"` (ADR-33)"
+                    ),
+                });
+            }
         },
-        findings,
     )
 }
 
@@ -957,40 +963,27 @@ pub fn config_pointer_declaration_missing(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CONFIG_POINTER_DECLARATION_MISSING;
-    let mut findings = Vec::new();
-
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        let declares_either =
-            type_config.pointer_fields.is_some() || type_config.narrative_fields.is_some();
-        if declares_either
-            && (type_config.pointer_fields.is_none() || type_config.narrative_fields.is_none())
-        {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
-                ),
-            });
-        }
-        Outcome::Examined
-    });
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
+    schema_inventory_rule(
+        config,
+        RULE_CONFIG_POINTER_DECLARATION_MISSING,
+        |type_name, type_config, findings| {
+            let declares_either =
+                type_config.pointer_fields.is_some() || type_config.narrative_fields.is_some();
+            if declares_either
+                && (type_config.pointer_fields.is_none() || type_config.narrative_fields.is_none())
+            {
+                findings.push(Finding {
+                    rule: RULE_CONFIG_POINTER_DECLARATION_MISSING.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
+                    ),
+                });
+            }
         },
-        findings,
     )
 }
 
@@ -1004,41 +997,29 @@ pub fn config_known_fields_declaration_missing(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING;
-    let mut findings = Vec::new();
-
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        // A `none`-shaped type has nowhere for a header field to be (`ADR-50`):
-        // `known_fields` governs which fields are permitted beyond
-        // `required_fields`, which is meaningless when no field can exist at
-        // all, the same reasoning `config.header-none-has-no-required-fields`
-        // already applies to `required_fields` itself.
-        if !type_config.has_no_header() && type_config.known_fields.is_none() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                message: format!(
-                    "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
-                ),
-            });
-        }
-        Outcome::Examined
-    });
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
+    schema_inventory_rule(
+        config,
+        RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+        |type_name, type_config, findings| {
+            // A `none`-shaped type has nowhere for a header field to be
+            // (`ADR-50`): `known_fields` governs which fields are permitted
+            // beyond `required_fields`, which is meaningless when no field
+            // can exist at all, the same reasoning
+            // `config.header-none-has-no-required-fields` already applies to
+            // `required_fields` itself.
+            if !type_config.has_no_header() && type_config.known_fields.is_none() {
+                findings.push(Finding {
+                    rule: RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
+                    ),
+                });
+            }
         },
-        findings,
     )
 }
 
@@ -1070,45 +1051,32 @@ pub fn config_pointer_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CONFIG_POINTER_FIELD_NOT_KNOWN;
-    let mut findings = Vec::new();
+    schema_inventory_rule(
+        config,
+        RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
+        |type_name, type_config, findings| {
+            let declared = type_config.declared_fields();
 
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        let declared = type_config.declared_fields();
-
-        let mut relation_fields: Vec<&String> = Vec::new();
-        if let Some(pointer_fields) = &type_config.pointer_fields {
-            relation_fields.extend(pointer_fields);
-        }
-        if let Some(narrative_fields) = &type_config.narrative_fields {
-            relation_fields.extend(narrative_fields);
-        }
-
-        for field in relation_fields {
-            if !declared.contains(field.as_str()) {
-                findings.push(undeclared_alias_finding(
-                    RULE_ID,
-                    config_path,
-                    format!(
-                        "record type '{type_name}' declares '{field}' as a pointer/narrative field, but it isn't in required_fields or known_fields"
-                    ),
-                ));
+            let mut relation_fields: Vec<&String> = Vec::new();
+            if let Some(pointer_fields) = &type_config.pointer_fields {
+                relation_fields.extend(pointer_fields);
             }
-        }
-        Outcome::Examined
-    });
+            if let Some(narrative_fields) = &type_config.narrative_fields {
+                relation_fields.extend(narrative_fields);
+            }
 
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
+            for field in relation_fields {
+                if !declared.contains(field.as_str()) {
+                    findings.push(undeclared_alias_finding(
+                        RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
+                        config_path,
+                        format!(
+                            "record type '{type_name}' declares '{field}' as a pointer/narrative field, but it isn't in required_fields or known_fields"
+                        ),
+                    ));
+                }
+            }
         },
-        findings,
     )
 }
 
@@ -1120,43 +1088,30 @@ pub fn config_relation_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CONFIG_RELATION_FIELD_NOT_KNOWN;
-    let mut findings = Vec::new();
-
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        let Some(relation_fields) = &type_config.relation_fields else {
-            return Outcome::Examined;
-        };
-        let declared = type_config.declared_fields();
-        for role in crate::config::RelationRole::ALL {
-            let Some(field) = relation_fields.get(role) else {
-                continue;
+    schema_inventory_rule(
+        config,
+        RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
+        |type_name, type_config, findings| {
+            let Some(relation_fields) = &type_config.relation_fields else {
+                return;
             };
-            if !declared.contains(field) {
-                findings.push(undeclared_alias_finding(
-                    RULE_ID,
-                    config_path,
-                    format!(
-                        "record type '{type_name}' declares '{field}' for relation_fields.{}, but it isn't in required_fields or known_fields",
-                        role.config_key()
-                    ),
-                ));
+            let declared = type_config.declared_fields();
+            for role in crate::config::RelationRole::ALL {
+                let Some(field) = relation_fields.get(role) else {
+                    continue;
+                };
+                if !declared.contains(field) {
+                    findings.push(undeclared_alias_finding(
+                        RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
+                        config_path,
+                        format!(
+                            "record type '{type_name}' declares '{field}' for relation_fields.{}, but it isn't in required_fields or known_fields",
+                            role.config_key()
+                        ),
+                    ));
+                }
             }
-        }
-        Outcome::Examined
-    });
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
         },
-        findings,
     )
 }
 
@@ -1168,44 +1123,31 @@ pub fn config_pointer_narrative_overlap(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CONFIG_POINTER_NARRATIVE_OVERLAP;
-    let mut findings = Vec::new();
-
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        let (Some(pointer_fields), Some(narrative_fields)) =
-            (&type_config.pointer_fields, &type_config.narrative_fields)
-        else {
-            return Outcome::Examined;
-        };
-        let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
-        for field in narrative_fields {
-            if declared_pointers.contains(field) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    message: format!(
-                        "record type '{type_name}' declares '{field}' in both pointer_fields and narrative_fields -- a field must be exactly one kind"
-                    ),
-                });
+    schema_inventory_rule(
+        config,
+        RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
+        |type_name, type_config, findings| {
+            let (Some(pointer_fields), Some(narrative_fields)) =
+                (&type_config.pointer_fields, &type_config.narrative_fields)
+            else {
+                return;
+            };
+            let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
+            for field in narrative_fields {
+                if declared_pointers.contains(field) {
+                    findings.push(Finding {
+                        rule: RULE_CONFIG_POINTER_NARRATIVE_OVERLAP.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: config_path.to_path_buf(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "record type '{type_name}' declares '{field}' in both pointer_fields and narrative_fields -- a field must be exactly one kind"
+                        ),
+                    });
+                }
             }
-        }
-        Outcome::Examined
-    });
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
         },
-        findings,
     )
 }
 
@@ -1226,82 +1168,76 @@ pub fn config_header_none_has_no_required_fields(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS;
-    let mut findings = Vec::new();
-
-    let type_names = config.sorted_type_names();
-
-    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
-        let type_config = &config.record_types[*type_name];
-        if !type_config.has_no_header() {
-            return Outcome::Examined;
-        }
-
-        let mut contradiction = |declared: bool, field: &str, detail: String| {
-            if declared {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    message: format!(
-                        "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
-                    ),
-                });
+    schema_inventory_rule(
+        config,
+        RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+        |type_name, type_config, findings| {
+            if !type_config.has_no_header() {
+                return;
             }
-        };
 
-        contradiction(
-            !type_config.required_fields.is_empty(),
-            "required_fields",
-            format!("{:?}", type_config.required_fields),
-        );
-        contradiction(
-            type_config
-                .known_fields
-                .as_ref()
-                .is_some_and(|f| !f.is_empty()),
-            "known_fields",
-            format!("{:?}", type_config.known_fields),
-        );
-        contradiction(
-            type_config
-                .pointer_fields
-                .as_ref()
-                .is_some_and(|f| !f.is_empty()),
-            "pointer_fields",
-            format!("{:?}", type_config.pointer_fields),
-        );
-        contradiction(
-            type_config
-                .narrative_fields
-                .as_ref()
-                .is_some_and(|f| !f.is_empty()),
-            "narrative_fields",
-            format!("{:?}", type_config.narrative_fields),
-        );
-        contradiction(
-            type_config.relation_fields.as_ref().is_some_and(|r| {
-                crate::config::RelationRole::ALL
-                    .iter()
-                    .any(|role| r.get(*role).is_some())
-            }),
-            "relation_fields",
-            format!("{:?}", type_config.relation_fields),
-        );
+            let contradiction = |findings: &mut Vec<Finding>,
+                                 declared: bool,
+                                 field: &str,
+                                 detail: String| {
+                if declared {
+                    findings.push(Finding {
+                            rule: RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS.to_string(),
+                            severity: FindingSeverity::Error,
+                            file: config_path.to_path_buf(),
+                            line: None,
+                            waived: None,
+                            message: format!(
+                                "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
+                            ),
+                        });
+                }
+            };
 
-        Outcome::Examined
-    });
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
+            contradiction(
+                findings,
+                !type_config.required_fields.is_empty(),
+                "required_fields",
+                format!("{:?}", type_config.required_fields),
+            );
+            contradiction(
+                findings,
+                type_config
+                    .known_fields
+                    .as_ref()
+                    .is_some_and(|f| !f.is_empty()),
+                "known_fields",
+                format!("{:?}", type_config.known_fields),
+            );
+            contradiction(
+                findings,
+                type_config
+                    .pointer_fields
+                    .as_ref()
+                    .is_some_and(|f| !f.is_empty()),
+                "pointer_fields",
+                format!("{:?}", type_config.pointer_fields),
+            );
+            contradiction(
+                findings,
+                type_config
+                    .narrative_fields
+                    .as_ref()
+                    .is_some_and(|f| !f.is_empty()),
+                "narrative_fields",
+                format!("{:?}", type_config.narrative_fields),
+            );
+            contradiction(
+                findings,
+                type_config.relation_fields.as_ref().is_some_and(|r| {
+                    crate::config::RelationRole::ALL
+                        .iter()
+                        .any(|role| r.get(*role).is_some())
+                }),
+                "relation_fields",
+                format!("{:?}", type_config.relation_fields),
+            );
         },
-        findings,
     )
 }
 
@@ -1480,16 +1416,10 @@ pub fn pointer_target_status(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.is_unreadable() {
-                return Outcome::Unreadable;
-            }
-            let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::Absent;
+            let references = match declared_field_references(record, field_name.as_str()) {
+                Ok(refs) => refs,
+                Err(outcome) => return outcome,
             };
-            let references = extract_references(value);
-            if references.is_empty() {
-                return Outcome::Absent;
-            }
 
             for reference in references {
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
@@ -1557,16 +1487,10 @@ pub fn pointer_resolution(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.is_unreadable() {
-                return Outcome::Unreadable;
-            }
-            let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::Absent;
+            let references = match declared_field_references(record, field_name.as_str()) {
+                Ok(refs) => refs,
+                Err(outcome) => return outcome,
             };
-            let references = extract_references(value);
-            if references.is_empty() {
-                return Outcome::Absent;
-            }
 
             for reference in references {
                 if index.contains_key(&crate::values::RecordId::new(&reference)) {
@@ -1716,16 +1640,10 @@ pub fn narrative_field_stale(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.is_unreadable() {
-                return Outcome::Unreadable;
-            }
-            let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::Absent;
+            let references = match declared_field_references(record, field_name.as_str()) {
+                Ok(refs) => refs,
+                Err(outcome) => return outcome,
             };
-            let references = extract_references(value);
-            if references.is_empty() {
-                return Outcome::Absent;
-            }
 
             for reference in references {
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
@@ -1869,6 +1787,28 @@ pub(crate) fn extract_references(value: &str) -> Vec<String> {
             is_record_reference(token).then(|| token.to_string())
         })
         .collect()
+}
+
+/// The references a declared pointer/narrative field carries, or the
+/// `Outcome` its absence means -- the guard chain `pointer_resolution`,
+/// `pointer_target_status`, `narrative_field_stale`, and
+/// `relation_target_status_undeclared` each independently re-derived before
+/// their own per-reference loop. `Unreadable` if the header didn't parse;
+/// `Absent` if the field is unwritten, or written but yields no reference
+/// (`narrative_field_stale`'s BUG-39 case: prose that extracts nothing is
+/// unexamined, not silently present).
+fn declared_field_references(record: &Record, field_name: &str) -> Result<Vec<String>, Outcome> {
+    if record.header.is_unreadable() {
+        return Err(Outcome::Unreadable);
+    }
+    let Some(value) = record.header.get(field_name) else {
+        return Err(Outcome::Absent);
+    };
+    let references = extract_references(value);
+    if references.is_empty() {
+        return Err(Outcome::Absent);
+    }
+    Ok(references)
 }
 
 /// Rule 3 (Phase 6): a required field's *quality*, not just its presence.
@@ -2337,15 +2277,18 @@ pub fn filename_title_consistency(
     )
 }
 
-/// Same acceptance as `record_id` (ADR-36/BUG-2): `TYPE-NNNN-slug.md`, any
-/// non-empty numeric prefix, no fixed digit-count.
+/// The number half of `record_id`'s `TYPE-NNNN` (ADR-36/BUG-2): any
+/// non-empty numeric prefix, no fixed digit-count. Shares `record_id`'s
+/// acceptance exactly by construction, rather than re-deriving it -- the two
+/// were independently hand-written copies of the same filename grammar
+/// before (`BUG-133`'s shape, one level over: not the reference/filename
+/// segment predicates, but the id-from-filename extraction itself).
 fn filename_number(record: &Record) -> Option<String> {
-    let stem = record.path.file_stem()?.to_str()?;
-    let type_prefix = record.type_prefix.clone();
-
-    let rest = stem.strip_prefix(&format!("{type_prefix}-"))?;
-    let number = rest.split_once('-').map_or(rest, |(n, _)| n);
-    (!number.is_empty() && number.chars().all(|c| c.is_ascii_digit())).then(|| number.to_string())
+    let id = record_id(record)?;
+    // The number is always the segment after the *last* hyphen: it is
+    // all-digit by `record_id`'s own guard, so a hyphenated type prefix
+    // (`DOC-ADR-2`) still splits correctly.
+    id.rsplit_once('-').map(|(_, number)| number.to_string())
 }
 
 /// Whether an H1 exists and whether it carries a number are independent
@@ -3162,16 +3105,10 @@ pub fn relation_target_status_undeclared(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.is_unreadable() {
-                return Outcome::Unreadable;
-            }
-            let Some(value) = record.header.get(field_name.as_str()) else {
-                return Outcome::Absent;
+            let references = match declared_field_references(record, field_name.as_str()) {
+                Ok(refs) => refs,
+                Err(outcome) => return outcome,
             };
-            let references = extract_references(value);
-            if references.is_empty() {
-                return Outcome::Absent;
-            }
 
             for reference in references {
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
@@ -4970,6 +4907,28 @@ mod tests {
             "# 37 — Y\n\n> Status: Accepted\n".to_string(),
         );
         let (exec, findings) = filename_title_consistency(&[new_style, legacy_style], &full_text);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    /// `filename_number` derives from `record_id` rather than re-deriving
+    /// the same filename grammar independently -- a hyphenated type prefix
+    /// (`DOC-ADR`, `BUG-111`'s shape) must still isolate the trailing
+    /// numeric segment correctly.
+    #[test]
+    fn filename_title_consistency_reads_the_number_past_a_hyphenated_prefix() {
+        let r = record_with_prefix(
+            "docs/adr/DOC-ADR-2-x.md",
+            "adr",
+            "DOC-ADR",
+            "# 2 — X\n\n> Status: Accepted\n",
+        );
+        let mut full_text = HashMap::new();
+        full_text.insert(
+            r.path.clone(),
+            "# 2 — X\n\n> Status: Accepted\n".to_string(),
+        );
+        let (exec, findings) = filename_title_consistency(&[r], &full_text);
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
