@@ -202,6 +202,7 @@ which stays only for what genuinely isn't built yet.
 | `config.relation-field-not-known` | Every field named in a type's `relation_fields` (`RFC-42`/`ADR-61`) must also appear in that type's own `required_fields`/`known_fields`, the same shape as `config.pointer-field-not-known`. |
 | `config.known-fields-declaration-missing` | A type declaring no `known_fields` at all gets no field-set governance from `header.field-set-consistency` (`ADR-53`'s "declared, not voted" default) — opt-in, so a repository can require the choice be made explicit rather than left ambiguous by omission (`RFC-43`/`ADR-62`). |
 | `relation.target-status-undeclared` | A resolved pointer or narrative reference whose target type never declares `Status` at all — `ADR-60`'s gate would otherwise silently exclude it from every status-reading rule, with no disclosure of why (`RFC-45`/`ADR-63`). |
+| `field.leading-reserved-indicator` | A declared field's value starts with a reserved YAML indicator character (`@`, `*`, `&`, `!`, `%`, `|`, `>`), which needs quoting to parse at all — the same avoidable, decorative-prefix hazard `BUG-18` found for `Author`/`Deciders`, generalized so the next instance is caught rather than found by hand. |
 <!-- rule-table:end -->
 
 ### Not yet built

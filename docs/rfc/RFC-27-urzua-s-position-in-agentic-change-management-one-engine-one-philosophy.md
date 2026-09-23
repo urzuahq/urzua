@@ -2,7 +2,7 @@
 Stable-Id: 01M28K3SWK8FGBR1R4N3GJH15S
 Status: Draft
 Date: 2026-09-11
-Author: '@beauwilliams'
+Author: beauwilliams
 ---
 # 27 — Urzua's position in agentic change management: one engine, one philosophy
 
