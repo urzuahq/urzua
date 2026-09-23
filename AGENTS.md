@@ -34,11 +34,94 @@ that claim; read it before assuming a change is obviously fine.
   says. Weigh new work against whether it moves toward an adopter deleting their own linter, not
   just toward more checks existing.
 
+## The record-type workflow
+
+Six record types, each governing its own directory and each defined by its own `spec` (`SPEC-16`
+adr, `SPEC-17` rfc, `SPEC-18` spec, `SPEC-6` milestone, `SPEC-9` bug, `SPEC-10` waiver) — read the
+relevant one before hand-writing a record of that type, rather than inferring its schema from nearby
+examples. What each is *for*, not just its fields:
+
+- **`rfc`** — a proposal, not yet a decision. Lives in `Draft`/`Discussion` until an `adr`
+  (`Derives-from: RFC-N`) accepts or rejects it. An RFC's own `Status` is independent of whether a
+  governing ADR exists yet.
+- **`adr`** — a point-in-time decision fact. Frozen once `Accepted`; never edited in place to match
+  later understanding — amended via a dated `## Amendment` section instead (see "Never silently
+  rewrite an Accepted decision" below).
+- **`spec`** — a living, current-truth document, the opposite of an ADR: edited in place, a
+  substantive change is a `Version` bump plus a revision-log entry, not a new record. `spec` is also
+  what any *other* type's own schema is defined in (see above).
+- **`milestone`** — this project's own backlog: decided-but-unbuilt work, explicitly deferred work,
+  unrouted research findings. *Planned* work moving toward done.
+- **`bug`** — a real defect already found, retrospective rather than planned, with a required
+  `Regression-test` pointer so "nobody verified this is actually fixed" can't happen by accident.
+- **`waiver`** — a reviewed, time-boxed exception to a specific rule finding, never a config-level
+  ignore list. A waived finding still appears in `check`'s output, only excluded from the blocking
+  exit code.
+
+The typical pipeline: an idea becomes an `rfc`; an `adr` derives from it to accept or reject; an
+accepted decision that isn't built yet becomes a `milestone` (`Implements` pointing at the `rfc`/`adr`
+it realizes); a defect found along the way becomes a `bug`; a `spec` is created or updated once the
+resulting schema/behavior is real and needs documenting as current truth. Not every change visits
+every stage — a same-turn bugfix still gets a `bug` record even though no RFC preceded it.
+
+`Implements`/`Derives-from`/`Amends`/`Parent` are **pointer fields**; `Blocked-on` is a **narrative
+field**. Both are resolved by `pointer.resolution` the same way — a stale or unresolvable reference
+is a finding either way, not just a broken link. The real difference is format and what else runs on
+top: a pointer field must hold clean, comma-separated references only (`header.pointer-field-clean`
+enforces this; it never applies to narrative fields, which tolerate free prose around the reference),
+and a narrative field gets one more check narrative fields don't: `narrative-field.stale` flags it
+specifically once the record it names reaches a terminal status, a stronger, more specific signal
+than `pointer.resolution`'s routine "resolves; target status = X". Use a pointer field for a
+relationship that should read as a clean, enforced reference; narrative when it's prose that happens
+to name a record, with staleness worth flagging once that record is done.
+
 ## Git workflow
 
 Never commit directly to `main`. Create a feature branch and open a PR for every change, however
 small — including a one-line docs fix. Check `git branch --show-current` before your first edit if
-there's any doubt which branch you're on.
+there's any doubt which branch you're on. Cut the branch from an up-to-date `origin/main`, not from
+whatever a prior round left checked out — a branch cut before the last PR merged carries a stale base
+and reopens whatever that PR just fixed.
+
+## The review loop
+
+This project's own defects are found by running reviews against real code, not by reading a diff and
+trusting it — the discipline in "Verify before trusting" applies to a *reviewer's* claims exactly as
+much as to a change's own author. The loop:
+
+1. **Run a review.** This repository has `CodeRabbit` wired in at the GitHub level
+   (`.coderabbit.yaml`) — trigger it by commenting `@coderabbitai review` on an open PR, regardless of
+   which tool or agent is doing the triggering. If your own environment provides an additional review
+   capability (a slash command, a separate reviewing agent), use it too — that's a capability of your
+   tooling, not a project requirement, so don't assume the next agent working here has the same one.
+2. **Verify every finding against the actual code before acting on it** — a review has produced
+   fabricated findings before, and has also, this project's own history shows, missed a real defect a
+   narrower earlier check should have caught. Neither "the reviewer said so" nor "I already checked
+   this shape once" is verification; read the exact lines the finding names and confirm the failure
+   scenario reproduces, or doesn't.
+3. **Triage each verified finding into exactly one of three outcomes** — never a fourth "note it and
+   move on":
+   - **Fix it now** if it's mechanical and needs no design or schema decision. Ship it with a
+     planted-violation test, observed failing before the fix and passing after (see "Verify before
+     trusting").
+   - **File it** (`bug` for an already-real defect, `milestone`/`rfc` for something requiring a design
+     call) if fixing it means deciding something, not just correcting something. Don't rush a design
+     decision to close a review round faster.
+   - **Refute it** if it describes already-decided, deliberate design — `grep docs/adr/` for the
+     field, rule, or behavior the finding names; an `Accepted` decision that already made this exact
+     tradeoff means the finding is wrong, not the code.
+4. **Watch for a repeating shape across findings**, not just each one individually. The same
+   collapse-of-distinct-states defect (`BUG-125`) was independently found in three different rules,
+   across two separate review passes, before it was fixed once in the shared mechanism instead of
+   three times at the call sites. Two independent findings with the same underlying shape is a signal
+   to fix the mechanism (or at least name the pattern to the user) rather than patch each instance and
+   move on.
+5. **Ship each round as one PR**: fresh branch off `origin/main`, a changeset (`.changeset/*.md`)
+   per PR describing what an adopter would care about — skip it for the same cases "Before calling
+   anything done" already exempts (CI config, internal refactors, docs-only changes) — then `gh pr
+   comment <n> --body "@coderabbitai review"` after pushing, `gh pr checks <n>` polled until
+   resolved. **Never merge or force-push** —
+   that action belongs to the human running the session, every time, with no standing exception.
 
 ## Use the tool on itself
 
