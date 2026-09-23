@@ -443,6 +443,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_FIELD_UNTRIMMED_VALUE, || {
             rules::field_untrimmed_value(&records, &config)
         }),
+        crate::gate::gated(
+            &config,
+            rules::RULE_FIELD_LEADING_RESERVED_INDICATOR,
+            || rules::field_leading_reserved_indicator(&records, &config),
+        ),
         crate::gate::gated(&config, rules::RULE_HEADER_FIELD_CASE_MISMATCH, || {
             rules::header_field_case_mismatch(&records, &config)
         }),

@@ -57,6 +57,7 @@ pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
 pub const RULE_CONFIG_RELATION_FIELD_NOT_KNOWN: &str = "config.relation-field-not-known";
 pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
     "config.known-fields-declaration-missing";
+pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -90,6 +91,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
     RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
+    RULE_FIELD_LEADING_RESERVED_INDICATOR,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -224,6 +226,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
         description: "A resolved pointer or narrative reference whose target type never declares `Status` at all — `ADR-60`'s gate would otherwise silently exclude it from every status-reading rule, with no disclosure of why (`RFC-45`/`ADR-63`).",
+    },
+    RuleMeta {
+        id: RULE_FIELD_LEADING_RESERVED_INDICATOR,
+        description: "A declared field's value starts with a reserved YAML indicator character (`@`, `*`, `&`, `!`, `%`, `|`, `>`), which needs quoting to parse at all — the same avoidable, decorative-prefix hazard `BUG-18` found for `Author`/`Deciders`, generalized so the next instance is caught rather than found by hand.",
     },
 ];
 
@@ -2057,6 +2063,89 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
                         value.trim()
                     ),
                 });
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// Characters YAML reserves as scalar indicators: a plain (unquoted) scalar
+/// cannot begin with one. `BUG-18` found `@` doing exactly this to every
+/// hand-typed `Author`/`Deciders` value -- decorative, forcing a quoting
+/// workaround for a character that carried no meaning anywhere in this
+/// codebase. Deliberately excludes backtick: this rule's own first run
+/// found nine `Subject` values quoted only because they open with a
+/// backtick-quoted command name -- meaningful Markdown, not decoration, so
+/// including it would make the rule permanently noisy on legitimate content
+/// rather than catching the next `BUG-18`. Also excludes `:`, `-`, `#`,
+/// which YAML only treats as indicators in specific positions and would
+/// false-positive on ordinary prose-like values.
+const RESERVED_LEADING_CHARS: &[char] = &['@', '*', '&', '!', '%', '|', '>'];
+
+/// A declared field's value starting with a reserved YAML indicator
+/// character (`BUG-18`'s defect class, generalized past `Author`/`Deciders`):
+/// the character forces quoting to parse at all, and a hand-typed value only
+/// needs that quoting *because* the character is there. This does not assert
+/// the character is meaningless -- only that it costs a reader nothing to
+/// confirm, the same way `BUG-18`'s investigation had to grep the whole
+/// codebase by hand to learn `@` was decorative before removing it. Distinct
+/// from `BUG-12`'s defect (an *unquoted* reserved character breaking the
+/// header's own parse, surfaced reactively via the real YAML error): this
+/// rule only ever examines a value the header already parsed successfully.
+pub fn field_leading_reserved_indicator(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
+    const RULE_ID: &str = RULE_FIELD_LEADING_RESERVED_INDICATOR;
+    let mut findings = Vec::new();
+
+    let slots = field_slots(records, declared_by_type);
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| record.path.clone(),
+        |(record, field)| {
+            // `ADR-50`: a `header_shape: none` type has no header for this
+            // slot to be in.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
+            let Some(value) = record.header.get(field.as_str()) else {
+                return Outcome::Absent;
+            };
+            if let Some(first) = value.chars().next() {
+                if RESERVED_LEADING_CHARS.contains(&first) {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "field '{field}' is {value:?} -- it needs quoting only because it starts with '{first}', a reserved YAML indicator character; confirm the character is meaningful, or drop it (BUG-18)"
+                        ),
+                    });
+                }
             }
             Outcome::Examined
         },
@@ -4467,6 +4556,51 @@ mod tests {
         let config = config_for_required(vec![("adr", vec!["Status"])]);
         let (exec, findings) = field_untrimmed_value(&[r], &config);
         assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// `BUG-18`: a hand-typed `Author: '@beauwilliams'` only needs quoting
+    /// because of the decorative `@` -- the same defect this rule generalizes
+    /// past `Author`/`Deciders` to any declared field.
+    #[test]
+    fn a_value_starting_with_a_reserved_yaml_indicator_is_reported_observed_failing() {
+        let r = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/adr/ADR-1-x.md"),
+            "adr".to_string(),
+            "---\nAuthor: '@beauwilliams'\n---\n# 1 — X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "ADR".to_string(),
+        );
+        let config = config_for_required(vec![("adr", vec!["Author"])]);
+
+        let (exec, findings) = field_leading_reserved_indicator(&[r], &config);
+        assert_eq!(examined(&exec), 1, "the slot is written, so it is judged");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains('@'));
+        assert!(findings[0].message.contains("BUG-18"));
+    }
+
+    #[test]
+    fn a_value_with_no_reserved_leading_character_is_not_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Author: beauwilliams\n");
+        let config = config_for_required(vec![("adr", vec!["Author"])]);
+        let (exec, findings) = field_leading_reserved_indicator(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// An em dash, this corpus's own "no value" convention, must not be
+    /// mistaken for a reserved indicator -- it isn't one, and `—` is a
+    /// deliberate, common, legitimate value across many declared fields.
+    #[test]
+    fn the_no_value_em_dash_sentinel_is_not_reported() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Supersedes / Superseded-by: —\n",
+        );
+        let config = config_for_required(vec![("adr", vec!["Supersedes / Superseded-by"])]);
+        let (_, findings) = field_leading_reserved_indicator(&[r], &config);
         assert!(findings.is_empty(), "{findings:?}");
     }
 

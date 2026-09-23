@@ -4,8 +4,8 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/report.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Date: 2026-09-11
-Author: '@beauwilliams'
-Deciders: '@beauwilliams'
+Author: beauwilliams
+Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: BUG-19
 ---

@@ -129,6 +129,7 @@ rules:
   field.quality: error
   field.pending: warn
   field.untrimmed-value: warn
+  field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
   filename.title-consistency: error
   relation.supersession-reciprocity: error
