@@ -179,18 +179,27 @@ pub(crate) fn scope_to_requested_paths(
 /// git history, since the `Realized-by` line was last touched (ADR-0032).
 /// The one piece of I/O `embodiment_consistency` needs but can't do itself
 /// -- computed here and handed in as plain data, same shape as `full_text`.
-pub(crate) fn compute_drifted_records(repo_root: &Path, records: &[Record]) -> HashSet<PathBuf> {
+pub(crate) fn compute_drifted_records(
+    repo_root: &Path,
+    records: &[Record],
+    config: &Config,
+) -> HashSet<PathBuf> {
     let mut drifted = HashSet::new();
 
     for record in records {
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
+        let locator_field = rules::relation_field_name(
+            config,
+            &record.record_type,
+            urzua_core::config::RelationRole::EmbodimentLocator,
+        );
+        let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
         let Some(field) = record
             .header
             .fields
             .iter()
-            .find(|f| f.key.as_str() == "Realized-by")
+            .find(|f| f.key.as_str() == locator_field)
         else {
             continue;
         };

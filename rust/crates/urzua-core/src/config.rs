@@ -207,12 +207,10 @@ pub struct RecordTypeConfig {
     #[serde(default)]
     pub spec: Option<String>,
     /// The field name that plays each fixed relation/status role for this
-    /// type (`RFC-42`/`ADR-61`), replacing what were six hardcoded literals
-    /// (`"Status"`, `"Embodiment"`, `"Realized-by"`,
-    /// `"Supersedes / Superseded-by"`) baked into rule bodies. Every role
-    /// defaults to its current literal when omitted, so an existing config
-    /// needs no change. A declared name not also present in this type's
-    /// `required_fields`/`known_fields` is reported by
+    /// type (`RFC-42`/`ADR-61`). Every role defaults to its own literal
+    /// (`RelationRole::default_field_name`) when omitted, so an existing
+    /// config needs no change. A declared name not also present in this
+    /// type's `required_fields`/`known_fields` is reported by
     /// `config.relation-field-not-known`, mirroring
     /// `config.pointer-field-not-known`.
     #[serde(default)]
@@ -232,6 +230,17 @@ pub enum RelationRole {
 }
 
 impl RelationRole {
+    /// Every role, so a validation loop can't silently miss one added later
+    /// -- the compiler catches an unmatched variant in `default_field_name`
+    /// and `RelationFields::get` below, but not a hand-copied array of role
+    /// names, which is exactly what this constant replaces.
+    pub const ALL: [RelationRole; 4] = [
+        RelationRole::Status,
+        RelationRole::EmbodimentState,
+        RelationRole::EmbodimentLocator,
+        RelationRole::Supersession,
+    ];
+
     /// The pre-`RFC-42` literal this role reads when a type declares no
     /// override.
     pub fn default_field_name(self) -> &'static str {
@@ -240,6 +249,17 @@ impl RelationRole {
             RelationRole::EmbodimentState => "Embodiment",
             RelationRole::EmbodimentLocator => "Realized-by",
             RelationRole::Supersession => "Supersedes / Superseded-by",
+        }
+    }
+
+    /// The config key this role is declared under in `relation_fields`
+    /// (`RelationFields`'s own field name).
+    pub fn config_key(self) -> &'static str {
+        match self {
+            RelationRole::Status => "status",
+            RelationRole::EmbodimentState => "embodiment_state",
+            RelationRole::EmbodimentLocator => "embodiment_locator",
+            RelationRole::Supersession => "supersession",
         }
     }
 }
@@ -251,6 +271,20 @@ pub struct RelationFields {
     pub embodiment_state: Option<String>,
     pub embodiment_locator: Option<String>,
     pub supersession: Option<String>,
+}
+
+impl RelationFields {
+    /// The declared override for `role`, or `None` if this type didn't
+    /// declare one -- the single match the compiler checks against
+    /// `RelationRole::ALL`, in place of a hand-enumerated tuple list.
+    pub fn get(&self, role: RelationRole) -> Option<&str> {
+        match role {
+            RelationRole::Status => self.status.as_deref(),
+            RelationRole::EmbodimentState => self.embodiment_state.as_deref(),
+            RelationRole::EmbodimentLocator => self.embodiment_locator.as_deref(),
+            RelationRole::Supersession => self.supersession.as_deref(),
+        }
+    }
 }
 
 impl RecordTypeConfig {
@@ -270,13 +304,10 @@ impl RecordTypeConfig {
     /// an existing config's behavior is unchanged until it opts into a
     /// different name.
     pub fn relation_field(&self, role: RelationRole) -> &str {
-        let declared = self.relation_fields.as_ref().and_then(|r| match role {
-            RelationRole::Status => r.status.as_deref(),
-            RelationRole::EmbodimentState => r.embodiment_state.as_deref(),
-            RelationRole::EmbodimentLocator => r.embodiment_locator.as_deref(),
-            RelationRole::Supersession => r.supersession.as_deref(),
-        });
-        declared.unwrap_or_else(|| role.default_field_name())
+        self.relation_fields
+            .as_ref()
+            .and_then(|r| r.get(role))
+            .unwrap_or_else(|| role.default_field_name())
     }
 }
 

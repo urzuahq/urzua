@@ -297,7 +297,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
         .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
     {
-        compute_drifted_records(&repo_root, &records)
+        compute_drifted_records(&repo_root, &records, &config)
     } else {
         std::collections::HashSet::new()
     };

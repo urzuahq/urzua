@@ -159,7 +159,7 @@ records to invent content or its linters to be switched off.
 
 ### Shipped, by actual rule id
 
-Twenty-one rules ship today. This list is the complete, current set, and
+Twenty-nine rules ship today. This list is the complete, current set, and
 `urzua_core::rules::ALL_RULES` is the source it must match — not a delta on top of the
 aspirational language below, which stays only for what genuinely isn't built yet.
 
@@ -186,6 +186,14 @@ aspirational language below, which stays only for what genuinely isn't built yet
 | `field.pending` | A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`. |
 | `claim.status-agreement` | A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared. |
 | `embodiment.locator-exists` | A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file. |
+| `type.dir-matches-nothing` | A type's declared `dir` matched no discovered path at all (`BUG-56`'s hazard for `dir`, no load-time guard). |
+| `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
+| `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
+| `config.scope-matches-nothing` | Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). |
+| `field.untrimmed-value` | A field value carrying leading/trailing whitespace, reachable only through `yaml-frontmatter` — disclosed rather than silently trimmed. |
+| `header.field-case-mismatch` | A declared field written under a different case than its declaration (`RFC-40`/`ADR-58`) — the one place a case-only miss is distinguished from genuine non-adoption. |
+| `config.header-none-has-no-required-fields` | A type declaring `header_shape: none` has nowhere for a field to be, so a non-empty `required_fields` is a self-contradiction (`ADR-50`). |
+| `config.relation-field-not-known` | Every field named in a type's `relation_fields` (`RFC-42`/`ADR-61`) must also appear in that type's own `required_fields`/`known_fields`, the same shape as `config.pointer-field-not-known`. |
 
 ### Not yet built
 
@@ -336,3 +344,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-19 | Rule count corrected from seventeen to twenty-one, and `ALL_RULES` named as the source this list must match. **Why:** `MILE-80` and the fixes after it added `pointer.target-status`, `field.pending`, `claim.status-agreement` and `embodiment.locator-exists` without updating the spec that calls itself *"the complete, current set"* -- so `check`'s own spec understated what `check` runs by four. Nothing checks the two agree, which is filed separately. | **substantive** |
 > | 2026-09-19 | The four rules shipped since `MILE-80` added to the table: `pointer.target-status`, `field.pending`, `claim.status-agreement`, `embodiment.locator-exists`. **Why:** the count was corrected to twenty-one in the same change that left the list at seventeen rows, so the section contradicted itself in adjacent lines and the rule this repository declares `error` was undocumented in the spec calling itself complete. `BUG-52` is the missing mechanism. | **substantive** |
 > | 2026-09-19 | `embodiment.locator-exists`'s row states the on-disk requirement. **Why:** it read *"absent from the git-tracked set"*, which was the rule's first form and silent on a staged deletion -- `git rm` drops a path from `ls-files` while leaving it in `diff --cached`. The spec described a check the code no longer performs. | **substantive** |
+> | 2026-09-23 | Rule count corrected from twenty-one to twenty-nine; the eight rows `ALL_RULES` had gained since without this table being updated added (`type.dir-matches-nothing`, `type.record-outside-declared-dir`, `identity.collision`, `config.scope-matches-nothing`, `field.untrimmed-value`, `header.field-case-mismatch`, `config.header-none-has-no-required-fields`, `config.relation-field-not-known`). **Why:** found by a `RFC-42`/`ADR-61` review, which noticed this list's own self-declared invariant ("the complete, current set... `ALL_RULES` is the source it must match") had gone untrue by seven rows before its own change added an eighth. `BUG-52` remains open as the actual mechanism gap — nothing enforces this agreement automatically, so this is a manual sync, not a fix. | **substantive** |

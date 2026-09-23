@@ -4,10 +4,11 @@
 //! concept. No new field, no new rule -- a read over data every other rule
 //! already parses.
 
+use crate::config::{Config, RelationRole};
 use crate::record::Record;
 use crate::rules::{
-    build_normalized_index, extract_references, parse_realized_by, record_id, RelationKind,
-    NARRATIVE, POINTER,
+    build_normalized_index, extract_references, parse_realized_by, record_id, relation_field_name,
+    RelationKind, NARRATIVE, POINTER,
 };
 use crate::values::RecordId;
 use std::collections::HashMap;
@@ -25,10 +26,12 @@ pub struct GoverningRecord {
 /// decisions govern this file," answered from data the schema already
 /// carries rather than a new declared-scope field (RFC-0011's boundaries
 /// remain a separate, undesigned mechanism).
-pub fn explain(records: &[Record], path: &str) -> Vec<GoverningRecord> {
+pub fn explain(records: &[Record], path: &str, config: &Config) -> Vec<GoverningRecord> {
     let mut matches = Vec::new();
     for record in records {
-        let Some(realized_by_value) = record.header.get("Realized-by") else {
+        let locator_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
+        let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
         let parsed = parse_realized_by(realized_by_value);
@@ -78,16 +81,11 @@ pub struct GraphEdge {
 /// `pointer_resolution`'s).
 pub fn graph(
     records: &[Record],
+    config: &Config,
     pointer_fields_by_type: &HashMap<String, Vec<String>>,
     narrative_fields_by_type: &HashMap<String, Vec<String>>,
 ) -> Vec<GraphEdge> {
     let index = build_normalized_index(records);
-
-    // Supersedes / Superseded-by is pushed unconditionally below, its own
-    // mechanism outside the pointer_fields/narrative_fields axis (ADR-44) --
-    // excluded here so a config that also lists it in either declared list
-    // can't produce a duplicate edge or a conflicting `kind`.
-    const SUPERSESSION_FIELD: &str = "Supersedes / Superseded-by";
 
     let mut edges = Vec::new();
     for record in records {
@@ -95,12 +93,19 @@ pub fn graph(
             continue;
         };
 
+        // Supersedes / Superseded-by is pushed unconditionally below, its own
+        // mechanism outside the pointer_fields/narrative_fields axis (ADR-44)
+        // -- excluded here so a config that also lists it in either declared
+        // list can't produce a duplicate edge or a conflicting `kind`.
+        let supersession_field =
+            relation_field_name(config, &record.record_type, RelationRole::Supersession);
+
         let mut fields: Vec<(&str, RelationKind)> = Vec::new();
         if let Some(pointer_fields) = pointer_fields_by_type.get(&record.record_type) {
             fields.extend(
                 pointer_fields
                     .iter()
-                    .filter(|f| f.as_str() != SUPERSESSION_FIELD)
+                    .filter(|f| f.as_str() != supersession_field)
                     .map(|f| (f.as_str(), POINTER.kind)),
             );
         }
@@ -108,11 +113,11 @@ pub fn graph(
             fields.extend(
                 narrative_fields
                     .iter()
-                    .filter(|f| f.as_str() != SUPERSESSION_FIELD)
+                    .filter(|f| f.as_str() != supersession_field)
                     .map(|f| (f.as_str(), NARRATIVE.kind)),
             );
         }
-        fields.push((SUPERSESSION_FIELD, POINTER.kind));
+        fields.push((supersession_field, POINTER.kind));
 
         for (field_name, kind) in fields {
             let Some(value) = record.header.get(field_name) else {
@@ -141,6 +146,41 @@ mod tests {
         Record::parse(PathBuf::from(path), record_type.to_string(), content)
     }
 
+    fn no_relation_field_overrides() -> Config {
+        Config {
+            schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            rules: HashMap::new(),
+            record_types: HashMap::new(),
+        }
+    }
+
+    fn config_with_relation_field(
+        record_type: &str,
+        relation_fields: crate::config::RelationFields,
+    ) -> Config {
+        Config {
+            schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            rules: HashMap::new(),
+            record_types: [(
+                record_type.to_string(),
+                crate::config::RecordTypeConfig {
+                    dir: "docs/x".to_string(),
+                    required_fields: vec![],
+                    header_shape: crate::header::HeaderShape::default(),
+                    prefix: None,
+                    header_layout: None,
+                    known_fields: None,
+                    pointer_fields: None,
+                    narrative_fields: None,
+                    spec: None,
+                    relation_fields: Some(relation_fields),
+                },
+            )]
+            .into_iter()
+            .collect(),
+        }
+    }
+
     fn field_map(entries: &[(&str, &[&str])]) -> HashMap<String, Vec<String>> {
         entries
             .iter()
@@ -160,7 +200,7 @@ mod tests {
             "adr",
             "> Realized-by: code:rust/src/lib.rs\n",
         );
-        let result = explain(&[r], "rust/src/lib.rs");
+        let result = explain(&[r], "rust/src/lib.rs", &no_relation_field_overrides());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].via, "code");
     }
@@ -172,7 +212,43 @@ mod tests {
             "adr",
             "> Realized-by: code:rust/src/lib.rs\n",
         );
-        assert!(explain(&[r], "rust/src/other.rs").is_empty());
+        assert!(explain(&[r], "rust/src/other.rs", &no_relation_field_overrides()).is_empty());
+    }
+
+    #[test]
+    fn explain_reads_a_custom_embodiment_locator_field_name_observed_failing() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Evidence: code:rust/src/lib.rs\n",
+        );
+        let config = config_with_relation_field(
+            "adr",
+            crate::config::RelationFields {
+                embodiment_locator: Some("Evidence".to_string()),
+                ..Default::default()
+            },
+        );
+        let result = explain(&[r], "rust/src/lib.rs", &config);
+        assert_eq!(result.len(), 1, "{result:?}");
+        assert_eq!(result[0].via, "code");
+    }
+
+    #[test]
+    fn graph_reads_a_custom_supersession_field_name_observed_failing() {
+        let old = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
+        let new = record("docs/adr/ADR-2-y.md", "adr", "> Replaces: ADR-1\n");
+        let config = config_with_relation_field(
+            "adr",
+            crate::config::RelationFields {
+                supersession: Some("Replaces".to_string()),
+                ..Default::default()
+            },
+        );
+        let edges = graph(&[old, new], &config, &HashMap::new(), &HashMap::new());
+        assert_eq!(edges.len(), 1, "{edges:?}");
+        assert_eq!(edges[0].relation, "Replaces");
+        assert_eq!(edges[0].kind, RelationKind::Pointer);
     }
 
     #[test]
@@ -180,7 +256,12 @@ mod tests {
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-1\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let edges = graph(&[target, source], &pointer_fields, &HashMap::new());
+        let edges = graph(
+            &[target, source],
+            &no_relation_field_overrides(),
+            &pointer_fields,
+            &HashMap::new(),
+        );
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].to, "RFC-1");
         assert_eq!(edges[0].kind, RelationKind::Pointer);
@@ -191,7 +272,12 @@ mod tests {
     fn graph_marks_a_non_resolving_reference_as_dangling_observed_failing() {
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-9999\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let edges = graph(&[source], &pointer_fields, &HashMap::new());
+        let edges = graph(
+            &[source],
+            &no_relation_field_overrides(),
+            &pointer_fields,
+            &HashMap::new(),
+        );
         assert_eq!(edges.len(), 1);
         assert!(edges[0].dangling);
     }
@@ -205,7 +291,12 @@ mod tests {
         let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
         let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-0001\n");
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
-        let edges = graph(&[target, source], &pointer_fields, &HashMap::new());
+        let edges = graph(
+            &[target, source],
+            &no_relation_field_overrides(),
+            &pointer_fields,
+            &HashMap::new(),
+        );
         assert_eq!(edges.len(), 1);
         assert!(
             !edges[0].dangling,
@@ -222,7 +313,12 @@ mod tests {
         let target = record("docs/specs/SPEC-1-x.md", "spec", "> Status: Accepted\n");
         let source = record("docs/specs/SPEC-2-y.md", "spec", "> Parent: SPEC-1\n");
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
-        let edges = graph(&[target, source], &pointer_fields, &HashMap::new());
+        let edges = graph(
+            &[target, source],
+            &no_relation_field_overrides(),
+            &pointer_fields,
+            &HashMap::new(),
+        );
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].relation, "Parent");
         assert!(!edges[0].dangling);
@@ -237,7 +333,12 @@ mod tests {
             "> Blocked-on: BUG-1\n",
         );
         let narrative_fields = field_map(&[("milestone", &["Blocked-on"])]);
-        let edges = graph(&[bug, milestone], &HashMap::new(), &narrative_fields);
+        let edges = graph(
+            &[bug, milestone],
+            &no_relation_field_overrides(),
+            &HashMap::new(),
+            &narrative_fields,
+        );
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].kind, RelationKind::Narrative);
     }
@@ -250,7 +351,12 @@ mod tests {
             "adr",
             "> Supersedes / Superseded-by: ADR-1\n",
         );
-        let edges = graph(&[old, new], &HashMap::new(), &HashMap::new());
+        let edges = graph(
+            &[old, new],
+            &no_relation_field_overrides(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].kind, RelationKind::Pointer);
     }
@@ -269,7 +375,12 @@ mod tests {
             "> Supersedes / Superseded-by: ADR-1\n",
         );
         let pointer_fields = field_map(&[("adr", &["Supersedes / Superseded-by"])]);
-        let edges = graph(&[old, new], &pointer_fields, &HashMap::new());
+        let edges = graph(
+            &[old, new],
+            &no_relation_field_overrides(),
+            &pointer_fields,
+            &HashMap::new(),
+        );
         assert_eq!(edges.len(), 1, "unexpected edges: {edges:?}");
         assert_eq!(edges[0].kind, RelationKind::Pointer);
     }

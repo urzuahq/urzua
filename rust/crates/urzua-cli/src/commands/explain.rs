@@ -36,7 +36,7 @@ pub fn run(config_path: Option<PathBuf>, path: String) -> ExitCode {
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let governing_records = urzua_core::graph::explain(&records, &path);
+    let governing_records = urzua_core::graph::explain(&records, &path, &config);
 
     emit(&ExplainReport {
         status: ReportStatus::Ok,

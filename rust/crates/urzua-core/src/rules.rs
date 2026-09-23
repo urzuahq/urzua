@@ -844,6 +844,25 @@ pub fn config_pointer_declaration_missing(
     )
 }
 
+/// A declared alias not present in a type's own `required_fields`/
+/// `known_fields`, shared by every "config declares a field name nothing
+/// else knows about" rule (`config.pointer-field-not-known`,
+/// `config.relation-field-not-known`).
+fn undeclared_alias_finding(
+    rule_id: &str,
+    config_path: &std::path::Path,
+    message: String,
+) -> Finding {
+    Finding {
+        rule: rule_id.to_string(),
+        severity: FindingSeverity::Error,
+        file: config_path.to_path_buf(),
+        line: None,
+        waived: None,
+        message,
+    }
+}
+
 /// Rule (MILE-0090/ADR-0044): every field named in a type's `pointer_fields`
 /// or `narrative_fields` must also appear in that type's own
 /// `required_fields`/`known_fields` -- a relationship field the schema
@@ -873,16 +892,13 @@ pub fn config_pointer_field_not_known(
 
         for field in relation_fields {
             if !declared.contains(field.as_str()) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    message: format!(
+                findings.push(undeclared_alias_finding(
+                    RULE_ID,
+                    config_path,
+                    format!(
                         "record type '{type_name}' declares '{field}' as a pointer/narrative field, but it isn't in required_fields or known_fields"
                     ),
-                });
+                ));
             }
         }
         Outcome::Examined
@@ -919,24 +935,19 @@ pub fn config_relation_field_not_known(
             return Outcome::Examined;
         };
         let declared = type_config.declared_fields();
-        for (role, field) in [
-            ("status", &relation_fields.status),
-            ("embodiment_state", &relation_fields.embodiment_state),
-            ("embodiment_locator", &relation_fields.embodiment_locator),
-            ("supersession", &relation_fields.supersession),
-        ] {
-            let Some(field) = field else { continue };
-            if !declared.contains(field.as_str()) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    message: format!(
-                        "record type '{type_name}' declares '{field}' for relation_fields.{role}, but it isn't in required_fields or known_fields"
+        for role in crate::config::RelationRole::ALL {
+            let Some(field) = relation_fields.get(role) else {
+                continue;
+            };
+            if !declared.contains(field) {
+                findings.push(undeclared_alias_finding(
+                    RULE_ID,
+                    config_path,
+                    format!(
+                        "record type '{type_name}' declares '{field}' for relation_fields.{}, but it isn't in required_fields or known_fields",
+                        role.config_key()
                     ),
-                });
+                ));
             }
         }
         Outcome::Examined
@@ -2359,7 +2370,7 @@ fn declared_value<'a>(record: &'a Record, key: &str) -> Result<&'a str, Outcome>
 
 /// The field name `record`'s own type uses for `role` (`RFC-42`/`ADR-61`),
 /// or the role's pre-`RFC-42` default if the type isn't configured at all.
-fn relation_field_name<'a>(
+pub fn relation_field_name<'a>(
     config: &'a Config,
     record_type: &str,
     role: crate::config::RelationRole,
