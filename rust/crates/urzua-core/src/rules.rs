@@ -421,6 +421,15 @@ pub fn header_required_fields(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // `ADR-50`: mirrors the record-scoped loop's own gate above -- a
+            // `header_shape: none` type has no header for this slot to be in.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             // An unparsed header leaves every slot of that record unreadable: the
             // rule was handed them and could not judge them. The record-scoped
             // finding above says why.
@@ -1416,40 +1425,36 @@ pub fn pointer_target_status(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            let references = match declared_field_references(record, field_name.as_str()) {
-                Ok(refs) => refs,
-                Err(outcome) => return outcome,
-            };
-
-            for reference in references {
-                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
-                    continue;
-                };
-                // A lookup miss is unjudged, not a status match (BUG-100).
-                let target_status_field = relation_field_name(
-                    config,
-                    &target.record_type,
-                    crate::config::RelationRole::Status,
-                );
-                let Ok(status) =
-                    declared_cross_record_value(declared_by_type, target, target_status_field)
-                else {
-                    continue;
-                };
-                if not_in.iter().any(|s| s == status) {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        message: format!(
-                            "{field_name}: {reference} resolves, but its {target_status_field} is {status}"
-                        ),
-                    });
-                }
+            let result = for_each_resolved_status_target(
+                record,
+                field_name.as_str(),
+                config,
+                index,
+                |reference, target, target_status_field| {
+                    // A lookup miss is unjudged, not a status match (BUG-100).
+                    let Ok(status) =
+                        declared_cross_record_value(declared_by_type, target, target_status_field)
+                    else {
+                        return;
+                    };
+                    if not_in.iter().any(|s| s == status) {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Warning,
+                            file: record.path.clone(),
+                            line: None,
+                            waived: None,
+                            message: format!(
+                                "{field_name}: {reference} resolves, but its {target_status_field} is {status}"
+                            ),
+                        });
+                    }
+                },
+            );
+            match result {
+                Ok(()) => Outcome::Examined,
+                Err(outcome) => outcome,
             }
-            Outcome::Examined
         },
     );
 
@@ -1811,6 +1816,34 @@ fn declared_field_references(record: &Record, field_name: &str) -> Result<Vec<St
     Ok(references)
 }
 
+/// The walk `pointer_target_status` and `relation_target_status_undeclared`
+/// both do before their own, differing judgment of a resolved target's
+/// status: resolve the declared field's references, look each up in the
+/// index, and name the field that plays the `Status` role for the target's
+/// type. A lookup miss is silently skipped in both -- `pointer_resolution`
+/// already reports a dangling reference, so this is never that rule's job.
+fn for_each_resolved_status_target(
+    record: &Record,
+    field_name: &str,
+    config: &Config,
+    index: &RecordIndex,
+    mut body: impl FnMut(&str, &Record, &str),
+) -> Result<(), Outcome> {
+    let references = declared_field_references(record, field_name)?;
+    for reference in references {
+        let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
+            continue;
+        };
+        let target_status_field = relation_field_name(
+            config,
+            &target.record_type,
+            crate::config::RelationRole::Status,
+        );
+        body(&reference, target, target_status_field);
+    }
+    Ok(())
+}
+
 /// Rule 3 (Phase 6): a required field's *quality*, not just its presence.
 /// `header.required-fields` only asks "is the key there"; a field holding
 /// unedited template text or an explicit pending marker passes that check
@@ -1834,6 +1867,15 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // `ADR-50`: same reasoning as `field.quality`'s own gate -- a
+            // `header_shape: none` type has no header to fail to parse.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             // Unreadable, not absent -- the same reason as `field.quality`.
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
@@ -2158,6 +2200,19 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // `ADR-50`: a `header_shape: none` type has nowhere for a header
+            // to be, so `is_unreadable()` is always true for it by
+            // construction -- not a parse failure. A declared `required_fields`
+            // entry on such a type is a config contradiction the opt-in
+            // `config.header-none-has-no-required-fields` lint names, not a
+            // record this rule can ever examine.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify. Calling it Blank reports something
             // untrue about a file that may well set the field, and a rule whose
@@ -3096,6 +3151,8 @@ pub fn relation_target_status_undeclared(
     let pointer_fields_by_type = &pointer_fields_by_type;
     let narrative_fields_by_type = narrative_fields_by_type(config);
     let narrative_fields_by_type = &narrative_fields_by_type;
+    let declared_by_type = declared_fields_by_type(config);
+    let declared_by_type = &declared_by_type;
 
     let slots =
         pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
@@ -3105,39 +3162,34 @@ pub fn relation_target_status_undeclared(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            let references = match declared_field_references(record, field_name.as_str()) {
-                Ok(refs) => refs,
-                Err(outcome) => return outcome,
-            };
-
-            for reference in references {
-                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
-                    continue; // pointer_resolution already reports a dangling reference
-                };
-                let target_status_field = relation_field_name(
-                    config,
-                    &target.record_type,
-                    crate::config::RelationRole::Status,
-                );
-                let declared = config
-                    .record_types
-                    .get(&target.record_type)
-                    .is_some_and(|t| t.declared_fields().contains(target_status_field));
-                if !declared {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        message: format!(
-                            "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
-                            target.record_type
-                        ),
-                    });
-                }
+            let result = for_each_resolved_status_target(
+                record,
+                field_name.as_str(),
+                config,
+                index,
+                |reference, target, target_status_field| {
+                    let declared = declared_by_type
+                        .get(&target.record_type)
+                        .is_some_and(|fields| fields.contains(target_status_field));
+                    if !declared {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Warning,
+                            file: record.path.clone(),
+                            line: None,
+                            waived: None,
+                            message: format!(
+                                "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
+                                target.record_type
+                            ),
+                        });
+                    }
+                },
+            );
+            match result {
+                Ok(()) => Outcome::Examined,
+                Err(outcome) => outcome,
             }
-            Outcome::Examined
         },
     );
 
@@ -5484,6 +5536,93 @@ mod tests {
         let (_, findings) = field_quality(&[r], &config);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
+    }
+
+    /// `ADR-50`: a `header_shape: none` type has nowhere for a header to be,
+    /// so `is_unreadable()` is always true for it by construction -- not a
+    /// parse failure. `header_required_fields`'s own record-scoped loop and
+    /// `migrate::schema_report` (`BUG-137`) both gate on `has_no_header()`
+    /// before checking `is_unreadable()`; `field_quality`'s population loop
+    /// did not.
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_field_quality_observed_failing() {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                required_fields: vec!["Reviewers".to_string()],
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = field_quality(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (population.examined(), population.unreadable(), population.out_of_scope()),
+            (0, 0, 1),
+            "a header-less type's declared field is never examinable, but it is not a parse failure either: {population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// Same gap, `field_pending`'s own population loop.
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_field_pending_observed_failing() {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                required_fields: vec!["Reviewers".to_string()],
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = field_pending(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// Same gap, `header_required_fields`'s own per-slot population loop --
+    /// distinct from its record-scoped loop, which already gated correctly.
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_header_required_fields_observed_failing(
+    ) {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                required_fields: vec!["Reviewers".to_string()],
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = header_required_fields(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
