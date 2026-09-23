@@ -1657,12 +1657,18 @@ fn is_record_reference(token: &str) -> bool {
     let Some((num, prefix_segments)) = segments.split_last() else {
         return false;
     };
+    // Digits allowed in a prefix segment (`BUG-114`: a type may declare a
+    // prefix like `V2`), same grammar `parse_record_filename` already uses --
+    // the two "is this a valid record identifier" recognizers must agree, or
+    // a mention of a digit-bearing-prefix record in prose never resolves.
     !num.is_empty()
         && num.chars().all(|c| c.is_ascii_digit())
         && !prefix_segments.is_empty()
-        && prefix_segments
-            .iter()
-            .all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_uppercase()))
+        && prefix_segments.iter().all(|s| {
+            !s.is_empty()
+                && s.chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        })
 }
 
 pub(crate) fn scan_references(line: &str) -> Vec<String> {
@@ -5048,6 +5054,19 @@ mod tests {
         assert_eq!(
             extract_references("DOC-ADR-2, RFC-9"),
             vec!["DOC-ADR-2".to_string(), "RFC-9".to_string()]
+        );
+    }
+
+    /// `BUG-114` loosened `parse_record_filename` to allow a digit-bearing
+    /// prefix (e.g. a type declaring `prefix: "V2"`), but the reference
+    /// recognizer wasn't updated to match -- a mention of such a record in
+    /// prose or a pointer field never resolved.
+    #[test]
+    fn a_digit_bearing_prefix_reference_is_recognized_observed_failing() {
+        assert!(is_record_reference("V2-3"));
+        assert_eq!(
+            extract_references("V2-3, RFC-9"),
+            vec!["V2-3".to_string(), "RFC-9".to_string()]
         );
     }
 

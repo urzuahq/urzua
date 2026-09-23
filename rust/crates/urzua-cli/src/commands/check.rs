@@ -15,6 +15,16 @@ use crate::discovery::{
 };
 use crate::emit;
 
+/// Whether an already-resolved (canonicalized) path stays inside the
+/// repository -- the one containment test every `claim_paths` check needs,
+/// so a future change to the policy (e.g. `BUG-117`'s reflexive-`starts_with`
+/// case) has one place to land. Both `resolve_inside_repo`, below, and the
+/// pre-flight `claim_paths` validation in `run` call this rather than each
+/// inlining `starts_with`.
+fn path_is_inside_repo(repo_canonical: &std::path::Path, resolved: &std::path::Path) -> bool {
+    resolved.starts_with(repo_canonical)
+}
+
 /// Canonicalizes `candidate` and confirms it stays inside `repo_canonical` --
 /// the one check `claim_paths`' directory and file branches both need, so a
 /// future change to the symlink/containment policy has one place to land
@@ -29,7 +39,7 @@ fn resolve_inside_repo(
             candidate.display()
         )
     })?;
-    if !resolved.starts_with(repo_canonical) {
+    if !path_is_inside_repo(repo_canonical, &resolved) {
         return Err(format!(
             "claim_paths: {} resolves outside the repository",
             candidate.display()
@@ -290,7 +300,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
                             "claim.status-agreement: claim_paths entry '{prefix}' is not a directory"
                         )))
                     }
-                    Ok(r) if !r.starts_with(&root) => {
+                    Ok(r) if !path_is_inside_repo(&root, r) => {
                         return emit(&CouldNotRun::from(format!(
                             "claim.status-agreement: claim_paths entry '{prefix}' resolves outside the repository"
                         )))
