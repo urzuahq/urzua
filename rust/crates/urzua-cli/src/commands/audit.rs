@@ -41,7 +41,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let record_index = rules::build_normalized_index(&records);
+    let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
 
     let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
         rules::pointer_resolution(&records, &config, &record_index)
@@ -51,8 +51,12 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
         || rules::supersession_reciprocity(&records, &config, &record_index),
     );
+    let (exec3, findings3) = crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
+        rules::identity_collision(&records, identity_collisions)
+    });
     let mut findings = findings1;
     findings.extend(findings2);
+    findings.extend(findings3);
 
     let waivers = urzua_core::waiver::load_waivers(&records);
     urzua_core::waiver::apply_waivers(&mut findings, &waivers, &urzua_io::today());
@@ -61,7 +65,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     let blocking =
         active_findings().any(|f| f.severity == urzua_core::report::FindingSeverity::Error);
 
-    let executed = [exec1.clone(), exec2.clone()];
+    let executed = [exec1.clone(), exec2.clone(), exec3.clone()];
     let status = if records.is_empty() || !crate::gate::any_rule_looked(&executed) {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
@@ -70,7 +74,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         ReportStatus::FindingsPresent
     };
 
-    let rules_executed = vec![exec1, exec2];
+    let rules_executed = vec![exec1, exec2, exec3];
     let report = CheckReport {
         status,
         files_examined: records.len(),

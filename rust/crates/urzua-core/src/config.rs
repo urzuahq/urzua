@@ -4,7 +4,7 @@
 
 use crate::header::{HeaderLayout, HeaderShape};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// The only schema version defined so far (ADR-0012). A config declaring any
 /// other value is a parse-time error, not a silent best-effort read.
@@ -14,25 +14,24 @@ pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub schema_version: u32,
-    pub record_types: HashMap<String, RecordTypeConfig>,
+    /// A `BTreeMap`, not a `HashMap`: iterated by several rules and by
+    /// discovery, and `HashMap` iteration order is randomized per process,
+    /// which several call sites' own results must not depend on.
+    pub record_types: BTreeMap<String, RecordTypeConfig>,
     /// Every rule a repository has turned on, and at what level. Absent or
     /// empty means no rule runs: governance is declared, never inherited
-    /// (ADR-53).
+    /// (ADR-53). A `BTreeMap` for the same reason as `record_types`: `parse`
+    /// below reports the first unrecognized name it finds, and that should
+    /// not depend on `HashMap`'s randomized order.
     #[serde(default)]
-    pub rules: HashMap<String, RuleSetting>,
+    pub rules: BTreeMap<String, RuleSetting>,
 }
 
 impl Config {
-    /// Every declared record type's name, sorted -- `record_types` is a
-    /// `HashMap`, whose own iteration order is randomized per process. A
-    /// rule or discovery pass iterating it unsorted can feed a
-    /// first-seen-wins merge (`build_index_reporting_collisions`) a
-    /// different candidate order on every run, making its result
-    /// nondeterministic across otherwise-identical invocations.
+    /// Every declared record type's name, in `record_types`' own (sorted)
+    /// order.
     pub fn sorted_type_names(&self) -> Vec<&String> {
-        let mut names: Vec<&String> = self.record_types.keys().collect();
-        names.sort();
-        names
+        self.record_types.keys().collect()
     }
 }
 
@@ -301,10 +300,21 @@ impl RelationFields {
 }
 
 impl RecordTypeConfig {
+    /// `ADR-50`: a `none`-shaped type has nowhere for a header field to be at
+    /// all, the gate every `config.header-none-has-no-*` rule shares.
+    pub fn has_no_header(&self) -> bool {
+        self.header_shape == HeaderShape::None
+    }
+
     /// Every field this type declares, `required_fields` **or** `known_fields`
     /// (`BUG-106`): reading either alone silently drops the type that requires
     /// a field instead of merely permitting it.
-    pub fn declared_fields(&self) -> std::collections::HashSet<crate::values::FieldName> {
+    /// A `BTreeSet`, not a `HashSet`: this feeds `field_slots` (`rules.rs`)
+    /// for `field.untrimmed-value`/`header.field-case-mismatch`'s candidate
+    /// order, and `HashSet` iteration order is randomized per process --
+    /// unsorted, two runs of the same unchanged corpus could report those
+    /// rules' findings in a different relative order.
+    pub fn declared_fields(&self) -> std::collections::BTreeSet<crate::values::FieldName> {
         self.required_fields
             .iter()
             .chain(self.known_fields.iter().flatten())

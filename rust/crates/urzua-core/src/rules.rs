@@ -193,7 +193,9 @@ fn header_layout_by_type(config: &Config) -> HashMap<String, HeaderLayout> {
 /// `known_fields` (`ADR-59`): `header.field-set-consistency` skips a type
 /// declaring only `required_fields` by design, and a map with an entry for
 /// every type would silently stop skipping it.
-fn known_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::values::FieldName>> {
+fn known_fields_by_type(
+    config: &Config,
+) -> HashMap<String, std::collections::BTreeSet<crate::values::FieldName>> {
     project_by_type(config, |cfg| {
         cfg.known_fields.as_ref().map(|_| cfg.declared_fields())
     })
@@ -201,7 +203,9 @@ fn known_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::value
 
 /// Every field a type declares (`required_fields` ∪ `known_fields`), by type
 /// name (`ADR-59`, `BUG-106`).
-fn declared_fields_by_type(config: &Config) -> HashMap<String, HashSet<crate::values::FieldName>> {
+fn declared_fields_by_type(
+    config: &Config,
+) -> HashMap<String, std::collections::BTreeSet<crate::values::FieldName>> {
     project_by_type(config, |cfg| Some(cfg.declared_fields()))
 }
 
@@ -238,7 +242,7 @@ pub fn header_required_fields(
         if config
             .record_types
             .get(&record.record_type)
-            .is_some_and(|t| t.header_shape == crate::header::HeaderShape::None)
+            .is_some_and(|t| t.has_no_header())
         {
             continue;
         }
@@ -407,7 +411,7 @@ fn layout_label(layout: HeaderLayout) -> &'static str {
 /// declared -- `Maße` and `Masse` are different words.
 pub fn field_is_declared(
     key: &crate::values::FieldName,
-    allowed: &HashSet<crate::values::FieldName>,
+    allowed: &std::collections::BTreeSet<crate::values::FieldName>,
 ) -> bool {
     allowed.contains(key)
 }
@@ -418,7 +422,7 @@ pub fn field_is_declared(
 /// a message that changes between runs on one corpus is `BUG-79`'s shape.
 pub fn near_miss<'a>(
     key: &crate::values::FieldName,
-    allowed: &'a HashSet<crate::values::FieldName>,
+    allowed: &'a std::collections::BTreeSet<crate::values::FieldName>,
 ) -> Option<&'a crate::values::FieldName> {
     let key = key.as_str().to_lowercase();
     allowed
@@ -877,9 +881,7 @@ pub fn config_known_fields_declaration_missing(
         // `required_fields`, which is meaningless when no field can exist at
         // all, the same reasoning `config.header-none-has-no-required-fields`
         // already applies to `required_fields` itself.
-        if type_config.header_shape != crate::header::HeaderShape::None
-            && type_config.known_fields.is_none()
-        {
+        if !type_config.has_no_header() && type_config.known_fields.is_none() {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Error,
@@ -1096,7 +1098,7 @@ pub fn config_header_none_has_no_required_fields(
 
     let population = census(PopulationUnit::RecordType, type_names, |type_name| {
         let type_config = &config.record_types[*type_name];
-        if type_config.header_shape != crate::header::HeaderShape::None {
+        if !type_config.has_no_header() {
             return Outcome::Examined;
         }
 
@@ -2330,9 +2332,7 @@ pub fn revision_log_change_class(
 }
 
 pub(crate) struct RevisionLogEntry {
-    #[allow(dead_code)]
     pub(crate) date: String,
-    #[allow(dead_code)]
     pub(crate) change_class: String,
     pub(crate) line: usize,
 }
@@ -3061,7 +3061,7 @@ mod tests {
     fn config_with_types(entries: Vec<(&str, crate::config::RecordTypeConfig)>) -> Config {
         Config {
             schema_version: 2,
-            rules: HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types: entries
                 .into_iter()
                 .map(|(type_name, type_config)| (type_name.to_string(), type_config))
@@ -3549,11 +3549,11 @@ mod tests {
         // session declared any `spec` pointer, every configured type
         // (including milestone/bug/waiver, which already had SPEC-6/9/10)
         // had none wired into config at all.
-        let mut record_types = HashMap::new();
+        let mut record_types = std::collections::BTreeMap::new();
         record_types.insert("milestone".to_string(), type_config(None));
         let config = Config {
             schema_version: 2,
-            rules: HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types,
         };
 
@@ -3566,11 +3566,11 @@ mod tests {
 
     #[test]
     fn a_declared_spec_pointer_produces_no_finding() {
-        let mut record_types = HashMap::new();
+        let mut record_types = std::collections::BTreeMap::new();
         record_types.insert("milestone".to_string(), type_config(Some("SPEC-6")));
         let config = Config {
             schema_version: 2,
-            rules: HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types,
         };
 
@@ -3582,14 +3582,14 @@ mod tests {
 
     #[test]
     fn a_type_still_declaring_blockquote_is_a_finding() {
-        let mut record_types = HashMap::new();
+        let mut record_types = std::collections::BTreeMap::new();
         record_types.insert(
             "adr".to_string(),
             type_config_with_shape(crate::header::HeaderShape::Blockquote),
         );
         let config = Config {
             schema_version: 2,
-            rules: HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types,
         };
 
@@ -3602,14 +3602,14 @@ mod tests {
 
     #[test]
     fn a_type_declaring_yaml_frontmatter_produces_no_finding() {
-        let mut record_types = HashMap::new();
+        let mut record_types = std::collections::BTreeMap::new();
         record_types.insert(
             "adr".to_string(),
             type_config_with_shape(crate::header::HeaderShape::YamlFrontmatter),
         );
         let config = Config {
             schema_version: 2,
-            rules: HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types,
         };
 
@@ -3950,22 +3950,16 @@ mod tests {
 
     #[test]
     fn the_case_only_hint_names_the_same_declaration_every_run() {
-        // A fresh `HashSet` each time: iteration order is randomised per
-        // instance but fixed within one, so reusing a single set would pass
-        // against an order-dependent implementation.
-        for _ in 0..40 {
-            let allowed: HashSet<crate::values::FieldName> =
-                ["Blocked-on", "Blocked-On", "BLOCKED-on"]
-                    .iter()
-                    .map(|s| crate::values::FieldName::from(*s))
-                    .collect();
-            assert_eq!(
-                near_miss(&crate::values::FieldName::from("blocked-on"), &allowed)
-                    .map(|f| f.as_str()),
-                Some("BLOCKED-on"),
-                "the hint must not depend on which spelling the set yields first"
-            );
-        }
+        let allowed: std::collections::BTreeSet<crate::values::FieldName> =
+            ["Blocked-on", "Blocked-On", "BLOCKED-on"]
+                .iter()
+                .map(|s| crate::values::FieldName::from(*s))
+                .collect();
+        assert_eq!(
+            near_miss(&crate::values::FieldName::from("blocked-on"), &allowed).map(|f| f.as_str()),
+            Some("BLOCKED-on"),
+            "the hint must not depend on which spelling the set yields first"
+        );
     }
 
     #[test]
@@ -4304,6 +4298,29 @@ mod tests {
         assert_eq!(examined(&exec), 1, "the slot is written, so it is judged");
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Superseded"));
+    }
+
+    /// The declared-field set `field_untrimmed_value` iterates
+    /// (`declared_fields_by_type`) is a `BTreeSet`, not a `HashSet` -- two
+    /// untrimmed fields on one record must report in the same order every
+    /// run, not whichever order a randomized hasher seed happened to yield.
+    #[test]
+    fn two_untrimmed_fields_report_in_a_deterministic_order_observed_failing() {
+        let r = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/adr/ADR-1-x.md"),
+            "adr".to_string(),
+            "---\nZeta: \"z   \"\nAlpha: \"a   \"\n---\n# 1 — X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "ADR".to_string(),
+        );
+        let config = config_for_required(vec![("adr", vec!["Zeta", "Alpha"])]);
+
+        let (_, findings) = field_untrimmed_value(&[r], &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(
+            findings[0].message.contains("Alpha") && findings[1].message.contains("Zeta"),
+            "findings must report in a fixed (sorted) order regardless of declaration order: {findings:?}"
+        );
     }
 
     #[test]

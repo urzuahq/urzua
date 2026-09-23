@@ -154,7 +154,7 @@ mod tests {
     fn a_field_name_matches_its_declaration_exactly_and_only_exactly() {
         let matcher = |key: &str, allowed: &HashSet<String>| {
             let key = crate::values::FieldName::from(key);
-            let allowed: HashSet<crate::values::FieldName> = allowed
+            let allowed: std::collections::BTreeSet<crate::values::FieldName> = allowed
                 .iter()
                 .map(|s| crate::values::FieldName::from(s.as_str()))
                 .collect();
@@ -201,7 +201,6 @@ mod tests {
     fn every_field_a_record_carries_is_either_accepted_or_reported() {
         use crate::config::{Config, RecordTypeConfig};
         use crate::rules::header_field_set_consistency;
-        use std::collections::HashMap;
 
         let mut gen = Gen(0xA11CE);
         for _ in 0..200 {
@@ -210,7 +209,7 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
-                rules: HashMap::new(),
+                rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
                     RecordTypeConfig {
@@ -320,7 +319,7 @@ mod tests {
 
         let config = Config {
             schema_version: 2,
-            rules: HashMap::new(),
+            rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "note".to_string(),
                 RecordTypeConfig {
@@ -475,7 +474,7 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
-                rules: std::collections::HashMap::new(),
+                rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
                     RecordTypeConfig {

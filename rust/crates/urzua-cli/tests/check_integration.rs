@@ -368,12 +368,39 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
         stdout.contains("relation.supersession-reciprocity"),
         "stdout: {stdout}"
     );
-    // audit's rule set is narrower than check's -- exactly the two
-    // cross-record rules, never the per-record ones (ADR-0030).
+    // audit's rule set is narrower than check's -- the cross-record rules,
+    // never the per-record ones (ADR-0030).
     assert!(
         !stdout.contains("header.required-fields"),
         "stdout: {stdout}"
     );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A found-in-review bug: `audit` used to build its record index with the
+/// lossy `build_normalized_index` and never ran `identity.collision`, so two
+/// records sharing an identifier were silently resolved against whichever
+/// one `HashMap` insertion happened to keep, with no finding at all --
+/// unlike `check`, which reports the collision as an error.
+#[test]
+fn audit_reports_an_identity_collision_check_would_also_report_observed_failing() {
+    let dir = fixture_repo("audit-collision");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {identity.collision: error, relation.supersession-reciprocity: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
+    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["audit"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
+    assert!(stdout.contains("identity.collision"), "stdout: {stdout}");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -1257,18 +1284,22 @@ fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
         "the notice must name the affected command: {stdout}"
     );
 
-    // BUG-77 still holds: audit itself is unchanged, and still reports
-    // not-run/exit non-zero on the config init just wrote.
+    // `identity.collision` doesn't need a declared prefix to run
+    // meaningfully (unlike `pointer.resolution`/`relation.supersession-
+    // reciprocity`, which `identity_dependent` correctly drops here) --
+    // `audit` now has one rule that legitimately runs on this corpus, so
+    // `BUG-99`'s "exits non-zero for no real reason" symptom is gone: a
+    // thin-config corpus with nothing actually wrong is `ok`, per `ADR-53`.
     let audit_out = run_urzua(&dir, &["audit"]);
     let audit_stdout = String::from_utf8_lossy(&audit_out.stdout).to_string();
     assert!(
-        audit_stdout.contains("\"status\": \"not-run\""),
-        "audit's own status must be unchanged by init's new disclosure: {audit_stdout}"
+        audit_stdout.contains("\"status\": \"ok\""),
+        "identity.collision runs regardless of prefix and finds nothing wrong: {audit_stdout}"
     );
-    assert_ne!(
+    assert_eq!(
         audit_out.status.code(),
         Some(0),
-        "audit must still not exit 0: {audit_stdout}"
+        "nothing is actually wrong with this corpus: {audit_stdout}"
     );
 }
 
