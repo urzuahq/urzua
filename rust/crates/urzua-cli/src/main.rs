@@ -123,6 +123,11 @@ enum Command {
     /// unrecognized config key is an error here, not a warning.
     Doctor,
 
+    /// The complete, current rule set this build ships, with each rule's
+    /// description. Reads no config -- what the binary supports, not what
+    /// any one repository enabled.
+    Rules,
+
     /// Detect fields whose stated value disagrees with what the tool
     /// computes (ADR-0015). Read-only by default. Only Tier 1 (Embodiment)
     /// exists.
@@ -230,6 +235,7 @@ fn main() -> ExitCode {
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => commands::init::run(dry_run),
         Command::Doctor => commands::doctor::run(),
+        Command::Rules => commands::rules::run(),
         Command::Fix {
             tier,
             apply,
