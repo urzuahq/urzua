@@ -66,28 +66,56 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
     // equals the declared `dir`, and the record drops out of the corpus with
     // no rule reporting it (BUG-87).
     let tracked = run_git(repo_root, &["ls-files", "-z"])?;
-    let staged = run_git(repo_root, &["diff", "--name-only", "--cached", "-z"])?;
-    let deleted = run_git(
-        repo_root,
-        &["diff", "--name-only", "--cached", "--diff-filter=D", "-z"],
-    )?;
+    // `--name-status`, one subprocess instead of two separate `--name-only`
+    // calls: the deleted set is always a subset of the staged set for every
+    // status but a rename/copy, so a second call for it was re-deriving what
+    // this one call's own status codes already say. `-z` pairs each entry as
+    // `<status>\0<path>\0`, except `R`/`C` (rename/copy), which git always
+    // reports as `<status>\0<old-path>\0<new-path>\0` -- three fields, not
+    // two (verified against real git output, not assumed from the docs). A
+    // rename's old name is deliberately not counted as a staged deletion
+    // here, matching the two-call version's own behavior: `--diff-filter=D`
+    // never matched a rename either, since git classifies it `R`, not `D`.
+    let staged = run_git(repo_root, &["diff", "--name-status", "--cached", "-z"])?;
+
+    let mut staged_paths = Vec::new();
+    let mut staged_deletions = std::collections::HashSet::new();
+    let mut fields = staged.split('\0').filter(|f| !f.is_empty());
+    while let Some(status) = fields.next() {
+        let is_rename_or_copy = status.starts_with('R') || status.starts_with('C');
+        let Some(first_path) = fields.next() else {
+            break;
+        };
+        let path = if is_rename_or_copy {
+            // The old name is the extra field a rename/copy carries; the
+            // new name is the one that matters to a caller reading the
+            // working tree today.
+            let Some(new_path) = fields.next() else {
+                break;
+            };
+            new_path
+        } else {
+            first_path
+        };
+        let path = PathBuf::from(path);
+        if status.starts_with('D') {
+            staged_deletions.insert(path.clone());
+        }
+        staged_paths.push(path);
+    }
 
     let mut paths: Vec<PathBuf> = tracked
         .split('\0')
-        .chain(staged.split('\0'))
         .filter(|l| !l.is_empty())
         .map(PathBuf::from)
+        .chain(staged_paths)
         .collect();
     paths.sort();
     paths.dedup();
 
     Ok(DiscoveredFiles {
         paths,
-        staged_deletions: deleted
-            .split('\0')
-            .filter(|l| !l.is_empty())
-            .map(PathBuf::from)
-            .collect(),
+        staged_deletions,
         source: DiscoverySource::GitTracked,
     })
 }
@@ -384,6 +412,65 @@ mod tests {
         assert!(
             !names.contains(&"scratch.md".to_string()),
             "untracked scratch file must never be discovered: {names:?}"
+        );
+
+        fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// `BUG-147`'s own regression: merging the staged/deleted discovery into
+    /// one `--name-status` call has to handle a staged rename correctly --
+    /// `git diff --name-status` reports it as `R100\0old\0new\0`, three
+    /// fields, not the two every other status line carries. A naive
+    /// two-fields-per-record parser would misalign on exactly this input.
+    #[test]
+    fn a_staged_rename_is_discovered_under_its_new_name_only_observed_failing() {
+        let tmp = std::env::temp_dir().join(format!("urzua-io-rename-test-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+
+        // Identical, substantial content: git's default rename detection
+        // needs enough similarity to classify this as `R`, not a plain `D`
+        // followed by an unrelated `A`.
+        let body = "line one\nline two\nline three\nline four\nline five\n".repeat(4);
+        fs::write(tmp.join("old-name.md"), &body).unwrap();
+        Command::new("git")
+            .args(["add", "old-name.md"])
+            .current_dir(&tmp)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-q", "-m", "init"])
+            .current_dir(&tmp)
+            .output()
+            .unwrap();
+
+        Command::new("git")
+            .args(["mv", "old-name.md", "new-name.md"])
+            .current_dir(&tmp)
+            .output()
+            .unwrap();
+
+        let result = discover_tracked_files(&tmp).expect("discovery should succeed");
+        let names: Vec<_> = result
+            .paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+
+        assert!(
+            names.contains(&"new-name.md".to_string()),
+            "the renamed file's new name must be discovered: {names:?}"
+        );
+        assert!(
+            !names.contains(&"old-name.md".to_string()),
+            "a rename's old name must not linger as a phantom entry: {names:?}"
+        );
+        assert!(
+            !result
+                .staged_deletions
+                .contains(&PathBuf::from("old-name.md")),
+            "a rename is not a deletion -- git classifies it R, not D: {:?}",
+            result.staged_deletions
         );
 
         fs::remove_dir_all(&tmp).ok();
