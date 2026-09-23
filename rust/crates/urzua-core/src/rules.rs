@@ -243,7 +243,7 @@ pub fn header_required_fields(
             continue;
         }
 
-        if record.header.region.is_none() {
+        if record.header.is_unreadable() {
             let detail = match &record.header.parse_error {
                 Some(e) => format!(" -- YAML parse error: {e}"),
                 None => String::new(),
@@ -285,7 +285,7 @@ pub fn header_required_fields(
             // An unparsed header leaves every slot of that record unreadable: the
             // rule was handed them and could not judge them. The record-scoped
             // finding above says why.
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_none() {
@@ -456,7 +456,7 @@ pub fn header_field_set_consistency(
             // allowed. Counting it as examined inflated the one signal ADR-55 makes
             // load-bearing; `header.required-fields` reports the unparsed header
             // (BUG-78).
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
 
@@ -1265,7 +1265,7 @@ pub fn pointer_target_status(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1341,7 +1341,7 @@ pub fn pointer_resolution(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1421,7 +1421,7 @@ pub fn header_pointer_field_clean(
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify (BUG-125's shape, `field_quality`'s
             // same guard).
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1498,7 +1498,7 @@ pub fn narrative_field_stale(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
@@ -1673,7 +1673,7 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
         |(record, _)| record.path.clone(),
         |(record, field)| {
             // Unreadable, not absent -- the same reason as `field.quality`.
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             if classify(record.header.get(field.as_str())) == FieldState::Pending {
@@ -1875,7 +1875,7 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field.as_str()) else {
@@ -1929,7 +1929,7 @@ pub fn header_field_case_mismatch(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_some() {
@@ -2000,7 +2000,7 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
             // `examined` can never fall short of `eligible` can never be caught
             // not looking (ADR-55). `header.required-fields` reports the parse
             // error itself, once per record rather than once per slot.
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let state = classify(record.header.get(field.as_str()));
@@ -2839,7 +2839,7 @@ pub fn supersession_reciprocity(
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify (BUG-125's shape, `field_quality`'s
             // same guard).
-            if record.header.region.is_none() || record.header.parse_error.is_some() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field) else {
@@ -2931,7 +2931,7 @@ pub fn relation_target_status_undeclared(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
-            if record.header.region.is_none() {
+            if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
             let Some(value) = record.header.get(field_name.as_str()) else {
