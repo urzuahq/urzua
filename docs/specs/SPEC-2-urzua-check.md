@@ -126,13 +126,16 @@ untracked scratch file under the records directory failed *every* run from that 
 runs touching zero records. The tracked set is also what a reviewer sees, which makes the check's
 input equal to the review's input.
 
-Explicit paths on argv override discovery and are used as given.
+Explicit paths on argv override discovery and are used as given -- for a directly-named file. A
+directory argument still scopes the tracked-only sweep rather than walking the filesystem raw
+(`BUG-24`): the "never a raw directory walk" guarantee above governs a directory argument the same as
+the default sweep, and only a path naming one file precisely bypasses the tracked-set filter.
 
 | `scope.source` | Meaning | `base` | Produced today |
 |---|---|---|---|
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
 | `git-diff` | changed against a base ref | the ref | no — the mode is not built |
-| `argv` | explicit paths | `null` | no — see `BUG-24` |
+| `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
 | `none` | nothing selected | `null` | no |
 
 The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of whichever internal
@@ -345,3 +348,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-19 | The four rules shipped since `MILE-80` added to the table: `pointer.target-status`, `field.pending`, `claim.status-agreement`, `embodiment.locator-exists`. **Why:** the count was corrected to twenty-one in the same change that left the list at seventeen rows, so the section contradicted itself in adjacent lines and the rule this repository declares `error` was undocumented in the spec calling itself complete. `BUG-52` is the missing mechanism. | **substantive** |
 > | 2026-09-19 | `embodiment.locator-exists`'s row states the on-disk requirement. **Why:** it read *"absent from the git-tracked set"*, which was the rule's first form and silent on a staged deletion -- `git rm` drops a path from `ls-files` while leaving it in `diff --cached`. The spec described a check the code no longer performs. | **substantive** |
 > | 2026-09-23 | Rule count corrected from twenty-one to twenty-nine; the eight rows `ALL_RULES` had gained since without this table being updated added (`type.dir-matches-nothing`, `type.record-outside-declared-dir`, `identity.collision`, `config.scope-matches-nothing`, `field.untrimmed-value`, `header.field-case-mismatch`, `config.header-none-has-no-required-fields`, `config.relation-field-not-known`). **Why:** found by a `RFC-42`/`ADR-61` review, which noticed this list's own self-declared invariant ("the complete, current set... `ALL_RULES` is the source it must match") had gone untrue by seven rows before its own change added an eighth. `BUG-52` remains open as the actual mechanism gap — nothing enforces this agreement automatically, so this is a manual sync, not a fix. | **substantive** |
+> | 2026-09-23 | `argv` marked produced, scoped to a directly-named file; the Discovery prose states the directory-argument exception explicitly. **Why:** `BUG-24` fixed the gap this table had marked unbuilt -- an explicit argv path naming one file now overrides the tracked-only filter, while a directory argument still respects "never a raw directory walk" (`ADR-6`), which the table's blanket "explicit paths ... override discovery" line did not previously distinguish. | **substantive** |

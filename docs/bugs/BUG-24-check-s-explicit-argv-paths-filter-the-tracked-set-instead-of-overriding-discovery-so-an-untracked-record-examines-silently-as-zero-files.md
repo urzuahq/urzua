@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M28KB0425HYMCHHAWZTEKDSN
-Status: Open
+Status: Fixed
 Found-in: 'hit live filing RFC-27: ran `urzua check docs/rfc/RFC-27-....md` on the freshly created record and got `"status": "not-run", "files_examined": 0` with zero findings. The same command after `git add` on the same unchanged file returned `"status": "ok", "files_examined": 1`.'
-Regression-test: 'not yet written -- `rust/crates/urzua-cli/src/main.rs`, a test passing an on-disk-but-untracked path as an explicit argv path and asserting it is examined (or that a finding says why it was not), planted-failing before the fix'
+Regression-test: 'an_untracked_file_named_explicitly_is_examined_not_silently_dropped_observed_failing, an_untracked_file_below_an_explicitly_requested_directory_is_not_examined, check_integration.rs'
 ---
 # 24 — check's explicit argv paths filter the tracked set instead of overriding discovery, so an untracked record examines silently as zero files
 
@@ -75,3 +75,4 @@ spec line being revisited. The spec was not updated, so SPEC-2 still specifies o
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not fixed -- the fix direction (argv truly overriding discovery vs. amending SPEC-2 to match the implemented intersection, plus a finding when a requested path is dropped) is a real decision, not an obvious patch. | **structural** |
+> | 2026-09-23 | Fixed: argv paths truly override discovery, matching SPEC-2's literal contract, for a directly-named file. **Why:** decided rather than deferred further; a directory argument deliberately keeps the tracked-only sweep unchanged (`an_untracked_scratch_file_is_never_examined`, `ADR-6`) -- only a path naming one file precisely bypasses the tracked-set filter, additive to the tracked sweep per `BUG-60`'s non-regression requirement, never a replacement of the corpus pointers resolve against. New `ScopeSource::Argv`/`DiscoverySource::Argv` report which mode actually ran. | **substantive** |

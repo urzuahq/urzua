@@ -18,6 +18,7 @@ use urzua_core::rules;
 pub(crate) fn scope_source(source: urzua_io::DiscoverySource) -> ScopeSource {
     match source {
         urzua_io::DiscoverySource::GitTracked => ScopeSource::TrackedSweep,
+        urzua_io::DiscoverySource::Argv => ScopeSource::Argv,
     }
 }
 
@@ -153,6 +154,31 @@ pub(crate) fn relative_scopes(
         out.push(relative);
     }
     Ok(out)
+}
+
+/// A directly-named file outside `tracked` (`BUG-24`): an explicit argv path
+/// is "used as given" (SPEC-2), but only when it names one file precisely --
+/// a directory argument still respects the tracked-only sweep
+/// (`an_untracked_scratch_file_is_never_examined`, `ADR-6`). Additive to the
+/// tracked sweep, never a replacement of it (`BUG-60`).
+pub(crate) fn resolve_argv_overrides(
+    repo_root: &Path,
+    requested_scopes: &[PathBuf],
+    tracked: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    let tracked: std::collections::HashSet<&PathBuf> = tracked.iter().collect();
+    requested_scopes
+        .iter()
+        .filter(|scope| !tracked.contains(scope))
+        .filter_map(|scope| {
+            let full = repo_root.join(scope);
+            match std::fs::symlink_metadata(&full) {
+                Ok(meta) if meta.is_file() => Some(Ok(scope.clone())),
+                Ok(_) => None,
+                Err(e) => Some(Err(format!("could not stat {}: {e}", full.display()))),
+            }
+        })
+        .collect()
 }
 
 /// Takes the caller's already-resolved scopes rather than a raw path list

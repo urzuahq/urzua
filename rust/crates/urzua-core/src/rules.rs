@@ -54,6 +54,8 @@ pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothin
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
 pub const RULE_CONFIG_RELATION_FIELD_NOT_KNOWN: &str = "config.relation-field-not-known";
+pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
+    "config.known-fields-declaration-missing";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -85,6 +87,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_FIELD_CASE_MISMATCH,
     RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
     RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
+    RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -92,6 +95,16 @@ pub const ALL_RULES: &[&str] = &[
 /// gives them nothing to examine. Single source of this fact: `init`'s
 /// adopt-mode proposal (`BUG-61`) is the only consumer today, but the fact
 /// belongs to the rules themselves, not to one command's module.
+/// Rules whose findings name a file outside the corpus a `check <path>`
+/// invocation scopes against -- `claim.status-agreement` reads a claim file
+/// under `claim_paths`, which a record-type `dir` never covers. `BUG-67`'s
+/// path-prefix scoping is correct for every rule reporting on a record; a
+/// rule like this one needs the same unconditional exemption `check.rs`
+/// already gives a finding about the config file itself, or `BUG-86`'s
+/// "scoped invocation silently drops a real finding" recurs for any narrower
+/// scope than the one that repository's own Makefile was changed to use.
+pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[RULE_CLAIM_STATUS_AGREEMENT];
+
 pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
     RULE_POINTER_RESOLUTION,
     RULE_POINTER_TARGET_STATUS,
@@ -827,6 +840,57 @@ pub fn config_pointer_declaration_missing(
                 waived: None,
                 message: format!(
                     "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
+                ),
+            });
+        }
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
+/// Rule (`RFC-43`/`ADR-62`): a type declaring no `known_fields` at all gets no
+/// field-set governance from `header.field-set-consistency` (`ADR-53`'s
+/// "declared, not voted" default) -- opt-in, so a repository can require the
+/// choice be made explicit rather than leaving it ambiguous by omission, the
+/// same shape `config.pointer-declaration-missing` already is for a
+/// different pair of fields.
+pub fn config_known_fields_declaration_missing(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING;
+    let mut findings = Vec::new();
+
+    let mut type_names: Vec<&String> = config.record_types.keys().collect();
+    type_names.sort();
+
+    let population = census(PopulationUnit::RecordType, type_names, |type_name| {
+        let type_config = &config.record_types[*type_name];
+        // A `none`-shaped type has nowhere for a header field to be (`ADR-50`):
+        // `known_fields` governs which fields are permitted beyond
+        // `required_fields`, which is meaningless when no field can exist at
+        // all, the same reasoning `config.header-none-has-no-required-fields`
+        // already applies to `required_fields` itself.
+        if type_config.header_shape != crate::header::HeaderShape::None
+            && type_config.known_fields.is_none()
+        {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: config_path.to_path_buf(),
+                line: None,
+                waived: None,
+                message: format!(
+                    "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
                 ),
             });
         }
@@ -3426,6 +3490,52 @@ mod tests {
             config_pointer_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml"));
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_type_with_no_known_fields_declared_is_a_missing_declaration_observed_failing() {
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&["Status"], None, None, None),
+        )]);
+        let (exec, findings) = config_known_fields_declaration_missing(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("spec"));
+    }
+
+    #[test]
+    fn a_header_none_type_with_no_known_fields_is_not_a_missing_declaration_observed_failing() {
+        let config = config_with_types(vec![(
+            "waiver",
+            type_config_with_shape(crate::header::HeaderShape::None),
+        )]);
+        let (exec, findings) = config_known_fields_declaration_missing(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "a type with no header has nowhere for known_fields to govern: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_type_declaring_known_fields_as_an_explicit_empty_list_is_not_missing() {
+        let config = config_with_types(vec![(
+            "waiver",
+            type_config_pointer(&[], Some(&[]), None, None),
+        )]);
+        let (exec, findings) = config_known_fields_declaration_missing(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     fn exec_with(

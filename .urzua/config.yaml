@@ -121,6 +121,7 @@ rules:
   config.pointer-declaration-missing: error
   config.pointer-field-not-known: error
   config.relation-field-not-known: error
+  config.known-fields-declaration-missing: error
   config.scope-matches-nothing: warn
   config.pointer-narrative-overlap: error
   pointer.resolution: error

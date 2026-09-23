@@ -51,3 +51,4 @@ reaching a verdict that was then discarded. The count was honest; the finding ne
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-09-23 | `BUG-121` filed and fixed: the general defect this record named ("the same blindness applies to any rule whose findings name a file outside `docs/`") is now closed in `check.rs`'s filter itself, not only worked around at this repository's own Makefile caller. | **substantive** |

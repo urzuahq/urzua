@@ -173,7 +173,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+    let mut discovered = match urzua_io::discover_tracked_files(&repo_root) {
         Ok(d) => d,
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
@@ -182,6 +182,25 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Ok(s) => s,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+
+    // Argv paths override discovery (SPEC-2, BUG-24) -- see resolve_argv_overrides.
+    if !requested_scopes.is_empty() {
+        let extra = match crate::discovery::resolve_argv_overrides(
+            &repo_root,
+            &requested_scopes,
+            &discovered.paths,
+        ) {
+            Ok(e) => e,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+        if !extra.is_empty() {
+            discovered.paths.extend(extra);
+            discovered.paths.sort();
+            discovered.paths.dedup();
+            discovered.source = urzua_io::DiscoverySource::Argv;
+        }
+    }
+
     let scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
 
     // A path argument narrows what is *reported on*. It must not narrow the
@@ -450,6 +469,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_CONFIG_RELATION_FIELD_NOT_KNOWN, || {
             rules::config_relation_field_not_known(&config, &config_path)
         }),
+        crate::gate::gated(
+            &config,
+            rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+            || rules::config_known_fields_declaration_missing(&config, &config_path),
+        ),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());
@@ -474,10 +498,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // rule may report on a file git does not track -- a claim file is read
     // straight off disk -- whose finding then belonged to no scope at all and
     // was dropped, so `check .` passed a corpus `check` blocked (BUG-67).
-    // A finding about the config survives every scope, being outside all of them.
+    // A finding about the config survives every scope, being outside all of
+    // them, and so does one from a rule declared in
+    // `RULES_REPORTING_OUTSIDE_THE_CORPUS`: `claim.status-agreement`'s claim
+    // file lives under `claim_paths`, which no record-type `dir` scope covers,
+    // and a narrower-than-unscoped `check <path>` silently dropping a real
+    // finding is `BUG-86`'s own recurrence, not a new defect (`BUG-121`).
     if !requested_scopes.is_empty() {
         findings.retain(|f| {
             f.file == config_path.as_path()
+                || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
                 || requested_scopes.iter().any(|s| f.file.starts_with(s))
         });
     }
