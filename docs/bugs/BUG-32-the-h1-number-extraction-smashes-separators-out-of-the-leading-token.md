@@ -45,6 +45,9 @@ what the rule reports when it does not.
 - BUG-23 -- the message-collapse defect in the same function, fixed separately.
 - RFC-29 -- the related question of whether the H1 numbering convention should be declarable at all;
   if it is, this extractor's contract changes with it.
+- RFC-44 -- proposes the actual fix: an `identity` field type as part of a general declared
+  field-shape mechanism, closing this defect for this repository's own record types (RFC-29's
+  foreign-corpus case stays open).
 
 > **Revision log**
 >
