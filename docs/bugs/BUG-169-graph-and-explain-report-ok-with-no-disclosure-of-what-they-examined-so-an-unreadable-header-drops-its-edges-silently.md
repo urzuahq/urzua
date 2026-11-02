@@ -8,9 +8,11 @@ Regression-test: "planned: graph and explain tests where a header is unreadable 
 
 ## What was wrong
 
-`urzua graph` and `urzua explain` always emit `status: ok` with exit 0 and carry no population or notice
-about what they read. The report docs describe a status axis of ok / not-run, but neither command ever
-produces the second.
+Once the repository, config and records load, `urzua graph` and `urzua explain` emit `status: ok` with
+exit 0 whatever the records contributed, and carry no population. (A failure to find the repository,
+load the config or discover files does return `not-run`.) Both reports already have a `notices` field,
+but `graph` fills it only for identity collisions and `explain` never does, so nothing discloses an
+unreadable header or an empty corpus.
 
 Repro (yaml-frontmatter `adr` type, `Derives-from` declared a pointer field): ADR-2 with
 `Derives-from: ADR-1` gives one edge. Change the line to `Derives-from: ADR-1: bad: yaml` (an unparseable
@@ -33,8 +35,8 @@ There it was a selector that matched nothing; here it is a corpus, or a header, 
 
 ## Decision needed
 
-- Add a `population` and `notices` (unreadable records, zero records) to `GraphReport` and
-  `ExplainReport`, or return `not-run` when no record was readable?
+- Add a `population` to `GraphReport` and `ExplainReport` and use their existing `notices` for
+  unreadable records and zero records, or return `not-run` when no record was readable?
 - Whether `explain` of a path no record cites should disclose that it is an exact-match miss.
 - Whether an unreadable header makes `graph` partial (its own status) or a notice only.
 

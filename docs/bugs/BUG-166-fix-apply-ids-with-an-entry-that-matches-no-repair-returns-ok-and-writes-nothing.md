@@ -29,8 +29,8 @@ reports none. The matching rule is unchanged.
 
 ## Notes: a design question left open
 
-The selector form is still a full repo-relative path, as before. SPEC-8 writes `--ids <record,...>`
-without defining the form and `--help` says "record". Whether a record id (`ADR-1`, resolved through
+The selector form is a full repo-relative path, as before, and SPEC-8 now says so; `--help` still says
+"record". Whether a record id (`ADR-1`, resolved through
 the identity index, with a collision or a legacy `NNNN-` filename to decide) should also be accepted is
 a SPEC-8 decision, not made here. Until then `--ids ADR-1` fails loudly instead of silently succeeding.
 
