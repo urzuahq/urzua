@@ -1,5 +1,5 @@
 ---
-Version: '0.3'
+Version: '0.4'
 Date: 2026-08-20
 Status: Draft
 Author: beauwilliams
@@ -181,6 +181,33 @@ indistinguishable from one whose generator produces nothing interesting — a mu
 *pass* only because the module under test contained a duplicate definition and the mutation was
 applied to the copy that never ran, which is exactly the false confidence this guards against.
 
+## First runner (MILE-101)
+
+The narrow first version is a Rust integration test, `rust/crates/urzua-cli/tests/acceptance.rs`
+(`harness = false`, so its report always prints), run by `cargo test` and therefore `make ci`. Corpora
+live in `rust/crates/urzua-cli/tests/acceptance/corpora/<corpus-id>/` with the layout above. What is
+built, and where it differs from the sketch:
+
+- A case's `invocation` runs with the corpus copied into a throwaway git repo as its working directory,
+  so paths are relative to the corpus root and the configuration is whatever the corpus holds. Pass an
+  alternate config with the global `--config` flag. Optional `setup` is a list of invocations run first
+  (e.g. `init`).
+- `corpus: "@repo"` runs in place against this repository (corpus zero); nothing is copied.
+- Expectations: `expect_exit`, `expect_stdout_contains`, `expect_json` (`at` is a JSON pointer, with
+  `equals` or `gt`), `expect_findings` / `expect_no_findings` (match on `rule`, `file`, `severity`).
+- `manifest.yaml` is read: every fixture file must be listed with a non-empty irregularity and every
+  listed path must exist, so the record of intent cannot rot.
+- `known_gap: {ref, reason}` marks a case whose expectation is the correct behaviour that does not
+  hold yet. It still runs; failing is the expected outcome and is reported `KNOWN-GAP`. Passing fails
+  the suite until the marker is removed, so a gap cannot go stale and a fix flips the case visibly.
+- **Private corpora.** `URZUA_ACCEPTANCE_EXTRA` is a `:`-separated list of directories, each either one
+  corpus (it has `expectations/`) or a root of corpus directories, laid out as above. They run in
+  addition to the checked-in ones. Unset, the runner prints a one-line skip note rather than staying
+  silent. This lets a maintainer run fixtures that cannot be published against the same runner.
+
+Not built: the cases in the tables above other than those seeded (three irregularities, a positive
+control and corpus zero), the generative property, mutation checking and the "Nth record type" case.
+
 ## Success criteria
 
 1. Every case above is executable and named in `expectations/`.
@@ -211,3 +238,4 @@ applied to the copy that never ran, which is exactly the false confidence this g
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-18 | Stays `Draft`, deliberately. **Why:** unlike `SPEC-1`/`2`/`3`, this spec's subject does not exist. No code reads `manifest.yaml` or a per-case `<case-id>.yaml`, and the only test files in the workspace are `check_integration.rs`, `new_integration.rs` and `purity.rs`. `Draft` is the accurate status, and flipping it with the others would have been the bulk edit `BUG-26` warned against. | **structural** |
+> | 2026-11-02 | Bumped to `0.4`. **Why:** MILE-101 built the first runner; the spec now records the shape that met a real case: the runner location, the case fields actually supported, `known_gap` markers, a read `manifest.yaml`, and the `URZUA_ACCEPTANCE_EXTRA` private-corpus hook. | **substantive** |

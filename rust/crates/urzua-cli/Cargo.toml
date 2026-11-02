@@ -22,3 +22,10 @@ anyhow = { workspace = true }
 yaml_serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# SPEC-4's corpus acceptance suite. A custom harness so the per-case report
+# (and the private-corpus skip note) is always printed, not captured away by
+# libtest on a passing run.
+[[test]]
+name = "acceptance"
+harness = false

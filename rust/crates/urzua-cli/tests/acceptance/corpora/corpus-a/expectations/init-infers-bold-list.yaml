@@ -1,0 +1,12 @@
+id: init-infers-bold-list
+corpus: corpus-a
+invocation: [init, --dry-run]
+expect_exit: 0
+expect_stdout_contains:
+  - "header_shape: bold-list"
+known_gap:
+  ref: BUG-151
+  reason: >-
+    init's header-shape inference reads the body blockquote as the header and
+    proposes yaml-frontmatter. The fix is on an unmerged PR; when it merges
+    this case passes and the runner fails until this known_gap is removed.

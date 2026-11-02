@@ -1,0 +1,14 @@
+id: audit-reports-one-sided-supersession
+corpus: corpus-b
+setup:
+  - [init]
+invocation: [audit]
+expect_exit: 0
+expect_findings:
+  - {rule: relation.supersession-reciprocity, file: records/0002-use-a-stream.md}
+known_gap:
+  ref: RFC-46 / MILE-126
+  reason: >-
+    A bare-numbered filename gives a record no identity, so init declares no
+    prefix and audit's supersession-reciprocity rule is not-enabled: the
+    one-sided Supersedes goes unreported. Documented gap, not yet fixed.

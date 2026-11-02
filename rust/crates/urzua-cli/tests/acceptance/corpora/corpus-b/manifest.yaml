@@ -1,0 +1,9 @@
+fixtures:
+  - path: records/0001-use-a-queue.md
+    irregularity: >-
+      bare zero-padded filename (no type prefix) with no back-pointer to the
+      record that supersedes it.
+  - path: records/0002-use-a-stream.md
+    irregularity: >-
+      declares `Supersedes: ADR-0001` while the file is named `0002-...` with no
+      `ADR-` prefix, so the reference has no identity to resolve against.
