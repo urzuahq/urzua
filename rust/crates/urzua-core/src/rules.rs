@@ -254,6 +254,12 @@ pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
     RULE_FILENAME_TITLE_CONSISTENCY,
     RULE_RELATION_SUPERSESSION_RECIPROCITY,
     RULE_NARRATIVE_FIELD_STALE,
+    // Shares `for_each_resolved_status_target`'s `RecordIndex` lookup with
+    // `RULE_POINTER_TARGET_STATUS` above -- a prefix-less corpus builds an
+    // empty index (`record_id` returns `None` for every record), so this
+    // rule resolves nothing for exactly the same reason its sibling does
+    // (`BUG-61`'s shape, missed here when the rule was added).
+    RULE_RELATION_TARGET_STATUS_UNDECLARED,
 ];
 
 /// One `(record, field)` candidate per field a record's type declares in
@@ -605,6 +611,15 @@ pub fn header_field_set_consistency(
             let Some(allowed) = allowed_by_type.get(&record.record_type) else {
                 return Outcome::Absent;
             };
+            // `ADR-50`: a `header_shape: none` type has no header for a field
+            // set to be inconsistent about.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             // A record whose header region never parsed has an empty field list,
             // which is indistinguishable here from a record whose fields are all
             // allowed. Counting it as examined inflated the one signal ADR-55 makes
@@ -1569,6 +1584,15 @@ pub fn header_pointer_field_clean(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field_name)| {
+            // `ADR-50`: a `header_shape: none` type has no header for this
+            // slot to be in.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify (BUG-125's shape, `field_quality`'s
             // same guard).
@@ -1584,7 +1608,8 @@ pub fn header_pointer_field_clean(
 
             for entry in value.split(',') {
                 let entry = entry.trim();
-                let is_clean_reference = is_record_reference(entry);
+                let is_clean_reference =
+                    is_record_reference(entry) || crate::values::is_no_value_sentinel(entry);
                 if !is_clean_reference {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
@@ -2087,6 +2112,15 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // `ADR-50`: a `header_shape: none` type has no header for this
+            // slot to be in.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
@@ -2224,6 +2258,15 @@ pub fn header_field_case_mismatch(
         slots,
         |(record, _)| record.path.clone(),
         |(record, field)| {
+            // `ADR-50`: a `header_shape: none` type has no header for this
+            // slot to be in.
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
@@ -4807,6 +4850,26 @@ mod tests {
         assert!(findings.is_empty());
     }
 
+    /// The doc comment above this rule says explicitly: "every comma-separated
+    /// entry, once trimmed, is *exactly* a reference token (or the `—`
+    /// no-value placeholder)" -- a per-entry claim, not only a whole-value
+    /// one. The whole-value sentinel check alone missed a real reference
+    /// mixed with the placeholder in the same field.
+    #[test]
+    fn a_placeholder_entry_mixed_with_a_real_reference_is_not_flagged_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-12-x.md",
+            "adr",
+            "> Status: Accepted\n> Derives-from: RFC-1, —\n",
+        );
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], None, Some(&["Derives-from"]), None),
+        )]);
+        let (_, findings) = header_pointer_field_clean(&[r], &config);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
     #[test]
     fn narrative_fields_are_excluded_even_with_trailing_prose() {
         // Blocked-on deliberately mixes free text with an optional embedded
@@ -5278,10 +5341,10 @@ mod tests {
         assert!(findings[0].message.contains("Placeholder"));
     }
 
-    /// `BUG-125`: a rule's silence about an unreadable header used to depend
+    /// `BUG-125`: a rule's silence about an unreadable header must not depend
     /// on `header.required-fields` being separately enabled to disclose it --
-    /// a pairing `ADR-53` never guarantees. `Population` now discloses
-    /// `unreadable` on its own, regardless of what else is enabled.
+    /// a pairing `ADR-53` never guarantees. Each rule's own `Population`
+    /// discloses `unreadable` on its own, regardless of what else is enabled.
     #[test]
     fn field_quality_discloses_unreadable_on_its_own_observed_failing() {
         let r = record("docs/adr/0001-x.md", "adr", "this is not a header at all");
@@ -5744,6 +5807,123 @@ mod tests {
         )]);
 
         let (exec, findings) = header_required_fields(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// Round 27's own sweep found the same `BUG-142`/`ADR-50` gap in three
+    /// more rules that share the shape of reading `known_fields`-declared
+    /// slots but not `header_required_fields`'s specific field list.
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_header_field_set_consistency_observed_failing(
+    ) {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                known_fields: Some(vec!["Reviewers".to_string()]),
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = header_field_set_consistency(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_header_pointer_field_clean_observed_failing(
+    ) {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                known_fields: Some(vec!["Derives-from".to_string()]),
+                pointer_fields: Some(vec!["Derives-from".to_string()]),
+                narrative_fields: Some(vec![]),
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = header_pointer_field_clean(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_field_untrimmed_value_observed_failing(
+    ) {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                required_fields: vec!["Reviewers".to_string()],
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = field_untrimmed_value(&[r], &config);
+        let population = exec
+            .population
+            .expect("the rule must state what it was handed");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_header_none_type_is_out_of_scope_not_unreadable_for_header_field_case_mismatch_observed_failing(
+    ) {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            crate::config::RecordTypeConfig {
+                required_fields: vec!["Reviewers".to_string()],
+                ..type_config_with_shape(crate::header::HeaderShape::None)
+            },
+        )]);
+
+        let (exec, findings) = header_field_case_mismatch(&[r], &config);
         let population = exec
             .population
             .expect("the rule must state what it was handed");

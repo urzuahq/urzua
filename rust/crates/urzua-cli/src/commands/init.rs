@@ -517,6 +517,7 @@ mod tests {
             "pointer.resolution",
             "pointer.target-status",
             "narrative-field.stale",
+            "relation.target-status-undeclared",
         ] {
             assert!(
                 !yaml.contains(rule),
