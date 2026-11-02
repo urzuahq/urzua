@@ -10,10 +10,12 @@ Regression-test: "none -- no planted-violation test is practical: root is built 
 
 `render_config_yaml` (`init.rs`) rendered the generated config's YAML body with
 `yaml_serde::to_string(&Value::Mapping(root)).unwrap_or_default()`. If serialization ever failed, `body`
-would silently become an empty string -- `urzua init` would then write (or `--dry-run` print) a config
-containing only the leading comment line, report `written: true` with no error and no notice, and the
-adopter would get a config with no `record_types`/`rules` at all. `check`/`audit` would then report a
-clean, empty run against a real corpus with nothing to say something had gone wrong.
+would silently become an empty string -- `urzua init` would then write a config containing only the
+leading comment line and report `written: true` with no error or notice (`--dry-run` would print the
+same comment-only config with `written: false`). Because `schema_version` and `record_types` are
+required, `check`/`audit` would then refuse to load that config (`not-run`, "missing field
+`schema_version`") -- a failure surfaced only later, by a different command, not at `init` where it
+happened.
 
 ## Why nothing caught it
 
