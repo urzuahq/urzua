@@ -14,4 +14,10 @@ cargo fmt --all -- --check
 echo "pre-push: cargo clippy"
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
+# The tool that governs this corpus. `make records` builds the release binary
+# and runs `urzua check`, exactly as CI does; non-zero exits abort the push
+# via `set -e`. Like CI, it blocks on blocking findings only.
+echo "pre-push: urzua check (make records)"
+make -C "$(git rev-parse --show-toplevel)" records
+
 echo "pre-push: ok"

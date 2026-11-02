@@ -84,6 +84,26 @@ pub fn run(
 
     let mut applied = Vec::new();
     let mut failed = Vec::new();
+    // An `--ids` entry that selected nothing is a failure naming it, not a
+    // clean `ok`: the selector is matched against a record's repo-relative
+    // path, and a typo or a record id (`ADR-1`) would otherwise read as
+    // "checked, nothing to do" while a repair is still pending. `--force`
+    // selects every repair regardless, so it has no selectors to miss.
+    if !force {
+        for id in &ids {
+            if !selected
+                .iter()
+                .any(|r| r.record.display().to_string() == *id)
+            {
+                failed.push((
+                    PathBuf::from(id),
+                    format!(
+                        "--ids entry '{id}' matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)"
+                    ),
+                ));
+            }
+        }
+    }
     for repair in selected {
         let full_path = repo_root.join(&repair.record);
         // Re-read from disk right before writing (RFC-0008 §4's

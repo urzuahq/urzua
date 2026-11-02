@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -61,6 +61,9 @@ Every one of the following is a hard gate — none are optional, none are defaul
 
 - **`--ids <record,...>` or `--force` is required.** Nothing applies without one; `--force` (apply to
   every detected repair) is never implied by `--apply` alone.
+- **An `--ids` entry that matches no pending repair is a failure.** It is reported in `failed` naming
+  the entry (`partial-failure`, exit 1) and writes nothing, never a clean `ok` (`BUG-166`). An entry is
+  matched against a record's repo-relative path; accepting a record id is not defined here.
 - **Identity is required**, resolved via `urzua-io::resolve_identity` (`gh api user` wins even over
   an explicit `--by`, which wins over `git config user.name` -- ADR-31's amendment); none resolving
   is a hard error, never a placeholder author. A `--by` that diverges from an authenticated `gh`
@@ -78,6 +81,8 @@ Every one of the following is a hard gate — none are optional, none are defaul
   real, named gap, not silently accepted as fine.
 - **The edit touches only the one field's line.** Every other field and all prose is untouched,
   byte-for-byte — verified by test, not just intended.
+  That includes the file's line endings and trailing-newline state, and the new revision-log row
+  repeats the existing table's own row prefix (`BUG-164`, `BUG-165`).
 
 Every applied write appends a `structural` revision-log entry naming the computation and the
 evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
@@ -116,3 +121,4 @@ asserted by test, not assumed by convention.
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Corrected the identity-resolution order, stale since ADR-31's amendment (`gh api user` now wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). Noted the new `notices` field (ADR-46) for a `--by`/`gh` divergence. **Why:** found live, touching this exact paragraph for the `notices` addition -- leaving the identity-order claim wrong while editing the sentence next to it would have been the same "found it, patched around it" mistake this project's own `AGENTS.md` already warns against. | **substantive** |
+> | 2026-11-02 | Bumped to `0.5`. Apply mode now fails an `--ids` entry that matches no repair, and keeps CRLF endings, the absent trailing newline and a plain-table log's row prefix. **Why:** round 29 found each as a silent no-op or a whole-file rewrite (`BUG-164`, `BUG-165`, `BUG-166`). | **substantive** |

@@ -5,6 +5,7 @@
 //! is "a real Phase 1 feature" per ADR-0015, not a stub.
 
 use crate::config::{Config, RelationRole};
+use crate::line_edit::{table_row_prefix, LineDoc};
 use crate::record::Record;
 use crate::report::{census, Outcome, Population, PopulationUnit};
 use crate::rules::{
@@ -95,21 +96,24 @@ pub fn apply_repair(
     today: &str,
     by: &str,
 ) -> Result<String, String> {
-    let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+    let mut doc = LineDoc::parse(content);
 
-    let field_line_idx = lines
-        .iter()
-        .position(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
+    let field_line = doc
+        .find_line(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
         .ok_or_else(|| {
             format!(
                 "could not find a line containing both '{}' and '{}' to edit -- the record may have changed since detect ran",
                 repair.field, repair.current_value
             )
         })?;
-    lines[field_line_idx] =
-        lines[field_line_idx].replacen(&repair.current_value, &repair.computed_value, 1);
-    let edited_content = lines.join("\n") + "\n";
+    let edited_line = doc.line(field_line).unwrap_or_default().replacen(
+        &repair.current_value,
+        &repair.computed_value,
+        1,
+    );
+    doc.replace_line(field_line, edited_line);
 
+    let edited_content = doc.to_string();
     let entries = find_revision_log_entries(&edited_content).ok_or_else(|| {
         "record has no Revision log section -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement)".to_string()
     })?;
@@ -119,15 +123,20 @@ pub fn apply_repair(
         );
     };
 
-    let mut lines: Vec<String> = edited_content.lines().map(|l| l.to_string()).collect();
-    let insert_at = last_entry.line; // 1-indexed; inserting at this index in a 0-indexed Vec places it right after
+    // The new row repeats the existing last row's own prefix, so it lands
+    // inside the table whether the log is a blockquote table or a plain one.
+    let prefix = doc
+        .line(last_entry.line)
+        .and_then(table_row_prefix)
+        .unwrap_or("> ")
+        .to_string();
     let new_row = format!(
-        "> | {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value. | **structural** |",
+        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value. | **structural** |",
         repair.field, repair.evidence, repair.current_value
     );
-    lines.insert(insert_at, new_row);
+    doc.insert_after(last_entry.line, new_row);
 
-    Ok(lines.join("\n") + "\n")
+    Ok(doc.to_string())
 }
 
 #[cfg(test)]
@@ -262,5 +271,26 @@ mod tests {
         let content = "# 0001 — X\n\n> Embodiment: Implemented\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
         let err = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap_err();
         assert!(err.contains("could not find"));
+    }
+
+    #[test]
+    fn apply_repair_appends_a_plain_table_row_inside_the_plain_table_observed_failing() {
+        let content = "# 0001 — X\n\n> Embodiment: Not started\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-08-20 | Initial. | **structural** |\n";
+        let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
+        let last = result.lines().last().unwrap();
+        assert!(last.starts_with("| 2026-09-05 |"), "{last}");
+        assert!(!result.contains("> | 2026-09-05"));
+    }
+
+    #[test]
+    fn apply_repair_on_a_crlf_file_changes_only_the_intended_lines_observed_failing() {
+        let content = "# 0001 — X\r\n\r\n> Embodiment: Not started\r\n\r\n> **Revision log**\r\n>\r\n> | Date | Change | Class |\r\n> |---|---|---|\r\n> | 2026-08-20 | Initial. | **structural** |";
+        let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
+        assert!(result.starts_with(
+            "# 0001 — X\r\n\r\n> Embodiment: Verified\r\n\r\n> **Revision log**\r\n>\r\n"
+        ));
+        assert!(!result.replace("\r\n", "").contains('\n'), "bare LF");
+        assert!(!result.ends_with('\n'), "trailing newline was added");
+        assert_eq!(result.lines().count(), content.lines().count() + 1);
     }
 }
