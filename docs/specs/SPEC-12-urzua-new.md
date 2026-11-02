@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -41,6 +41,19 @@ Scans the type's directory for the highest existing numeric prefix and takes the
 **never reused**, even if a number was deleted, since a cross-reference elsewhere may still assume
 the old numbering held (the same reasoning RFC-13 argues for vacated numbers generally, applied here
 as prevention: `new` never manufactures the collision RFC-13 exists to describe after the fact).
+
+**Other refs are consulted too (MILE-89).** After the working-tree scan, `new` also lists the type's
+directory on every local branch and remote-tracking ref (`refs/heads/*`, `refs/remotes/*`) and takes
+one past the highest number found anywhere. Each number above the working tree's own highest that
+another ref already uses is reported on stderr with the ref(s) claiming it. This is git only, with
+no network and no `gh`: **a ref that was never fetched into this clone is invisible**, so a branch
+or PR known only to the remote can still collide -- run `git fetch` first, and still check open PRs
+before opening one. If git cannot be read (git missing, `.git` unusable), `new` numbers from the
+working tree exactly as before and says so on stderr; it never silently skips the check. The query is
+one `for-each-ref` plus one `ls-tree` per distinct commit: it reads a single directory tree per tip
+and knows which ref each name came from, where `git log --all --name-only` walks all history and
+cannot attribute.
+
 Filenames emitted going forward carry the type's prefix (`ADR-38-slug.md`, ADR-36); legacy
 `NNNN-slug.md` filenames are never renamed and resolve identically forever.
 
@@ -85,3 +98,4 @@ take content and parameters, returning a string.
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | §Output's "No other fields" is now false: `notices` (ADR-46) can carry a non-fatal identity-divergence observation. **Why:** this spec's own literal wording would otherwise contradict the shipped output the moment `--by` diverges from an authenticated `gh` login. | **substantive** |
 > | 2026-09-11 | Corrected §"The three paths"' identity-resolution order, stale since ADR-31's amendment (`gh api user` wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). **Why:** caught by review before merge; the same stale order SPEC-8 was already corrected for elsewhere in this same change. | **substantive** |
+> | 2026-11-02 | §Display-number assignment now also skips numbers used on other local branches and remote-tracking refs, naming them on stderr, and documents that unfetched refs are invisible (`MILE-89`). Bumped to `0.5`. **Why:** `urzua new` re-assigned numbers already claimed by open PR branches. | **substantive** |
