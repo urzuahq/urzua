@@ -8,7 +8,7 @@ Track: governance-process
 
 ## What
 
-Bring `urzua check docs/` on this repository to zero unexplained warnings: each current warning is
+Bring `urzua check` (the repository gate `make records` runs) on this repository to zero unexplained warnings: each current warning is
 fixed at its source, or waived through a `waiver` record with a reason and an expiry, so `check`
 itself annotates it (`SPEC-10`). A warning merely mentioned by another record does not count: it stays
 indistinguishable from a new finding in `check`'s output. The count today is 69, all `warn`-level, by rule: `embodiment.consistency` 34,
@@ -26,7 +26,7 @@ output of the tool whose whole job is to be believed. The warnings exit 0, so no
 decision about them, and a new finding on a new record is indistinguishable from the 69 already there.
 `AGENTS.md` already says a live finding is signal ("Don't patch around a finding on your own new
 work"); this milestone is the work of making that rule cheap to follow by clearing the backlog it
-would otherwise be buried in. Counts were taken by running `urzua check docs/` on this branch.
+would otherwise be buried in. Counts were taken by running `urzua check` on this branch (`urzua check docs/` gave the same result).
 
 ## References
 
