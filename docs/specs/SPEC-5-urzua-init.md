@@ -73,7 +73,10 @@ setup for a repository with no records yet are `MILE-114`'s scope, not this spec
 
 For each proposed type, `init` parses the type's existing records with the real header parser under
 each supported shape (`yaml-frontmatter`, `bold-list`, `blockquote`) and proposes the shape they parse
-under, so the first `check` reads the corpus (`BUG-151`; `ADR-33`'s 2026-11-02 amendment). The
+under, so the first `check` reads the corpus (`BUG-151`; `ADR-33`'s 2026-11-02 amendment). A record
+takes the shape whose parsed region carries the most fields, so a quoted block in the body (a
+Y-statement, say) never outranks the real header; equal field counts fall back to the earliest
+region, then to the order above. The
 deprecated-shape steer is carried by `header.deprecated-shape`, which `init` declares in the config it
 writes. When a type's records use more than one shape, the majority shape is proposed (a tie goes to
 `yaml-frontmatter`) and a `header-shape` notice names the split; when none of a type's records parse
