@@ -151,7 +151,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_POINTER_TARGET_STATUS,
-        description: "A reference resolves, but its target's `Status` is one the repository declared unacceptable (`not_in`). Split from `pointer.resolution` in `MILE-80`.",
+        description: "A reference resolves, but its target's `Status` is one the repository declared unacceptable (`not_in`). The optional `fields` option restricts it to the named declared pointer/narrative fields, so a dependency field (`Implements`) can be judged apart from a lineage field (`Derives-from`); an excluded field is not part of the rule's population, and a `fields` entry naming no declared field is a config error. Split from `pointer.resolution` in `MILE-80`.",
     },
     RuleMeta {
         id: RULE_HEADER_POINTER_FIELD_CLEAN,
@@ -1445,6 +1445,7 @@ pub fn pointer_target_status(
     records: &[Record],
     config: &Config,
     not_in: &[String],
+    fields: Option<&[String]>,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     let pointer_fields_by_type = pointer_fields_by_type(config);
@@ -1461,6 +1462,15 @@ pub fn pointer_target_status(
     // eligible and unexamined -- handed to the rule and not judged.
     let slots =
         pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
+    // A field the repository's `fields` option leaves out is not part of this
+    // rule's population at all. It is not `OutOfScope`: that outcome means
+    // "fix the configuration" and trips `config.scope-matches-nothing`, but
+    // this exclusion is the configuration working as written. Not `Absent`
+    // either, which says the record did not write a field it was handed.
+    let slots: Vec<_> = slots
+        .into_iter()
+        .filter(|(_, field)| fields.is_none_or(|f| f.contains(field)))
+        .collect();
 
     let (population, examined_records) = scoped_census_records(
         config,
@@ -4434,19 +4444,19 @@ mod tests {
         let index = build_normalized_index(&records);
 
         let (exec, findings) =
-            pointer_target_status(&records, &config, &["Draft".to_string()], &index);
+            pointer_target_status(&records, &config, &["Draft".to_string()], None, &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Draft"));
 
         // Nothing declared unacceptable means nothing reported -- never a
         // built-in fallback list, which is how a rule silently stops applying.
-        let (_, none_declared) = pointer_target_status(&records, &config, &[], &index);
+        let (_, none_declared) = pointer_target_status(&records, &config, &[], None, &index);
         assert!(none_declared.is_empty(), "{none_declared:?}");
 
         // A status outside the declared set is not this rule's business.
         let (_, other) =
-            pointer_target_status(&records, &config, &["Superseded".to_string()], &index);
+            pointer_target_status(&records, &config, &["Superseded".to_string()], None, &index);
         assert!(other.is_empty(), "{other:?}");
     }
 
@@ -4474,7 +4484,7 @@ mod tests {
         let index = build_normalized_index(&records);
 
         let (exec, findings) =
-            pointer_target_status(&records, &config, &["Draft".to_string()], &index);
+            pointer_target_status(&records, &config, &["Draft".to_string()], None, &index);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Draft"));
@@ -4744,6 +4754,7 @@ mod tests {
             &target_status_records,
             &config,
             &["Superseded".to_string()],
+            None,
             &build_normalized_index(&target_status_records),
         );
         assert!(
