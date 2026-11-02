@@ -34,8 +34,13 @@ when the decision is taken.
 - `MILE-98` -- the declared document model, including identity patterns.
 - `ADR-36` -- filenames carry the type prefix going forward.
 
+## Decision (2026-11-02)
+
+`RFC-46` was rejected: a bare-number filename does not get an identity from its type. Such a corpus is renamed to `TYPE-NNNN-slug.md` (`ADR-36`), and zero-padded citations such as `ADR-0173` keep resolving because IDs are compared numerically. `MILE-120` reports the mismatch with rename guidance; `MILE-134` is the later rename tool. Closing this milestone is a human decision.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** A declared prefix does not give bare zero-padded numeric filenames an identity, so a real adopter's pointers all fail to resolve; filed as a decision. | **substantive** |
+> | 2026-11-02 | Decision recorded from `RFC-46`'s rejection. **Why:** The question this milestone asked is now answered. | **substantive** |

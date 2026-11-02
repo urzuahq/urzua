@@ -21,13 +21,18 @@ no-silent-no-op rule applies: a file the directory declares but the type cannot 
 an absence. This is the file-level sibling of `type.record-outside-declared-dir`, which covers the
 reverse direction. Needed for `MILE-102`.
 
+Since `RFC-46` was rejected, renaming is the only supported route for a corpus in another filename shape, so this rule is also how the engine says so: when every file in a type's directory is off-pattern (a whole bare-number corpus), `urzua init` and `urzua audit` report the mismatch once per type, with the expected `TYPE-NNNN-slug.md` name for each file, instead of silently running the identity rules on zero records. That covers the bare-filename case of `BUG-99`, and the acceptance suite's bare-filename known gap becomes an assertion of this guidance.
+
 ## References
 
 - `type.record-outside-declared-dir` -- the existing reverse-direction rule.
 - `MILE-98` -- the declared identity pattern this rule compares filenames against.
+- `RFC-46` -- rejected; renaming replaces tolerating bare-number filenames.
+- `MILE-134` -- the later rename tool.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** An adopter's off-pattern filename in a type's directory is invisible to every rule; filed as a first-adopter gap. | **substantive** |
+> | 2026-11-02 | Scope widened to whole-corpus mismatch guidance in `init` and `audit`. **Why:** `RFC-46` was rejected, so the engine must explain the one convention rather than tolerate others. | **substantive** |
