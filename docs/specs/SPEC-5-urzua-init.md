@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -69,6 +69,21 @@ live, and no rule needs to know it exists.
 disk rather than taking a `--types` selection. Type selection, built-in profiles, and non-interactive
 setup for a repository with no records yet are `MILE-114`'s scope, not this spec's current subject.
 
+## Proposed header shape
+
+For each proposed type, `init` parses the type's existing records with the real header parser under
+each supported shape (`yaml-frontmatter`, `bold-list`, `blockquote`) and proposes the shape they parse
+under, so the first `check` reads the corpus (`BUG-151`; `ADR-33`'s 2026-11-02 amendment). YAML
+frontmatter that parses with fields at the very start of a record is its header outright. Otherwise a
+record takes the shape whose parsed region carries the most fields, so a quoted block in the body (a
+Y-statement, say) never outranks the real header; equal field counts fall back to the earliest
+region, then to the order above. The
+deprecated-shape steer is carried by `header.deprecated-shape`, which `init` declares in the config it
+writes. When a type's records use more than one shape, the majority shape is proposed (a tie goes to
+`yaml-frontmatter`) and a `header-shape` notice names the split; when none of a type's records parse
+under any shape, `yaml-frontmatter` is proposed with a notice. A type with no records keeps
+`yaml-frontmatter`. Each `proposed` entry reports the chosen `header_shape`.
+
 ## Safety
 
 - **Never clobber.** An existing `.urzua/config.yaml` is not overwritten. `init` reports what exists
@@ -90,7 +105,7 @@ The real, shipped shape (`InitReport`/ADR-46):
   "status": "ok",
   "dry_run": false,
   "config_path": ".urzua/config.yaml",
-  "proposed": [{ "name": "adr", "dir": "docs/adr", "record_count": 5 }],
+  "proposed": [{ "name": "adr", "dir": "docs/adr", "record_count": 5, "prefix": null, "header_shape": "bold-list" }],
   "written": true
 }
 ```
@@ -147,3 +162,5 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-18 | Stays `Draft`, deliberately, and is the genuinely mixed case `BUG-26` identified. **Why:** the adopt path is built and tested -- `BUG-36`/`BUG-37` closed yesterday and `init` now adopts a real foreign corpus end to end. The rest is not: `init`'s only command-specific flag is `--dry-run` (`--config` is global, declared `#[arg(long, global = true)]`), so §"Type selection"'s `--types adr,rfc,spec`, its built-in `adr`/`rfc`/`spec`/`prd` profiles and its interactive mode do not exist, §Safety claims a re-run exits 0 when it exits 2, and §Success criteria depends on unclassified-file reporting that was never built. Flipping it would make the spec assert commands that error; leaving it `Draft` understates the half that ships. The aspirational sections need to move to a record that can hold unbuilt design before the flip -- that move is the remaining work on `BUG-26`. | **structural** |
 > | 2026-09-24 | Bumped to `0.5`, flipped to `Accepted` with `Embodiment: Verified`, closing `BUG-26`. **Why:** relocated every aspirational section (greenfield mode, `--types`/`--dir`, built-in profiles, unclassified-file reporting, the two unbuilt success criteria, all four open questions) to the new `MILE-114`, then re-verified every remaining claim against the binary rather than assuming the previous Draft/shipped split was already complete. Found two more inaccuracies the same pass: the Layout diagram implied `init` writes `templates/`/`cache/`/`.gitignore`, none of which it touches -- only `.urzua/config.yaml` is written today; corrected rather than carried forward silently. | **substantive** |
+> | 2026-11-02 | Bumped to `0.6`. **Why:** added `## Proposed header shape` and the `header_shape` field on each `proposed` entry. Adopt mode proposes the shape each type's records already use instead of `yaml-frontmatter` for every type (`BUG-151`, `ADR-33` amended), because the previous behavior produced a config that read none of a real adopter corpus. | **substantive** |
+> | 2026-11-02 | Leading YAML frontmatter that parses with fields takes precedence over the field-count rule. **Why:** review found body `- **Key:**` bullets could outvote a real frontmatter header. | **substantive** |

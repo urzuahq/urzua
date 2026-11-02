@@ -7,10 +7,8 @@ use crate::config::Config;
 use crate::field_state::classify;
 use crate::header::HeaderLayout;
 use crate::record::Record;
-#[cfg(test)]
-use crate::report::Population;
 use crate::report::{
-    census, census_records, Finding, FindingSeverity, Notice, NoticeSeverity, Outcome,
+    census, census_records, Finding, FindingSeverity, Notice, NoticeSeverity, Outcome, Population,
     PopulationUnit, RuleExecution, RuleStatus,
 };
 use crate::FieldState;
@@ -262,6 +260,44 @@ pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
 ];
 
+/// `census_records` for every rule that reads a record's header: the one place
+/// a `header_shape: none` type (`ADR-50`) is classified `OutOfScope`
+/// (`MILE-119`). Such a type has nowhere for a header to be, so its
+/// `is_unreadable()` is true by construction -- not a parse failure -- and no
+/// edit to the record could make the rule apply; the contradiction of declaring
+/// fields on it is `config.header-none-has-no-required-fields`'s to name.
+/// Gating here rather than in each rule is the point: `BUG-98`, `BUG-124`,
+/// `BUG-137`, `BUG-142` and `BUG-147` were each one rule that forgot.
+///
+/// A rule that never reads a header (`identity.collision`,
+/// `filename.title-consistency`, `revision-log.change-class-required`) uses
+/// `census_records` directly. The all-rules test in `check_integration.rs`
+/// iterates `ALL_RULES` and names each such exemption.
+fn scoped_census_records<'a, T>(
+    config: &Config,
+    unit: PopulationUnit,
+    candidates: Vec<T>,
+    record_of: impl Fn(&T) -> &'a Record,
+    mut body: impl FnMut(&T) -> Outcome,
+) -> (Population, Vec<PathBuf>) {
+    census_records(
+        unit,
+        candidates,
+        |candidate| record_of(candidate).path.clone(),
+        |candidate| {
+            let record = record_of(candidate);
+            if config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.has_no_header())
+            {
+                return Outcome::OutOfScope;
+            }
+            body(candidate)
+        },
+    )
+}
+
 /// One `(record, field)` candidate per field a record's type declares in
 /// `fields_by_type` (`BUG-105`): the same construction four rules duplicated,
 /// against `HashMap`s of either `Vec<String>` or `HashSet<String>`.
@@ -428,20 +464,12 @@ pub fn header_required_fields(
     // per field the record's type declares.
     let slots = field_slots(records, required_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: mirrors the record-scoped loop's own gate above -- a
-            // `header_shape: none` type has no header for this slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // An unparsed header leaves every slot of that record unreadable: the
             // rule was handed them and could not judge them. The record-scoped
             // finding above says why.
@@ -505,10 +533,11 @@ pub fn header_layout_consistency(
         .filter(|r| declared_by_type.contains_key(&r.record_type))
         .collect();
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Record,
         candidates,
-        |record| record.path.clone(),
+        |record| *record,
         |record| {
             let Some(&declared) = declared_by_type.get(&record.record_type) else {
                 return Outcome::Absent;
@@ -603,23 +632,15 @@ pub fn header_field_set_consistency(
         .filter(|r| allowed_by_type.contains_key(&r.record_type))
         .collect();
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Record,
         candidates,
-        |record| record.path.clone(),
+        |record| *record,
         |record| {
             let Some(allowed) = allowed_by_type.get(&record.record_type) else {
                 return Outcome::Absent;
             };
-            // `ADR-50`: a `header_shape: none` type has no header for a field
-            // set to be inconsistent about.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // A record whose header region never parsed has an empty field list,
             // which is indistinguishable here from a record whose fields are all
             // allowed. Counting it as examined inflated the one signal ADR-55 makes
@@ -1451,10 +1472,11 @@ pub fn pointer_target_status(
         .filter(|(_, field)| fields.is_none_or(|f| f.contains(field)))
         .collect();
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field_name)| {
             let result = for_each_resolved_status_target(
                 record,
@@ -1518,10 +1540,11 @@ pub fn pointer_resolution(
     let slots =
         pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field_name)| {
             let references = match declared_field_references(record, field_name.as_str()) {
                 Ok(refs) => refs,
@@ -1589,20 +1612,12 @@ pub fn header_pointer_field_clean(
     // and not judged -- rather than outside its population.
     let slots = field_slots(records, &clean_fields_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field_name)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify (BUG-125's shape, `field_quality`'s
             // same guard).
@@ -1681,10 +1696,11 @@ pub fn narrative_field_stale(
     // instrument that measured that fix.
     let slots = field_slots(records, &narrative_fields_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field_name)| {
             let references = match declared_field_references(record, field_name.as_str()) {
                 Ok(refs) => refs,
@@ -1903,20 +1919,12 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
     // Same population as `field.quality`: one declared slot per required field.
     let slots = field_slots(records, required_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: same reasoning as `field.quality`'s own gate -- a
-            // `header_shape: none` type has no header to fail to parse.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // Unreadable, not absent -- the same reason as `field.quality`.
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
@@ -2117,20 +2125,12 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
 
     let slots = field_slots(records, declared_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
@@ -2199,20 +2199,12 @@ pub fn field_leading_reserved_indicator(
 
     let slots = field_slots(records, declared_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
@@ -2263,20 +2255,12 @@ pub fn header_field_case_mismatch(
 
     let slots = field_slots(records, declared_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
@@ -2337,24 +2321,12 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
     // (`BUG-40`); the unit is what makes that legible rather than alarming.
     let slots = field_slots(records, required_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: a `header_shape: none` type has nowhere for a header
-            // to be, so `is_unreadable()` is always true for it by
-            // construction -- not a parse failure. A declared `required_fields`
-            // entry on such a type is a config contradiction the opt-in
-            // `config.header-none-has-no-required-fields` lint names, not a
-            // record this rule can ever examine.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify. Calling it Blank reports something
             // untrue about a file that may well set the field, and a rule whose
@@ -2863,10 +2835,11 @@ pub fn embodiment_locator_exists(
         &[crate::config::RelationRole::EmbodimentLocator],
     );
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |record| record.path.clone(),
+        |record| *record,
         |record| {
             let field = relation_field_name(
                 config,
@@ -2952,10 +2925,11 @@ pub fn embodiment_consistency(
         ],
     );
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |record| record.path.clone(),
+        |record| *record,
         |record| {
             let state_field = relation_field_name(
                 config,
@@ -3033,10 +3007,11 @@ pub fn embodiment_locator_promotion_candidate(
 
     // Findings are emitted after the census, not inside it: this rule judges
     // locators across records, so no single candidate is at fault.
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |record| record.path.clone(),
+        |record| *record,
         |record| {
             let field = relation_field_name(
                 config,
@@ -3184,10 +3159,11 @@ pub fn supersession_reciprocity(
         &[crate::config::RelationRole::Supersession],
     );
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |record| record.path.clone(),
+        |record| *record,
         |record| {
             let field = relation_field_name(
                 config,
@@ -3299,10 +3275,11 @@ pub fn relation_target_status_undeclared(
     let slots =
         pointer_and_narrative_slots(records, pointer_fields_by_type, narrative_fields_by_type);
 
-    let (population, examined_records) = census_records(
+    let (population, examined_records) = scoped_census_records(
+        config,
         PopulationUnit::Field,
         slots,
-        |(record, _)| record.path.clone(),
+        |(record, _)| *record,
         |(record, field_name)| {
             let result = for_each_resolved_status_target(
                 record,

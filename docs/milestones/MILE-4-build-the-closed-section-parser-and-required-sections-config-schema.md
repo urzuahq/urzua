@@ -4,7 +4,7 @@ Stable-Id: 01M1Y5JE63FXMT7PV7QJQN7BXV
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
-Blocked-on: RFC-33, MILE-98
+Blocked-on: MILE-98
 ---
 # 4 — Require sections per type, as a rule over the declared document model
 
@@ -100,3 +100,4 @@ declares what its records look like, and the corpus has been diverging from it a
 > | 2026-09-18 | `Blocked-on` now names `MILE-98`. **Why:** the declared document model had no milestone -- `MILE-4` was marked absorbed into `RFC-33` and the work moved into an RFC, so six records were blocked on something the plan did not track. Naming it makes the dependency resolvable, and `narrative-field.stale` can report when it moves. | **structural** |
 > | 2026-09-19 | Re-scoped: the section *parser* moves to `MILE-98`, and this keeps `required_sections` as a rule. **Why:** filed as one deliverable -- a parser plus a schema -- which `ADR-53` splits in two. Locating a `##` block is shape and may ship as a primitive (`RFC-34`); requiring one is governance and must be declared. Marked *absorbed into `RFC-33`* on 2026-09-17, which was half right and left this record a duplicate of one third of `MILE-98`. Narrowed instead of closed, because the policy half is real work that nothing else owns. | **substantive** |
 > | 2026-09-19 | Measurement added: 79 of 269 records are missing at least one of their type's template sections. **Why:** the case for this milestone had been an intuition. Counted while restoring `RFC-35`, which had been written by replacing its scaffold rather than filling it in -- the same mechanism, visible in records filed the same week. | **substantive** |
+> | 2026-11-02 | Unblocked: `RFC-33` was Accepted; maintainer decision 2026-11-02. `Blocked-on` now reads `MILE-98`; `Status` stays `Planned`. **Why:** `narrative-field.stale` flagged the reference once `RFC-33` reached a terminal status, and the maintainer decided the dependency no longer holds. `MILE-98` is still open and stays named. | **substantive** |
