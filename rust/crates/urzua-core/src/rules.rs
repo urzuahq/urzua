@@ -641,15 +641,6 @@ pub fn header_field_set_consistency(
             let Some(allowed) = allowed_by_type.get(&record.record_type) else {
                 return Outcome::Absent;
             };
-            // `ADR-50`: a `header_shape: none` type has no header for a field
-            // set to be inconsistent about.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // A record whose header region never parsed has an empty field list,
             // which is indistinguishable here from a record whose fields are all
             // allowed. Counting it as examined inflated the one signal ADR-55 makes
@@ -1617,15 +1608,6 @@ pub fn header_pointer_field_clean(
         slots,
         |(record, _)| *record,
         |(record, field_name)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             // Unreadable, not absent: the header did not parse, so this slot
             // has no value to classify (BUG-125's shape, `field_quality`'s
             // same guard).
@@ -2139,15 +2121,6 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
         slots,
         |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
@@ -2278,15 +2251,6 @@ pub fn header_field_case_mismatch(
         slots,
         |(record, _)| *record,
         |(record, field)| {
-            // `ADR-50`: a `header_shape: none` type has no header for this
-            // slot to be in.
-            if config
-                .record_types
-                .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
-            {
-                return Outcome::OutOfScope;
-            }
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
