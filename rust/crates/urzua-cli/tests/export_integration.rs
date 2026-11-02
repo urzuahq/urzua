@@ -137,3 +137,54 @@ fn export_json_marks_an_unreadable_header_instead_of_an_empty_one() {
         .expect("broken record still exported");
     assert_eq!(broken["header_readable"], false);
 }
+
+#[test]
+fn export_json_treats_a_headerless_type_as_readable() {
+    let dir = fixture_repo("headerless");
+    std::fs::create_dir_all(dir.join("docs/log")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  log:\n    dir: \"docs/log\"\n    required_fields: []\n    header_shape: \"none\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/log/LOG-1-entry.md"),
+        "# 1 — Entry\n\nText.\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "headerless"]);
+    let output = run_urzua(&dir, &["export", "--format", "json"]);
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let entry = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "LOG-1")
+        .expect("headerless record exported");
+    assert_eq!(entry["header_readable"], true, "{v}");
+}
+
+#[cfg(unix)]
+#[test]
+fn export_json_refuses_a_record_symlinked_outside_the_repository() {
+    let dir = fixture_repo("symlink-escape");
+    let outside = std::env::temp_dir().join(format!("urzua-export-secret-{}", std::process::id()));
+    std::fs::write(
+        &outside,
+        "---\nStatus: Accepted\n---\n# 9 — secret contents\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(&outside, dir.join("docs/adr/ADR-9-link.md")).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "link"]);
+    let output = run_urzua(&dir, &["export", "--format", "json"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_ne!(output.status.code(), Some(0), "{stdout}");
+    assert!(!stdout.contains("secret contents"), "{stdout}");
+    assert!(
+        stdout.contains("resolves outside the repository"),
+        "{stdout}"
+    );
+    std::fs::remove_file(&outside).ok();
+}

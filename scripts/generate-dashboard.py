@@ -76,10 +76,17 @@ def title_of(record: dict) -> str:
 
 def records_of(exported: dict, record_type: str):
     """Records of one type, in numeric display-id order."""
-    out = [r for r in exported["records"] if r["type"] == record_type]
-    for r in out:
+    out = []
+    for r in exported["records"]:
+        if r["type"] != record_type:
+            continue
         if r["id"] is None:
-            raise SystemExit(f"{r['path']}: export gave no display id")
+            # A file in a record directory with no display number (a README,
+            # an off-pattern name) has no place in a numbered list. Say so
+            # rather than drop it silently.
+            print(f"skipped {r['path']}: no display id", file=sys.stderr)
+            continue
+        out.append({**r, "raw_text": r["raw_text"].replace("\r\n", "\n")})
     return sorted(out, key=lambda r: int(r["id"].rsplit("-", 1)[1]))
 
 

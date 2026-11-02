@@ -167,7 +167,9 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 ### Export contract (`urzua export --format json`)
 
 Prints one `ExportReport` object (exit 0; exit 2 with a `CouldNotRun` object if the corpus cannot be
-read, as for `graph`):
+read, as for `graph`). Because `raw_text` publishes file contents, a tracked file in a record
+directory whose real path resolves outside the repository (a symlink) makes the export exit 2 with a
+`CouldNotRun` naming it, rather than reading it:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -185,7 +187,7 @@ Each `records` entry:
 | `path` | string | Repository-relative path. |
 | `id` | string or `null` | The display identifier from the filename under the type's prefix (e.g. `MILE-115`); `null` when the filename yields none. |
 | `stable_id` | string or `null` | The `Stable-Id` header value (key matched case-insensitively, as everywhere); `null` when absent. |
-| `header_readable` | boolean | `false` when no header region parsed. Then `header` is empty and means "unreadable", not "no fields". |
+| `header_readable` | boolean | `false` when no header region parsed. Then `header` is empty and means "unreadable", not "no fields". A type declaring `header_shape: none` has no header by design, so its records are `true` with an empty `header`. |
 | `header` | array | The header as the configured `header_shape` parser (the one `check` uses) read it, in file order: `{ "name", "value", "line" }`. A list, not a map, so a repeated key stays visible. Values are strings exactly as parsed. |
 | `raw_text` | string | The file's complete text, unmodified, header included. |
 
@@ -263,3 +265,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-09-19 | Narrowed to the CLI; `Version` `0.3` → `0.4`; revision log moved to the end of the document. **Why:** carried the repository layout (now `SPEC-21`), a duplicate of the acceptance suite it already said `SPEC-4` specifies in full, and five open questions every one of which had been answered or routed. The four exit criteria stay -- they are the standard, which is current truth -- and each now names the milestone reaching it, because a spec cannot report an unmet condition. The revision log had been sitting *inside* the Monorepo layout section, which is why removing that section destroyed it on the first attempt. | **substantive** |
 > | 2026-09-19 | Retitled from *`urzua` v0 CLI* to *The `urzua` CLI*, and the file renamed to match. **Why:** the subject is the CLI, not one version of it. v0's exit bar is stated here because that is current truth about the standard, but the spec outlives it -- a spec whose number is permanent per subject (`ADR-14`) should not carry a version in its name. | **structural** |
 > | 2026-11-02 | `urzua export --format json` implemented (`MILE-115`); `Version` `0.4` → `0.5`. **Why:** `export` declared only `agdr` and was unimplemented, so `scripts/generate-dashboard.py` grew a second parser of the corpus that could disagree with `check` (the published dashboard once showed 3 bugs against roughly 145 in the corpus). Added the command section and an "Export contract" naming every JSON field, including that the body is a single `raw_text` string because no type declares sections (`MILE-98`), and `ExportReport` in the report list. `--format agdr` and the no-flag default are unchanged (not implemented; `MILE-21`). | **substantive** |
+> | 2026-11-02 | Export refuses a record symlinked outside the repository; `header_shape: none` records are `header_readable: true`. **Why:** review found `raw_text` could disclose an outside file, and headerless records were indistinguishable from malformed ones. | **substantive** |

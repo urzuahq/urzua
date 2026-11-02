@@ -2,12 +2,14 @@
 //! type as plain data, so tooling reads records through the same parser
 //! `check` uses instead of a second one (`MILE-115`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::report::{
     CouldNotRun, ExportReport, ExportTypeCount, ExportedField, ExportedRecord, ReportStatus,
 };
+
+use urzua_core::config::Config;
 
 use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::emit;
@@ -30,6 +32,17 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
+    // `raw_text` publishes a file's contents, so a tracked record that is a
+    // symlink resolving outside the repository must not be read: the export
+    // would otherwise disclose an arbitrary file under a repository path.
+    // Refuse the whole export rather than drop the record silently.
+    if let Some(escaping) = first_record_outside_repo(&repo_root, &discovered.paths, &config) {
+        return emit(&CouldNotRun::from(format!(
+            "{} resolves outside the repository; export refuses to read it",
+            escaping.display()
+        )));
+    }
+
     let (records, full_text) = match load_records(
         &repo_root,
         &discovered.paths,
@@ -47,7 +60,10 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
             path: record.path.clone(),
             id: urzua_core::rules::record_id(record),
             stable_id: record.header.get_reserved("Stable-Id").map(str::to_string),
-            header_readable: !record.header.is_unreadable(),
+            // A type declaring `header_shape: none` has no header by
+            // design; that is readable, not a parse failure.
+            header_readable: config.record_types[&record.record_type].has_no_header()
+                || !record.header.is_unreadable(),
             header: record
                 .header
                 .fields
@@ -80,4 +96,27 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         records: exported,
         notices: Vec::new(),
     })
+}
+
+/// The first tracked file in a record directory whose real location is
+/// outside `repo_root`, if any.
+fn first_record_outside_repo(
+    repo_root: &Path,
+    paths: &[PathBuf],
+    config: &Config,
+) -> Option<PathBuf> {
+    let root = repo_root.canonicalize().ok()?;
+    paths
+        .iter()
+        .filter(|p| {
+            config
+                .record_types
+                .values()
+                .any(|t| p.parent() == Some(Path::new(&t.dir)))
+        })
+        .find(|p| match repo_root.join(p).canonicalize() {
+            Ok(real) => !real.starts_with(&root),
+            Err(_) => false,
+        })
+        .cloned()
 }
