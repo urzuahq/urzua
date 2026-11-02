@@ -136,6 +136,13 @@ conversation history. If you're doing multi-step work worth remembering:
   you plan to write. Cross-link the milestone that plans the fix and the bug that describes the
   defect via a real `Implements` pointer, not just a prose mention — verify the edge actually
   resolves with `urzua graph` before treating the record as done.
+- **Every finding improves both our own workflow configuration and the engine.** When a finding
+  exposes a gap, ask two questions: does this repository's own `.urzua/config.yaml`, records or
+  process need to change, and does the engine need a capability so the configuration can express
+  the fix (the config-driven thesis)? Record each answer as a `milestone` or `bug`, not as prose.
+  Two past examples: lineage and dependency relations needed different field scopes (fixed by a
+  `fields:` scope, generalized in RFC-47), and the dashboard's second parser drifted from the
+  engine's (fixed by `urzua export`).
 - Before assuming something isn't already tracked, run `urzua check docs/`, `urzua explain <path>`,
   or `urzua graph` against the real corpus rather than trusting memory of an earlier turn.
 - **Before hand-writing a field the tool already computes, run the subcommand that computes it.**
@@ -180,6 +187,13 @@ about behavior as true:
   read the ADR.
 - When a change invalidates a claim in prose, grep the whole file (or corpus) for that claim's key
   phrase before calling the change done — not just the section being actively edited.
+- **Verify against a real corpus, not only fixtures.** Any change to how records are read or
+  identified (header parsing or shape inference, identity or filename parsing, discovery, config
+  loading) must also be run read-only against at least one real corpus before it is accepted: this
+  repository's own, plus any real adopter corpus available locally. A fixture-only pass is not
+  verification. An init header-shape fix passed every fixture test and still chose the wrong shape
+  for 444 of 444 records on a real adopter corpus, because a body blockquote outranked the real
+  header. MILE-101 plans the automated version of this check.
 
 ## Never silently rewrite an Accepted decision
 
