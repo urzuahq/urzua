@@ -59,7 +59,7 @@ pub fn run(
             )))
         }
     };
-    let display_number = urzua_core::new_record::next_display_number(&filenames);
+    let display_number = assign_display_number(&repo_root, &type_config.dir, &filenames);
 
     let title = title.unwrap_or_else(|| "Title".to_string());
     // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
@@ -178,4 +178,105 @@ pub fn run(
         stable_id: stable_id.as_str().to_string(),
         notices,
     })
+}
+
+/// Numbers `new` in the working tree, then skips past any a local branch or
+/// remote-tracking ref already uses (`MILE-89`). Git only, no network: refs
+/// never fetched into this clone are invisible. A git failure falls back to
+/// the working-tree-only number and says so on stderr.
+fn assign_display_number(repo_root: &std::path::Path, dir: &str, filenames: &[String]) -> u32 {
+    let claims = match other_ref_claims(repo_root, dir) {
+        Ok(c) => c,
+        Err(reason) => {
+            eprintln!(
+                "urzua: numbering from the working tree only; could not read other refs ({reason}). \
+                 A number claimed on an unmerged branch will not be seen."
+            );
+            return urzua_core::new_record::next_display_number(filenames);
+        }
+    };
+    let got = urzua_core::new_record::next_display_number_with_claims(filenames, &claims);
+    for (number, refs) in &got.skipped {
+        eprintln!(
+            "urzua: skipped {number}: already used on {} (local git refs only; unfetched remotes are not checked)",
+            refs.join(", ")
+        );
+    }
+    got.number
+}
+
+fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(args)
+        .output()
+        .map_err(|e| format!("could not run git: {e}"))?;
+    if out.status.success() {
+        Ok(out.stdout)
+    } else {
+        Err(format!(
+            "git {} failed: {}",
+            args[0],
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
+    }
+}
+
+/// `(ref name, filenames in `dir`)` for every local branch and remote-tracking
+/// ref. One `for-each-ref`, then one `ls-tree` per *distinct commit* (many
+/// refs share a tip), which reads only the one directory's tree object --
+/// unlike `git log --all --name-only`, which walks all history and cannot say
+/// which ref a name came from.
+fn other_ref_claims(
+    repo_root: &std::path::Path,
+    dir: &str,
+) -> Result<Vec<(String, Vec<String>)>, String> {
+    let refs = git_output(
+        repo_root,
+        &[
+            "for-each-ref",
+            "--format=%(objectname) %(refname)",
+            "refs/heads",
+            "refs/remotes",
+        ],
+    )?;
+    let mut by_commit: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for line in String::from_utf8_lossy(&refs).lines() {
+        let Some((sha, full)) = line.split_once(' ') else {
+            continue;
+        };
+        // `origin/HEAD` is a symbolic alias of another remote ref.
+        if full.ends_with("/HEAD") {
+            continue;
+        }
+        let short = full
+            .strip_prefix("refs/heads/")
+            .or_else(|| full.strip_prefix("refs/remotes/"))
+            .unwrap_or(full);
+        by_commit
+            .entry(sha.to_string())
+            .or_default()
+            .push(short.to_string());
+    }
+    let pathspec = format!("{}/", dir.trim_end_matches('/'));
+    let mut claims = Vec::new();
+    for (sha, names) in by_commit {
+        let listing = git_output(
+            repo_root,
+            &["ls-tree", "-z", "--name-only", &sha, "--", &pathspec],
+        )?;
+        let files: Vec<String> = listing
+            .split(|b| *b == 0)
+            .filter(|p| !p.is_empty())
+            .map(|p| {
+                let p = String::from_utf8_lossy(p);
+                p.rsplit('/').next().unwrap_or(&p).to_string()
+            })
+            .collect();
+        for name in names {
+            claims.push((name, files.clone()));
+        }
+    }
+    Ok(claims)
 }

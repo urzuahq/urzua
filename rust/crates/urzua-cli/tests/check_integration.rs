@@ -1065,8 +1065,15 @@ fn a_claim_path_prefix_is_read_to_any_depth() {
         stdout.contains("claim.status-agreement"),
         "rule must appear: {stdout}"
     );
-    assert!(
-        !stdout.contains("\"rule\": \"claim.status-agreement\",\n      \"records_examined\": 0"),
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let claim_rule = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "claim.status-agreement")
+        .unwrap_or_else(|| panic!("claim.status-agreement must appear: {stdout}"));
+    assert_eq!(
+        claim_rule["population"]["examined"], 1,
         "a nested claim layout must not report a clean run over zero claims: {stdout}"
     );
     assert!(
