@@ -78,14 +78,20 @@ milestone acts as an epic over child milestones and bugs.
 
 A read-only command that computes, for a scope (default: every type with a sequencing relation):
 
-- **Waves**: topological layers over open records; wave 0 is everything with no open blocker.
-- **Ready set**: open records whose blockers are all in a terminal status.
+- **Waves**: topological layers over open records; wave 0 is everything whose blockers are all in a
+  success terminal state.
+- **Ready set**: open records whose blockers are all in a success terminal state. A blocker in a
+  failure terminal state keeps its dependent out of the ready set (`sequence.failed-dependency`).
 - **Critical path**: the longest chain of open blockers.
 - **Per record**: what it blocks, transitively.
 - **Grouping** by `Phase` then `Track` (fields named in config, not hard-coded).
 
 Output is JSON by default, and part of `export --format json` (`MILE-115`), so a dashboard or
-roadmap page is generated from it rather than hand-written. Like `audit`, nothing is stored.
+roadmap page is generated from it rather than hand-written. Proposed shape: a top-level `roadmap`
+object with `waves` (array of arrays of record IDs), `ready` (record IDs), `critical_path` (record
+IDs in order) and `groups` (keyed by the configured grouping fields), and on each exported record a
+`derived` object holding its derived values (`blocked`, `blocks`, `children`). The exact field names
+are fixed in the SPEC that implements this RFC. Like `audit`, nothing is stored.
 
 ### 3. Rules
 
@@ -114,8 +120,7 @@ answered" are facts that are observed, not built, and a milestone is the wrong s
 
 ```yaml
 ---
-Status: Open            # Open | Met | Dropped
-Met-by: —               # evidence, required when Met: a record ID, a commit, a link
+Status: Open            # Open | Met | Dropped; a Met condition adds Met-by (evidence: a record ID, a commit, a link)
 Review-by: 2027-02-01   # optional: when to re-ask whether the condition is still plausible
 ---
 # 1 — An external adopter requests AgDR round-tripping
@@ -130,7 +135,8 @@ One sentence on exactly what counts as met.
   The engine has no special case for it. It is the first record type composed entirely from
   configuration, which makes it the test that the primitives are sufficient.
 - **Terminal states split into success and failure.** A state machine declares each terminal state as
-  `success` (Met, Done, Fixed, Accepted) or `failure` (Dropped, WontDo, WontFix, Rejected). A
+  `success` (Met, Done, Fixed, Accepted) or `failure` (Dropped, WontDo, WontFix, Rejected, and
+  Superseded, because a dependency on a superseded record must be re-pointed at its successor). A
   `Depends-on` target in a success state unblocks its dependent. A target in a failure state does not
   silently unblock it: `sequence.failed-dependency` reports the dependent for re-planning. Rules
   refer to "success" or "failure" from the declaration instead of copying status lists, which removes
@@ -143,14 +149,14 @@ One sentence on exactly what counts as met.
 - **Migration for this repository.** Prose blockers that name facts become conditions with a
   `Depends-on` from the waiting record: "a real external adopter asking for it", "real adopter demand
   for AgDR round-tripping", "real adoption data on how much the deprecated shapes are still in use".
-  "A real case where Phase/Track tags aren't enough" becomes a condition created already `Met`, with
-  this RFC as `Met-by`. Prose blockers that name decisions ("a decision to actually build it", "RFC-9's
+  "A real case where Phase/Track tags aren't enough" becomes a condition created `Open`, with this RFC
+  proposed as its `Met-by` evidence; a person moves it to `Met`. Prose blockers that name decisions ("a decision to actually build it", "RFC-9's
   own Q2") point at the RFC or a decide-milestone instead. `Blocked-on` keeps any explanatory note.
 
 ## How this composes in the engine
 
-None of this is a milestone feature. The engine has four primitives, and every piece above is
-configuration over them, so an adopter opts in or out per type and per pair:
+None of this is a milestone feature. Every piece above is configuration over five primitives: three
+exist today, the state machine comes from `MILE-132`, and the derived value is new in this RFC, so an adopter opts in or out per type and per pair:
 
 | Primitive | Today | Added here |
 |---|---|---|
@@ -160,14 +166,17 @@ configuration over them, so an adopter opts in or out per type and per pair:
 | Rule | opt-in in `rules:`, with options | `sequence.*` and `condition.review-due` rules, each opt-in |
 | State machine | none: status lists copied into rule options | declared per type (`MILE-132`), terminal states marked success or failure |
 
-- **A derived value** is the one new primitive. A type may declare values computed from its relations,
-  for example `blocked: any Depends-on target not in a terminal status`. Derived values appear in
+- **A derived value** is the one primitive this RFC adds. A type may declare values computed from its relations,
+  for example `blocked: any Depends-on target not in a success terminal state`. Derived values appear in
   `export`, `graph` and `roadmap`, and rules can read them, but they are never written into a file.
 - **`Status: Blocked` is computed this way.** The roadmap shows a record as blocked whenever its derived
   `blocked` value is true, whatever its written `Status`. An adopter who still writes `Status` by hand
   can opt into `sequence.status-agreement`, which reports a written `Blocked` with no open dependency,
   and an open dependency on a record whose written status says otherwise. This repository drops
-  `Blocked` from the written vocabulary instead, because the engine computes it.
+  `Blocked` from the written vocabulary instead, because the engine computes it: accepting this RFC
+  includes amending `SPEC-6`'s `Status` value set to remove `Blocked`, and each milestone whose
+  written `Status` is `Blocked` is moved to `Planned`, with its blocker recorded as a
+  `Depends-on` value.
 - **`urzua roadmap` is a view over these primitives**: waves from any `acyclic` pair, grouping by any
   declared field. A repository that declares no acyclic pair has no roadmap and loses nothing else.
 
@@ -211,3 +220,4 @@ workflow is then configuration on top of it, adopted or not per repository.
 > | 2026-11-02 | External conditions become records too, not body prose. **Why:** Author: structured in and out. | **substantive** |
 > | 2026-11-02 | `Blocked-on` kept as a separate narrative field beside `Depends-on`. **Why:** Author: a dependency and a free-text note on what is in the way are different fields. | **substantive** |
 > | 2026-11-02 | Added the `condition` record type, success and failure terminal states, review dates and the condition migration. **Why:** Author accepted the recommendations from the condition-type discussion. | **substantive** |
+> | 2026-11-02 | Readiness and `blocked` count only success terminals; Superseded classed as failure; condition example and migration no longer pre-set `Met`; `SPEC-6` amendment for `Blocked` named; primitive count fixed; roadmap JSON shape proposed. **Why:** Review findings. | **substantive** |
