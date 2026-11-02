@@ -2754,6 +2754,47 @@ fn init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so() 
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// BUG-151 review: valid frontmatter at the start of the document is the
+/// header even when body bullets carry more fields.
+#[test]
+fn init_prefers_leading_frontmatter_over_more_numerous_body_bullets() {
+    let dir = fixture_repo("init-frontmatter-vs-bullets");
+    for n in 1..=2 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-record-{n}.md")),
+            format!(
+                "---\nStatus: Accepted\n---\n# {n} — Record {n}\n\n- **Owner:** someone\n- **Area:** a thing\n\nBody.\n"
+            ),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let init = run_urzua(&dir, &["init"]);
+    let init_stdout = String::from_utf8_lossy(&init.stdout);
+    let parsed = assert_valid_json_object(&init_stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
+        "stdout: {init_stdout}"
+    );
+
+    let path = dir.join(".urzua/config.yaml");
+    let config = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        config.replace("required_fields: []", "required_fields: [Status]"),
+    )
+    .unwrap();
+    let check = run_urzua(&dir, &["check", "docs/"]);
+    let stdout = String::from_utf8_lossy(&check.stdout);
+    assert!(
+        !stdout.contains("missing required header field"),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// BUG-151: a Y-statement blockquote in the body must not be mistaken for the
 /// header. The header is the region that carries the most parsed fields.
 #[test]

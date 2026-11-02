@@ -129,7 +129,15 @@ fn shape_name(shape: HeaderShape) -> &'static str {
 /// wins: a header is the region that carries the fields, and a stray quote
 /// carries few. Equal field counts fall back to the earliest region start,
 /// then to candidate order. Nothing here reads a field name.
+///
+/// One exception comes first: YAML frontmatter that parses with fields at the
+/// very start of the document is the header outright. Its position is
+/// structural, so `- **Key:**` bullets in the body cannot outvote it.
 fn shape_of(content: &str) -> Option<HeaderShape> {
+    let yaml = header::parse_with_shape(content, HeaderShape::YamlFrontmatter);
+    if matches!(yaml.region, Some((1, _))) && !yaml.fields.is_empty() {
+        return Some(HeaderShape::YamlFrontmatter);
+    }
     CANDIDATE_SHAPES
         .iter()
         .filter_map(|shape| {
