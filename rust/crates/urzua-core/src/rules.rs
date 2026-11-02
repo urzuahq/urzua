@@ -2709,8 +2709,13 @@ pub(crate) struct RealizedBy {
 /// [`parse_realized_by`], so every rule reading a locator agrees. A leading
 /// `..` is kept (it escapes the repository and matches nothing); an empty
 /// locator stays empty so the rule can report it.
-pub(crate) fn normalize_locator(raw: &str) -> String {
+pub fn normalize_locator(raw: &str) -> String {
     let raw = raw.trim();
+    // An absolute locator is never a repository path; keep it as written so
+    // it cannot normalize into a tracked relative one.
+    if raw.starts_with('/') {
+        return raw.to_string();
+    }
     let mut parts: Vec<&str> = Vec::new();
     for seg in raw.split('/') {
         match seg {
@@ -5703,6 +5708,7 @@ mod tests {
             assert!(findings.is_empty(), "{spelled}: {findings:?}");
         }
         assert_eq!(normalize_locator("../x"), "../x");
+        assert_eq!(normalize_locator("/src/b.rs"), "/src/b.rs");
         assert_eq!(normalize_locator("."), ".");
         assert_eq!(normalize_locator(" "), "");
     }

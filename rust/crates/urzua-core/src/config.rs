@@ -457,6 +457,21 @@ fn dir_names_nothing(dir: &str) -> bool {
         && dir.split('/').all(|p| p.trim() == "" || p == ".")
 }
 
+/// True when `dir` is absolute or has a `..` component: it would point
+/// `urzua new` outside the repository, where discovery never looks.
+fn dir_escapes_repo(dir: &str) -> bool {
+    let path = std::path::Path::new(dir.trim());
+    dir.trim().starts_with('/')
+        || path.components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+}
+
 /// One option's name, the one rule it belongs to, and what happens if a rule
 /// that needs it is declared without it. The single source for three facts a
 /// hand-maintained list per fact would let drift apart: which rule an option
@@ -524,25 +539,26 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
     for (name, rt) in &config.record_types {
-        if dir_names_nothing(&rt.dir) {
+        if dir_names_nothing(&rt.dir) || dir_escapes_repo(&rt.dir) {
             return Err(ConfigError::InvalidDir {
                 record_type: name.clone(),
                 dir: rt.dir.clone(),
             });
         }
-        if let Some(p) = &rt.prefix {
-            if let Some(reason) = prefix_problem(p) {
-                return Err(ConfigError::InvalidPrefix {
-                    record_type: name.clone(),
-                    prefix: p.clone(),
-                    reason,
-                });
-            }
-        }
+        // The effective prefix, not only a declared one: a type named
+        // `my_type` with no `prefix` defaults to `MY_TYPE`, which no filename
+        // can carry, so `new` would mint records the numbering scan ignores.
         let effective = rt
             .prefix
             .clone()
             .unwrap_or_else(|| name.to_ascii_uppercase());
+        if let Some(reason) = prefix_problem(&effective) {
+            return Err(ConfigError::InvalidPrefix {
+                record_type: name.clone(),
+                prefix: effective,
+                reason,
+            });
+        }
         if let Some(first) = seen_prefix.insert(effective.clone(), name) {
             return Err(ConfigError::DuplicatePrefix {
                 prefix: effective,
@@ -994,5 +1010,29 @@ record_types:
             );
         }
         assert!(parse(&rt_config("  adr:\n    dir: \"docs/adr\"\n")).is_ok());
+    }
+
+    /// Round 30 review: a `dir` outside the repository is refused too.
+    #[test]
+    fn a_dir_escaping_the_repository_is_refused_at_load() {
+        for bad in ["..", "../docs", "docs/../../x", "/etc", "/docs/adr"] {
+            let yaml = rt_config(&format!("  adr:\n    dir: \"{bad}\"\n"));
+            assert!(
+                matches!(parse(&yaml), Err(ConfigError::InvalidDir { .. })),
+                "dir {bad:?} must be refused"
+            );
+        }
+    }
+
+    /// Round 30 review: the default prefix (the upper-cased type name) is
+    /// validated like a declared one.
+    #[test]
+    fn an_invalid_default_prefix_is_refused_at_load() {
+        let yaml = rt_config("  my_type:\n    dir: \"docs/t\"\n");
+        assert!(
+            matches!(parse(&yaml), Err(ConfigError::InvalidPrefix { .. })),
+            "{:?}",
+            parse(&yaml)
+        );
     }
 }

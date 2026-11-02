@@ -2,7 +2,7 @@
 Stable-Id: 01M6D5VMCJKG8X6YSHC5QZE8D4
 Status: Open
 Found-in: "A /code-review pass, round 30"
-Regression-test: "planned: a waiver.rs test that a waiver lacking Reason is not active, once the intended behavior is decided"
+Regression-test: "planned: a test that load_waivers does not load or apply a waiver lacking Reason, once the intended behavior is decided (not Waiver::is_active, which checks only Expires)"
 ---
 # 177 — a waiver with no Reason still waives because load_waivers requires only Rule and Scope
 
