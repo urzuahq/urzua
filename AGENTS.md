@@ -136,10 +136,11 @@ conversation history. If you're doing multi-step work worth remembering:
   you plan to write. Cross-link the milestone that plans the fix and the bug that describes the
   defect via a real `Implements` pointer, not just a prose mention — verify the edge actually
   resolves with `urzua graph` before treating the record as done.
-- **Every finding improves both our own workflow configuration and the engine.** When a finding
+- **Every finding is checked against both our own workflow configuration and the engine.** When a finding
   exposes a gap, ask two questions: does this repository's own `.urzua/config.yaml`, records or
   process need to change, and does the engine need a capability so the configuration can express
-  the fix (the config-driven thesis)? Record each answer as a `milestone` or `bug`, not as prose.
+  the fix (the config-driven thesis)? Record each follow-up a yes answer calls for as a `milestone` or
+  `bug`, not as prose; a no needs no record.
   Two past examples: lineage and dependency relations needed different field scopes (fixed by a
   `fields:` scope, generalized in RFC-47), and the dashboard's second parser drifted from the
   engine's (fixed by `urzua export`).
