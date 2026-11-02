@@ -11,7 +11,7 @@ genuinely open rather than settled.
 ```sh
 git clone https://github.com/urzuahq/urzua && cd urzua
 make ci        # exactly what CI runs: fmt-check, clippy, build, test
-make hooks-install   # optional: fmt-check + clippy on every push
+make hooks-install   # optional: fmt-check, clippy and `urzua check` on every push
 ```
 
 `make help` lists every target. Native `cargo` commands work fine inside `rust/` for anyone who

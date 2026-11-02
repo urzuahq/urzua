@@ -148,10 +148,10 @@ conversation history. If you're doing multi-step work worth remembering:
 - **Before hand-writing a field the tool already computes, run the subcommand that computes it.**
   `urzua fix --apply` derives `Embodiment` from `Realized-by`'s actual tier — don't hand-assert
   `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.
-- **`urzua new`'s assigned display number is provisional, not reserved.** It's a scan of the local
-  filesystem, blind to numbers already claimed by other open, unmerged branches or PRs (MILE-89) — a
-  real collision this project has hit live. There's no automated check for this yet (MILE-89 is
-  unbuilt): before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
+- **`urzua new`'s assigned display number is provisional, not reserved.** It scans the working tree and
+  every local branch and remote-tracking ref (MILE-89), skipping past numbers found there and naming
+  the claiming refs on stderr. It is blind to refs never fetched into this clone, so `git fetch` first
+  and, before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
   — a collision found this way is expected and cheap to rename, not a bug in the tool.
 - **Before hand-writing any record header or field, check `.urzua/config.yaml`'s

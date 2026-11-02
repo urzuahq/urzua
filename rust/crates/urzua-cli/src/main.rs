@@ -57,6 +57,9 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Create a record with a stable ID assigned. Never asks you to pick a number.
+    ///
+    /// The number skips past any already used on a local branch or remote-tracking ref
+    /// (named on stderr). Refs never fetched into this clone are invisible: `git fetch` first.
     New {
         /// Record type, as configured in .urzua/config.yaml (e.g. adr, rfc, spec).
         record_type: String,
