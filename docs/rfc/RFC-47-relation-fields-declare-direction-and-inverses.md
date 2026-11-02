@@ -21,8 +21,9 @@ that `BUG-17` and `BUG-41` each record from a different side.
 **1. A combined key hides direction.** `docs/adr/ADR-29-*.md` carries `Supersedes / Superseded-by:
 ADR-28, ADR-45`. Read against its neighbours, that means "supersedes ADR-28, superseded by ADR-45":
 `ADR-28` lists `ADR-29` and `ADR-45` lists `ADR-29`, so the three headers are consistent. Nothing in the
-file or in `.urzua/config.yaml` says which reference is which; the config declares the key as one
-`known_fields` entry and, via `relation_fields.supersession`, one relation role. A reader recovers
+file or in `.urzua/config.yaml` says which reference is which; the config lists the key as one
+`known_fields` entry; `relation_fields` is optional and not set, so the engine applies its built-in
+`Supersession` role default to that one key. A reader recovers
 direction only from the target's own header or from the target's status, which is exactly the
 inference a tool should not leave to a human.
 
@@ -67,18 +68,26 @@ relation_pairs:
 
 - **forward / inverse** name header fields. A claim `A.forward = B` is echoed by `B.inverse = A`, and the
   reverse. Direction is the field name, so it is machine-readable by construction.
-- **Per-type resolution.** Field names resolve per record type through the existing
-  `relation_fields`/`known_fields` machinery, so two types may spell a pair differently.
+- **Per-type resolution (unresolved).** Two types may need to spell a pair differently. The existing
+  `relation_fields` maps only the fixed `RelationRole` values, so it cannot bind an arbitrary pair's
+  forward and inverse to per-type field names. How that binding is declared is an open question
+  below; this RFC does not claim the current machinery provides it.
 - **reciprocity** sets the severity ceiling of the new check; `none` declares direction only.
 - **cross_type** says whether the target of a claim may be a different record type. A claim to a type
-  not allowed by the pair is a finding, not a silent skip.
+  not allowed by the pair is excluded from the reciprocity check as out of scope (disclosed in its
+  population), and is reported by a separate rule, `relation.cross-type-disallowed`, so it is never a
+  silent skip.
 - **A direction-mismatch check**, `relation.direction-mismatch`: a record names a target in its
   `forward` field, and the target's `forward` field (not `inverse`) also names the record. Today's rule
   cannot see this; with directions declared it is a plain set comparison.
 - **`relation.supersession-reciprocity` becomes the `supersession` pair** of the general rule, keeping
-  its id as an alias for one release so existing configs and waivers keep resolving.
-- Both check rules disclose their `Population` per `RFC-45`: pairs declared, claims examined, claims
-  out of scope (target type outside `cross_type`), and unreadable headers.
+  its id as an alias for one release: config validation accepts the old id, execution and reports
+  name the canonical rule, and waiver matching treats the two ids as the same rule, so existing
+  configs and waivers keep resolving.
+- Both check rules disclose their `Population` per `RFC-45`, in one unit: claims. Examined claims,
+  claims out of scope (target type outside `cross_type`) and claims on records with unreadable headers
+  are counts in that population. The number of declared pairs is a configuration fact, reported as a
+  separate metric beside the population, not as a population count.
 - A declared pair whose field is absent from a type's `known_fields` is a config finding, mirroring
   `config.relation-field-not-known`.
 
@@ -90,8 +99,9 @@ relation_pairs:
   the rule that references before a marker (or in a fixed position) are forward. Requires a delimiter
   the current values do not contain, so it too means rewriting values.
 - *A parser that derives direction from the reciprocal side.* Without rewriting anything, a reference
-  `X` in the combined field is forward when `X`'s own combined field lists this record and this
-  record is older, or by status; otherwise inverse. Works on today's corpus but derives a fact from
+  `X` in the combined field, where `X`'s own combined field lists this record, is forward
+  (`Supersedes`) when this record is the newer of the two and inverse (`Superseded-by`) when it is the
+  older, or by status. Works on today's corpus but derives a fact from
   data that is itself under check, so a wrong header can validate itself.
 
 The leaning is to declare two keys for new pairs and accept a legacy `combined` key as read-only input
@@ -100,8 +110,22 @@ direction-mismatch check reports it as unverifiable rather than passing it, and 
 the split as a tool-authored repair (`RFC-8`). Direction-unknown is a third state, distinct from
 correct and from wrong, in the spirit of the three-field-states rule in `AGENTS.md`.
 
+### Alternatives considered
+
+- **Add more fixed `RelationRole` variants** (`Amendment`, `Dependency`, ...). Rejected: each is
+  another hardcoded pair in Rust source, the exact shape `BUG-41` records; it scales per pair, not per
+  config.
+- **Generalise reciprocity to "any field mentioning a record names it back", no declared pair.**
+  Rejected: it cannot tell a dependency from a lineage claim, and still has no direction.
+- **Leave direction to prose.** Rejected: the combined key is the evidence that prose direction is
+  not recoverable by a tool.
+- **Infer direction from record status or date only.** Rejected as the sole mechanism: a stale or
+  wrong status makes the check validate its own input.
+
 ## Open questions
 
+- **Per-type binding.** How a type maps a pair's forward and inverse to its own field names, given
+  that `relation_fields` binds only fixed roles today.
 - **Config shape.** Top-level `relation_pairs`, or per-type under `relation_fields`? Pairs that span
   types suggest top-level; per-type spelling suggests the field names live with the type.
 - **Does the fixed `RelationRole` set survive?** `Supersession` carries role-specific behaviour
@@ -129,18 +153,6 @@ correct and from wrong, in the spirit of the three-field-states rule in `AGENTS.
 - Does not add rule primitives beyond the pair declaration (`RFC-33` governs how new primitives are
   admitted).
 
-## Alternatives considered
-
-- **Add more fixed `RelationRole` variants** (`Amendment`, `Dependency`, ...). Rejected: each is
-  another hardcoded pair in Rust source, the exact shape `BUG-41` records; it scales per pair, not per
-  config.
-- **Generalise reciprocity to "any field mentioning a record names it back", no declared pair.**
-  Rejected: it cannot tell a dependency from a lineage claim, and still has no direction.
-- **Leave direction to prose.** Rejected: the combined key is the evidence that prose direction is
-  not recoverable by a tool.
-- **Infer direction from record status or date only.** Rejected as the sole mechanism: a stale or
-  wrong status makes the check validate its own input.
-
 ## References
 
 - `RFC-33` — rule primitives; a declared pair is a new configurable primitive.
@@ -158,3 +170,4 @@ correct and from wrong, in the spirit of the three-field-states rule in `AGENTS.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed as `Draft`. **Why:** the combined `Supersedes / Superseded-by` key hides direction and only that one pair is reciprocity-checked. | **substantive** |
+> | 2026-11-02 | Review corrections: the config's actual supersession declaration; per-type binding marked unresolved; one population unit; cross-type claims reported by a named rule; alias handling spelled out; reciprocal-side direction corrected; alternatives moved under Proposal. **Why:** review found each stated as more settled or different than the code. | **substantive** |
