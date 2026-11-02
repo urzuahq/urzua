@@ -1,10 +1,10 @@
 //! The `urzua` binary.
 //!
 //! Command surface per SPEC-0001. `check`, `explain`, `graph`, `new`, `audit`,
-//! `init` (adopt mode), `doctor`, `fix` (detect and apply), `migrate ids`, and
-//! `migrate schema --report` are implemented; `migrate schema
-//! --assist-waivers`/`--apply`, `export`, and `import` still bail with "not
-//! implemented yet." Stdout is always JSON, on every implemented command --
+//! `init` (adopt mode), `doctor`, `fix` (detect and apply), `migrate ids`,
+//! `migrate schema --report`, and `export --format json` are implemented;
+//! `migrate schema --assist-waivers`/`--apply`, `export --format agdr`, and
+//! `import` still bail with "not implemented yet." Stdout is always JSON, on every implemented command --
 //! no `--format` flag exists (ADR-0023).
 //!
 //! Implements: SPEC-0001, SPEC-0002, SPEC-0003
@@ -179,6 +179,8 @@ enum MigrateTarget {
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum ExportFormat {
     Agdr,
+    /// Every record as plain JSON data (SPEC-1). Must be named explicitly.
+    Json,
 }
 
 /// `--help`/`--version` surface as `Err(_)` too (`ErrorKind::DisplayHelp`/
@@ -231,7 +233,12 @@ fn main() -> ExitCode {
         } => emit(&CouldNotRun::from(
             "pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)",
         )),
-        Command::Export { .. } => not_implemented("export"),
+        Command::Export {
+            format: ExportFormat::Json,
+        } => commands::export::run(cli.config),
+        Command::Export {
+            format: ExportFormat::Agdr,
+        } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => commands::init::run(dry_run),
         Command::Doctor => commands::doctor::run(),

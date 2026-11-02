@@ -1,9 +1,9 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/export_integration.rs
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -127,8 +127,15 @@ computes from evidence already in the record; apply mode writes the computed val
 **Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, and previews
 what a newly-required field would break before it's added to config.
 
+### `urzua export --format json`
+Every record of every configured type as plain JSON data, so tooling reads records through the one
+parser `check` uses instead of a second one. Takes no paths: it always exports the whole tracked
+corpus. `--format json` must be named explicitly; `urzua export` with no flag still selects
+`agdr`, which is not implemented (exit 2). The exact fields are under "Export contract" below.
+
 ### `urzua export --format=agdr` / `urzua import`
-AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields.
+AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields. Not
+implemented; `MILE-21`.
 
 ## Output contract
 
@@ -137,7 +144,7 @@ Stdout is the only stream, success or failure, every invocation. No stderr for a
 codebase's own code can structure into JSON, including genuine errors (ADR-26's amendment).
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
-  `ExplainReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
+  `ExplainReport`, `ExportReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
   `DoctorReport`, `CouldNotRun`)
   stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
   no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
@@ -156,6 +163,36 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
   prints a minimal ad hoc JSON object to stdout before the process exits, instead of Rust's default
   raw-text-to-stderr behavior. Not routed through `Notice`/`Report` — a panic is a lower-level escape
   hatch, not another instance of the five-command contract.
+
+### Export contract (`urzua export --format json`)
+
+Prints one `ExportReport` object (exit 0; exit 2 with a `CouldNotRun` object if the corpus cannot be
+read, as for `graph`):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `status` | `"ok"` | Read-only; no blocking axis. |
+| `record_count` | integer | Length of `records`. |
+| `types` | array | One entry per configured type, in sorted name order: `type`, `dir`, `records` (the count exported). A type with no records is listed with `0`, so "empty" and "not configured" differ. |
+| `records` | array | Every record, ordered by `type` then `path`. |
+| `notices` | array | Omitted when empty, as for every report. |
+
+Each `records` entry:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `type` | string | The configured type name (e.g. `milestone`). |
+| `path` | string | Repository-relative path. |
+| `id` | string or `null` | The display identifier from the filename under the type's prefix (e.g. `MILE-115`); `null` when the filename yields none. |
+| `stable_id` | string or `null` | The `Stable-Id` header value (key matched case-insensitively, as everywhere); `null` when absent. |
+| `header_readable` | boolean | `false` when no header region parsed. Then `header` is empty and means "unreadable", not "no fields". |
+| `header` | array | The header as the configured `header_shape` parser (the one `check` uses) read it, in file order: `{ "name", "value", "line" }`. A list, not a map, so a repeated key stays visible. Values are strings exactly as parsed. |
+| `raw_text` | string | The file's complete text, unmodified, header included. |
+
+**There is no `sections` field yet.** No record type declares where its sections come from
+(`MILE-98`), so the body is one raw string and a consumer that needs a section (`## What`) must
+extract it from `raw_text` itself. When `MILE-98` lands, sections are added as a new field beside
+`raw_text`; this spec is then revised.
 
 ## Configuration
 
@@ -225,3 +262,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-09-11 | "Every command" is now literally true: `init`/`migrate ids` gained real `Report` types (BUG-20), so the exception carved out above is removed rather than left stale. `§urzua init` also corrected -- it claimed type selection and template creation, neither of which is built (SPEC-5 is still `Draft` for exactly that reason). | **substantive** |
 > | 2026-09-19 | Narrowed to the CLI; `Version` `0.3` → `0.4`; revision log moved to the end of the document. **Why:** carried the repository layout (now `SPEC-21`), a duplicate of the acceptance suite it already said `SPEC-4` specifies in full, and five open questions every one of which had been answered or routed. The four exit criteria stay -- they are the standard, which is current truth -- and each now names the milestone reaching it, because a spec cannot report an unmet condition. The revision log had been sitting *inside* the Monorepo layout section, which is why removing that section destroyed it on the first attempt. | **substantive** |
 > | 2026-09-19 | Retitled from *`urzua` v0 CLI* to *The `urzua` CLI*, and the file renamed to match. **Why:** the subject is the CLI, not one version of it. v0's exit bar is stated here because that is current truth about the standard, but the spec outlives it -- a spec whose number is permanent per subject (`ADR-14`) should not carry a version in its name. | **structural** |
+> | 2026-11-02 | `urzua export --format json` implemented (`MILE-115`); `Version` `0.4` → `0.5`. **Why:** `export` declared only `agdr` and was unimplemented, so `scripts/generate-dashboard.py` grew a second parser of the corpus that could disagree with `check` (the published dashboard once showed 3 bugs against roughly 145 in the corpus). Added the command section and an "Export contract" naming every JSON field, including that the body is a single `raw_text` string because no type declares sections (`MILE-98`), and `ExportReport` in the report list. `--format agdr` and the no-flag default are unchanged (not implemented; `MILE-21`). | **substantive** |

@@ -2,8 +2,9 @@
 """Generate a self-contained HTML dashboard from this repo's own corpus.
 
 Not a second maintained source: every number and record on the page comes
-from parsing docs/ directly and from running the real `urzua` binary
-(check/explain/graph), the same way `check` itself reads the corpus. Re-run
+from the real `urzua` binary (check/explain/graph/export), so records are read
+by the same parser `check` uses. This script never globs or parses docs/
+headers itself. Re-run
 this any time the corpus changes; nothing here is hand-updated.
 
 Usage:
@@ -12,14 +13,11 @@ Usage:
 """
 
 import argparse
-import glob
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
-
-import yaml
 
 
 def repo_root() -> Path:
@@ -52,148 +50,114 @@ def extract_body(content: str) -> str:
     return "\n".join(lines[idx:]).strip()
 
 
-def _yaml_frontmatter(content: str):
-    if not content.startswith("---\n"):
-        return None
-    end = content.find("\n---\n", 4)
-    if end == -1:
-        return None
-    parsed = yaml.safe_load(content[4:end])
-    return parsed if isinstance(parsed, dict) else None
-
-
-def field(content: str, name: str, default: str = "—") -> str:
-    frontmatter = _yaml_frontmatter(content)
-    if frontmatter is not None:
-        value = frontmatter.get(name)
-        return default if value is None else str(value).strip()
-    m = re.search(rf"^> {name}: (.+)$", content, re.M)
-    return m.group(1).strip() if m else default
+def field(record: dict, name: str, default: str = "—") -> str:
+    """A header field as `urzua export` parsed it (the parser `check` uses)."""
+    for f in record["header"]:
+        if f["name"] == name:
+            return f["value"].strip() or default
+    return default
 
 
 def section(content: str, name: str) -> str:
+    # No record type declares sections yet (MILE-98), so `export` hands over
+    # one raw string; this is the only text-shaping left in this script.
     m = re.search(
         rf"^## {name}\n\n(.+?)(?=\n## |\n> \*\*Revision log\*\*|\Z)", content, re.M | re.S
     )
     return m.group(1).strip().replace("\n", " ") if m else ""
 
 
-def parse_milestones(root: Path):
-    records = []
-    files = sorted(
-        glob.glob(str(root / "docs/milestones/MILE-*.md")),
-        key=lambda p: int(re.search(r"MILE-(\d+)-", p).group(1)),
-    )
-    for f in files:
-        content = Path(f).read_text()
-        num = re.search(r"MILE-(\d+)-", f).group(1)
-        title = re.search(r"^# \d+ — (.+)$", content, re.M).group(1)
-        records.append(
-            {
-                "num": num,
-                "title": title,
-                "status": field(content, "Status"),
-                "phase": field(content, "Phase"),
-                "track": field(content, "Track"),
-                "implements": field(content, "Implements"),
-                "what": section(content, "What"),
-                "why": section(content, "Why"),
-                "blocked": field(content, "Blocked-on"),
-                "file": str(Path(f).relative_to(root)),
-            }
-        )
-    return records
+def title_of(record: dict) -> str:
+    m = re.search(r"^# (?:[A-Z]+-)?\d+ — (.+)$", record["raw_text"], re.M)
+    if not m:
+        raise SystemExit(f"{record['path']}: no '# N — Title' heading")
+    return m.group(1)
 
 
-def parse_bugs(root: Path):
-    records = []
-    files = sorted(
-        glob.glob(str(root / "docs/bugs/BUG-*.md")),
-        key=lambda p: int(re.search(r"BUG-(\d+)-", p).group(1)),
-    )
-    for f in files:
-        content = Path(f).read_text()
-        num = re.search(r"BUG-(\d+)-", f).group(1)
-        title = re.search(r"^# \d+ — (.+)$", content, re.M).group(1)
-        records.append(
-            {
-                "num": num,
-                "title": title,
-                "status": field(content, "Status"),
-                "found_in": field(content, "Found-in"),
-                "body": extract_body(content),
-                "file": str(Path(f).relative_to(root)),
-            }
-        )
-    return records
+def records_of(exported: dict, record_type: str):
+    """Records of one type, in numeric display-id order."""
+    out = [r for r in exported["records"] if r["type"] == record_type]
+    for r in out:
+        if r["id"] is None:
+            raise SystemExit(f"{r['path']}: export gave no display id")
+    return sorted(out, key=lambda r: int(r["id"].rsplit("-", 1)[1]))
 
 
-def parse_rfcs(root: Path):
-    records = []
-    files = sorted(
-        glob.glob(str(root / "docs/rfc/RFC-*.md")),
-        key=lambda p: int(re.search(r"RFC-(\d+)-", p).group(1)),
-    )
-    for f in files:
-        content = Path(f).read_text()
-        num = re.search(r"RFC-(\d+)-", f).group(1)
-        title = re.search(r"^# \d+ — (.+)$", content, re.M).group(1)
-        records.append(
-            {
-                "num": num,
-                "title": title,
-                "status": field(content, "Status"),
-                "body": extract_body(content),
-                "file": str(Path(f).relative_to(root)),
-            }
-        )
-    return records
+def num_of(record: dict) -> str:
+    return record["id"].rsplit("-", 1)[1]
 
 
-def parse_adrs(root: Path):
-    records = []
-    files = sorted(
-        glob.glob(str(root / "docs/adr/ADR-*.md")),
-        key=lambda p: int(re.search(r"ADR-(\d+)-", p).group(1)),
-    )
-    for f in files:
-        content = Path(f).read_text()
-        num = re.search(r"ADR-(\d+)-", f).group(1)
-        title = re.search(r"^# \d+ — (.+)$", content, re.M).group(1)
-        records.append(
-            {
-                "num": num,
-                "title": title,
-                "status": field(content, "Status"),
-                "embodiment": field(content, "Embodiment"),
-                "body": extract_body(content),
-                "file": str(Path(f).relative_to(root)),
-            }
-        )
-    return records
+def parse_milestones(exported: dict):
+    return [
+        {
+            "num": num_of(r),
+            "title": title_of(r),
+            "status": field(r, "Status"),
+            "phase": field(r, "Phase"),
+            "track": field(r, "Track"),
+            "implements": field(r, "Implements"),
+            "what": section(r["raw_text"], "What"),
+            "why": section(r["raw_text"], "Why"),
+            "blocked": field(r, "Blocked-on"),
+            "file": r["path"],
+        }
+        for r in records_of(exported, "milestone")
+    ]
 
 
-def parse_specs(root: Path):
-    records = []
-    files = sorted(
-        glob.glob(str(root / "docs/specs/SPEC-*.md")),
-        key=lambda p: int(re.search(r"SPEC-(\d+)-", p).group(1)),
-    )
-    for f in files:
-        content = Path(f).read_text()
-        num = re.search(r"SPEC-(\d+)-", f).group(1)
-        title = re.search(r"^# SPEC-\d+ — (.+)$", content, re.M).group(1)
-        records.append(
-            {
-                "num": num,
-                "title": title,
-                "status": field(content, "Status"),
-                "version": field(content, "Version"),
-                "body": extract_body(content),
-                "file": str(Path(f).relative_to(root)),
-            }
-        )
-    return records
+def parse_bugs(exported: dict):
+    return [
+        {
+            "num": num_of(r),
+            "title": title_of(r),
+            "status": field(r, "Status"),
+            "found_in": field(r, "Found-in"),
+            "body": extract_body(r["raw_text"]),
+            "file": r["path"],
+        }
+        for r in records_of(exported, "bug")
+    ]
+
+
+def parse_rfcs(exported: dict):
+    return [
+        {
+            "num": num_of(r),
+            "title": title_of(r),
+            "status": field(r, "Status"),
+            "body": extract_body(r["raw_text"]),
+            "file": r["path"],
+        }
+        for r in records_of(exported, "rfc")
+    ]
+
+
+def parse_adrs(exported: dict):
+    return [
+        {
+            "num": num_of(r),
+            "title": title_of(r),
+            "status": field(r, "Status"),
+            "embodiment": field(r, "Embodiment"),
+            "body": extract_body(r["raw_text"]),
+            "file": r["path"],
+        }
+        for r in records_of(exported, "adr")
+    ]
+
+
+def parse_specs(exported: dict):
+    return [
+        {
+            "num": num_of(r),
+            "title": title_of(r),
+            "status": field(r, "Status"),
+            "version": field(r, "Version"),
+            "body": extract_body(r["raw_text"]),
+            "file": r["path"],
+        }
+        for r in records_of(exported, "spec")
+    ]
 
 
 def run_urzua(binary: Path, root: Path, *args):
@@ -208,14 +172,15 @@ def build_data(root: Path) -> dict:
     check = run_urzua(binary, root, "check", "docs/")
     explain = run_urzua(binary, root, "explain", "rust/crates/urzua-core/src/new_record.rs")
     graph = run_urzua(binary, root, "graph")
+    exported = run_urzua(binary, root, "export", "--format", "json")
     milestone_edges = [e for e in graph["edges"] if e.get("from", "").startswith("MILE-")]
 
     return {
-        "milestones": parse_milestones(root),
-        "bugs": parse_bugs(root),
-        "rfcs": parse_rfcs(root),
-        "adrs": parse_adrs(root),
-        "specs": parse_specs(root),
+        "milestones": parse_milestones(exported),
+        "bugs": parse_bugs(exported),
+        "rfcs": parse_rfcs(exported),
+        "adrs": parse_adrs(exported),
+        "specs": parse_specs(exported),
         "check": {
             "status": check["status"],
             "files_examined": check["files_examined"],
