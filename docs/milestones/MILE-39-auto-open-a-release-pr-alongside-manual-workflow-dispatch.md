@@ -3,7 +3,7 @@ Status: Done
 Stable-Id: 01M1YKX8C584N9ESVE5181FJJE
 Phase: '1'
 Track: release-process
-Implements: ADR-29
+Implements: ADR-45
 Blocked-on: —
 ---
 # 39 — Auto-open a release PR alongside manual workflow_dispatch
@@ -30,3 +30,4 @@ that opens itself is a standing, visible reminder instead of a step nobody's wat
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | `Blocked` -> `Done`. **Why:** `ADR-45` built this -- `prepare-release.yml` runs on every push to `main` and opens or updates the release PR, which is how `#24` (v0.2.0) and `#39` (v0.2.1) were cut. The `Blocked-on: MILE-38` sequencing was deliberate at the time but overtaken: `ADR-45` superseded `ADR-29`'s mechanism outright rather than amending it, so the amended-citation test case this was waiting to provide never arose. `MILE-38` is unaffected and still `Planned`. | **substantive** |
+> | 2026-11-02 | `Implements` repointed from `ADR-29` to `ADR-45`. **Why:** `ADR-29` is Superseded and `ADR-45` is the decision now in force for this work; `pointer.target-status` flagged the stale target. | **structural** |

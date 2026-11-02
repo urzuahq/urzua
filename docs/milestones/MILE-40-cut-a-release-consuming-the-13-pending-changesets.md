@@ -3,7 +3,7 @@ Status: Done
 Stable-Id: 01M1YKX8WYPDEW5D4M1T1RHVB6
 Phase: '1'
 Track: release-process
-Implements: ADR-29
+Implements: ADR-45
 Blocked-on: —
 ---
 # 40 — Cut a release consuming the pending changesets
@@ -30,5 +30,6 @@ unilaterally.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-02 | `Implements` repointed from `ADR-29` to `ADR-45`. **Why:** `ADR-29` is Superseded and `ADR-45` is the decision now in force for this work; `pointer.target-status` flagged the stale target. | **structural** |
 > | 2026-09-16 | `Planned` -> `Done`. **Why:** done twice -- `v0.2.0` consumed twenty accumulated fragments into a 14,380-character changelog, and `v0.2.1` consumed one. The stale `0.1.0` changelog entry this milestone was filed against is no longer the top of the file. Cut through `ADR-45`'s reviewable release PR rather than `ADR-29`'s `workflow_dispatch`, which no longer exists. | **substantive** |
 > | 2026-09-07 | Dropped the hardcoded "13" from the title (now "the pending changesets"); noted the count is 14 as of this date in the body instead. **Why:** found live during backlog triage -- the count had already drifted from 13 to 14 with nothing catching it, and hardcoding a transient number into a permanent title guarantees it drifts again. | **structural** |
