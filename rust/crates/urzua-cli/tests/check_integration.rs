@@ -2628,6 +2628,124 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
     }
 }
 
+const EDIT_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
+
+fn edit_fixture(name: &str, record: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), EDIT_CONFIG).unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-1-first.md"), record).unwrap();
+    commit_all(&dir);
+    dir
+}
+
+/// A CRLF record with no trailing newline: `fix --apply` must change the one
+/// field line and add one revision-log row, nothing else -- not rewrite the
+/// whole file to LF with a trailing newline.
+#[test]
+fn fix_apply_preserves_crlf_and_the_absent_trailing_newline() {
+    let original = "# ADR-1: First\r\n\r\n> Embodiment: Not started\r\n> Realized-by: code:src/a.rs\r\n\r\n> **Revision log**\r\n>\r\n> | Date | Change | Class |\r\n> |---|---|---|\r\n> | 2026-01-01 | Initial. | **structural** |";
+    let dir = edit_fixture("fix-crlf", original);
+
+    let output = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    let before_lines: Vec<&str> = original.split("\r\n").collect();
+    let after_lines: Vec<&str> = after.split("\r\n").collect();
+    assert_eq!(after_lines.len(), before_lines.len() + 1, "{after:?}");
+    assert!(
+        !after.replace("\r\n", "").contains('\n'),
+        "bare LF: {after:?}"
+    );
+    assert!(!after.ends_with('\n'), "trailing newline added: {after:?}");
+    let changed = after_lines
+        .iter()
+        .filter(|l| !before_lines.contains(l))
+        .count();
+    assert_eq!(changed, 2, "only the field line and the new row: {after:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A plain (non-blockquote) revision-log table: the appended row must be a
+/// plain table row too, or it renders outside the table.
+#[test]
+fn fix_apply_appends_inside_a_plain_revision_log_table() {
+    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-01-01 | Initial. | **structural** |\n";
+    let dir = edit_fixture("fix-plain-table", original);
+
+    let output = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    let last = after.lines().last().unwrap();
+    assert!(
+        last.starts_with("| ") && last.contains("Tool-authored"),
+        "new row must be a plain table row: {after:?}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `migrate ids --apply` on a CRLF record with no trailing newline inserts
+/// exactly one line and leaves every other byte alone.
+#[test]
+fn migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline() {
+    let original = "# ADR-1: First\r\n\r\n> Status: Draft\r\n> Date: 2026-01-01\r\n\r\nbody\r\nno trailing newline";
+    let dir = edit_fixture("migrate-crlf", original);
+
+    let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    let kept: Vec<&str> = after
+        .split("\r\n")
+        .filter(|l| !l.contains("Stable-Id:"))
+        .collect();
+    assert_eq!(kept.join("\r\n"), original, "{after:?}");
+    assert_eq!(after.matches("Stable-Id:").count(), 1, "{after:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// An `--ids` entry that selects nothing is a reported failure (exit 1)
+/// naming the entry, not a clean `ok` with nothing written.
+#[test]
+fn fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector() {
+    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+    let dir = edit_fixture("fix-ids-unmatched", original);
+
+    for selector in ["NOPE", "ADR-1"] {
+        let output = run_urzua(&dir, &["fix", "--apply", "--ids", selector, "--by", "me"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "partial-failure", "{selector}: {stdout}");
+        assert_eq!(output.status.code(), Some(1), "{selector}: {stdout}");
+        assert_eq!(parsed["failed"][0]["record"], selector, "{stdout}");
+    }
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    assert_eq!(after, original, "an unmatched selector must write nothing");
+
+    // The documented path form still applies, with no failure.
+    let output = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--apply",
+            "--ids",
+            "docs/adr/ADR-1-first.md",
+            "--by",
+            "me",
+        ],
+    );
+    let parsed = assert_valid_json_object(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(parsed["status"], "applied");
+    assert_eq!(output.status.code(), Some(0));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `MILE-119`: every rule that builds a per-record or per-slot population must
 /// classify a `header_shape: none` type (`ADR-50`) as out of scope -- it has no
 /// header, so "unreadable" would misreport a deliberate declaration as a

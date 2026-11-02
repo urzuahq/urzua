@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -57,6 +57,10 @@ cannot attribute.
 Filenames emitted going forward carry the type's prefix (`ADR-38-slug.md`, ADR-36); legacy
 `NNNN-slug.md` filenames are never renamed and resolve identically forever.
 
+A title that yields an empty filename slug (empty, whitespace, or only non-ASCII characters) is an
+error, reported before anything is written and without consuming a number: a slug-less filename is not
+one the numbering scan recognises, so the number would be reissued (`BUG-167`).
+
 ## Output
 
 Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id`, plus an optional
@@ -99,3 +103,4 @@ take content and parameters, returning a string.
 > | 2026-09-11 | §Output's "No other fields" is now false: `notices` (ADR-46) can carry a non-fatal identity-divergence observation. **Why:** this spec's own literal wording would otherwise contradict the shipped output the moment `--by` diverges from an authenticated `gh` login. | **substantive** |
 > | 2026-09-11 | Corrected §"The three paths"' identity-resolution order, stale since ADR-31's amendment (`gh api user` wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). **Why:** caught by review before merge; the same stale order SPEC-8 was already corrected for elsewhere in this same change. | **substantive** |
 > | 2026-11-02 | §Display-number assignment now also skips numbers used on other local branches and remote-tracking refs, naming them on stderr, and documents that unfetched refs are invisible (`MILE-89`). Bumped to `0.5`. **Why:** `urzua new` re-assigned numbers already claimed by open PR branches. | **substantive** |
+> | 2026-11-02 | Bumped to `0.6`. A title with no slug is refused. **Why:** `new` wrote a slug-less `ADR-N-.md` that its own numbering scan ignored, so the next `new` reissued `N` (`BUG-167`). | **substantive** |

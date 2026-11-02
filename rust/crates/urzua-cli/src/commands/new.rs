@@ -62,6 +62,15 @@ pub fn run(
     let display_number = assign_display_number(&repo_root, &type_config.dir, &filenames);
 
     let title = title.unwrap_or_else(|| "Title".to_string());
+    // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
+    // the identity index recognise as a record, so the next `new` would
+    // reissue the same number. Refuse before anything is written.
+    let slug = urzua_core::new_record::slugify(&title);
+    if slug.is_empty() {
+        return emit(&CouldNotRun::from(format!(
+            "title '{title}' has no ASCII letters or digits to build a filename slug from -- give it a title containing at least one"
+        )));
+    }
     let stable_id = urzua_id::StableId::generate();
     let today = urzua_io::today();
     let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
@@ -122,12 +131,7 @@ pub fn run(
         .prefix
         .clone()
         .unwrap_or_else(|| record_type.to_ascii_uppercase());
-    let filename = format!(
-        "{}-{}-{}.md",
-        type_prefix,
-        display_number,
-        urzua_core::new_record::slugify(&title)
-    );
+    let filename = format!("{type_prefix}-{display_number}-{slug}.md");
     let file_path = dir.join(&filename);
     // `create_new` is atomic (matching `FixLock`'s own pattern) -- a
     // separate `exists()` check followed by `write` would leave a race
