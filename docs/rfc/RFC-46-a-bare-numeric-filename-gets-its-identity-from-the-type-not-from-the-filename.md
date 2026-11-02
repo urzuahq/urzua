@@ -12,7 +12,7 @@ A record's identity today is read out of its filename as `<prefix>-<number>-<slu
 `0173-slug.md` has no identity, whatever `prefix` its type declares. This RFC proposes the narrowest
 config-driven fix: a type may declare that its filenames carry **only a number**, and the type then
 supplies the prefix. The identity of `docs/adr/0173-slug.md` becomes `ADR-173` (as a numeric value),
-and `ADR-0173` and `ADR-173` resolve to it alike, as `normalize_id` already makes them equal. It is
+and `ADR-0173` and `ADR-173` resolve to it alike, as `RecordId` (`values.rs`) already makes them equal by numeric value. It is
 one declared option on the type, not a second filename policy in Rust, and it is the smallest
 interim shape of `MILE-98`'s `identity` declaration rather than a rival to it.
 
@@ -45,7 +45,7 @@ writing a duplicate. So the numbering path already reads this shape; the identit
 exactly today's: `TYPE-N-slug.md` only. No corpus changes unless it opts in.
 
 **2. Identity is `prefix` (from config) + number (from filename).** For `prefix: ADR` and
-`0173-slug.md`, `record_id` yields `ADR-173`. Numeric normalization is the existing `normalize_id`
+`0173-slug.md`, `record_id` yields `ADR-173`. Numeric normalization is the existing `RecordId` comparison (`values.rs`)
 (compare by value), so `ADR-0173`, `ADR-173` and `ADR-00173` all resolve to this record in pointer
 fields, narrative fields, `graph` and prose-reference extraction. No new matching mechanism; the type
 only changes how an id is *produced*, not how it is *compared*.
