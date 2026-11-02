@@ -13,7 +13,6 @@ The set of finished statuses is written out by hand in several places, and the c
 - `narrative-field.stale` `terminal_statuses`: Fixed, WontFix, Accepted, Rejected, Superseded, Done,
   WontDo (`.urzua/config.yaml`).
 - `claim.status-agreement` `closed_statuses`: Fixed, Done, Accepted, Rejected, Superseded, Withdrawn.
-- `pointer.target-status` `not_in`: Superseded.
 - The test helper `terminal_for_tests` in `rules.rs`, a fourth copy of the first list.
 
 `closed_statuses` lacks WontFix and WontDo, so a changeset that claims to close a bug whose status is
@@ -37,3 +36,4 @@ duplication `ADR-64` names.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Found by the implicit state machine inventory. | **substantive** |
+> | 2026-11-02 | Dropped `pointer.target-status` `not_in` from the copies. **Why:** It is a separate, narrower policy (pointers must not target a Superseded record), not a list of finished statuses. | **substantive** |

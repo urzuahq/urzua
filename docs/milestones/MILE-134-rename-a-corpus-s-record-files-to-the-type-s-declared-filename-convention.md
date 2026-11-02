@@ -8,7 +8,7 @@ Track: write-path
 
 ## What
 
-`urzua migrate filenames`: rename a corpus's record files to its type's declared filename convention (`TYPE-NNNN-slug.md`), and rewrite relative links and path mentions to the renamed files, reporting every rewrite. Dry run by default.
+`urzua migrate filenames`: rename a corpus's record files to the filename convention its type's `identity.pattern` declares (`TYPE-NNNN-slug.md` for this repository's `ADR-36` corpus), and rewrite relative links and path mentions to the renamed files, reporting every rewrite. Dry run by default.
 
 ## Why
 
@@ -25,3 +25,4 @@ Track: write-path
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** A gap the Phase 0 roadmap found with no record. | **substantive** |
+> | 2026-11-02 | Target follows the declared pattern. **Why:** The tool must not hardcode one filename shape. | **substantive** |
