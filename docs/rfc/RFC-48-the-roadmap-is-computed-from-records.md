@@ -92,8 +92,10 @@ roadmap page is generated from it rather than hand-written. Like `audit`, nothin
 - `sequence.cycle`: a cycle in a sequencing relation. Error.
 - `sequence.terminal-parent-open-child`: a parent in a terminal status with a child that is not.
 - `sequence.phase-order`: a record blocked on a record in a later phase.
-- `sequence.unresolved-blocker`: a sequencing value that is neither a resolving ID nor marked
-  external.
+- `sequence.failed-dependency`: a `Depends-on` target reached a failure terminal state; the
+  dependent needs re-planning.
+- `sequence.unresolved-blocker`: a `Depends-on` value that does not resolve to a record. A fact that
+  is not yet a record becomes a condition (below).
 - The existing `narrative-field.stale` / `pointer.target-status` behavior covers a blocker that has
   since reached a terminal status.
 
@@ -103,6 +105,47 @@ roadmap page is generated from it rather than hand-written. Like `audit`, nothin
   the records carry it.
 - Generate the roadmap page from `urzua roadmap` output, the same way the ledger page is generated
   from records, and retire the hand-built page.
+
+## Conditions: dependencies on facts nobody builds
+
+Some dependencies are not work. "An external adopter asks for AgDR round-tripping" or "RFC-9's Q2 is
+answered" are facts that are observed, not built, and a milestone is the wrong shape for them. A
+`condition` record type holds them, so a dependency on a fact is as structured as a dependency on work.
+
+```yaml
+---
+Status: Open            # Open | Met | Dropped
+Met-by: —               # evidence, required when Met: a record ID, a commit, a link
+Review-by: 2027-02-01   # optional: when to re-ask whether the condition is still plausible
+---
+# 1 — An external adopter requests AgDR round-tripping
+
+## Signal
+One sentence on exactly what counts as met.
+```
+
+- **Configuration, not an engine type.** `condition` is declared in config (`dir: docs/conditions`,
+  prefix `COND`, filenames `COND-NNNN-slug.md` per `ADR-36`) with a state machine built from
+  `MILE-132`'s primitive: `Open -> Met`, `Open -> Dropped`, both terminal; `Met-by` required in `Met`.
+  The engine has no special case for it. It is the first record type composed entirely from
+  configuration, which makes it the test that the primitives are sufficient.
+- **Terminal states split into success and failure.** A state machine declares each terminal state as
+  `success` (Met, Done, Fixed, Accepted) or `failure` (Dropped, WontDo, WontFix, Rejected). A
+  `Depends-on` target in a success state unblocks its dependent. A target in a failure state does not
+  silently unblock it: `sequence.failed-dependency` reports the dependent for re-planning. Rules
+  refer to "success" or "failure" from the declaration instead of copying status lists, which removes
+  the cause of `BUG-178`.
+- **Review dates.** `condition.review-due` warns when an `Open` condition's `Review-by` has passed, so
+  a condition such as "a real adopter asks" cannot block work indefinitely without anyone re-asking.
+  The same date semantics as a waiver's `Expires`.
+- **Humans flip the status.** Moving a condition to `Met` or `Dropped` is a human decision, like any
+  Status. `MILE-135`'s later forge tool may propose `Met` from evidence it finds; a person accepts it.
+- **Migration for this repository.** Prose blockers that name facts become conditions with a
+  `Depends-on` from the waiting record: "a real external adopter asking for it", "real adopter demand
+  for AgDR round-tripping", "real adoption data on how much the deprecated shapes are still in use".
+  "A real case where Phase/Track tags aren't enough" becomes a condition created already `Met`, with
+  this RFC as `Met-by`. Prose blockers that name decisions ("a decision to actually build it", "RFC-9's
+  own Q2") point at the RFC or a decide-milestone instead. `Blocked-on` keeps any explanatory note.
 
 ## How this composes in the engine
 
@@ -114,7 +157,8 @@ configuration over them, so an adopter opts in or out per type and per pair:
 | Declared field | `required_fields`, `known_fields`, `pointer_fields`, `narrative_fields` | `Depends-on` as a pointer field |
 | Declared relation | `RFC-47` pairs: forward, inverse, reciprocity, cross-type | `acyclic` on a pair |
 | Derived value | none: every value is read from a file | a value computed from relations, never written (`blocked`, `Blocks`, `Children`) |
-| Rule | opt-in in `rules:`, with options | `sequence.*` rules, each opt-in |
+| Rule | opt-in in `rules:`, with options | `sequence.*` and `condition.review-due` rules, each opt-in |
+| State machine | none: status lists copied into rule options | declared per type (`MILE-132`), terminal states marked success or failure |
 
 - **A derived value** is the one new primitive. A type may declare values computed from its relations,
   for example `blocked: any Depends-on target not in a terminal status`. Derived values appear in
@@ -166,3 +210,4 @@ workflow is then configuration on top of it, adopted or not per repository.
 > | 2026-11-02 | `Blocked-on` retired in favour of `Depends-on`; lifecycle stages moved out as a workflow over `MILE-132`. **Why:** Author: one field for waiting, and stages are workflow composition. | **substantive** |
 > | 2026-11-02 | External conditions become records too, not body prose. **Why:** Author: structured in and out. | **substantive** |
 > | 2026-11-02 | `Blocked-on` kept as a separate narrative field beside `Depends-on`. **Why:** Author: a dependency and a free-text note on what is in the way are different fields. | **substantive** |
+> | 2026-11-02 | Added the `condition` record type, success and failure terminal states, review dates and the condition migration. **Why:** Author accepted the recommendations from the condition-type discussion. | **substantive** |
