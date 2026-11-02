@@ -9,8 +9,9 @@ Track: governance-process
 ## What
 
 Bring `urzua check docs/` on this repository to zero unexplained warnings: each current warning is
-fixed at its source, waived through a `waiver` record with a reason and an expiry, or tracked by a
-record that names it. The count today is 69, all `warn`-level, by rule: `embodiment.consistency` 34,
+fixed at its source, or waived through a `waiver` record with a reason and an expiry, so `check`
+itself annotates it (`SPEC-10`). A warning merely mentioned by another record does not count: it stays
+indistinguishable from a new finding in `check`'s output. The count today is 69, all `warn`-level, by rule: `embodiment.consistency` 34,
 `embodiment.locator-promotion-candidate` 18, `pointer.target-status` 6, `field.pending` 5,
 `narrative-field.stale` 5, `header.field-set-consistency` 1.
 

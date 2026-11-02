@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
-Blocked-on: MILE-4 (the closed section parser this shape is built on)
+Blocked-on: MILE-98 (the section parser this shape is built on)
 ---
 # 121 — A section content shape requiring a table with a minimum number of data rows
 
@@ -13,7 +13,7 @@ Blocked-on: MILE-4 (the closed section parser this shape is built on)
 A section content shape that requires a section to contain a table with at least N data rows, for
 example a considered-options table with at least two options. `RFC-17` names it as the plausible
 second shape after `y-statement` and leaves it undesigned. Build it on the section parser from
-`MILE-4`, declared in config like any other shape.
+`MILE-98` (the parser moved there from `MILE-4` on 2026-09-19), declared in config like any other shape.
 
 ## Why
 

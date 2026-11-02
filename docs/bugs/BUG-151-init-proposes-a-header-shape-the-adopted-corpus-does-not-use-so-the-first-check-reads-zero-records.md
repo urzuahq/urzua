@@ -2,7 +2,7 @@
 Stable-Id: 01M6CXZZ2TP2VC2SZ8CJWVTKZM
 Status: Open
 Found-in: "The first check of a real adopter corpus (bold-list headers, bare zero-padded numeric filenames) after urzua init"
-Regression-test: "planned: an init test adopting a bold-list fixture asserts the proposed header_shape is bold-list"
+Regression-test: "planned: an init test adopting a bold-list fixture asserts that check, run with the config init wrote, reads every fixture record (records_read_by_any_rule equals the record count) -- whichever shape policy ADR-33's follow-up decision selects"
 ---
 # 151 — init proposes a header shape the adopted corpus does not use, so the first check reads zero records
 

@@ -8,9 +8,12 @@ Track: roadmap-tracking
 
 ## What
 
-`urzua export` supports exactly one format today, `--format agdr`. Add a plain-JSON export that emits
-every record of every configured type as data: its identity, type, path, header fields, and the
-sections the type declares. Then switch `scripts/generate-dashboard.py` to consume that output instead
+`urzua export` is not implemented today: `--format agdr` is the only declared value and the command
+exits `not implemented`. Add a plain-JSON export that emits every record of every configured type as
+data: its identity (display id and `Stable-Id`), type, path, and header fields, plus its sections once
+`MILE-98`'s document model declares where sections come from (no type declares sections today). The
+exact JSON field names are part of this milestone's deliverable and belong in `SPEC-1`'s output
+contract. AgDR export stays `MILE-21`'s scope. Then switch `scripts/generate-dashboard.py` to consume that output instead
 of globbing `docs/` and parsing it with its own Python and YAML logic.
 
 ## Why

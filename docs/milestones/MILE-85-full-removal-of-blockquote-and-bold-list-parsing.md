@@ -27,7 +27,8 @@ adopter's un-migrated corpus needs to stay readable, and `check` must still run 
 evaluator's existing, unmodified docs before they decide whether to adopt anything at all (ADR-33's
 own stated reason for deprecating rather than removing). Neither of those depends on this repo's own
 state, so this milestone can't move to `Done` on this repo's evidence alone -- it needs the adoption
-data ADR-33 itself names as the actual gate, which doesn't exist yet.
+data ADR-33 itself names as the actual gate, which did not exist when this milestone was filed (see
+the 2026-11-02 revision-log row).
 
 > **Revision log**
 >

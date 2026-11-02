@@ -3,7 +3,6 @@ Stable-Id: 01M6CXZTS2PNQ6Q0A7BN67K70E
 Status: Planned
 Phase: '0'
 Track: governance-process
-Implements: SPEC-19
 ---
 # 117 — Decide whether a bug fixed in the same PR that files it may be filed as Fixed
 
