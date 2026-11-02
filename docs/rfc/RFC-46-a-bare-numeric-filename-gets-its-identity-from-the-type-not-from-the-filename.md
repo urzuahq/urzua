@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6D5B37EB2FEZEBNP95GPTCA
-Status: Draft
+Status: Rejected
 Date: 2026-11-02
 Author: beauwilliams
 ---
@@ -148,8 +148,13 @@ pattern and migrates mechanically, never contradicts it.
 - `RFC-44` — declared record identity (H1 shape) as a field type.
 - `ADR-53` — declared, not voted; `ADR-59` — `RecordId` display.
 
+## Decision (2026-11-02)
+
+**Rejected by the maintainer.** A type stays namespaced in its filenames (`TYPE-NNNN-slug.md`, `ADR-36`): a bare number is only meaningful relative to its directory, so it cannot be namespaced across types. A corpus in the bare `NNNN-slug.md` shape is renamed to the typed form instead of the engine gaining a per-type exception. Ids cited as `ADR-NNNN` keep resolving through numeric id comparison, so citations need no change; path references to the renamed files do. A general filename-migration command is future work, not part of this decision.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed as `Draft`. **Why:** a real adopter corpus names files `NNNN-slug.md` and cites `ADR-NNNN`; a declared `prefix` gives such files no identity, so every cross-record pointer fails to resolve (`MILE-126`). | **substantive** |
+> | 2026-11-02 | `Draft` -> `Rejected`. **Why:** maintainer decision: keep the type in the filename and rename bare-number corpora rather than add a per-type identity exception. | **substantive** |
