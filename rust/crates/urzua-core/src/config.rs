@@ -135,7 +135,18 @@ impl<'de> Deserialize<'de> for RuleSetting {
         // into "data did not match any variant of untagged enum Either", and the
         // messages naming the valid levels and keys were unreachable (BUG-46).
         let value = yaml_serde::Value::deserialize(deserializer)?;
-        if value.is_mapping() {
+        if let Some(map) = value.as_mapping() {
+            // A present key with no value (`fields:` or `fields: null`) would
+            // deserialize to `None`, the same as an omitted key, and silently
+            // restore the rule's default scope. Reject it instead.
+            for (key, v) in map {
+                if v.is_null() {
+                    return Err(serde::de::Error::custom(format!(
+                        "rule option '{}' is present with no value; give it a list or remove the key",
+                        key.as_str().unwrap_or("?")
+                    )));
+                }
+            }
             let table = Table::deserialize(value).map_err(serde::de::Error::custom)?;
             Ok(RuleSetting {
                 level: table.level,
@@ -763,6 +774,30 @@ rules:
         for msg in [bad_bare, bad_table, bad_key] {
             assert!(!msg.contains("untagged"), "{msg}");
         }
+    }
+
+    /// A rule option present with no value must not read as omitted: for
+    /// `pointer.target-status` `fields:` that would silently widen the rule
+    /// back to every pointer field (BUG-172 review).
+    #[test]
+    fn a_rule_option_present_with_no_value_is_rejected_not_treated_as_omitted() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    pointer_fields: [\"Implements\"]\nrules:\n";
+        for opt in ["fields:", "fields: null", "not_in: ~"] {
+            let err = parse(&format!(
+                "{base}  pointer.target-status:\n    level: warn\n    {opt}\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("present with no value"), "{opt}: {err}");
+        }
+        let ok = parse(&format!(
+            "{base}  pointer.target-status:\n    level: warn\n    not_in: [\"Superseded\"]\n    fields: [\"Implements\"]\n"
+        ));
+        assert!(ok.is_ok(), "{:?}", ok.err().map(|e| e.to_string()));
+        assert!(parse(&format!(
+            "{base}  pointer.target-status:\n    level: warn\n    not_in: [\"Superseded\"]\n"
+        ))
+        .is_ok());
     }
 
     #[test]
