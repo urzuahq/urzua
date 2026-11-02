@@ -218,6 +218,56 @@ fn doctor_reports_missing_config_as_exit_2() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Round 30 F4: `doctor` was healthy (exit 0) for a config enabling no rule,
+/// where `check` exits 2 not-run.
+#[test]
+fn doctor_errors_when_no_rule_is_enabled() {
+    let dir = fixture_repo("doctor-no-rules");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let output = run_urzua(&dir, &["doctor"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
+    assert!(stdout.contains("rules-enabled"), "stdout: {stdout}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Round 30 F1/F2/F5: doctor and check share config load, so an invalid
+/// record-type value is reported by both rather than accepted.
+#[test]
+fn doctor_reports_an_invalid_record_type_prefix_or_dir() {
+    for (i, ty) in [
+        "  adr:\n    dir: \"docs/adr\"\n    prefix: \"../..\"\n",
+        "  adr:\n    dir: \"docs/adr\"\n    prefix: \"P\"\n  w:\n    dir: \"docs/w\"\n    prefix: \"P\"\n",
+        "  adr:\n    dir: \"\"\n",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let dir = fixture_repo(&format!("doctor-bad-type-{i}"));
+        std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+        std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            format!("schema_version: 2\nrules: {{field.quality: error}}\nrecord_types:\n{ty}"),
+        )
+        .unwrap();
+        commit_all(&dir);
+        let out = run_urzua(&dir, &["doctor"]);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(out.status.code(), Some(1), "stdout: {stdout}");
+        assert!(stdout.contains("config does not parse"), "stdout: {stdout}");
+        assert_ne!(run_urzua(&dir, &["check"]).status.code(), Some(0));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
 #[test]
 fn doctor_emits_json_not_plain_text_lines() {
     // BUG-4, observed failing before the fix: `doctor` printed `[OK]`/
@@ -390,11 +440,11 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {identity.collision: error, relation.supersession-reciprocity: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {identity.collision: error, relation.supersession-reciprocity: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["audit"]);
@@ -541,11 +591,11 @@ fn graph_discloses_an_identity_collision_as_a_notice_observed_failing() {
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["graph"]);
@@ -573,11 +623,11 @@ fn check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["check"]);
@@ -600,11 +650,11 @@ fn audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["audit"]);
@@ -2574,8 +2624,11 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
 // call site. No regression test exists for this non-bug; see the `BUG-127`
 // record for the full account.
 
-/// A found-in-review bug: two record types (`adr`/`rfc`) sharing a prefix so
-/// their records collide on one identifier. `load_records` used to iterate
+/// Originally a found-in-review bug with two record types (`adr`/`rfc`)
+/// sharing a prefix so their records collided on one identifier. Config load
+/// now refuses a shared prefix (Round 30), so the same first-seen-wins
+/// guarantee is exercised with two same-type records; the history below
+/// describes the original cross-type form. `load_records` used to iterate
 /// `config.record_types` -- a `HashMap`, whose own order is randomized per
 /// process -- feeding `build_index_reporting_collisions`' first-seen-wins
 /// merge a different candidate order on every run. Empirically confirmed on
@@ -2589,7 +2642,7 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
 /// type-name-sorted regardless of `record_types`' own hash-map order, and
 /// `"adr" < "rfc"` lexicographically.
 #[test]
-fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_hashmap_order() {
+fn a_same_type_identifier_collision_resolves_deterministically() {
     let dir = fixture_repo("hashmap-collision-determinism");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
@@ -2600,12 +2653,11 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
          rules:\n  identity.collision: warn\n  pointer.target-status:\n    level: error\n    not_in: [\"Accepted\"]\n\n\
          record_types:\n\
          \x20 adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
-         \x20 rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
          \x20 mile:\n    dir: \"docs/mile\"\n    prefix: \"M\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Derives-from\"]\n    pointer_fields: [\"Derives-from\"]\n    narrative_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     std::fs::write(
         dir.join("docs/mile/M-1-c.md"),
         "> Status: Open\n> Derives-from: DOC-1\n",

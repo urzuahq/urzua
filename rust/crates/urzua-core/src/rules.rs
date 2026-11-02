@@ -2683,6 +2683,37 @@ pub(crate) struct RealizedBy {
     pub(crate) test: Vec<String>,
 }
 
+/// Lexical normalization of a locator path: drops `.` segments and empty
+/// ones (`//`), and resolves `x/..`. `./src/b.rs` and `src/../src/b.rs` name
+/// the tracked file `src/b.rs`, which git's own pathspec resolution (drift
+/// detection) already treated as the same path; membership against the
+/// tracked set (`embodiment.locator-exists`) must too. Applied once, in
+/// [`parse_realized_by`], so every rule reading a locator agrees. A leading
+/// `..` is kept (it escapes the repository and matches nothing); an empty
+/// locator stays empty so the rule can report it.
+pub fn normalize_locator(raw: &str) -> String {
+    let raw = raw.trim();
+    // An absolute locator is never a repository path; keep it as written so
+    // it cannot normalize into a tracked relative one.
+    if raw.starts_with('/') {
+        return raw.to_string();
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for seg in raw.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|l| *l != "..") => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    if parts.is_empty() && !raw.is_empty() {
+        return ".".to_string();
+    }
+    parts.join("/")
+}
+
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
     for segment in value.split(',') {
@@ -2690,7 +2721,7 @@ pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
         let Some((prefix, locator)) = segment.split_once(':') else {
             continue;
         };
-        let locator = locator.trim().to_string();
+        let locator = normalize_locator(locator);
         match prefix.trim() {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
@@ -5647,6 +5678,27 @@ mod tests {
             findings[0].message.contains("empty locator"),
             "{findings:?}"
         );
+    }
+
+    /// Round 30 F3: `./src/b.rs` and `src/../src/b.rs` are the tracked file
+    /// `src/b.rs`; the rule reported them "not in the working tree".
+    #[test]
+    fn a_dot_or_dotdot_spelled_locator_resolves_to_the_tracked_file_observed_failing() {
+        let present = |p: &str| p == "src/b.rs";
+        for spelled in ["./src/b.rs", "src/../src/b.rs", "src//b.rs", "src/./b.rs"] {
+            let r = record(
+                "docs/adr/ADR-1-x.md",
+                "adr",
+                &format!("> Realized-by: code:{spelled}\n"),
+            );
+            let (_, findings) =
+                embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
+            assert!(findings.is_empty(), "{spelled}: {findings:?}");
+        }
+        assert_eq!(normalize_locator("../x"), "../x");
+        assert_eq!(normalize_locator("/src/b.rs"), "/src/b.rs");
+        assert_eq!(normalize_locator("."), ".");
+        assert_eq!(normalize_locator(" "), "");
     }
 
     #[test]

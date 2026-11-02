@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -55,6 +55,7 @@ empty, same as every other command's report.
 | `config-exists` | `.urzua/config.yaml` is present. `error` if missing (short-circuits, exit 2). |
 | `config-parses` | The config parses with no unrecognized keys (`deny_unknown_fields` — a typo'd key is a hard parse error, not a silently-ignored one). `error` if not (short-circuits, exit 1). |
 | `record-types-declared` | At least one `[record_types.*]` entry exists. `error` if the map is empty — `check` would never examine anything. |
+| `rules-enabled` | At least one rule is enabled (level other than `off`). `error` if none is: every rule is opt-in (`ADR-53`), so `check` would report not-run and examine nothing (`BUG-174`). |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
 | `record-type-required-fields` | One check per declared type with an empty `required_fields`. `warn`, not `error` — a type with no required fields is unusual, not necessarily wrong. |
 | `ci-wired` | `.github/workflows/ci.yml` contains `urzua check` or `make records`. `warn` if not — a check that exists but is never run reports nothing to anyone. |
@@ -67,8 +68,9 @@ than compounded:
 - **Which config resolved and from where** — today's `doctor` only checks the default
   `.urzua/config.yaml` path; it doesn't report whether a `--config` override was in play or surface
   the resolution path explicitly.
-- **Which rules are off** — there is no per-rule enable/disable or severity config yet at all
-  (MILE-80 tracks configurable severity); `doctor` can't list what doesn't exist as a config surface.
+- **Which rules are off** — per-rule levels exist (`ADR-53`, every rule opt-in) and `doctor` errors
+  when none is enabled (`rules-enabled`), but it does not list which individual rules are off or what
+  level each has.
 - **Whether the binary is invoked from CI, a hook, or ad hoc** — `doctor` only checks whether the CI
   *workflow file* mentions `urzua check`/`make records` as text; it doesn't detect the actual
   invocation context of the specific run currently executing `doctor` itself.
@@ -90,3 +92,4 @@ than compounded:
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Added `notices` to the documented shape and explained why the 2/1/0 exit-code split lives on a separate field rather than being derived from `status` (ADR-46). | **substantive** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-11-02 | Bumped to `0.5`. Added the `rules-enabled` check and corrected the "which rules are off" paragraph, which still said there is no per-rule config (stale since `ADR-53`). **Why:** `doctor` exited 0 for a config where `check` exits 2 not-run (`BUG-174`). Also noted that config load now rejects an invalid record-type `prefix` or `dir` (`BUG-173`), surfaced through `config-parses`. | **substantive** |

@@ -27,6 +27,10 @@ pub struct GoverningRecord {
 /// carries rather than a new declared-scope field (RFC-0011's boundaries
 /// remain a separate, undesigned mechanism).
 pub fn explain(records: &[Record], path: &str, config: &Config) -> Vec<GoverningRecord> {
+    // Locators are stored normalized (`parse_realized_by`), so the query is
+    // too: `./src/b.rs` and `src/b.rs` name the same file.
+    let path = crate::rules::normalize_locator(path);
+    let path = path.as_str();
     let mut matches = Vec::new();
     for record in records {
         let locator_field =
@@ -205,6 +209,24 @@ mod tests {
         let result = explain(&[r], "rust/src/lib.rs", &no_relation_field_overrides());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].via, "code");
+    }
+
+    /// Round 30 review: stored locators are normalized, so the query must be
+    /// too, or `explain ./x` misses a record citing `x`.
+    #[test]
+    fn explain_normalizes_the_queried_path_like_the_stored_locator() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Realized-by: code:./rust/src/lib.rs\n",
+        );
+        for q in ["rust/src/lib.rs", "./rust/src/lib.rs", "rust/./src/lib.rs"] {
+            assert_eq!(
+                explain(std::slice::from_ref(&r), q, &no_relation_field_overrides()).len(),
+                1,
+                "{q}"
+            );
+        }
     }
 
     #[test]

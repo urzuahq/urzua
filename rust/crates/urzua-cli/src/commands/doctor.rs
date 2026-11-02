@@ -117,6 +117,23 @@ pub fn run() -> ExitCode {
         });
     }
 
+    // Every rule is opt-in (ADR-53): a config enabling none makes `check`
+    // exit 2 not-run, so "healthy" here would be the silent no-op doctor
+    // exists to catch.
+    if config
+        .rules
+        .values()
+        .all(|r| r.level == urzua_core::config::RuleLevel::Off)
+    {
+        checks.push(DoctorCheck {
+            check: "rules-enabled".to_string(),
+            status: DoctorStatus::Error,
+            message:
+                "no rule is enabled under `rules:` -- check will report not-run and examine nothing"
+                    .to_string(),
+        });
+    }
+
     let type_names = config.sorted_type_names();
     for name in type_names {
         let cfg = &config.record_types[name];
