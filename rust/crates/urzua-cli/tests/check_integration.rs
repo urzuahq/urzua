@@ -406,13 +406,10 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
 }
 
 #[test]
-fn init_then_check_flags_a_pre_existing_blockquote_record() {
-    // ADR-33: adopt mode proposes `header_shape = "yaml-frontmatter"`
-    // regardless of what shape the existing corpus happens to use -- so a
-    // record already written in the deprecated `blockquote` shape (as this
-    // one is) no longer parses cleanly against the freshly-adopted config,
-    // and `check` correctly reports the mismatch rather than silently
-    // reading it as though no header requirement applied.
+fn init_then_check_reads_a_pre_existing_blockquote_record_and_flags_its_shape() {
+    // BUG-151: adopt mode proposes the shape the corpus already uses, so this
+    // blockquote record is read; the migration steer is carried by
+    // `header.deprecated-shape`, not by a config that cannot read the corpus.
     let dir = fixture_repo("bootstrap");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
@@ -432,13 +429,14 @@ fn init_then_check_flags_a_pre_existing_blockquote_record() {
 
     let check_output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&check_output.stdout);
-    // Exit 0, not 1: `init` proposes every rule at `warn`, so an adopted
-    // corpus is told what is irregular without being blocked on day one
-    // (MILE-51). The finding itself must still be present -- the assertion
-    // below is the real one, and the exit code is secondary to it.
+    // Exit 0: `init` proposes every rule at `warn` (MILE-51).
     assert_eq!(check_output.status.code(), Some(0), "stdout: {stdout}");
     assert!(
-        stdout.contains("no header-shaped region found"),
+        !stdout.contains("no header-shaped region found"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("header.deprecated-shape"),
         "stdout: {stdout}"
     );
 
@@ -2619,4 +2617,132 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
             "adr's Status: Accepted must always win the collision, deterministically, every run: {parsed}"
         );
     }
+}
+
+/// BUG-151: `init` wrote `header_shape: yaml-frontmatter` for every type, so
+/// an adopted corpus in another shape read as zero records on the first
+/// `check`, reported only as one warning per record.
+#[test]
+fn init_on_a_bold_list_corpus_proposes_bold_list_and_the_first_check_reads_every_record_observed_failing(
+) {
+    let dir = fixture_repo("init-bold-list");
+    for n in 1..=3 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-record-{n}.md")),
+            format!(
+                "# {n} — Record {n}\n\n- **Status:** Accepted\n- **Date:** 2026-01-0{n}\n\nBody.\n"
+            ),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let init = run_urzua(&dir, &["init"]);
+    let init_stdout = String::from_utf8_lossy(&init.stdout);
+    assert_eq!(init.status.code(), Some(0), "stdout: {init_stdout}");
+    let parsed = assert_valid_json_object(&init_stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "bold-list",
+        "stdout: {init_stdout}"
+    );
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    assert!(config.contains("header_shape: bold-list"), "{config}");
+    assert!(
+        config.contains("header.deprecated-shape"),
+        "the migration steer is carried by this rule, so init must propose it: {config}"
+    );
+
+    let check = run_urzua(&dir, &["check", "docs/"]);
+    let check_stdout = String::from_utf8_lossy(&check.stdout);
+    let checked = assert_valid_json_object(&check_stdout);
+    assert_eq!(checked["files_examined"], 3, "stdout: {check_stdout}");
+    // `records_read_by_any_rule` cannot carry this assertion: init proposes
+    // `required_fields: []` and no `known_fields`, so no rule has a declared
+    // field to read and the count is 0 for a yaml-frontmatter corpus too. The
+    // symptom BUG-151 produced was one unreadable-header warning per record.
+    assert_eq!(
+        check_stdout
+            .matches("no header-shaped region found")
+            .count(),
+        0,
+        "the config init wrote must read every record's header: {check_stdout}"
+    );
+    assert!(
+        check_stdout.contains("header.deprecated-shape"),
+        "a non-frontmatter shape is still steered toward migration: {check_stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-151: a type whose records disagree gets the majority shape and a
+/// notice naming the split, never a silent pick.
+#[test]
+fn init_on_a_mixed_shape_type_proposes_the_majority_shape_and_names_the_split() {
+    let dir = fixture_repo("init-mixed-shape");
+    for n in 1..=2 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-bold-{n}.md")),
+            "# T\n\n- **Status:** Accepted\n\nBody.\n",
+        )
+        .unwrap();
+    }
+    std::fs::write(
+        dir.join("docs/adr/0003-quote.md"),
+        "# T\n\n> Status: Accepted\n\nBody.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["init", "--dry-run"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "bold-list",
+        "stdout: {stdout}"
+    );
+    let notices = parsed["notices"]
+        .as_array()
+        .expect("a split needs a notice");
+    assert!(
+        notices.iter().any(|n| {
+            let m = n["message"].as_str().unwrap_or("");
+            m.contains("docs/adr") && m.contains("bold-list") && m.contains("blockquote")
+        }),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-151: records that parse under no shape keep the destination shape,
+/// with a notice rather than a silent default.
+#[test]
+fn init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so() {
+    let dir = fixture_repo("init-no-header");
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\nProse only.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["init", "--dry-run"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
+        "stdout: {stdout}"
+    );
+    assert!(
+        parsed["notices"]
+            .as_array()
+            .map(|a| a
+                .iter()
+                .any(|n| n["message"].as_str().unwrap_or("").contains("docs/adr")))
+            .unwrap_or(false),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
 }
