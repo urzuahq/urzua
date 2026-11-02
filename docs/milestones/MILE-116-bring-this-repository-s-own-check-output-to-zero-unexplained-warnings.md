@@ -15,6 +15,10 @@ indistinguishable from a new finding in `check`'s output. The count today is 69,
 `embodiment.locator-promotion-candidate` 18, `pointer.target-status` 6, `field.pending` 5,
 `narrative-field.stale` 5, `header.field-set-consistency` 1.
 
+Also in scope: inconsistencies between records and the specs that define their type that no rule
+reports yet. Known today: `SPEC-6` defines a milestone's `Implements` as RFC/ADR lineage, but
+`MILE-100` to `MILE-104` point it at specs; either the spec or those records changes.
+
 ## Why
 
 A bootstrap corpus that carries standing warnings teaches everyone, agents included, to ignore the
