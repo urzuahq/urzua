@@ -99,7 +99,7 @@ roadmap page is generated from it rather than hand-written. Like `audit`, nothin
 
 ### 4. This repository's workflow
 
-- Re-record the order the hand-built Phase 0 roadmap holds as `Blocked-on` and `Parent` values, so
+- Re-record the order the hand-built Phase 0 roadmap holds as `Depends-on` and `Parent` values, so
   the records carry it.
 - Generate the roadmap page from `urzua roadmap` output, the same way the ledger page is generated
   from records, and retire the hand-built page.
