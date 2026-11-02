@@ -34,4 +34,4 @@ against every team hand-writing its own linter, applied to this repository's own
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-02 | Filed. **Why:** `export` could emit only `agdr`, so the dashboard script grew a second parser that already produced a wrong published count; filed so tooling reads records through `urzua`. | **substantive** |
+> | 2026-11-02 | Filed. **Why:** `export` declared only `agdr` and was unimplemented, so the dashboard script grew a second parser that already produced a wrong published count; filed so tooling reads records through `urzua`. | **substantive** |
