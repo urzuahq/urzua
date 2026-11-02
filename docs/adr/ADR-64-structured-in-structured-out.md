@@ -45,12 +45,15 @@ Concretely:
 
 1. A field that a rule reads holds record IDs or declared values. A condition that is not yet a record
    (a pending decision, an outside event) becomes one.
-2. Free text belongs in the body or in fields no rule reads. A new prose-tolerant field read by a rule
-   needs a stated reason in the change that adds it.
-3. Every command's output is structured data. Human-readable text is a rendering of that data, never
-   a separate path.
+2. Structure lives in headers; prose lives in sections. A rule may require a section to exist and be
+   non-empty, but never parses its meaning. A new prose-tolerant header field read by a rule needs a
+   stated reason in the change that adds it.
+3. Every command's output is JSON. `explain` and `doctor` already comply; human-readable text, where
+   wanted, is a field in the JSON or a rendering outside the engine.
 4. Derived values (for example "blocked", computed from a sequencing relation) are computed, not
-   written by hand.
+   written by hand. A hand-written value that a derived value contradicts is an error.
+5. Configuration is held to the same rule: `.urzua/config.yaml` is validated against a declared
+   schema, and values that name statuses, fields or types must resolve to declarations.
 
 ## Reversibility
 
@@ -78,3 +81,4 @@ wholesale once rules and views depend on structured values, which is the point.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Drafted as Proposed. **Why:** Author stated the principle while settling `RFC-48`. | **substantive** |
+> | 2026-11-02 | Headers structured and sections prose; contradicted hand-written values are errors; config held to the same rule; JSON-only output. **Why:** Author's answers to the draft's open points. | **substantive** |
