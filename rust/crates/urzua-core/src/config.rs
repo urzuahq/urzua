@@ -404,6 +404,57 @@ pub enum ConfigError {
         option: String,
         consequence: &'static str,
     },
+    #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
+    InvalidPrefix {
+        record_type: String,
+        prefix: String,
+        reason: &'static str,
+    },
+    #[error("record types '{first}' and '{second}' both use the prefix '{prefix}' -- `urzua new` would mint colliding identities")]
+    DuplicatePrefix {
+        prefix: String,
+        first: String,
+        second: String,
+    },
+    #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
+    InvalidDir { record_type: String, dir: String },
+}
+
+/// Why a declared `prefix` cannot head a recognized `PREFIX-N-slug.md`
+/// filename, or `None` when it can. Reuses the filename grammar
+/// (`parse_record_filename`): hyphen-separated segments, each non-empty
+/// upper-case/digits and not all digits (an all-digit segment would be read
+/// as the record number).
+fn prefix_problem(prefix: &str) -> Option<&'static str> {
+    if prefix.is_empty() {
+        return Some("is empty");
+    }
+    for seg in prefix.split('-') {
+        if seg.is_empty() {
+            return Some(
+                "has an empty hyphen-separated segment (leading, trailing or doubled hyphen)",
+            );
+        }
+        if crate::new_record::is_digit_segment(seg) {
+            return Some("has an all-digit segment, which would be read as the record number");
+        }
+        if !crate::new_record::is_prefix_segment(seg) {
+            return Some(
+                "must be upper-case ASCII letters and digits in hyphen-separated segments",
+            );
+        }
+    }
+    None
+}
+
+/// True when `dir` has no real path component (`""`, `"."`, `"./"`): it
+/// resolves to the repository root, which no record type can govern.
+fn dir_names_nothing(dir: &str) -> bool {
+    !std::path::Path::new(dir.trim())
+        .components()
+        .any(|c| matches!(c, std::path::Component::Normal(_)))
+        && !dir.trim().starts_with('/')
+        && dir.split('/').all(|p| p.trim() == "" || p == ".")
 }
 
 /// One option's name, the one rule it belongs to, and what happens if a rule
@@ -468,6 +519,37 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
         return Err(ConfigError::UnrecognizedSchemaVersion {
             found: config.schema_version,
         });
+    }
+    // Values that reach filenames and discovery: validated here, once, so
+    // every command (and `doctor`, which loads through this) agrees.
+    let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
+    for (name, rt) in &config.record_types {
+        if dir_names_nothing(&rt.dir) {
+            return Err(ConfigError::InvalidDir {
+                record_type: name.clone(),
+                dir: rt.dir.clone(),
+            });
+        }
+        if let Some(p) = &rt.prefix {
+            if let Some(reason) = prefix_problem(p) {
+                return Err(ConfigError::InvalidPrefix {
+                    record_type: name.clone(),
+                    prefix: p.clone(),
+                    reason,
+                });
+            }
+        }
+        let effective = rt
+            .prefix
+            .clone()
+            .unwrap_or_else(|| name.to_ascii_uppercase());
+        if let Some(first) = seen_prefix.insert(effective.clone(), name) {
+            return Err(ConfigError::DuplicatePrefix {
+                prefix: effective,
+                first: first.clone(),
+                second: name.clone(),
+            });
+        }
     }
     // A misspelled rule name would otherwise be a check that silently never
     // runs, which is the failure direction this project treats as the worse
@@ -852,5 +934,65 @@ record_types:
             err,
             ConfigError::UnrecognizedSchemaVersion { found: 99 }
         ));
+    }
+
+    fn rt_config(types: &str) -> String {
+        format!("schema_version: 2\nrecord_types:\n{types}rules:\n  identity.collision: error\n")
+    }
+
+    /// Round 30 F2: a prefix that cannot form a recognized `PREFIX-N-slug.md`
+    /// name (empty, path separators, `..`, spaces, trailing hyphen,
+    /// lower-case, all-digit segment) is refused at load.
+    #[test]
+    fn an_unsafe_prefix_is_refused_at_load() {
+        for bad in [
+            "", "../..", "../x", "a b", "ADR-", "-ADR", "A/B", "adr", "A--B", "2024", "A-1",
+        ] {
+            let yaml = rt_config(&format!(
+                "  adr:\n    dir: \"docs/adr\"\n    prefix: \"{bad}\"\n"
+            ));
+            assert!(
+                matches!(parse(&yaml), Err(ConfigError::InvalidPrefix { .. })),
+                "prefix {bad:?} must be refused"
+            );
+        }
+        for good in ["ADR", "V2", "DOC-ADR", "MILE"] {
+            let yaml = rt_config(&format!(
+                "  adr:\n    dir: \"docs/adr\"\n    prefix: \"{good}\"\n"
+            ));
+            assert!(parse(&yaml).is_ok(), "prefix {good:?} must load");
+        }
+    }
+
+    /// Round 30 F1: two types may not share a prefix, explicit or defaulted.
+    #[test]
+    fn two_types_sharing_a_prefix_are_refused_at_load() {
+        let yaml = rt_config(
+            "  adr:\n    dir: \"docs/adr\"\n    prefix: \"PFX\"\n  waiver:\n    dir: \"docs/waiver\"\n    prefix: \"PFX\"\n",
+        );
+        assert!(matches!(
+            parse(&yaml),
+            Err(ConfigError::DuplicatePrefix { .. })
+        ));
+        let yaml = rt_config(
+            "  adr:\n    dir: \"docs/adr\"\n  other:\n    dir: \"docs/o\"\n    prefix: \"ADR\"\n",
+        );
+        assert!(matches!(
+            parse(&yaml),
+            Err(ConfigError::DuplicatePrefix { .. })
+        ));
+    }
+
+    /// Round 30 F5: an empty or root `dir` examines nothing.
+    #[test]
+    fn an_empty_or_root_dir_is_refused_at_load() {
+        for bad in ["", " ", ".", "./", "./."] {
+            let yaml = rt_config(&format!("  adr:\n    dir: \"{bad}\"\n"));
+            assert!(
+                matches!(parse(&yaml), Err(ConfigError::InvalidDir { .. })),
+                "dir {bad:?} must be refused"
+            );
+        }
+        assert!(parse(&rt_config("  adr:\n    dir: \"docs/adr\"\n")).is_ok());
     }
 }
