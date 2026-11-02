@@ -2620,3 +2620,122 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
         );
     }
 }
+
+/// `MILE-119`: every rule that builds a per-record or per-slot population must
+/// classify a `header_shape: none` type (`ADR-50`) as out of scope -- it has no
+/// header, so "unreadable" would misreport a deliberate declaration as a
+/// malformed file. The rule set is `ALL_RULES`, not a hand-picked list, so a
+/// rule added later is covered without anyone remembering to extend this test.
+///
+/// A rule is exempt only if it cannot read a header at all, and each entry says
+/// why. Everything else must show `eligible > 0` (a rule with no candidate
+/// proves nothing), `examined == 0` and `unreadable == 0`, and every candidate
+/// out of scope.
+#[test]
+fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
+    const EXEMPT: &[(&str, &str)] = &[
+        // Config-level: judge the configuration, never a record's header.
+        ("type.no-declared-spec", "config-level"),
+        ("type.dir-matches-nothing", "config-level"),
+        ("type.record-outside-declared-dir", "path-level"),
+        ("header.deprecated-shape", "config-level"),
+        ("config.pointer-declaration-missing", "config-level"),
+        ("config.pointer-field-not-known", "config-level"),
+        ("config.pointer-narrative-overlap", "config-level"),
+        ("config.header-none-has-no-required-fields", "config-level"),
+        ("config.relation-field-not-known", "config-level"),
+        ("config.known-fields-declaration-missing", "config-level"),
+        (
+            "config.scope-matches-nothing",
+            "judges other rules' populations",
+        ),
+        // Record-level but header-independent: filename and body text only.
+        ("identity.collision", "reads the filename identifier only"),
+        ("filename.title-consistency", "reads filename and H1 only"),
+        ("revision-log.change-class-required", "reads body text only"),
+        // Claim-level: judges claim files, not records.
+        (
+            "claim.status-agreement",
+            "population is claims, not records",
+        ),
+    ];
+
+    for (id, _) in EXEMPT {
+        assert!(
+            urzua_core::rules::ALL_RULES.contains(id),
+            "exemption names '{id}', which is not a shipped rule"
+        );
+    }
+
+    let dir = fixture_repo("header-none-all-rules");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/note")).unwrap();
+    let rules: Vec<String> = urzua_core::rules::ALL_RULES
+        .iter()
+        .map(|id| match *id {
+            // These rules refuse to load without their own option.
+            "claim.status-agreement" => format!(
+                "{id}: {{level: error, claim_paths: [\"docs/claims\"], closed_statuses: [\"Done\"]}}"
+            ),
+            "narrative-field.stale" => {
+                format!("{id}: {{level: error, terminal_statuses: [\"Done\"]}}")
+            }
+            "pointer.target-status" => format!("{id}: {{level: error, not_in: [\"Done\"]}}"),
+            _ => format!("{id}: error"),
+        })
+        .collect();
+    std::fs::create_dir_all(dir.join("docs/claims")).unwrap();
+    std::fs::write(dir.join("docs/claims/c.md"), "nothing claimed\n").unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules: {{{}}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n",
+            rules.join(", ")
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/note/NOTE-1-x.md"), "# 1 — X\n\nA body.\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+        panic!(
+            "check must print JSON ({e}): {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let executed = parsed["rules_executed"].as_array().unwrap();
+
+    let mut failures = Vec::new();
+    for id in urzua_core::rules::ALL_RULES {
+        if EXEMPT.iter().any(|(exempt, _)| exempt == id) {
+            continue;
+        }
+        let Some(entry) = executed.iter().find(|r| r["rule"] == *id) else {
+            failures.push(format!("{id}: absent from rules_executed"));
+            continue;
+        };
+        let pop = &entry["population"];
+        let n = |k: &str| pop[k].as_u64();
+        let (eligible, examined, oos, unreadable) = (
+            n("eligible"),
+            n("examined"),
+            n("out_of_scope"),
+            n("unreadable"),
+        );
+        if !(eligible.is_some_and(|e| e > 0)
+            && examined == Some(0)
+            && unreadable == Some(0)
+            && oos == eligible)
+        {
+            failures.push(format!("{id}: population {pop}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "rules that do not classify a header_shape: none type as out of scope:\n{}",
+        failures.join("\n")
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
