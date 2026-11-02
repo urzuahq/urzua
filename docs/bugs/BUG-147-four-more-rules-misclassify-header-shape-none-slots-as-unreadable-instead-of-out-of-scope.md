@@ -16,8 +16,10 @@ record's type declares `header_shape: none` (`ADR-50`) first -- the same defect 
 ## Why nothing caught it
 
 `BUG-142`'s own sweep was scoped to the three rules sharing `field_slots`-built required-field
-populations (`field.quality`, `field.pending`, `header.required-fields`). These four rules read
-`known_fields`-declared slots via a different population construction each, so they weren't in that
+populations (`field.quality`, `field.pending`, `header.required-fields`). These four rules build their
+populations three other ways (`header.field-set-consistency` from `known_fields_by_type`;
+`header.pointer-field-clean` from `fields_with_capability` + `field_slots`; `field.untrimmed-value` and
+`header.field-case-mismatch` from `declared_fields_by_type` + `field_slots`), so they weren't in that
 sweep's scope, and nothing then checked whether the same gating gap recurred in the rest of the file.
 
 ## Fix

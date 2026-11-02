@@ -2,7 +2,7 @@
 Stable-Id: 01M37DNT002P07Y8HC0KQG96N3
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Regression-test: "none -- covered by init.rs's existing a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire test, which now also exercises relation.target-status-undeclared"
+Regression-test: "init.rs's a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire test, which asserts relation.target-status-undeclared is not proposed for a prefix-less corpus"
 ---
 # 149 — IDENTITY_DEPENDENT_RULES omits relation.target-status-undeclared
 

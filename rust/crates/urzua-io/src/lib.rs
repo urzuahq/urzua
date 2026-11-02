@@ -427,6 +427,13 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("urzua-io-rename-test-{}", std::process::id()));
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
+        // Pin rename detection locally: a developer's global `diff.renames=false`
+        // would otherwise report this move as `D`+`A` and fail the test.
+        Command::new("git")
+            .args(["config", "diff.renames", "true"])
+            .current_dir(&tmp)
+            .output()
+            .unwrap();
 
         // Identical, substantial content: git's default rename detection
         // needs enough similarity to classify this as `R`, not a plain `D`

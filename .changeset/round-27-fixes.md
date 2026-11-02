@@ -16,8 +16,6 @@ Round 27's `/code-review` found and fixed four more defects:
 - `discover_tracked_files` spawned a redundant third `git` subprocess on every invocation; merged into
   the second call's own richer output, with a staged rename's two-path-field shape explicitly handled
   and tested (`BUG-150`).
-- `init`'s config-rendering YAML serialization now fails loudly instead of silently writing an empty
-  config body (`BUG-146`).
 
 Two round-27 findings verified and refuted: a proposed status-comparison trim would have reversed an
 already-decided, tested policy (`ADR-57`'s exact-match extends to status comparisons by design); a
