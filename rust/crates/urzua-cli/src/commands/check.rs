@@ -368,12 +368,10 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::pointer_resolution(&records, &config, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
-            let not_in = config
-                .rules
-                .get(rules::RULE_POINTER_TARGET_STATUS)
-                .and_then(|s| s.not_in.clone())
-                .unwrap_or_default();
-            rules::pointer_target_status(&records, &config, &not_in, &record_index)
+            let setting = config.rules.get(rules::RULE_POINTER_TARGET_STATUS);
+            let not_in = setting.and_then(|s| s.not_in.clone()).unwrap_or_default();
+            let fields = setting.and_then(|s| s.fields.as_deref());
+            rules::pointer_target_status(&records, &config, &not_in, fields, &record_index)
         }),
         crate::gate::gated(&config, rules::RULE_FIELD_QUALITY, || {
             rules::field_quality(&records, &config)

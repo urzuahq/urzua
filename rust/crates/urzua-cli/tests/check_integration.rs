@@ -2627,3 +2627,79 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
         );
     }
 }
+
+/// BUG-172: `pointer.target-status` applied one `not_in` list to every declared
+/// pointer field, so a lineage field (`Derives-from`) pointing at a Superseded
+/// record warned the same as a dependency field (`Implements`). The `fields`
+/// option restricts which declared fields are judged.
+fn target_status_fields_fixture(name: &str, option: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/mile")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\n\
+             rules:\n  pointer.target-status:\n    level: warn\n    not_in: [\"Superseded\"]\n{option}\n\
+             record_types:\n\
+             \x20 adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
+             \x20 mile:\n    dir: \"docs/mile\"\n    prefix: \"M\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Derives-from\", \"Implements\"]\n    pointer_fields: [\"Derives-from\", \"Implements\"]\n    narrative_fields: []\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), "> Status: Superseded\n").unwrap();
+    std::fs::write(
+        dir.join("docs/mile/M-1-b.md"),
+        "> Status: Open\n> Derives-from: ADR-1\n> Implements: ADR-1\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    dir
+}
+
+fn target_status_messages(dir: &Path) -> Vec<String> {
+    let out = run_urzua(dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stderr)));
+    parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "pointer.target-status")
+        .map(|f| f["message"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn target_status_fields_restricts_which_declared_fields_warn_observed_failing() {
+    let dir = target_status_fields_fixture(
+        "target-status-fields-restricted",
+        "    fields: [\"Implements\"]",
+    );
+    let messages = target_status_messages(&dir);
+    assert_eq!(messages.len(), 1, "{messages:?}");
+    assert!(messages[0].starts_with("Implements:"), "{messages:?}");
+}
+
+#[test]
+fn target_status_without_fields_warns_on_every_declared_field() {
+    let dir = target_status_fields_fixture("target-status-fields-omitted", "");
+    let messages = target_status_messages(&dir);
+    assert_eq!(messages.len(), 2, "{messages:?}");
+}
+
+#[test]
+fn target_status_fields_naming_an_undeclared_field_is_a_config_error_observed_failing() {
+    let dir = target_status_fields_fixture(
+        "target-status-fields-undeclared",
+        "    fields: [\"Implments\"]",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("Implments"), "{text}");
+}

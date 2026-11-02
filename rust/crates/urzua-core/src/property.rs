@@ -393,7 +393,7 @@ mod tests {
             ),
             (
                 "pointer.target-status",
-                rules::pointer_target_status(&records, &config, &[], &record_index),
+                rules::pointer_target_status(&records, &config, &[], None, &record_index),
             ),
             (
                 "narrative-field.stale",

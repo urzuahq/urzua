@@ -59,6 +59,13 @@ pub struct RuleSetting {
     /// rule went inert for every other corpus (BUG-59).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_statuses: Option<Vec<String>>,
+    /// Declared pointer/narrative field names a rule checks, instead of all of
+    /// them. Only meaningful to `pointer.target-status`, and optional: omitted
+    /// means every declared field. Lets a repository judge a dependency field
+    /// (`Implements`) apart from a lineage field (`Derives-from`) whose
+    /// Superseded target is permanently true history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,6 +125,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             closed_statuses: Option<Vec<String>>,
             #[serde(default)]
             terminal_statuses: Option<Vec<String>>,
+            #[serde(default)]
+            fields: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -134,6 +143,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_paths: table.claim_paths,
                 closed_statuses: table.closed_statuses,
                 terminal_statuses: table.terminal_statuses,
+                fields: table.fields,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -143,6 +153,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_paths: None,
                 closed_statuses: None,
                 terminal_statuses: None,
+                fields: None,
             })
         }
     }
@@ -398,6 +409,8 @@ pub enum ConfigError {
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
     OptionNotApplicable { rule: String, option: String },
+    #[error("rule '{rule}' option 'fields' names '{field}', which is not a declared pointer_fields or narrative_fields entry of any record type")]
+    UndeclaredRuleField { rule: String, field: String },
     #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
     OptionRequired {
         rule: String,
@@ -418,6 +431,9 @@ struct RuleOption {
     name: &'static str,
     owner: &'static str,
     consequence_if_missing: &'static str,
+    /// An optional option may be omitted, but a declared one is still
+    /// validated (non-empty, no blanks) so it cannot be a silent no-op.
+    optional: bool,
 }
 
 const RULE_OPTIONS: &[RuleOption] = &[
@@ -425,21 +441,31 @@ const RULE_OPTIONS: &[RuleOption] = &[
         name: "not_in",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "examines every reference and can never report",
+        optional: false,
     },
     RuleOption {
         name: "claim_paths",
         owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
         consequence_if_missing: "scans nothing and can never report",
+        optional: false,
     },
     RuleOption {
         name: "closed_statuses",
         owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
         consequence_if_missing: "treats every claim as a violation, including correct ones",
+        optional: false,
     },
     RuleOption {
         name: "terminal_statuses",
         owner: crate::rules::RULE_NARRATIVE_FIELD_STALE,
         consequence_if_missing: "examines every reference and can never report",
+        optional: false,
+    },
+    RuleOption {
+        name: "fields",
+        owner: crate::rules::RULE_POINTER_TARGET_STATUS,
+        consequence_if_missing: "checks every declared field",
+        optional: true,
     },
 ];
 
@@ -452,6 +478,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "claim_paths" => setting.claim_paths.as_ref(),
         "closed_statuses" => setting.closed_statuses.as_ref(),
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
+        "fields" => setting.fields.as_ref(),
         _ => None,
     }
 }
@@ -513,12 +540,40 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
             // Non-empty *and* no blank entries, not merely present: an empty
             // list is the harm each consequence describes, and a list of
             // blanks is the same list wearing a value.
-            let ok = option_field(opt.name, setting).is_some_and(declared);
+            let value = option_field(opt.name, setting);
+            let ok = if opt.optional {
+                value.is_none_or(declared)
+            } else {
+                value.is_some_and(declared)
+            };
             if !ok {
                 return Err(ConfigError::OptionRequired {
                     rule: name.clone(),
                     option: opt.name.to_string(),
                     consequence: opt.consequence_if_missing,
+                });
+            }
+        }
+    }
+    // `fields` must name something the repository declared: a name matching no
+    // declared pointer/narrative field excludes nothing and checks nothing,
+    // which reads as a clean run.
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        for field in setting.fields.iter().flatten() {
+            let known = config.record_types.values().any(|t| {
+                t.pointer_fields
+                    .iter()
+                    .chain(t.narrative_fields.iter())
+                    .flatten()
+                    .any(|f| f == field)
+            });
+            if !known {
+                return Err(ConfigError::UndeclaredRuleField {
+                    rule: name.clone(),
+                    field: field.clone(),
                 });
             }
         }
