@@ -83,12 +83,12 @@ semantics (`prefix` + number, compared by value) are a strict subset of the patt
 declaration should be designed so that, when `MILE-98` lands, it is *expressible as* an identity
 pattern and migrates mechanically, never contradicts it.
 
-## Alternatives considered
+### Alternatives considered
 
 - **Rename the corpus to `ADR-173-slug.md`** (what `ADR-36` implicitly tells adopters). Rejected: it
   breaks thousands of external links, anchors and git-history paths, and `urzua` should read a corpus
   as it is. The "real bar is replacement": an adopter must be able to delete their linter without
-  restructuring their repo first. Remains available through `migrate`, never required.
+  restructuring their repo first. Would need future filename-migration tooling, never required.
 - **Accept the bare shape globally** (revert `BUG-9`). Rejected: it silently re-opens the cases
   `ADR-36`'s amendment closed, makes identity depend on directory context for every type, and lets a
   stray `1-notes.md` become a record. An opt-in declaration keeps the failure loud elsewhere.
@@ -150,7 +150,7 @@ pattern and migrates mechanically, never contradicts it.
 
 ## Decision (2026-11-02)
 
-**Rejected by the maintainer.** A type stays namespaced in its filenames (`TYPE-NNNN-slug.md`, `ADR-36`): a bare number is only meaningful relative to its directory, so it cannot be namespaced across types. A corpus in the bare `NNNN-slug.md` shape is renamed to the typed form instead of the engine gaining a per-type exception. Ids cited as `ADR-NNNN` keep resolving through numeric id comparison, so citations need no change; path references to the renamed files do. A general filename-migration command is future work, not part of this decision.
+**Rejected by the maintainer.** A type stays namespaced in its filenames (`TYPE-NNNN-slug.md`, `ADR-36`). This is a policy choice, not a technical limit: the per-type declaration proposed above could namespace a bare number, but the maintainer chose one filename form for every type. A corpus in the bare `NNNN-slug.md` shape is renamed to the typed form instead of the engine gaining a per-type exception. Ids cited as `ADR-NNNN` keep resolving through numeric id comparison, so citations need no change; path references to the renamed files do. A general filename-migration command is future work, not part of this decision.
 
 > **Revision log**
 >
@@ -158,3 +158,4 @@ pattern and migrates mechanically, never contradicts it.
 > |---|---|---|
 > | 2026-11-02 | Filed as `Draft`. **Why:** a real adopter corpus names files `NNNN-slug.md` and cites `ADR-NNNN`; a declared `prefix` gives such files no identity, so every cross-record pointer fails to resolve (`MILE-126`). | **substantive** |
 > | 2026-11-02 | `Draft` -> `Rejected`. **Why:** maintainer decision: keep the type in the filename and rename bare-number corpora rather than add a per-type identity exception. | **substantive** |
+> | 2026-11-02 | Decision worded as a policy choice; alternatives moved under Proposal; filename migration described as future tooling. **Why:** review found the decision called a policy choice a technical limit, and `migrate` does not rename files. | **structural** |
