@@ -143,12 +143,13 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
                 unreachable!("a `none`-shaped record has no region to insert into")
             }
         };
-        let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
         // region.0 is the 1-indexed first header line (the opening `---`
-        // for yaml-frontmatter); inserting at this 0-indexed Vec position
-        // places the new field right after it, valid for all three shapes.
-        lines.insert(region.0, new_line);
-        let new_content = lines.join("\n") + "\n";
+        // for yaml-frontmatter); inserting after it places the new field
+        // right below, valid for all three shapes. Every other byte of the
+        // file, line endings and trailing newline included, is left as is.
+        let mut doc = urzua_core::line_edit::LineDoc::parse(content);
+        doc.insert_after(region.0, new_line);
+        let new_content = doc.to_string();
 
         let full_path = repo_root.join(&r.path);
         match std::fs::write(&full_path, new_content) {
