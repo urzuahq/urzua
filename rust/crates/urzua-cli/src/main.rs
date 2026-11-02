@@ -25,6 +25,9 @@ mod gate;
 /// `Notice.subject` constants, one per emitter, matching `Finding.rule`'s
 /// existing `const RULE_ID` convention (ADR-0046).
 pub(crate) const NOTICE_IDENTITY: &str = "identity";
+/// `init` notice that a type's records disagree on, or parse under none of,
+/// the header shapes (`BUG-151`).
+pub(crate) const NOTICE_HEADER_SHAPE: &str = "header-shape";
 /// `init` warning that a proposed config leaves a command's rule set entirely
 /// undeclared (`BUG-99`).
 pub(crate) const NOTICE_RULE_APPLICABILITY: &str = "rule-applicability";
