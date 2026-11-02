@@ -44,14 +44,29 @@ that gap by construction.
 
 ### 1. A declared sequencing relation (`MILE-27`)
 
-A type declares which of its fields is a sequencing relation, using the relation declarations
-proposed in `RFC-47` (field, direction, inverse name). For this repository: `Blocked-on` on
-`milestone` and `bug`, direction "this record waits on the target"; `Parent` as containment.
+A new `Depends-on` field carries sequencing: a comma-separated list of record IDs, "this record cannot
+finish until those do". `Blocked-on` is not repurposed; it stays the free-text narrative field it is
+today ("waiting on a decision not yet made"), so the two meanings never share a field.
 
-- A sequencing value is a comma-separated list of record IDs. Prose stays legal in the field only
-  through an explicit marker (for example `external: a real adopter asking for it`), so a blocker
-  that is not a record is still visible and is never silently dropped from the order.
-- The inverse (`Blocks`) is computed, never written, so there is nothing to keep reciprocal by hand.
+`Depends-on` is declared as a pair through `RFC-47`'s relation declarations:
+
+```yaml
+relation_pairs:
+  - name: sequencing
+    forward: "Depends-on"
+    inverse: "Blocks"
+    reciprocity: none        # one direction is written; the inverse is computed
+    cross_type: true
+    acyclic: true            # new: the engine checks this pair for cycles
+```
+
+Each direction is a unidirectional relation, declared once and named twice. An adopter who wants both
+sides written in the files sets `reciprocity: required` and gets the existing reciprocity check; this
+repository writes `Depends-on` only and reads `Blocks` from `urzua roadmap`. `acyclic` is the one new
+key, and it applies to any pair, not only sequencing.
+
+`Parent` is declared the same way as a containment pair (`Parent` / `Children`), which is how a
+milestone acts as an epic over child milestones and bugs.
 
 ### 2. `urzua roadmap`
 
@@ -83,23 +98,56 @@ roadmap page is generated from it rather than hand-written. Like `audit`, nothin
 - Generate the roadmap page from `urzua roadmap` output, the same way the ledger page is generated
   from records, and retire the hand-built page.
 
+## How this composes in the engine
+
+None of this is a milestone feature. The engine has four primitives, and every piece above is
+configuration over them, so an adopter opts in or out per type and per pair:
+
+| Primitive | Today | Added here |
+|---|---|---|
+| Declared field | `required_fields`, `known_fields`, `pointer_fields`, `narrative_fields` | `Depends-on` as a pointer field |
+| Declared relation | `RFC-47` pairs: forward, inverse, reciprocity, cross-type | `acyclic` on a pair |
+| Derived value | none: every value is read from a file | a value computed from relations, never written (`blocked`, `Blocks`, `Children`) |
+| Rule | opt-in in `rules:`, with options | `sequence.*` rules, each opt-in |
+
+- **A derived value** is the one new primitive. A type may declare values computed from its relations,
+  for example `blocked: any Depends-on target not in a terminal status`. Derived values appear in
+  `export`, `graph` and `roadmap`, and rules can read them, but they are never written into a file.
+- **`Status: Blocked` is computed this way.** The roadmap shows a record as blocked whenever its derived
+  `blocked` value is true, whatever its written `Status`. An adopter who still writes `Status` by hand
+  can opt into `sequence.status-agreement`, which reports a written `Blocked` with no open dependency,
+  and an open dependency on a record whose written status says otherwise. This repository drops
+  `Blocked` from the written vocabulary instead, because the engine computes it.
+- **`urzua roadmap` is a view over these primitives**: waves from any `acyclic` pair, grouping by any
+  declared field. A repository that declares no acyclic pair has no roadmap and loses nothing else.
+
+## Lifecycle stages
+
+An engineering roadmap often moves each epic through ordered stages (for example Define, Design,
+Build, Launch, Operate), each closed by a "done when" review. There are three ways to express that,
+and the proposal is to support the first in the engine and leave the choice to config:
+
+1. **An ordered enumerated field (proposed).** The engine gains one value primitive, a declared
+   vocabulary with an order and allowed transitions, and per-value required fields or sections.
+   `Status` becomes one instance of it (`MILE-132`) and a `Stage` field another. An adopter can
+   declare stages as their own field, or fold them into `Status` with the same primitive; neither is
+   hard-coded. "Done when" is a section required on leaving a stage.
+2. **Stage as status values only.** Simpler, but mixes "where in the lifecycle" with "open, blocked,
+   done", and blocked is now derived, so the two would fight.
+3. **Stages as child records** (`Parent` containment, one child per stage). Most flexible and needs no
+   new primitive, but multiplies records by the number of stages.
+
 ## Open questions
 
-1. Is `Blocked-on` itself the sequencing relation, or a separate `Depends-on` field, with
-   `Blocked-on` staying a free-text narrative? Reusing it keeps one field and migrates 23 ID values;
-   a new field keeps the prose meaning intact.
-2. Does `Status: Blocked` become derived (an open blocker exists) or stay a human decision that a
-   rule checks against the relation? `AGENTS.md` treats Status as a human decision, which argues for
-   checking, not deriving.
-3. Is a lifecycle stage per milestone (define, design, build, launch, operate) a status vocabulary
-   (`MILE-132`) or a separate field? The roadmap can group by either; the choice belongs to `MILE-132`.
-4. Does the roadmap need evidence of progress (an open change implementing a record) from outside the
-   repository? That would be the first input the engine reads from a forge, and is excluded below
-   unless this question decides otherwise.
+1. Which of the three lifecycle options this repository uses. The engine work is the same for 1 and 2.
+2. Whether a derived value is declared per type in config or defined by a rule. Per type keeps it
+   visible in one place; per rule keeps the config smaller.
+3. Whether `Children` should be listed per record in `export` or only in `graph`.
 
 ## Non-goals
 
 - Reading issue trackers or pull requests. The roadmap is computed from records in the repository.
+  A later tool that reads open changes as evidence of progress is filed as `MILE-135`.
 - Scheduling, estimates, dates or assignment.
 - Storing the computed order anywhere, or a hand-edited board.
 
@@ -109,6 +157,7 @@ roadmap page is generated from it rather than hand-written. Like `audit`, nothin
 - `SPEC-6` -- the milestone schema, whose "deliberately not built" section names both.
 - `MILE-27` -- the sequencing relation this builds.
 - `RFC-47` -- relation declarations with direction; a prerequisite.
+- `MILE-135` -- later: open changes as roadmap progress evidence.
 - `MILE-115` -- `export --format json`, the data feed.
 - `MILE-131`, `MILE-132` -- the rules split and status vocabulary this interacts with.
 
@@ -117,3 +166,4 @@ roadmap page is generated from it rather than hand-written. Like `audit`, nothin
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Drafted. **Why:** Planning Phase 0 needed an order the records could not compute, which is the trigger `ADR-34` set for both deferred pieces. | **substantive** |
+> | 2026-11-02 | Sequencing moves to a new `Depends-on` pair (`Blocked-on` stays narrative); `Blocked` becomes a derived value; added the engine composition and lifecycle sections; forge evidence filed as `MILE-135`. **Why:** Author's answers to the first draft's open questions. | **substantive** |
