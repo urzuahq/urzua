@@ -178,6 +178,16 @@ fn matches(f: &serde_json::Value, m: &Matcher) -> bool {
         && m.file.as_deref().is_none_or(|p| field("file").ends_with(p))
 }
 
+/// Removes a case's temporary repository on every exit path, including the
+/// early returns when copying, git setup or a setup step fails.
+struct TempDir(PathBuf);
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// Run one case; returns the list of unmet expectations (empty = all met).
 fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
     let (cwd, temp) = if case.corpus == "@repo" {
@@ -189,6 +199,7 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
             case.id
         ));
         let _ = std::fs::remove_dir_all(&t);
+        let guard = TempDir(t.clone());
         std::fs::create_dir_all(&t).map_err(|e| e.to_string())?;
         copy_corpus(corpus_dir, &t)?;
         git(&t, &["init", "-q"])?;
@@ -196,7 +207,7 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
         git(&t, &["config", "user.name", "acceptance"])?;
         git(&t, &["add", "-A"])?;
         git(&t, &["commit", "-q", "-m", "fixture"])?;
-        (t.clone(), Some(t))
+        (t, Some(guard))
     };
     let run = |args: &[String]| {
         Command::new(env!("CARGO_BIN_EXE_urzua"))
@@ -212,9 +223,7 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
         }
     }
     let out = run(&case.invocation)?;
-    if let Some(t) = temp {
-        let _ = std::fs::remove_dir_all(t);
-    }
+    drop(temp);
 
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     let mut unmet = Vec::new();
@@ -252,11 +261,17 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
                 }
             }
         }
-        let findings = j
-            .get("findings")
-            .and_then(|f| f.as_array())
-            .cloned()
-            .unwrap_or_default();
+        let has_finding_matchers =
+            !case.expect_findings.is_empty() || !case.expect_no_findings.is_empty();
+        let findings = match j.get("findings").and_then(|f| f.as_array()) {
+            Some(f) => f.clone(),
+            None => {
+                if has_finding_matchers {
+                    unmet.push("output has no findings array".to_string());
+                }
+                Vec::new()
+            }
+        };
         for m in &case.expect_findings {
             if !findings.iter().any(|f| matches(f, m)) {
                 unmet.push(format!(
@@ -294,20 +309,22 @@ fn run_case(case: &Case, corpus_dir: &Path) -> Outcome {
 }
 
 /// Corpus directories under a root, or the dir itself if it is one corpus.
-fn corpus_dirs(root: &Path) -> Vec<PathBuf> {
+fn corpus_dirs(root: &Path) -> Result<Vec<PathBuf>, String> {
     if root.join("expectations").is_dir() {
-        return vec![root.to_path_buf()];
+        return Ok(vec![root.to_path_buf()]);
     }
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
-        .map(|rd| {
-            rd.flatten()
-                .map(|e| e.path())
-                .filter(|p| p.join("expectations").is_dir())
-                .collect()
-        })
-        .unwrap_or_default();
+    let rd = std::fs::read_dir(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    let mut dirs = Vec::new();
+    for entry in rd {
+        let p = entry
+            .map_err(|e| format!("{}: {e}", root.display()))?
+            .path();
+        if p.join("expectations").is_dir() {
+            dirs.push(p);
+        }
+    }
     dirs.sort();
-    dirs
+    Ok(dirs)
 }
 
 fn main() {
@@ -331,7 +348,15 @@ fn main() {
     let (mut pass, mut gaps, mut fail, mut total) = (0, 0, 0, 0);
     let mut seen_ids = std::collections::HashSet::new();
     for root in &roots {
-        for dir in corpus_dirs(root) {
+        let dirs = match corpus_dirs(root) {
+            Ok(d) => d,
+            Err(e) => {
+                println!("FAIL  cannot read corpus root {e}");
+                fail += 1;
+                continue;
+            }
+        };
+        for dir in dirs {
             let name = dir.file_name().unwrap().to_string_lossy().to_string();
             for p in check_manifest(&dir) {
                 println!("FAIL  [{name}] {p}");
@@ -389,8 +414,11 @@ fn main() {
         }
     }
     println!("acceptance: {total} cases, {pass} ok, {gaps} known-gap, {fail} failed");
-    if fail > 0 || total == 0 {
-        if total == 0 {
+    // A name filter (`cargo test <name>` passes it to every target) may
+    // legitimately match no case; only an unfiltered run with no cases fails.
+    let empty_unfiltered = total == 0 && filter.is_none();
+    if fail > 0 || empty_unfiltered {
+        if empty_unfiltered {
             println!("acceptance: no cases ran");
         }
         std::process::exit(1);
