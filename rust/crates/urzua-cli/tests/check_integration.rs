@@ -2701,3 +2701,40 @@ fn migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// An `--ids` entry that selects nothing is a reported failure (exit 1)
+/// naming the entry, not a clean `ok` with nothing written.
+#[test]
+fn fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector() {
+    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+    let dir = edit_fixture("fix-ids-unmatched", original);
+
+    for selector in ["NOPE", "ADR-1"] {
+        let output = run_urzua(&dir, &["fix", "--apply", "--ids", selector, "--by", "me"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "partial-failure", "{selector}: {stdout}");
+        assert_eq!(output.status.code(), Some(1), "{selector}: {stdout}");
+        assert_eq!(parsed["failed"][0]["record"], selector, "{stdout}");
+    }
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    assert_eq!(after, original, "an unmatched selector must write nothing");
+
+    // The documented path form still applies, with no failure.
+    let output = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--apply",
+            "--ids",
+            "docs/adr/ADR-1-first.md",
+            "--by",
+            "me",
+        ],
+    );
+    let parsed = assert_valid_json_object(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(parsed["status"], "applied");
+    assert_eq!(output.status.code(), Some(0));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
