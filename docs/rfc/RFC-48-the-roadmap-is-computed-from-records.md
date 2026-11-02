@@ -47,20 +47,12 @@ that gap by construction.
 A new `Depends-on` field carries sequencing: a comma-separated list of record IDs, "this record cannot
 finish until those do". It is a pointer field, so every value must resolve.
 
-`Blocked-on` is retired rather than kept as free text. Free text was only ever there for blockers that
-were not records, and every such blocker is a condition that can be a record: a decision is a
-`decide ...` milestone or an RFC, and an external condition ("a real adopter asks for it") is a
-milestone whose `Done` means the condition was met. Structured in, structured out: anything the
-engine is expected to order or report on is a record or a field, never prose. Keeping a prose field beside a pointer field would leave two places to say "waiting",
-one of which the engine cannot order. Migration for this repository:
-
-- the `—` placeholders are deleted;
-- values that cite record IDs move to `Depends-on` unchanged;
-- each prose value becomes a `Depends-on` to an existing or new record for that decision or
-  condition.
-
-`narrative_fields` stays an engine feature for adopters who want it; this repository stops declaring
-`Blocked-on`.
+`Blocked-on` stays, as a separate free-text narrative field. The two answer different questions:
+`Depends-on` is a typed dependency the engine orders and derives `blocked` from; `Blocked-on` is a
+human note on what is in the way, which no rule orders on. A blocker the engine should act on is
+written as `Depends-on` (to a record or a condition record); `Blocked-on` explains it. This is the
+stated-reason exception `ADR-64` allows for a prose header field. The `—` placeholders are dropped,
+since an absent optional field says the same thing.
 
 `Depends-on` is declared as a pair through `RFC-47`'s relation declarations:
 
@@ -173,3 +165,4 @@ workflow is then configuration on top of it, adopted or not per repository.
 > | 2026-11-02 | Sequencing moves to a new `Depends-on` pair (`Blocked-on` stays narrative); `Blocked` becomes a derived value; added the engine composition and lifecycle sections; forge evidence filed as `MILE-135`. **Why:** Author's answers to the first draft's open questions. | **substantive** |
 > | 2026-11-02 | `Blocked-on` retired in favour of `Depends-on`; lifecycle stages moved out as a workflow over `MILE-132`. **Why:** Author: one field for waiting, and stages are workflow composition. | **substantive** |
 > | 2026-11-02 | External conditions become records too, not body prose. **Why:** Author: structured in and out. | **substantive** |
+> | 2026-11-02 | `Blocked-on` kept as a separate narrative field beside `Depends-on`. **Why:** Author: a dependency and a free-text note on what is in the way are different fields. | **substantive** |
