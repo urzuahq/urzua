@@ -32,7 +32,7 @@ clean: rust-clean ## Remove build artifacts
 ci: fmt-check lint rust-build test records rule-table-check release-guard release-invariants ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
-hooks-install: ## Install the pre-push hook (fmt + clippy, not the full suite)
+hooks-install: ## Install the pre-push hook (fmt + clippy + urzua check, not the full suite)
 	@cp .git-hooks/pre-push .git/hooks/pre-push
 	@chmod +x .git/hooks/pre-push
 	@echo "pre-push hook installed"

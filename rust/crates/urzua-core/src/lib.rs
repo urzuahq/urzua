@@ -14,6 +14,7 @@ pub mod field_state;
 pub mod fix;
 pub mod graph;
 pub mod header;
+pub mod line_edit;
 pub mod migrate;
 pub mod new_record;
 /// `SPEC-4`'s acceptance suite (`MILE-101`). Test-only: it exercises the
