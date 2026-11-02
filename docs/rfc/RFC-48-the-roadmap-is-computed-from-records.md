@@ -45,8 +45,21 @@ that gap by construction.
 ### 1. A declared sequencing relation (`MILE-27`)
 
 A new `Depends-on` field carries sequencing: a comma-separated list of record IDs, "this record cannot
-finish until those do". `Blocked-on` is not repurposed; it stays the free-text narrative field it is
-today ("waiting on a decision not yet made"), so the two meanings never share a field.
+finish until those do". It is a pointer field, so every value must resolve.
+
+`Blocked-on` is retired rather than kept as free text. Free text was only ever there for blockers that
+were not records, and every such blocker is either a decision (which is a record: a `decide ...`
+milestone or an RFC) or an external condition that does not sequence anything and belongs in the
+record's body. Keeping a prose field beside a pointer field would leave two places to say "waiting",
+one of which the engine cannot order. Migration for this repository:
+
+- the `—` placeholders are deleted;
+- values that cite record IDs move to `Depends-on` unchanged;
+- each prose value becomes a `Depends-on` to an existing or new decision record, or moves to the body
+  when it names no decision.
+
+`narrative_fields` stays an engine feature for adopters who want it; this repository stops declaring
+`Blocked-on`.
 
 `Depends-on` is declared as a pair through `RFC-47`'s relation declarations:
 
@@ -121,28 +134,18 @@ configuration over them, so an adopter opts in or out per type and per pair:
 - **`urzua roadmap` is a view over these primitives**: waves from any `acyclic` pair, grouping by any
   declared field. A repository that declares no acyclic pair has no roadmap and loses nothing else.
 
-## Lifecycle stages
+## Lifecycle stages are a workflow, not part of this proposal
 
-An engineering roadmap often moves each epic through ordered stages (for example Define, Design,
-Build, Launch, Operate), each closed by a "done when" review. There are three ways to express that,
-and the proposal is to support the first in the engine and leave the choice to config:
-
-1. **An ordered enumerated field (proposed).** The engine gains one value primitive, a declared
-   vocabulary with an order and allowed transitions, and per-value required fields or sections.
-   `Status` becomes one instance of it (`MILE-132`) and a `Stage` field another. An adopter can
-   declare stages as their own field, or fold them into `Status` with the same primitive; neither is
-   hard-coded. "Done when" is a section required on leaving a stage.
-2. **Stage as status values only.** Simpler, but mixes "where in the lifecycle" with "open, blocked,
-   done", and blocked is now derived, so the two would fight.
-3. **Stages as child records** (`Parent` containment, one child per stage). Most flexible and needs no
-   new primitive, but multiplies records by the number of stages.
+Moving an epic through ordered stages (for example Define, Design, Build, Launch, Operate) is a
+workflow an adopter composes from configuration, not an engine feature. The engine piece it needs is
+an ordered value vocabulary with per-value required fields, which belongs to `MILE-132`; a stage
+workflow is then configuration on top of it, adopted or not per repository.
 
 ## Open questions
 
-1. Which of the three lifecycle options this repository uses. The engine work is the same for 1 and 2.
-2. Whether a derived value is declared per type in config or defined by a rule. Per type keeps it
+1. Whether a derived value is declared per type in config or defined by a rule. Per type keeps it
    visible in one place; per rule keeps the config smaller.
-3. Whether `Children` should be listed per record in `export` or only in `graph`.
+2. Whether `Children` should be listed per record in `export` or only in `graph`.
 
 ## Non-goals
 
@@ -167,3 +170,4 @@ and the proposal is to support the first in the engine and leave the choice to c
 > |---|---|---|
 > | 2026-11-02 | Drafted. **Why:** Planning Phase 0 needed an order the records could not compute, which is the trigger `ADR-34` set for both deferred pieces. | **substantive** |
 > | 2026-11-02 | Sequencing moves to a new `Depends-on` pair (`Blocked-on` stays narrative); `Blocked` becomes a derived value; added the engine composition and lifecycle sections; forge evidence filed as `MILE-135`. **Why:** Author's answers to the first draft's open questions. | **substantive** |
+> | 2026-11-02 | `Blocked-on` retired in favour of `Depends-on`; lifecycle stages moved out as a workflow over `MILE-132`. **Why:** Author: one field for waiting, and stages are workflow composition. | **substantive** |
