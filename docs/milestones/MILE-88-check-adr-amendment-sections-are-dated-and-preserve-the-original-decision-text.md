@@ -3,7 +3,7 @@ Stable-Id: 01M2178DSHWKHW4BCSW03MPGV3
 Status: Planned
 Phase: '0'
 Track: schema-governance
-Blocked-on: RFC-33
+Blocked-on: —
 ---
 # 88 — Check ADR Amendment sections are dated and preserve the original Decision text
 
@@ -33,3 +33,4 @@ revision-log entry) real mechanical backing.
 > |---|---|---|
 > | 2026-09-08 | Initial milestone. **Why:** found live and validated while auditing which prose conventions across the corpus are load-bearing enough to deserve mechanical enforcement, following the same investigation that led to rejecting RFC-21. | **structural** |
 > | 2026-09-17 | Reshaped by `ADR-53`. **Why:** filed as "a new `check` rule". It is a configured rule now. The engine-side question is narrower and worth separating: guarantee (2) -- that a commit adding an Amendment never alters the original Decision text -- reads git history, which no function in `RFC-33`'s proposed vocabulary does. That gap is the actual finding here. | **substantive** |
+> | 2026-11-02 | Unblocked: `RFC-33` was Accepted; maintainer decision 2026-11-02. `Blocked-on` cleared; `Status` stays `Planned`. **Why:** `narrative-field.stale` flagged the reference once `RFC-33` reached a terminal status, and the maintainer decided the dependency no longer holds. | **substantive** |
