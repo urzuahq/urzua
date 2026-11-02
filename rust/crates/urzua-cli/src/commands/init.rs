@@ -124,9 +124,11 @@ fn shape_name(shape: HeaderShape) -> &'static str {
 }
 
 /// The shape one record's content parses under, using the real header parser.
-/// The two line-anchored shapes can both match a record (a `>` quote somewhere
-/// in the body), so among those the one whose region starts first wins; the
-/// frontmatter shape only matches at the very top, so it wins outright.
+/// The two line-anchored shapes can both match a record (a Y-statement `>`
+/// quote in the body, say), so the shape whose region yields the most fields
+/// wins: a header is the region that carries the fields, and a stray quote
+/// carries few. Equal field counts fall back to the earliest region start,
+/// then to candidate order. Nothing here reads a field name.
 fn shape_of(content: &str) -> Option<HeaderShape> {
     CANDIDATE_SHAPES
         .iter()
@@ -135,10 +137,10 @@ fn shape_of(content: &str) -> Option<HeaderShape> {
             parsed
                 .region
                 .filter(|_| !parsed.fields.is_empty())
-                .map(|(start, _)| (start, *shape))
+                .map(|(start, _)| (std::cmp::Reverse(parsed.fields.len()), start, *shape))
         })
-        .min_by_key(|(start, _)| *start)
-        .map(|(_, shape)| shape)
+        .min_by_key(|(fields, start, _)| (*fields, *start))
+        .map(|(_, _, shape)| shape)
 }
 
 /// Set each proposed type's `header_shape` from its existing records
