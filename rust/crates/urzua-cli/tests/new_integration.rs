@@ -121,3 +121,34 @@ fn new_still_uses_the_template_verbatim_for_the_default_blockquote_shape() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// A title that slugifies to nothing (empty, whitespace, or only non-ASCII)
+/// used to create `ADR-N-.md`, a name the numbering scan does not recognise,
+/// so the next `new` reissued N. It is now refused before anything is
+/// written, and the number is not consumed.
+#[test]
+fn new_refuses_a_title_with_no_slug_and_writes_nothing() {
+    let dir = fixture_repo("empty-slug");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    for title in ["", "   ", "日本語"] {
+        let output = run_urzua(&dir, &["new", "adr", title, "--by", "me"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(2), "{title:?}: {stdout}");
+        assert!(stdout.contains("no ASCII letters or digits"), "{stdout}");
+        let written: Vec<_> = std::fs::read_dir(dir.join("docs/adr")).unwrap().collect();
+        assert!(written.is_empty(), "{title:?} wrote {written:?}");
+    }
+
+    // A good title afterwards still takes number 1.
+    let output = run_urzua(&dir, &["new", "adr", "Real title", "--by", "me"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(dir.join("docs/adr/ADR-1-real-title.md").exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
