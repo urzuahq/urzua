@@ -39,6 +39,7 @@ pub const RULE_CONFIG_RELATION_FIELD_NOT_KNOWN: &str = "config.relation-field-no
 pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
     "config.known-fields-declaration-missing";
 pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
+pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -73,6 +74,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
     RULE_FIELD_LEADING_RESERVED_INDICATOR,
+    RULE_HEADER_CASE_VARIANT_KEY,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -211,6 +213,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_FIELD_LEADING_RESERVED_INDICATOR,
         description: "A declared field's value starts with a reserved YAML indicator character (`@`, `*`, `&`, `!`, `%`, `|`, `>`), which needs quoting to parse at all — the same avoidable, decorative-prefix hazard `BUG-18` found for `Author`/`Deciders`, generalized so the next instance is caught rather than found by hand.",
+    },
+    RuleMeta {
+        id: RULE_HEADER_CASE_VARIANT_KEY,
+        description: "One record's header writes two keys differing only by case (`Status`/`status`), reported as the fact of the difference, never as which spelling is right (`MILE-113`). Opt-in and declaration-free: it reads the keys a record wrote, not a declared vocabulary, and composes beside the exact-match rules without changing them (`ADR-57`). An exact repeat of one spelling stays `header.required-fields`' finding.",
     },
 ];
 
