@@ -1,0 +1,10 @@
+id: clean-frontmatter-passes
+corpus: corpus-c
+invocation: [check, records/]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /files_examined, equals: 3}
+expect_no_findings:
+  - {severity: error}
+  - {severity: warning}

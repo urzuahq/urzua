@@ -24,6 +24,15 @@ pair, and reports the number of records it actually examined — not just whethe
 ships with a planted-violation test**: construct the exact defect the rule exists to catch, and
 assert it's caught. A rule without one is unverified, not trusted, per RFC-11 §5.
 
+## Running the corpus acceptance suite
+
+`cargo test -p urzua-cli --test acceptance` (also part of `make ci`) runs the cases under
+`rust/crates/urzua-cli/tests/acceptance/corpora/`; a new corpus needs only a directory (records,
+`manifest.yaml`, `expectations/*.yaml`), no code. A case marked `known_gap` documents a defect not yet
+fixed and turns red once it is, as a reminder to remove the marker. To also run corpora kept outside
+this repository, set `URZUA_ACCEPTANCE_EXTRA` to a `:`-separated list of directories laid out the same
+way; unset, the runner prints that it skipped them. See SPEC-4.
+
 ## What's useful right now
 
 - **Reading the RFCs and filing an issue with a specific objection.** "RFC-11 §6 — here's a case

@@ -1,0 +1,10 @@
+id: own-docs-check-has-no-errors
+corpus: "@repo"
+invocation: [check, docs/]
+expect_exit: 0
+expect_json:
+  - {at: /blocking, equals: false}
+  - {at: /files_examined, gt: 0}
+  - {at: /records_read_by_any_rule, gt: 0}
+expect_no_findings:
+  - {severity: error}

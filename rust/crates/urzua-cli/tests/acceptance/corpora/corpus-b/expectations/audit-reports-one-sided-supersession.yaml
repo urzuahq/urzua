@@ -1,0 +1,17 @@
+id: audit-reports-one-sided-supersession
+corpus: corpus-b
+setup:
+  - [init]
+invocation: [audit]
+expect_exit: 0
+expect_findings:
+  - {rule: relation.supersession-reciprocity, file: records/0002-use-a-stream.md}
+known_gap:
+  ref: MILE-120
+  reason: >-
+    A bare-numbered filename gives a record no identity, so init declares no
+    prefix and audit's supersession-reciprocity rule is not-enabled: the
+    one-sided Supersedes goes unreported. RFC-46 was rejected: such a corpus is
+    renamed to TYPE-NNNN-slug, not tolerated. MILE-120 makes init and audit
+    report the mismatch with rename guidance, at which point this case's
+    expectation becomes that guidance.

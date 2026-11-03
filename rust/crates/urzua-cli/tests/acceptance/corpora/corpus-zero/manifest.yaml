@@ -1,0 +1,3 @@
+# Corpus zero is this repository's own docs/, referenced in place (never copied).
+fixtures: []
+in_place: true

@@ -1,0 +1,12 @@
+schema_version: 2
+record_types:
+  adr:
+    dir: records
+    required_fields: [Status, Date, Author]
+    known_fields: []
+    header_shape: yaml-frontmatter
+    pointer_fields: []
+    narrative_fields: []
+rules:
+  header.required-fields: error
+  field.quality: error
