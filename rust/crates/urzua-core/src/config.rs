@@ -66,6 +66,11 @@ pub struct RuleSetting {
     /// Superseded target is permanently true history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<String>>,
+    /// Path prefixes that publish beyond the repository (`RFC-11` section 1).
+    /// Only meaningful to `boundary.published-path-reference`. The rule's own
+    /// `level` is the boundary's severity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_paths: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,6 +132,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             terminal_statuses: Option<Vec<String>>,
             #[serde(default)]
             fields: Option<Vec<String>>,
+            #[serde(default)]
+            published_paths: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -155,6 +162,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 closed_statuses: table.closed_statuses,
                 terminal_statuses: table.terminal_statuses,
                 fields: table.fields,
+                published_paths: table.published_paths,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -165,6 +173,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 closed_statuses: None,
                 terminal_statuses: None,
                 fields: None,
+                published_paths: None,
             })
         }
     }
@@ -539,6 +548,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "published_paths",
+        owner: crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        consequence_if_missing: "declares no boundary and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "fields",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "checks every declared field",
@@ -556,6 +571,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "closed_statuses" => setting.closed_statuses.as_ref(),
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
+        "published_paths" => setting.published_paths.as_ref(),
         _ => None,
     }
 }
@@ -811,6 +827,38 @@ rules:
             "{base}  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n    closed_statuses: [\"Fixed\"]\n"
         );
         assert!(parse(&complete).is_ok());
+    }
+
+    #[test]
+    fn published_paths_is_required_by_the_boundary_rule_and_by_no_other() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        for bad in ["[]", "[\"\"]"] {
+            let cfg = format!(
+                "{base}  boundary.published-path-reference:\n    level: error\n    published_paths: {bad}\n"
+            );
+            assert!(
+                parse(&cfg)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("published_paths"),
+                "{bad} should be rejected"
+            );
+        }
+        assert!(parse(&format!(
+            "{base}  boundary.published-path-reference: error\n"
+        ))
+        .is_err());
+        assert!(parse(&format!("{base}  boundary.published-path-reference: off\n")).is_ok());
+        assert!(parse(&format!(
+            "{base}  boundary.published-path-reference:\n    level: error\n    published_paths: [\"pkg\"]\n"
+        ))
+        .is_ok());
+        let elsewhere =
+            format!("{base}  field.quality:\n    level: error\n    published_paths: [\"pkg\"]\n");
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'published_paths'"));
     }
 
     #[test]

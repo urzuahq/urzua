@@ -39,6 +39,7 @@ pub const RULE_CONFIG_RELATION_FIELD_NOT_KNOWN: &str = "config.relation-field-no
 pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
     "config.known-fields-declaration-missing";
 pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
+pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -73,6 +74,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
     RULE_FIELD_LEADING_RESERVED_INDICATOR,
+    RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -211,6 +213,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_FIELD_LEADING_RESERVED_INDICATOR,
         description: "A declared field's value starts with a reserved YAML indicator character (`@`, `*`, `&`, `!`, `%`, `|`, `>`), which needs quoting to parse at all — the same avoidable, decorative-prefix hazard `BUG-18` found for `Author`/`Deciders`, generalized so the next instance is caught rather than found by hand.",
+    },
+    RuleMeta {
+        id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry, which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
     },
 ];
 
