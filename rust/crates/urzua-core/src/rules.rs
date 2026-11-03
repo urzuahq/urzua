@@ -1770,7 +1770,7 @@ pub fn narrative_field_stale(
 /// `NNNN-slug.md` shape (BUG-9): it was never a real shape any adopter's own
 /// corpus would independently use, only this repo's own pre-ADR-36 history,
 /// and that history no longer exists in the corpus either.
-pub(crate) fn record_id(record: &Record) -> Option<String> {
+pub fn record_id(record: &Record) -> Option<String> {
     let stem = record.path.file_stem()?.to_str()?;
     let type_prefix = record.type_prefix.clone();
 
