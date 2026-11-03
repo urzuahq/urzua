@@ -43,8 +43,11 @@ records and that existing prose fields need a migration.
 
 Concretely:
 
-1. A field that a rule reads holds record IDs or declared values. A condition that is not yet a record
-   (a pending decision, an outside event) becomes one.
+1. By default, a field that a rule reads holds record IDs or declared values. A condition that is not
+   yet a record (a pending decision, an outside event) becomes one. A prose-tolerant header field is
+   an explicit exception: the change that adds it states its reason, and the field follows the
+   `narrative_fields` contract (presence and shape checks, plus optional resolution of any record
+   references it contains and their staleness).
 2. Structure lives in headers; prose lives in sections. A rule may require a section to exist and be
    non-empty, but never parses its meaning. A new prose-tolerant header field read by a rule needs a
    stated reason in the change that adds it.
@@ -62,10 +65,14 @@ wholesale once rules and views depend on structured values, which is the point.
 
 ## Consequences
 
-- `Blocked-on` is retired for `Depends-on` in this repository (`RFC-48`); its prose values become
-  records.
-- `narrative_fields` stays an engine feature for adopters, but this repository stops relying on it,
-  and a review of a new prose field cites this ADR.
+- Once this ADR and `RFC-48` are accepted and the migration lands, sequencing in this repository
+  moves to the structured `Depends-on` field. `RFC-48` sets its contract: an optional pointer field
+  whose absence means no dependencies, whose every value must resolve to a record
+  (`sequence.unresolved-blocker`), and which may not form a cycle (`sequence.cycle`). A blocking fact
+  that is not yet a record becomes one.
+- `Blocked-on` stays, as a prose note beside `Depends-on`: it is the stated exception item 1 allows,
+  because no rule orders or computes anything from it.
+- `narrative_fields` stays an engine feature, and a review of any new prose field will cite this ADR.
 - Status vocabularies and other value sets move toward one declaration per type (`MILE-132`), which
   is also the precondition for declared state machines.
 - Writing a record takes slightly more effort: a blocking condition is a record, not a sentence.
@@ -82,3 +89,4 @@ wholesale once rules and views depend on structured values, which is the point.
 > |---|---|---|
 > | 2026-11-02 | Drafted as Proposed. **Why:** Author stated the principle while settling `RFC-48`. | **substantive** |
 > | 2026-11-02 | Headers structured and sections prose; contradicted hand-written values are errors; config held to the same rule; JSON-only output. **Why:** Author's answers to the draft's open points. | **substantive** |
+> | 2026-11-03 | Prose-tolerant fields defined as the stated exception under the `narrative_fields` contract; Consequences reworded as pending and aligned with `RFC-48`: `Blocked-on` stays as a prose note beside `Depends-on`, whose contract is stated. **Why:** Review findings; the earlier wording retired `Blocked-on`, contradicting the decision that both fields exist. | **substantive** |
