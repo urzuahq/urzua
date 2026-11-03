@@ -218,6 +218,56 @@ fn doctor_reports_missing_config_as_exit_2() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Round 30 F4: `doctor` was healthy (exit 0) for a config enabling no rule,
+/// where `check` exits 2 not-run.
+#[test]
+fn doctor_errors_when_no_rule_is_enabled() {
+    let dir = fixture_repo("doctor-no-rules");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let output = run_urzua(&dir, &["doctor"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
+    assert!(stdout.contains("rules-enabled"), "stdout: {stdout}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Round 30 F1/F2/F5: doctor and check share config load, so an invalid
+/// record-type value is reported by both rather than accepted.
+#[test]
+fn doctor_reports_an_invalid_record_type_prefix_or_dir() {
+    for (i, ty) in [
+        "  adr:\n    dir: \"docs/adr\"\n    prefix: \"../..\"\n",
+        "  adr:\n    dir: \"docs/adr\"\n    prefix: \"P\"\n  w:\n    dir: \"docs/w\"\n    prefix: \"P\"\n",
+        "  adr:\n    dir: \"\"\n",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let dir = fixture_repo(&format!("doctor-bad-type-{i}"));
+        std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+        std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            format!("schema_version: 2\nrules: {{field.quality: error}}\nrecord_types:\n{ty}"),
+        )
+        .unwrap();
+        commit_all(&dir);
+        let out = run_urzua(&dir, &["doctor"]);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(out.status.code(), Some(1), "stdout: {stdout}");
+        assert!(stdout.contains("config does not parse"), "stdout: {stdout}");
+        assert_ne!(run_urzua(&dir, &["check"]).status.code(), Some(0));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
 #[test]
 fn doctor_emits_json_not_plain_text_lines() {
     // BUG-4, observed failing before the fix: `doctor` printed `[OK]`/
@@ -390,11 +440,11 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {identity.collision: error, relation.supersession-reciprocity: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {identity.collision: error, relation.supersession-reciprocity: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["audit"]);
@@ -406,13 +456,10 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
 }
 
 #[test]
-fn init_then_check_flags_a_pre_existing_blockquote_record() {
-    // ADR-33: adopt mode proposes `header_shape = "yaml-frontmatter"`
-    // regardless of what shape the existing corpus happens to use -- so a
-    // record already written in the deprecated `blockquote` shape (as this
-    // one is) no longer parses cleanly against the freshly-adopted config,
-    // and `check` correctly reports the mismatch rather than silently
-    // reading it as though no header requirement applied.
+fn init_then_check_reads_a_pre_existing_blockquote_record_and_flags_its_shape() {
+    // BUG-151: adopt mode proposes the shape the corpus already uses, so this
+    // blockquote record is read; the migration steer is carried by
+    // `header.deprecated-shape`, not by a config that cannot read the corpus.
     let dir = fixture_repo("bootstrap");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
@@ -432,13 +479,14 @@ fn init_then_check_flags_a_pre_existing_blockquote_record() {
 
     let check_output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&check_output.stdout);
-    // Exit 0, not 1: `init` proposes every rule at `warn`, so an adopted
-    // corpus is told what is irregular without being blocked on day one
-    // (MILE-51). The finding itself must still be present -- the assertion
-    // below is the real one, and the exit code is secondary to it.
+    // Exit 0: `init` proposes every rule at `warn` (MILE-51).
     assert_eq!(check_output.status.code(), Some(0), "stdout: {stdout}");
     assert!(
-        stdout.contains("no header-shaped region found"),
+        !stdout.contains("no header-shaped region found"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("header.deprecated-shape"),
         "stdout: {stdout}"
     );
 
@@ -543,11 +591,11 @@ fn graph_discloses_an_identity_collision_as_a_notice_observed_failing() {
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["graph"]);
@@ -575,11 +623,11 @@ fn check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["check"]);
@@ -602,11 +650,11 @@ fn audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["audit"]);
@@ -1065,8 +1113,15 @@ fn a_claim_path_prefix_is_read_to_any_depth() {
         stdout.contains("claim.status-agreement"),
         "rule must appear: {stdout}"
     );
-    assert!(
-        !stdout.contains("\"rule\": \"claim.status-agreement\",\n      \"records_examined\": 0"),
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let claim_rule = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "claim.status-agreement")
+        .unwrap_or_else(|| panic!("claim.status-agreement must appear: {stdout}"));
+    assert_eq!(
+        claim_rule["population"]["examined"], 1,
         "a nested claim layout must not report a clean run over zero claims: {stdout}"
     );
     assert!(
@@ -2569,8 +2624,11 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
 // call site. No regression test exists for this non-bug; see the `BUG-127`
 // record for the full account.
 
-/// A found-in-review bug: two record types (`adr`/`rfc`) sharing a prefix so
-/// their records collide on one identifier. `load_records` used to iterate
+/// Originally a found-in-review bug with two record types (`adr`/`rfc`)
+/// sharing a prefix so their records collided on one identifier. Config load
+/// now refuses a shared prefix (Round 30), so the same first-seen-wins
+/// guarantee is exercised with two same-type records; the history below
+/// describes the original cross-type form. `load_records` used to iterate
 /// `config.record_types` -- a `HashMap`, whose own order is randomized per
 /// process -- feeding `build_index_reporting_collisions`' first-seen-wins
 /// merge a different candidate order on every run. Empirically confirmed on
@@ -2584,7 +2642,7 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
 /// type-name-sorted regardless of `record_types`' own hash-map order, and
 /// `"adr" < "rfc"` lexicographically.
 #[test]
-fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_hashmap_order() {
+fn a_same_type_identifier_collision_resolves_deterministically() {
     let dir = fixture_repo("hashmap-collision-determinism");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
@@ -2595,12 +2653,11 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
          rules:\n  identity.collision: warn\n  pointer.target-status:\n    level: error\n    not_in: [\"Accepted\"]\n\n\
          record_types:\n\
          \x20 adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
-         \x20 rfc:\n    dir: \"docs/rfc\"\n    prefix: \"DOC\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
          \x20 mile:\n    dir: \"docs/mile\"\n    prefix: \"M\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Derives-from\"]\n    pointer_fields: [\"Derives-from\"]\n    narrative_fields: []\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/rfc/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
     std::fs::write(
         dir.join("docs/mile/M-1-c.md"),
         "> Status: Open\n> Derives-from: DOC-1\n",
@@ -2619,4 +2676,530 @@ fn a_cross_type_identifier_collision_resolves_deterministically_regardless_of_ha
             "adr's Status: Accepted must always win the collision, deterministically, every run: {parsed}"
         );
     }
+}
+
+/// BUG-151: `init` wrote `header_shape: yaml-frontmatter` for every type, so
+/// an adopted corpus in another shape read as zero records on the first
+/// `check`, reported only as one warning per record.
+#[test]
+fn init_on_a_bold_list_corpus_proposes_bold_list_and_the_first_check_reads_every_record_observed_failing(
+) {
+    let dir = fixture_repo("init-bold-list");
+    for n in 1..=3 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-record-{n}.md")),
+            format!(
+                "# {n} — Record {n}\n\n- **Status:** Accepted\n- **Date:** 2026-01-0{n}\n\nBody.\n"
+            ),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let init = run_urzua(&dir, &["init"]);
+    let init_stdout = String::from_utf8_lossy(&init.stdout);
+    assert_eq!(init.status.code(), Some(0), "stdout: {init_stdout}");
+    let parsed = assert_valid_json_object(&init_stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "bold-list",
+        "stdout: {init_stdout}"
+    );
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    assert!(config.contains("header_shape: bold-list"), "{config}");
+    assert!(
+        config.contains("header.deprecated-shape"),
+        "the migration steer is carried by this rule, so init must propose it: {config}"
+    );
+
+    let check = run_urzua(&dir, &["check", "docs/"]);
+    let check_stdout = String::from_utf8_lossy(&check.stdout);
+    let checked = assert_valid_json_object(&check_stdout);
+    assert_eq!(checked["files_examined"], 3, "stdout: {check_stdout}");
+    // `records_read_by_any_rule` cannot carry this assertion: init proposes
+    // `required_fields: []` and no `known_fields`, so no rule has a declared
+    // field to read and the count is 0 for a yaml-frontmatter corpus too. The
+    // symptom BUG-151 produced was one unreadable-header warning per record.
+    assert_eq!(
+        check_stdout
+            .matches("no header-shaped region found")
+            .count(),
+        0,
+        "the config init wrote must read every record's header: {check_stdout}"
+    );
+    assert!(
+        check_stdout.contains("header.deprecated-shape"),
+        "a non-frontmatter shape is still steered toward migration: {check_stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-151: a type whose records disagree gets the majority shape and a
+/// notice naming the split, never a silent pick.
+#[test]
+fn init_on_a_mixed_shape_type_proposes_the_majority_shape_and_names_the_split() {
+    let dir = fixture_repo("init-mixed-shape");
+    for n in 1..=2 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-bold-{n}.md")),
+            "# T\n\n- **Status:** Accepted\n\nBody.\n",
+        )
+        .unwrap();
+    }
+    std::fs::write(
+        dir.join("docs/adr/0003-quote.md"),
+        "# T\n\n> Status: Accepted\n\nBody.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["init", "--dry-run"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "bold-list",
+        "stdout: {stdout}"
+    );
+    let notices = parsed["notices"]
+        .as_array()
+        .expect("a split needs a notice");
+    assert!(
+        notices.iter().any(|n| {
+            let m = n["message"].as_str().unwrap_or("");
+            m.contains("docs/adr") && m.contains("bold-list") && m.contains("blockquote")
+        }),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-151: records that parse under no shape keep the destination shape,
+/// with a notice rather than a silent default.
+#[test]
+fn init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so() {
+    let dir = fixture_repo("init-no-header");
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "# 0001 — X\n\nProse only.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["init", "--dry-run"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
+        "stdout: {stdout}"
+    );
+    assert!(
+        parsed["notices"]
+            .as_array()
+            .map(|a| a
+                .iter()
+                .any(|n| n["message"].as_str().unwrap_or("").contains("docs/adr")))
+            .unwrap_or(false),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-151 review: valid frontmatter at the start of the document is the
+/// header even when body bullets carry more fields.
+#[test]
+fn init_prefers_leading_frontmatter_over_more_numerous_body_bullets() {
+    let dir = fixture_repo("init-frontmatter-vs-bullets");
+    for n in 1..=2 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-record-{n}.md")),
+            format!(
+                "---\nStatus: Accepted\n---\n# {n} — Record {n}\n\n- **Owner:** someone\n- **Area:** a thing\n\nBody.\n"
+            ),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let init = run_urzua(&dir, &["init"]);
+    let init_stdout = String::from_utf8_lossy(&init.stdout);
+    let parsed = assert_valid_json_object(&init_stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
+        "stdout: {init_stdout}"
+    );
+
+    let path = dir.join(".urzua/config.yaml");
+    let config = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        config.replace("required_fields: []", "required_fields: [Status]"),
+    )
+    .unwrap();
+    let check = run_urzua(&dir, &["check", "docs/"]);
+    let stdout = String::from_utf8_lossy(&check.stdout);
+    assert!(
+        !stdout.contains("missing required header field"),
+        "stdout: {stdout}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+const EDIT_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
+
+fn edit_fixture(name: &str, record: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), EDIT_CONFIG).unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-1-first.md"), record).unwrap();
+    commit_all(&dir);
+    dir
+}
+
+/// A CRLF record with no trailing newline: `fix --apply` must change the one
+/// field line and add one revision-log row, nothing else -- not rewrite the
+/// whole file to LF with a trailing newline.
+#[test]
+fn fix_apply_preserves_crlf_and_the_absent_trailing_newline() {
+    let original = "# ADR-1: First\r\n\r\n> Embodiment: Not started\r\n> Realized-by: code:src/a.rs\r\n\r\n> **Revision log**\r\n>\r\n> | Date | Change | Class |\r\n> |---|---|---|\r\n> | 2026-01-01 | Initial. | **structural** |";
+    let dir = edit_fixture("fix-crlf", original);
+
+    let output = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    let before_lines: Vec<&str> = original.split("\r\n").collect();
+    let after_lines: Vec<&str> = after.split("\r\n").collect();
+    assert_eq!(after_lines.len(), before_lines.len() + 1, "{after:?}");
+    assert!(
+        !after.replace("\r\n", "").contains('\n'),
+        "bare LF: {after:?}"
+    );
+    assert!(!after.ends_with('\n'), "trailing newline added: {after:?}");
+    let changed = after_lines
+        .iter()
+        .filter(|l| !before_lines.contains(l))
+        .count();
+    assert_eq!(changed, 2, "only the field line and the new row: {after:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A plain (non-blockquote) revision-log table: the appended row must be a
+/// plain table row too, or it renders outside the table.
+#[test]
+fn fix_apply_appends_inside_a_plain_revision_log_table() {
+    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-01-01 | Initial. | **structural** |\n";
+    let dir = edit_fixture("fix-plain-table", original);
+
+    let output = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    let last = after.lines().last().unwrap();
+    assert!(
+        last.starts_with("| ") && last.contains("Tool-authored"),
+        "new row must be a plain table row: {after:?}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `migrate ids --apply` on a CRLF record with no trailing newline inserts
+/// exactly one line and leaves every other byte alone.
+#[test]
+fn migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline() {
+    let original = "# ADR-1: First\r\n\r\n> Status: Draft\r\n> Date: 2026-01-01\r\n\r\nbody\r\nno trailing newline";
+    let dir = edit_fixture("migrate-crlf", original);
+
+    let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    let kept: Vec<&str> = after
+        .split("\r\n")
+        .filter(|l| !l.contains("Stable-Id:"))
+        .collect();
+    assert_eq!(kept.join("\r\n"), original, "{after:?}");
+    assert_eq!(after.matches("Stable-Id:").count(), 1, "{after:?}");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// An `--ids` entry that selects nothing is a reported failure (exit 1)
+/// naming the entry, not a clean `ok` with nothing written.
+#[test]
+fn fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector() {
+    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+    let dir = edit_fixture("fix-ids-unmatched", original);
+
+    for selector in ["NOPE", "ADR-1"] {
+        let output = run_urzua(&dir, &["fix", "--apply", "--ids", selector, "--by", "me"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "partial-failure", "{selector}: {stdout}");
+        assert_eq!(output.status.code(), Some(1), "{selector}: {stdout}");
+        assert_eq!(parsed["failed"][0]["record"], selector, "{stdout}");
+    }
+    let after = std::fs::read_to_string(dir.join("docs/adr/ADR-1-first.md")).unwrap();
+    assert_eq!(after, original, "an unmatched selector must write nothing");
+
+    // The documented path form still applies, with no failure.
+    let output = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--apply",
+            "--ids",
+            "docs/adr/ADR-1-first.md",
+            "--by",
+            "me",
+        ],
+    );
+    let parsed = assert_valid_json_object(&String::from_utf8_lossy(&output.stdout));
+    assert_eq!(parsed["status"], "applied");
+    assert_eq!(output.status.code(), Some(0));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `MILE-119`: every rule that builds a per-record or per-slot population must
+/// classify a `header_shape: none` type (`ADR-50`) as out of scope -- it has no
+/// header, so "unreadable" would misreport a deliberate declaration as a
+/// malformed file. The rule set is `ALL_RULES`, not a hand-picked list, so a
+/// rule added later is covered without anyone remembering to extend this test.
+///
+/// A rule is exempt only if it cannot read a header at all, and each entry says
+/// why. Everything else must show `eligible > 0` (a rule with no candidate
+/// proves nothing), `examined == 0` and `unreadable == 0`, and every candidate
+/// out of scope.
+#[test]
+fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
+    const EXEMPT: &[(&str, &str)] = &[
+        // Config-level: judge the configuration, never a record's header.
+        ("type.no-declared-spec", "config-level"),
+        ("type.dir-matches-nothing", "config-level"),
+        ("type.record-outside-declared-dir", "path-level"),
+        ("header.deprecated-shape", "config-level"),
+        ("config.pointer-declaration-missing", "config-level"),
+        ("config.pointer-field-not-known", "config-level"),
+        ("config.pointer-narrative-overlap", "config-level"),
+        ("config.header-none-has-no-required-fields", "config-level"),
+        ("config.relation-field-not-known", "config-level"),
+        ("config.known-fields-declaration-missing", "config-level"),
+        (
+            "config.scope-matches-nothing",
+            "judges other rules' populations",
+        ),
+        // Record-level but header-independent: filename and body text only.
+        ("identity.collision", "reads the filename identifier only"),
+        ("filename.title-consistency", "reads filename and H1 only"),
+        ("revision-log.change-class-required", "reads body text only"),
+        // Claim-level: judges claim files, not records.
+        (
+            "claim.status-agreement",
+            "population is claims, not records",
+        ),
+    ];
+
+    for (id, _) in EXEMPT {
+        assert!(
+            urzua_core::rules::ALL_RULES.contains(id),
+            "exemption names '{id}', which is not a shipped rule"
+        );
+    }
+
+    let dir = fixture_repo("header-none-all-rules");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/note")).unwrap();
+    let rules: Vec<String> = urzua_core::rules::ALL_RULES
+        .iter()
+        .map(|id| match *id {
+            // These rules refuse to load without their own option.
+            "claim.status-agreement" => format!(
+                "{id}: {{level: error, claim_paths: [\"docs/claims\"], closed_statuses: [\"Done\"]}}"
+            ),
+            "narrative-field.stale" => {
+                format!("{id}: {{level: error, terminal_statuses: [\"Done\"]}}")
+            }
+            "pointer.target-status" => format!("{id}: {{level: error, not_in: [\"Done\"]}}"),
+            _ => format!("{id}: error"),
+        })
+        .collect();
+    std::fs::create_dir_all(dir.join("docs/claims")).unwrap();
+    std::fs::write(dir.join("docs/claims/c.md"), "nothing claimed\n").unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules: {{{}}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n",
+            rules.join(", ")
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/note/NOTE-1-x.md"), "# 1 — X\n\nA body.\n").unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+        panic!(
+            "check must print JSON ({e}): {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let executed = parsed["rules_executed"].as_array().unwrap();
+
+    let mut failures = Vec::new();
+    for id in urzua_core::rules::ALL_RULES {
+        if EXEMPT.iter().any(|(exempt, _)| exempt == id) {
+            continue;
+        }
+        let Some(entry) = executed.iter().find(|r| r["rule"] == *id) else {
+            failures.push(format!("{id}: absent from rules_executed"));
+            continue;
+        };
+        let pop = &entry["population"];
+        let n = |k: &str| pop[k].as_u64();
+        let (eligible, examined, oos, unreadable) = (
+            n("eligible"),
+            n("examined"),
+            n("out_of_scope"),
+            n("unreadable"),
+        );
+        if !(eligible.is_some_and(|e| e > 0)
+            && examined == Some(0)
+            && unreadable == Some(0)
+            && oos == eligible)
+        {
+            failures.push(format!("{id}: population {pop}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "rules that do not classify a header_shape: none type as out of scope:\n{}",
+        failures.join("\n")
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-151: a Y-statement blockquote in the body must not be mistaken for the
+/// header. The header is the region that carries the most parsed fields.
+#[test]
+fn init_prefers_the_shape_carrying_the_most_fields_over_an_earlier_body_blockquote_observed_failing(
+) {
+    let dir = fixture_repo("init-y-statement");
+    for n in 1..=2 {
+        std::fs::write(
+            dir.join(format!("docs/adr/{n:04}-record-{n}.md")),
+            format!(
+                "# {n} — Record {n}\n\n> **Decision (Y-statement):** In the context of a thing,\n> facing a concern, we decided to do it,\n> to achieve a goal, accepting a cost.\n\n- **Status:** Accepted\n- **Date:** 2026-01-0{n}\n- **Deciders:** someone\n\nBody.\n"
+            ),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let init = run_urzua(&dir, &["init"]);
+    let init_stdout = String::from_utf8_lossy(&init.stdout);
+    let parsed = assert_valid_json_object(&init_stdout);
+    assert_eq!(
+        parsed["proposed"][0]["header_shape"], "bold-list",
+        "stdout: {init_stdout}"
+    );
+
+    let path = dir.join(".urzua/config.yaml");
+    let config = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        config.replace("required_fields: []", "required_fields: [Status]"),
+    )
+    .unwrap();
+
+    let check = run_urzua(&dir, &["check", "docs/"]);
+    let stdout = String::from_utf8_lossy(&check.stdout);
+    assert!(
+        !stdout.contains("missing required header field"),
+        "stdout: {stdout}"
+    );
+    assert_valid_json_object(&stdout);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// BUG-172: `pointer.target-status` applied one `not_in` list to every declared
+/// pointer field, so a lineage field (`Derives-from`) pointing at a Superseded
+/// record warned the same as a dependency field (`Implements`). The `fields`
+/// option restricts which declared fields are judged.
+fn target_status_fields_fixture(name: &str, option: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/mile")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\n\
+             rules:\n  pointer.target-status:\n    level: warn\n    not_in: [\"Superseded\"]\n{option}\n\
+             record_types:\n\
+             \x20 adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\"]\n\
+             \x20 mile:\n    dir: \"docs/mile\"\n    prefix: \"M\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Derives-from\", \"Implements\"]\n    pointer_fields: [\"Derives-from\", \"Implements\"]\n    narrative_fields: []\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), "> Status: Superseded\n").unwrap();
+    std::fs::write(
+        dir.join("docs/mile/M-1-b.md"),
+        "> Status: Open\n> Derives-from: ADR-1\n> Implements: ADR-1\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    dir
+}
+
+fn target_status_messages(dir: &Path) -> Vec<String> {
+    let out = run_urzua(dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stderr)));
+    parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "pointer.target-status")
+        .map(|f| f["message"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn target_status_fields_restricts_which_declared_fields_warn_observed_failing() {
+    let dir = target_status_fields_fixture(
+        "target-status-fields-restricted",
+        "    fields: [\"Implements\"]",
+    );
+    let messages = target_status_messages(&dir);
+    assert_eq!(messages.len(), 1, "{messages:?}");
+    assert!(messages[0].starts_with("Implements:"), "{messages:?}");
+}
+
+#[test]
+fn target_status_without_fields_warns_on_every_declared_field() {
+    let dir = target_status_fields_fixture("target-status-fields-omitted", "");
+    let messages = target_status_messages(&dir);
+    assert_eq!(messages.len(), 2, "{messages:?}");
+}
+
+#[test]
+fn target_status_fields_naming_an_undeclared_field_is_a_config_error_observed_failing() {
+    let dir = target_status_fields_fixture(
+        "target-status-fields-undeclared",
+        "    fields: [\"Implments\"]",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("Implments"), "{text}");
 }

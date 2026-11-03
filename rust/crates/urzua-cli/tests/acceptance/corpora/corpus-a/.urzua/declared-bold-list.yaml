@@ -1,0 +1,11 @@
+schema_version: 2
+record_types:
+  adr:
+    dir: records
+    required_fields: [Status]
+    known_fields: [Date, Author]
+    header_shape: bold-list
+    pointer_fields: []
+    narrative_fields: []
+rules:
+  header.required-fields: error

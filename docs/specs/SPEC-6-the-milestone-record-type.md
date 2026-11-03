@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -57,6 +57,23 @@ History is the existing revision-log model (RFC-6), reused unmodified: a milesto
 transitions are recorded as dated, classified revision-log entries on the milestone record itself,
 not a separate mechanism.
 
+## Phase vocabulary
+
+`Phase` stays a plain tag with no mechanical check, but this project uses one fixed vocabulary so a
+phase means the same thing on every record:
+
+| Phase | Meaning |
+|---|---|
+| `0` | Bootstrap: required for the tool to validate and build itself further, plus urgent bugs and the first adopter replacement (`MILE-102`). |
+| `1` | Worth installing. |
+| `2` | Agent-facing. |
+| `3` | Differentiated. |
+| `4` | Scale. |
+
+A milestone moves phase by an edit to `Phase` and a revision-log row saying why, the same as any other
+substantive change. Another repository using this type may define its own phases; these are this
+project's.
+
 ## Why no new fields for ordering or grouping
 
 A record's display number is identity, not priority (ADR-3) — `MILE-7` existing does not
@@ -101,3 +118,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = ["Implements"]`/`narrative_fields = ["Blocked-on"]` in config (MILE-90/ADR-44), replacing the two rules' prior hardcoded field list; `blocked-on.stale` renamed `narrative-field.stale`. **Why:** `BUG-8` named this exact type's schema as an example of the genericity `pointer.resolution` claimed but didn't have. | **substantive** |
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
+> | 2026-11-02 | Added the "Phase vocabulary" section defining `0` bootstrap, `1` worth installing, `2` agent-facing, `3` differentiated, `4` scale; bumped to `0.8`. **Why:** `Phase` was documented only as "a plain tag (`0`, `1`, ...)", so the same number meant different things across records and nothing said where adopter-blocking work belongs; `0` now has a stated meaning, which `MILE-35` and the first-adopter milestones rely on. | **substantive** |

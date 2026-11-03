@@ -155,3 +155,7 @@ rules:
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]
+    # Every declared pointer/narrative field except Derives-from: lineage to a
+    # Superseded record is permanently true history, not a stale dependency
+    # (BUG-172).
+    fields: ["Implements", "Amends", "Parent", "Blocked-on"]

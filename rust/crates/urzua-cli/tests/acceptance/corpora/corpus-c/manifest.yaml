@@ -1,0 +1,9 @@
+fixtures:
+  - path: records/ADR-0001-queue.md
+    irregularity: none -- positive control, a regular yaml-frontmatter record.
+  - path: records/ADR-0002-stream.md
+    irregularity: none -- positive control.
+  - path: records/ADR-0003-cache.md
+    irregularity: none -- positive control.
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; not a record.

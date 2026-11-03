@@ -118,6 +118,43 @@ pub fn next_display_number(filenames: &[String]) -> u32 {
         .map_or(1, |highest| highest + 1)
 }
 
+/// The outcome of numbering with other refs' claims taken into account.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NumberAssignment {
+    pub number: u32,
+    /// Numbers above the working tree's own highest that another ref already
+    /// uses, with the ref names claiming each -- the ones `number` skipped.
+    pub skipped: Vec<(u32, Vec<String>)>,
+}
+
+/// [`next_display_number`], also skipping past numbers other refs already
+/// use (`MILE-89`). `claims` is `(ref name, filenames in the type's directory
+/// on that ref)`. Pure: the caller gathers the claims from git.
+pub fn next_display_number_with_claims(
+    local: &[String],
+    claims: &[(String, Vec<String>)],
+) -> NumberAssignment {
+    let local_next = next_display_number(local);
+    let mut by_number: std::collections::BTreeMap<u32, Vec<String>> = Default::default();
+    for (ref_name, names) in claims {
+        for name in names {
+            if let Some((_, n)) = parse_record_filename(name) {
+                if n >= local_next {
+                    let refs = by_number.entry(n).or_default();
+                    if !refs.contains(ref_name) {
+                        refs.push(ref_name.clone());
+                    }
+                }
+            }
+        }
+    }
+    let number = by_number.keys().next_back().map_or(local_next, |m| m + 1);
+    NumberAssignment {
+        number,
+        skipped: by_number.into_iter().collect(),
+    }
+}
+
 /// Lowercase, hyphen-separated, ASCII-alphanumeric only -- matches this
 /// corpus's own existing filenames (e.g. `0016-a-bold-list-header-shape...`).
 pub fn slugify(title: &str) -> String {
@@ -302,6 +339,31 @@ mod tests {
         };
         let result = render_from_template(template, &params);
         assert!(result.contains("> Status: Proposed | Accepted | Rejected"));
+    }
+
+    #[test]
+    fn claims_on_other_refs_push_the_number_past_them() {
+        let local = vec!["BUG-1-x.md".to_string()];
+        let claims = vec![
+            (
+                "feat-a".to_string(),
+                vec!["BUG-1-x.md".into(), "BUG-2-y.md".into()],
+            ),
+            (
+                "origin/feat-b".to_string(),
+                vec!["BUG-2-z.md".into(), "BUG-4-w.md".into()],
+            ),
+        ];
+        let got = next_display_number_with_claims(&local, &claims);
+        assert_eq!(got.number, 5);
+        assert_eq!(
+            got.skipped,
+            vec![
+                (2, vec!["feat-a".to_string(), "origin/feat-b".to_string()]),
+                (4, vec!["origin/feat-b".to_string()]),
+            ]
+        );
+        assert_eq!(next_display_number_with_claims(&local, &[]).number, 2);
     }
 
     #[test]

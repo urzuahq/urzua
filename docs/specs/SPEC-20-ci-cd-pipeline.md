@@ -2,10 +2,10 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Accepted
 Date: 2026-09-10
-Version: '0.3'
+Version: '0.4'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
-Implements: ADR-13, ADR-29, ADR-45
+Implements: ADR-13, ADR-45
 Parent: —
 ---
 # SPEC-20 — CI/CD pipeline
@@ -165,3 +165,4 @@ unrepresentable — including on a re-run, which replays the original payload.
 > | 2026-09-10 | Documented two fixes found on this mechanism's first real run, same-day as `ADR-45` merged: `BUG-14` (`prepare-release`'s missing `Cargo.lock` regeneration) and `BUG-15` (`ci.yml`'s changeset gate missing `labeled`/`unlabeled` trigger types). **Why:** this spec's own standing purpose is to stay the accurate, buildable reference — leaving it describing the pre-fix mechanism the same day it changed would be the exact doc-drift gap this project's own `AGENTS.md` now explicitly guards against. | **substantive** |
 > | 2026-09-16 | Corrected three claims, all disproved by the `v0.2.1` run: the `no-changeset` no-op (`BUG-33`), `verify-ci`'s "it gated the merge" justification (`main` is unprotected), and the manual gate being one step rather than two (`BUG-34`). **Why:** this spec's standing purpose is to be the accurate, buildable reference, and each of these read as settled while being false -- the kind of claim that survives precisely because it is written down. | **substantive** |
 > | 2026-09-16 | Rewrote the release section: `publish-release.yml` now owns the whole publish (tag, release, binaries, upload) and `release.yml` is deleted. Documented the previously-undocumented manual approval the release PR's own `ci` run requires. **Why:** `BUG-28` -- the tag is bot-pushed, GitHub never triggers a workflow from a `GITHUB_TOKEN` event, so the separate tag-triggered build workflow silently never ran and `v0.2.0` published with zero binaries. This spec described a coupling that did not exist. | **substantive** |
+> | 2026-11-02 | Bumped to `0.4`. `Implements` no longer lists `ADR-29`. **Why:** `ADR-29` is Superseded by `ADR-45`, which was already listed and carries forward `knope`, the fragment format and the versioned-files config unchanged; `pointer.target-status` flagged the stale target. The body still cites `ADR-29` in prose for the fragment format and the changeset gate, which is lineage, not a claim to implement it. | **structural** |

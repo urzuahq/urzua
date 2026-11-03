@@ -6,10 +6,11 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use urzua_core::header::{self, HeaderShape};
 use urzua_core::report::{CouldNotRun, Notice, NoticeSeverity, Report, ReportStatus};
 
 use crate::discovery::find_repo_root;
-use crate::{emit, NOTICE_RULE_APPLICABILITY};
+use crate::{emit, NOTICE_HEADER_SHAPE, NOTICE_RULE_APPLICABILITY};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProposedRecordType {
@@ -20,6 +21,10 @@ pub struct ProposedRecordType {
     /// agree on one. `None` means the corpus uses the bare `NNNN-slug` shape,
     /// which carries no identity a rule can read (BUG-61).
     pub prefix: Option<String>,
+    /// The header shape the type's existing records parse under (BUG-151), so
+    /// the first `check` reads the corpus. `yaml-frontmatter` for a type whose
+    /// records parse under no shape, and for anything not yet inspected.
+    pub header_shape: HeaderShape,
 }
 
 /// Propose one record type per directory holding record-shaped files. Adopt
@@ -95,9 +100,134 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
                 dir: dir.to_string_lossy().to_string(),
                 record_count,
                 prefix,
+                header_shape: HeaderShape::YamlFrontmatter,
             }
         })
         .collect()
+}
+
+/// The shapes init can propose, in tie-break order: the destination shape
+/// first, then the two deprecated ones (ADR-33).
+const CANDIDATE_SHAPES: [HeaderShape; 3] = [
+    HeaderShape::YamlFrontmatter,
+    HeaderShape::BoldList,
+    HeaderShape::Blockquote,
+];
+
+fn shape_name(shape: HeaderShape) -> &'static str {
+    match shape {
+        HeaderShape::Blockquote => "blockquote",
+        HeaderShape::BoldList => "bold-list",
+        HeaderShape::YamlFrontmatter => "yaml-frontmatter",
+        HeaderShape::None => "none",
+    }
+}
+
+/// The shape one record's content parses under, using the real header parser.
+/// The two line-anchored shapes can both match a record (a Y-statement `>`
+/// quote in the body, say), so the shape whose region yields the most fields
+/// wins: a header is the region that carries the fields, and a stray quote
+/// carries few. Equal field counts fall back to the earliest region start,
+/// then to candidate order. Nothing here reads a field name.
+///
+/// One exception comes first: YAML frontmatter that parses with fields at the
+/// very start of the document is the header outright. Its position is
+/// structural, so `- **Key:**` bullets in the body cannot outvote it.
+fn shape_of(content: &str) -> Option<HeaderShape> {
+    let yaml = header::parse_with_shape(content, HeaderShape::YamlFrontmatter);
+    if matches!(yaml.region, Some((1, _))) && !yaml.fields.is_empty() {
+        return Some(HeaderShape::YamlFrontmatter);
+    }
+    CANDIDATE_SHAPES
+        .iter()
+        .filter_map(|shape| {
+            let parsed = header::parse_with_shape(content, *shape);
+            parsed
+                .region
+                .filter(|_| !parsed.fields.is_empty())
+                .map(|(start, _)| (std::cmp::Reverse(parsed.fields.len()), start, *shape))
+        })
+        .min_by_key(|(fields, start, _)| (*fields, *start))
+        .map(|(_, _, shape)| shape)
+}
+
+/// Set each proposed type's `header_shape` from its existing records
+/// (BUG-151), returning a notice for every type whose records disagree or
+/// parse under no shape. Reads only; a record that cannot be read counts as
+/// parsing under no shape.
+pub fn infer_header_shapes(
+    repo_root: &Path,
+    discovered: &[PathBuf],
+    proposed: &mut [ProposedRecordType],
+) -> Vec<Notice> {
+    let mut notices = Vec::new();
+    for rt in proposed.iter_mut() {
+        let mut tally: Vec<(HeaderShape, usize)> =
+            CANDIDATE_SHAPES.iter().map(|s| (*s, 0)).collect();
+        let mut unparsed = 0usize;
+        for rel in discovered {
+            let in_type = rel.parent() == Some(Path::new(&rt.dir))
+                && rel
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(is_record_shaped);
+            if !in_type {
+                continue;
+            }
+            let shape = std::fs::read_to_string(repo_root.join(rel))
+                .ok()
+                .and_then(|content| shape_of(&content));
+            match shape {
+                Some(shape) => {
+                    if let Some(entry) = tally.iter_mut().find(|(s, _)| *s == shape) {
+                        entry.1 += 1;
+                    }
+                }
+                None => unparsed += 1,
+            }
+        }
+
+        // Majority; a tie goes to the earlier candidate (the destination shape).
+        let mut best: Option<(HeaderShape, usize)> = None;
+        for (shape, n) in &tally {
+            if *n > 0 && best.is_none_or(|(_, b)| *n > b) {
+                best = Some((*shape, *n));
+            }
+        }
+        let Some((chosen, _)) = best else {
+            rt.header_shape = HeaderShape::YamlFrontmatter;
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_HEADER_SHAPE.to_string(),
+                message: format!(
+                    "none of the {} record(s) in {} parse under any header shape, so yaml-frontmatter is proposed; `check` will report each record's header as unreadable until the headers are written or the shape is set by hand",
+                    rt.record_count, rt.dir
+                ),
+            });
+            continue;
+        };
+        rt.header_shape = chosen;
+
+        let split: Vec<String> = tally
+            .iter()
+            .filter(|(_, n)| *n > 0)
+            .map(|(s, n)| format!("{n} {}", shape_name(*s)))
+            .chain((unparsed > 0).then(|| format!("{unparsed} unreadable")))
+            .collect();
+        if split.len() > 1 {
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_HEADER_SHAPE.to_string(),
+                message: format!(
+                    "records in {} use more than one header shape ({}); {} is proposed as the majority, and the others will not be read under it",
+                    rt.dir,
+                    split.join(", "),
+                    shape_name(chosen)
+                ),
+            });
+        }
+    }
+    notices
 }
 
 fn proposed_name(dir: &Path) -> String {
@@ -136,11 +266,14 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         let mut entry = Mapping::new();
         entry.insert(Value::from("dir"), Value::from(rt.dir.as_str()));
         entry.insert(Value::from("required_fields"), Value::Sequence(vec![]));
-        // ADR-33: recommend the destination shape for any newly-adopted type
-        // going forward, regardless of what shape the existing corpus happens
-        // to use -- adopt mode proposes where to grow, not a preservation of
-        // however the corpus already looks.
-        entry.insert(Value::from("header_shape"), Value::from("yaml-frontmatter"));
+        // The shape the type's records already use (BUG-151, ADR-33's
+        // amendment), so the first `check` reads the corpus. A deprecated
+        // shape is steered toward migration by `header.deprecated-shape`,
+        // which this config also declares.
+        entry.insert(
+            Value::from("header_shape"),
+            Value::from(shape_name(rt.header_shape)),
+        );
         // Without this, the prefix defaults to the type name upper-cased --
         // which is the directory's name, not the filenames' -- and every rule
         // that reads a record's identity from its filename silently examines
@@ -186,7 +319,15 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
     root.insert(Value::from("record_types"), Value::Mapping(types));
     root.insert(Value::from("rules"), Value::Mapping(rules));
 
-    let body = yaml_serde::to_string(&Value::Mapping(root)).unwrap_or_default();
+    // `.unwrap()`, not a swallowed default: `root` is built entirely from
+    // plain strings/sequences/mappings, so serialization failing here would
+    // be a bug in this function, not a config an adopter's input could
+    // trigger. A silent empty body would write a config with no
+    // `record_types`/`rules` and still report `written: true` -- exactly
+    // the disclosure failure (`ADR-55`) this project otherwise closes by
+    // panicking loudly (matching `emit()`'s own `serde_json::to_string_pretty(..).unwrap()`),
+    // which the panic hook turns into structured JSON rather than raw stderr.
+    let body = yaml_serde::to_string(&Value::Mapping(root)).unwrap();
     format!("# Generated by `urzua init` (adopt mode). Nothing was moved.\n\n{body}")
 }
 
@@ -235,7 +376,7 @@ pub fn run(dry_run: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let proposed = detect_record_types(&discovered.paths);
+    let mut proposed = detect_record_types(&discovered.paths);
     if proposed.is_empty() {
         return emit(&CouldNotRun::from(
             "no record-shaped files found in the tracked set -- nothing to adopt",
@@ -259,7 +400,6 @@ pub fn run(dry_run: bool) -> ExitCode {
         }
     }
 
-    let rendered = render_config_yaml(&proposed);
     let relative_config_path = config_path
         .strip_prefix(&repo_root)
         .unwrap_or(&config_path)
@@ -271,7 +411,7 @@ pub fn run(dry_run: bool) -> ExitCode {
     // `urzua audit` exits 2 immediately after this command (`BUG-99`).
     // Correct, not a bug in `audit`'s exit-code policy (`BUG-77`) -- but the
     // adopter's documented first two commands should not surprise them.
-    let mut notices = Vec::new();
+    let mut notices = infer_header_shapes(&repo_root, &discovered.paths, &mut proposed);
     if proposed.iter().all(|rt| rt.prefix.is_none()) {
         notices.push(Notice {
             severity: NoticeSeverity::Warning,
@@ -279,6 +419,8 @@ pub fn run(dry_run: bool) -> ExitCode {
             message: "no proposed type carries a filename prefix, so audit's rule set (pointer.resolution, relation.supersession-reciprocity) is entirely identity-dependent and none of it is declared here -- `urzua audit` will report not-run (exit 2) until at least one type adopts a prefix (see ADR-36)".to_string(),
         });
     }
+
+    let rendered = render_config_yaml(&proposed);
 
     if dry_run {
         return emit(&InitReport {
@@ -380,6 +522,7 @@ mod tests {
             dir: hostile.to_string(),
             record_count: 1,
             prefix: None,
+            header_shape: HeaderShape::YamlFrontmatter,
         }]);
         let parsed = urzua_core::config::parse(&rendered)
             .expect("init must never emit a config it cannot read back");
@@ -436,6 +579,7 @@ mod tests {
             dir: "docs/adr".to_string(),
             record_count: 1,
             prefix: None,
+            header_shape: HeaderShape::YamlFrontmatter,
         }]);
         assert!(!rendered.contains("claim.status-agreement"), "{rendered}");
         assert!(!rendered.contains("pointer.target-status"), "{rendered}");
@@ -453,6 +597,7 @@ mod tests {
                 dir: format!("docs/{n}"),
                 record_count: 1,
                 prefix: None,
+                header_shape: HeaderShape::YamlFrontmatter,
             })
             .collect();
         assert_eq!(render_config_yaml(&proposed), render_config_yaml(&proposed));
@@ -465,6 +610,7 @@ mod tests {
             dir: "decisions".to_string(),
             record_count: 2,
             prefix: Some("ADR".to_string()),
+            header_shape: HeaderShape::YamlFrontmatter,
         }];
         let yaml = render_config_yaml(&proposed);
         assert!(
@@ -482,12 +628,14 @@ mod tests {
                 dir: "docs/adr".to_string(),
                 record_count: 2,
                 prefix: Some("ADR".to_string()),
+                header_shape: HeaderShape::YamlFrontmatter,
             },
             ProposedRecordType {
                 name: "note".to_string(),
                 dir: "docs/notes".to_string(),
                 record_count: 1,
                 prefix: None,
+                header_shape: HeaderShape::YamlFrontmatter,
             },
         ];
         let yaml = render_config_yaml(&proposed);
@@ -505,6 +653,7 @@ mod tests {
             dir: "doc/adr".to_string(),
             record_count: 9,
             prefix: None,
+            header_shape: HeaderShape::YamlFrontmatter,
         }];
         let yaml = render_config_yaml(&proposed);
         assert!(
@@ -517,6 +666,7 @@ mod tests {
             "pointer.resolution",
             "pointer.target-status",
             "narrative-field.stale",
+            "relation.target-status-undeclared",
         ] {
             assert!(
                 !yaml.contains(rule),

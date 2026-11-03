@@ -11,7 +11,7 @@ genuinely open rather than settled.
 ```sh
 git clone https://github.com/urzuahq/urzua && cd urzua
 make ci        # exactly what CI runs: fmt-check, clippy, build, test
-make hooks-install   # optional: fmt-check + clippy on every push
+make hooks-install   # optional: fmt-check, clippy and `urzua check` on every push
 ```
 
 `make help` lists every target. Native `cargo` commands work fine inside `rust/` for anyone who
@@ -23,6 +23,15 @@ Every rule lives in `rust/crates/urzua-core/src/rules.rs`, returns a `(RuleExecu
 pair, and reports the number of records it actually examined — not just whether it ran. **Every rule
 ships with a planted-violation test**: construct the exact defect the rule exists to catch, and
 assert it's caught. A rule without one is unverified, not trusted, per RFC-11 §5.
+
+## Running the corpus acceptance suite
+
+`cargo test -p urzua-cli --test acceptance` (also part of `make ci`) runs the cases under
+`rust/crates/urzua-cli/tests/acceptance/corpora/`; a new corpus needs only a directory (records,
+`manifest.yaml`, `expectations/*.yaml`), no code. A case marked `known_gap` documents a defect not yet
+fixed and turns red once it is, as a reminder to remove the marker. To also run corpora kept outside
+this repository, set `URZUA_ACCEPTANCE_EXTRA` to a `:`-separated list of directories laid out the same
+way; unset, the runner prints that it skipped them. See SPEC-4.
 
 ## What's useful right now
 

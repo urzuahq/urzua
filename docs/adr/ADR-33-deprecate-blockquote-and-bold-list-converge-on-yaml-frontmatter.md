@@ -105,6 +105,27 @@ Nothing else about the original Decision changes: parsing support for `blockquot
 first-time evaluator's existing docs); full removal of that parsing support remains its own,
 separately-decided future step, now tracked as MILE-85 rather than left as prose only.
 
+## Amendment (2026-11-02): adopt mode proposes the shape the corpus already uses
+
+The original Decision had `urzua init`'s adopt mode propose `header_shape = "yaml-frontmatter"` for
+every newly-adopted type, regardless of the shape the corpus uses. That is narrowed: **adopt mode
+proposes the header shape each type's existing records actually use**, and the steer toward the
+destination shape is carried by `header.deprecated-shape`, which `init` declares in every config it
+writes, not by `init` writing a shape the corpus does not use. A type whose records disagree gets the
+majority shape and an `init` notice naming the split; a type whose records parse under no shape, and a
+type with no records yet, keep `yaml-frontmatter`.
+
+**Why.** A real adopter corpus of several hundred bold-list records read zero records on its first
+`check`: the config `init` wrote declared `yaml-frontmatter`, so every record was reported as having no
+header, and the evaluation this ADR's own Decision protects ("someone evaluating Urzua for the first
+time needs `check` to run against their existing, unmodified docs") failed on the first command
+(BUG-151). A recommendation that makes the tool unable to read the corpus is not a recommendation the
+adopter can act on; the deprecation rule makes the same recommendation while `check` still works.
+
+The original Decision, Consequences and Status above stand unchanged as the history of what was
+decided on 2026-09-07. Nothing else about this ADR changes: both flat shapes stay deprecated, parsing
+support stays, and full removal remains separately decided.
+
 ## References
 
 - RFC-5 — the claim-graph destination this ADR's evidence rests on.

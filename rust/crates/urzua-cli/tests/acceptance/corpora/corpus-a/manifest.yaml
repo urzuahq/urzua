@@ -1,0 +1,17 @@
+# What each fixture was built to exhibit. Never reflow or normalize these
+# files: the whitespace, wrapping and punctuation are the material under test.
+fixtures:
+  - path: records/0001-pick-a-queue.md
+    irregularity: >-
+      bold-list header (`- **Status:** ...`) preceded in the BODY by a six-line
+      `> **Decision (Y-statement):**` blockquote, and a later body line that
+      mentions `**Status:**` in prose.
+  - path: records/0002-pick-a-cache.md
+    irregularity: >-
+      same shape with a two-line blockquote; a second record so shape inference
+      sees more than one file.
+  - path: .urzua/declared-bold-list.yaml
+    irregularity: >-
+      the config an adopter would hand-write (`header_shape: bold-list`,
+      Status required); not a record. No `.urzua/config.yaml` exists on purpose,
+      so `init` has something to propose.
