@@ -2,6 +2,7 @@
 //! directories, and required header fields. Phased -- this is the slice
 //! Phase A of `urzua check` needs, not the full spec.
 
+use crate::document_model::DocumentModel;
 use crate::header::{HeaderLayout, HeaderShape};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -442,6 +443,12 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("record type '{record_type}' declares an invalid `{key}`: {reason}")]
+    InvalidDocumentModel {
+        record_type: String,
+        key: &'static str,
+        reason: String,
+    },
 }
 
 /// Why a declared `prefix` cannot head a recognized `PREFIX-N-slug.md`
@@ -567,7 +574,26 @@ pub fn rule_requires_options(rule: &str) -> bool {
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
-    let config: Config = yaml_serde::from_str(content)?;
+    parse_with_document_models(content).map(|(config, _)| config)
+}
+
+/// `parse`, plus each record type's declared document model (RFC-33 layer 1,
+/// MILE-98). The declaration is validated here, so every command that loads a
+/// config rejects a bad one. It is returned beside `Config` rather than inside
+/// `RecordTypeConfig`, which is built field by field in many places; folding it
+/// in is a mechanical follow-up once nothing else constructs that struct.
+pub fn parse_with_document_models(
+    content: &str,
+) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
+    // A config declaring no document model is deserialized straight from the
+    // text, exactly as before, so its errors keep their line numbers.
+    let mut value: yaml_serde::Value = yaml_serde::from_str(content)?;
+    let models = crate::document_model::split_declarations(&mut value)?;
+    let config: Config = if models.is_empty() {
+        yaml_serde::from_str(content)?
+    } else {
+        yaml_serde::from_value(value)?
+    };
     if config.schema_version != CURRENT_SCHEMA_VERSION {
         return Err(ConfigError::UnrecognizedSchemaVersion {
             found: config.schema_version,
@@ -687,12 +713,76 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
             }
         }
     }
-    Ok(config)
+    Ok((config, models))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn model_cfg(type_body: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n{type_body}"
+        )
+    }
+
+    #[test]
+    fn a_config_without_a_document_model_loads_unchanged() {
+        let (c, models) = parse_with_document_models(&model_cfg("")).unwrap();
+        assert!(models.is_empty());
+        assert_eq!(c.record_types["adr"].required_fields, ["Status"]);
+        assert_eq!(
+            parse(&model_cfg("")).unwrap().record_types["adr"].dir,
+            "docs/adr"
+        );
+    }
+
+    #[test]
+    fn a_declared_document_model_loads_beside_the_ordinary_keys() {
+        let body = "    header_shape: yaml-frontmatter\n    identity: {from: filename, pattern: '^ADR-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: yaml-frontmatter}\n    sections: {from: headings, depth: 2, items: true}\n";
+        let (c, models) = parse_with_document_models(&model_cfg(body)).unwrap();
+        assert_eq!(
+            c.record_types["adr"].header_shape,
+            HeaderShape::YamlFrontmatter
+        );
+        assert_eq!(c.record_types["adr"].required_fields, ["Status"]);
+        assert_eq!(models["adr"].sections.as_ref().unwrap().depth, 2);
+        assert_eq!(
+            models["adr"].fields.as_ref().unwrap().from,
+            crate::document_model::FieldsSource::YamlFrontmatter
+        );
+    }
+
+    #[test]
+    fn parse_accepts_a_declared_model_instead_of_rejecting_the_keys() {
+        parse(&model_cfg("    sections: {from: headings}\n")).unwrap();
+    }
+
+    #[test]
+    fn an_invalid_declaration_fails_the_load_naming_the_type_and_key() {
+        let e = parse(&model_cfg("    sections: {from: headings, depth: 9}\n")).unwrap_err();
+        assert!(matches!(e, ConfigError::InvalidDocumentModel { .. }), "{e}");
+        let m = e.to_string();
+        assert!(
+            m.contains("adr") && m.contains("sections") && m.contains("depth"),
+            "{m}"
+        );
+    }
+
+    #[test]
+    fn other_unknown_keys_are_still_refused_beside_a_declaration() {
+        let body = "    sections: {from: headings}\n    bogus: 1\n";
+        let e = parse(&model_cfg(body)).unwrap_err();
+        assert!(e.to_string().contains("bogus"), "{e}");
+        let e = parse(&model_cfg("    bogus: 1\n")).unwrap_err();
+        assert!(e.to_string().contains("bogus"), "{e}");
+    }
+
+    #[test]
+    fn a_declaration_outside_a_record_type_is_not_accepted() {
+        let yaml = "schema_version: 2\nsections: {from: headings}\nrecord_types:\n  adr:\n    dir: docs/adr\n";
+        assert!(parse(yaml).is_err());
+    }
 
     /// A hand-written `Serialize` that disagrees with its `Deserialize` twin
     /// would write configs this build cannot read back, and nothing else would

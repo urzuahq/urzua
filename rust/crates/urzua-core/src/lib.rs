@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod document_model;
 pub mod field_state;
 pub mod fix;
 pub mod graph;
@@ -24,6 +25,7 @@ mod property;
 pub mod record;
 pub mod report;
 pub mod rules;
+pub mod section;
 pub mod values;
 pub mod waiver;
 
