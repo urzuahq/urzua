@@ -28,6 +28,8 @@ pub enum DiscoveryError {
         status: std::process::ExitStatus,
         stderr: String,
     },
+    #[error("{base:?} is not a valid base ref: a ref may not begin with `-`")]
+    InvalidRef { base: String },
     #[error("`git {args}` output was not valid UTF-8")]
     InvalidUtf8 { args: String },
 }
@@ -54,6 +56,9 @@ pub enum DiscoverySource {
     /// Explicit paths on argv, read as given (`BUG-24`): git-tracked status
     /// is not consulted at all, unlike `GitTracked`'s default sweep.
     Argv,
+    /// Only the records changed against a base ref (`MILE-123`): the tracked
+    /// set is still what is indexed, the diff is what is reported on.
+    GitDiff,
 }
 
 /// Discover files git tracks or has staged, at or below `repo_root`. Never a
@@ -118,6 +123,47 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
         staged_deletions,
         source: DiscoverySource::GitTracked,
     })
+}
+
+/// Every path that differs between the merge base of `base` and `HEAD` and
+/// the working tree, repository-relative (`MILE-123`). Merge base, not the
+/// ref's tip: a pull request must not be charged for what its base branch
+/// gained since the fork. The working tree, not `HEAD`: staged and unstaged
+/// edits to tracked files are changes a local run must see. Untracked files
+/// are not reported, matching the tracked-only discovery (`ADR-6`).
+///
+/// Renames are reported as a deletion plus an addition (`--no-renames`), so
+/// the new name is always listed on its own. A deleted path is listed too;
+/// the caller intersects with what discovery returns.
+pub fn changed_paths_since(
+    repo_root: &Path,
+    base: &str,
+) -> Result<std::collections::HashSet<PathBuf>, DiscoveryError> {
+    // A ref beginning with `-` would be read by git as an option.
+    if base.starts_with('-') {
+        return Err(DiscoveryError::InvalidRef {
+            base: base.to_string(),
+        });
+    }
+    let merge_base = run_git(repo_root, &["merge-base", base, "HEAD"])?;
+    let merge_base = merge_base.trim();
+    let diff = run_git(
+        repo_root,
+        &[
+            "diff",
+            "--name-status",
+            "--no-renames",
+            "-z",
+            merge_base,
+            "--",
+        ],
+    )?;
+    let mut changed = std::collections::HashSet::new();
+    let mut fields = diff.split('\0').filter(|f| !f.is_empty());
+    while let (Some(_status), Some(path)) = (fields.next(), fields.next()) {
+        changed.insert(PathBuf::from(path));
+    }
+    Ok(changed)
 }
 
 /// Read a file's content as UTF-8. The only I/O `urzua-core`'s parser needs;

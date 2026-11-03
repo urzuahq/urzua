@@ -33,3 +33,4 @@ not only what it found.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `SPEC-2` documents `git-diff` scope as not built; a pull-request gate over a large corpus needs it, so it is now planned. | **substantive** |
+> | 2026-11-03 | Built on `urzua check --base <ref>`: merge-base to working tree, reporting-scope only, `scope.base` added, refused alongside an untracked named file. `SPEC-2` revised to match. **Why:** the milestone fixed the semantics (reporting scope, full-corpus index, base reported) but not the flag, the comparison point or the interaction with path arguments; the narrowest reading of each was taken and recorded in `SPEC-2` §Discovery. The `MILE-124` hand-off (changed paths alongside the full index) is not built here: no rule consumes it yet. | **substantive** |

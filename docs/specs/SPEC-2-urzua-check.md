@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -134,7 +134,7 @@ the default sweep, and only a path naming one file precisely bypasses the tracke
 | `scope.source` | Meaning | `base` | Produced today |
 |---|---|---|---|
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
-| `git-diff` | changed against a base ref | the ref | no — the mode is not built |
+| `git-diff` | changed against a base ref | the ref | **yes** (`MILE-123`) |
 | `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
 | `none` | nothing selected | `null` | no |
 
@@ -142,6 +142,30 @@ The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of
 type produced them. Only variants the tool can actually emit exist on that enum; the rest of this
 table is the declared vocabulary those modes will use when built, and is marked so a consumer is not
 misled into branching on a value no run produces.
+
+`base` is always present in `scope`: the ref as the caller gave it for a `git-diff` run, `null` for
+every other source.
+
+**`git-diff` scope** (`MILE-123`) is selected by `urzua check --base <ref>`. It is a reporting scope,
+not a reading scope, exactly as a path argument is (`BUG-60`):
+
+- The changed set is every path that differs between the merge base of `<ref>` and `HEAD` and the
+  working tree, so a branch is not charged for what its base gained since the fork, and staged and
+  unstaged edits to tracked files count. Untracked files never do (the tracked-only guarantee
+  above). A rename is a deletion plus an addition, and a deleted path is simply not a record any
+  more.
+- `files_examined`, `records_read_by_any_rule` and the findings are limited to changed records.
+  Reference resolution and every other corpus-wide computation still index the whole tracked
+  corpus, so an unchanged target is never reported missing. A finding about the configuration, and
+  one from a rule that reports outside the corpus (`RULES_REPORTING_OUTSIDE_THE_CORPUS`), survive
+  the scope exactly as they survive a path argument (`BUG-86`, `BUG-121`).
+- Path arguments still apply and narrow the changed set further.
+- A run in which nothing changed examines nothing and reports `not-run`, with `source` and `base`
+  still naming what was asked for. A ref that does not resolve, or one with no merge base with
+  `HEAD`, is a could-not-run (exit 2), never an empty selection.
+- `--base` together with a directly-named file git does not track is refused (exit 2): the diff
+  lists tracked paths only, so the file could not be examined, and dropping it silently is the
+  failure `BUG-24` fixed.
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
@@ -253,7 +277,7 @@ but the JSON object below, so a consumer never has to find it inside prose.
       "status": "not-enabled"
     }
   ],
-  "scope": { "source": "tracked-sweep", "record_types": ["adr", "bug", "rfc"] },
+  "scope": { "source": "tracked-sweep", "base": null, "record_types": ["adr", "bug", "rfc"] },
   "blocking": false,
   "findings": [
     {
@@ -372,3 +396,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-23 | `argv` marked produced, scoped to a directly-named file; the Discovery prose states the directory-argument exception explicitly. **Why:** `BUG-24` fixed the gap this table had marked unbuilt -- an explicit argv path naming one file now overrides the tracked-only filter, while a directory argument still respects "never a raw directory walk" (`ADR-6`), which the table's blanket "explicit paths ... override discovery" line did not previously distinguish. | **substantive** |
 > | 2026-09-23 | The rule table is now generated, not hand-maintained: `urzua_core::rules::RULE_METADATA` is the single source, `scripts/generate-rule-table.py` renders it between `<!-- rule-table:start/end -->` markers, `make rule-table-check` (wired into `make ci`) fails the build on drift. Backfilled the two rows `ALL_RULES` had gained since the last manual sync (`config.known-fields-declaration-missing`, `relation.target-status-undeclared`) and corrected `config.header-none-has-no-required-fields`'s description for its round-22 broadening. **Why:** `BUG-52` named this as the real fix -- not a comparison rule re-deriving the same fact a second time, but collapsing to one source so there is nothing left to drift. `BUG-52` is `Fixed`. | **substantive** |
 > | 2026-11-02 | `pointer.target-status` gains the optional `fields` option, restricting the rule to named declared pointer/narrative fields; the rule's row in the generated table is updated. **Why:** one `not_in` list judged lineage (`Derives-from`) and dependency (`Implements`) fields alike, so a Superseded lineage target warned as stale (`BUG-172`). Omitted, the rule is unchanged. | **substantive** |
+> | 2026-11-03 | Bumped to `0.12`. `git-diff` marked produced: `urzua check --base <ref>` reports only on records changed since the merge base of the ref and `HEAD` (working tree included), `scope` gains an always-present `base` (`null` unless `git-diff`), and §Discovery states the mode's contract, including that it is refused alongside an untracked named file. **Why:** `MILE-123` -- a pull-request gate over a large corpus should not sweep every record, and the table had reserved the value while marking it unbuilt so no consumer would branch on it before a run could produce it. | **substantive** |

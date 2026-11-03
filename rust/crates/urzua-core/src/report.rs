@@ -343,11 +343,18 @@ pub enum ScopeSource {
     /// Explicit paths on argv, read as given (`BUG-24`) -- distinct from
     /// `TrackedSweep` because a path git does not track is still examined.
     Argv,
+    /// Only the records changed against a base ref (`MILE-123`); the ref is
+    /// reported in [`ScopeInfo::base`].
+    GitDiff,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ScopeInfo {
     pub source: ScopeSource,
+    /// The ref a `git-diff` run compared against, as the caller gave it;
+    /// `null` for every other source -- a full sweep legitimately has none
+    /// (SPEC-2).
+    pub base: Option<String>,
     pub record_types: Vec<String>,
 }
 
@@ -755,6 +762,7 @@ mod tests {
             rules_executed: vec![],
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
+                base: None,
                 record_types: vec![],
             },
             blocking: false,

@@ -190,7 +190,7 @@ fn read_claim_files(
     Ok(out)
 }
 
-pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
+pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<String>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
         Err(e) => return emit(&CouldNotRun::from(e)),
@@ -223,6 +223,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             Ok(e) => e,
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
+        if !extra.is_empty() && base.is_some() {
+            // The diff lists tracked paths only, so a named file outside the
+            // tracked set could never be examined: refusing is the alternative
+            // to dropping it in silence (`BUG-24`'s failure shape).
+            return emit(&CouldNotRun::from(
+                "--base cannot be combined with a named file git does not track; \
+                 drop --base or track the file"
+                    .to_string(),
+            ));
+        }
         if !extra.is_empty() {
             discovered.paths.extend(extra);
             discovered.paths.sort();
@@ -231,7 +241,23 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }
     }
 
-    let scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
+    // Computed against the full tracked set, then used only to narrow what is
+    // reported on: the corpus a pointer resolves against stays whole (`MILE-123`).
+    let changed = match &base {
+        Some(base) => match urzua_io::changed_paths_since(&repo_root, base) {
+            Ok(c) => {
+                discovered.source = urzua_io::DiscoverySource::GitDiff;
+                Some(c)
+            }
+            Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+        },
+        None => None,
+    };
+
+    let mut scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
+    if let Some(changed) = &changed {
+        scoped.retain(|p| changed.contains(p));
+    }
 
     // A path argument narrows what is *reported on*. It must not narrow the
     // corpus a pointer resolves against: a target outside the requested path
@@ -559,6 +585,18 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         });
     }
 
+    // A diff run reports only on what changed. The same exemptions as a path
+    // scope apply: a finding about the config, or from a rule that reports
+    // outside the corpus, is about the run rather than a record, and dropping
+    // it would be `BUG-86`'s failure again.
+    if let Some(changed) = &changed {
+        findings.retain(|f| {
+            f.file == config_path.as_path()
+                || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
+                || changed.contains(f.file.as_path())
+        });
+    }
+
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
     let waivers = urzua_core::waiver::load_waivers(&records);
@@ -604,6 +642,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),
+            base: base.clone(),
             record_types: config.record_types.keys().cloned().collect(),
         },
         blocking,
