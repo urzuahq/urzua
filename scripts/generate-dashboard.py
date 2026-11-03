@@ -289,6 +289,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sa
   display: flex; flex-direction: column; gap: 24px;
   position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
 }
+@media (max-width: 900px) { .rail { position: static; max-height: none; overflow: visible; border-right: none; border-bottom: 1px solid var(--border); } }
 .wordmark { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--accent); letter-spacing: 0.01em; }
 .wordmark small {
   display: block; font-family: var(--sans); font-size: 11px; font-weight: 500;
