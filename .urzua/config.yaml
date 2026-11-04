@@ -26,6 +26,10 @@ record_types:
       failure: ["Rejected", "Superseded"]
       implementable: ["Accepted"]
       claim_retained: ["Superseded"]
+      # The type's placeholder vocabulary (MILE-153): whole values only. It
+      # feeds field.pending and makes status.require count them as missing, so
+      # an Accepted ADR whose Deciders reads "Unknown" is not decided.
+      pending: ["pending", "unknown", "none recorded"]
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"
