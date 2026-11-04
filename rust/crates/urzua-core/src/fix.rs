@@ -88,6 +88,7 @@ pub fn detect_repairs(
         // handed in as plain data, the same shape `embodiment_consistency`
         // takes, so this function stays pure (MILE-15).
         let computed = compute_embodiment(
+            &config.embodiment,
             &realized_by_value.map(parse_realized_by).unwrap_or_default(),
             drifted.contains(&record.path),
             cited_by_code,
@@ -95,7 +96,8 @@ pub fn detect_repairs(
         );
         let stated = stated.trim();
         // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
-        let keeps_stated_drift = fresh_drift.contains(&record.path) && stated == "Drift detected";
+        let keeps_stated_drift =
+            fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated);
         if stated != computed && !keeps_stated_drift {
             repairs.push(Repair {
                 record: record.path.clone(),
@@ -294,6 +296,7 @@ pub struct Rebaseline {
     pub pins: Vec<PinDrift>,
 }
 
+// Implements: ADR-67 (attributed re-baselining of a pin)
 /// Lists the records whose pinned locators changed. Pure: `current_hash` is
 /// the CLI's content-hash lookup for a repo-relative locator path. A locator
 /// whose file cannot be read is not a stale pin (`embodiment.locator-exists`
@@ -346,6 +349,7 @@ pub fn detect_rebaselines(
     (population, found)
 }
 
+// Implements: ADR-67 (attributed re-baselining of a pin)
 /// New file content for re-pinning one record: each stale pin on the
 /// `Realized-by` line becomes the current hash and nothing else on the line
 /// moves, then one revision-log row names who attested and why. Pure. Fails
@@ -439,6 +443,7 @@ mod tests {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -559,12 +564,14 @@ mod tests {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),
                 crate::config::RecordTypeConfig {
                     exclude_files: Vec::new(),
                     dir: "docs/adr".to_string(),
+                    extra_dirs: Vec::new(),
                     identity: None,
                     fields: None,
                     sections: None,

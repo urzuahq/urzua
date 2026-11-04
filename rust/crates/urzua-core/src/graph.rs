@@ -157,6 +157,7 @@ mod tests {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -170,12 +171,14 @@ mod tests {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),
                 crate::config::RecordTypeConfig {
                     exclude_files: Vec::new(),
                     dir: "docs/x".to_string(),
+                    extra_dirs: Vec::new(),
                     identity: None,
                     fields: None,
                     sections: None,

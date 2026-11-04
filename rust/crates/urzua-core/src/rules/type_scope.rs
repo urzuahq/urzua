@@ -18,7 +18,8 @@ pub fn type_record_outside_declared_dir(
     let dirs: Vec<std::path::PathBuf> = config
         .record_types
         .values()
-        .map(|t| std::path::PathBuf::from(&t.dir))
+        .flat_map(|t| t.all_dirs())
+        .map(std::path::PathBuf::from)
         .collect();
 
     // Eligible: every tracked, record-shaped path below a declared dir. A
@@ -112,10 +113,11 @@ pub fn type_dir_matches_nothing(
     let names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, names, |name| {
-        let type_dir = std::path::Path::new(&config.record_types[*name].dir);
-        for entry in &config.record_types[*name].exclude_files {
+        let type_config = &config.record_types[*name];
+        for entry in &type_config.exclude_files {
             let present = tracked.iter().any(|p| {
-                p.parent() == Some(type_dir) && p.file_name().is_some_and(|n| n == entry.as_str())
+                type_config.owns_dir(p.parent())
+                    && p.file_name().is_some_and(|n| n == entry.as_str())
             });
             if !present {
                 findings.push(Finding {
@@ -127,8 +129,31 @@ pub fn type_dir_matches_nothing(
                     declared_severity: None,
                     message: format!(
                         "record type '{name}' declares exclude_files entry '{entry}', but no such file is \
-                         directly in '{}' -- the exclusion does nothing; remove it or correct the name",
-                        config.record_types[*name].dir
+                         directly in {} -- the exclusion does nothing; remove it or correct the name",
+                        type_config
+                            .all_dirs()
+                            .map(|d| format!("'{d}'"))
+                            .collect::<Vec<_>>()
+                            .join(" or ")
+                    ),
+                });
+            }
+        }
+        // A declared extra directory that is not there is a declaration that
+        // silently does nothing, even when `dir` still holds records
+        // (`MILE-130`).
+        for dir in &type_config.extra_dirs {
+            if !dir_exists(dir) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    message: format!(
+                        "record type '{name}' declares extra_dirs entry '{dir}', which does not exist -- \
+                         its records are not examined and its ids are not counted in the type's namespace"
                     ),
                 });
             }
@@ -307,6 +332,7 @@ mod tests {
             schema_version: 2,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types,
         };
@@ -326,6 +352,7 @@ mod tests {
             schema_version: 2,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types,
         };

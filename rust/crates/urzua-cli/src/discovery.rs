@@ -82,14 +82,13 @@ pub(crate) fn load_records(
             })
             .transpose()?
             .unwrap_or_default();
-        let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
             // This directory, not this subtree (RFC-35). Prefix matching let
             // two types claim one record whenever their dirs nested, which no
             // schema rule resolved -- and four heuristics accreted in `init`
             // guessing what an adopter meant by the overlap. A directory is a
             // type; `docs/rfc` holds RFCs.
-            if rel_path.parent() != Some(type_dir.as_path()) {
+            if !type_config.owns_dir(rel_path.parent()) {
                 continue;
             }
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
@@ -156,7 +155,7 @@ pub(crate) fn parse_prospective_record(
     let file_name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     for type_name in config.sorted_type_names() {
         let type_config = &config.record_types[type_name];
-        if rel_path.parent() != Some(Path::new(&type_config.dir))
+        if !type_config.owns_dir(rel_path.parent())
             || !urzua_core::record::is_governed_record_filename(file_name)
             || type_config.excludes(file_name)
         {
@@ -434,6 +433,7 @@ pub(crate) fn compute_drifted_records_at(
         .and_then(|s| s.drift_audit_field.as_deref())
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
+    // Implements: ADR-67 (the grace window)
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
     let mut within_grace = |commit: &str| -> bool {
@@ -484,6 +484,7 @@ pub(crate) fn compute_drifted_records_at(
         let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
+        // Implements: ADR-67 (the audit anchor)
         // A declared, well-formed last-audit date replaces the cited file's
         // last change as where the window counts from; a malformed one is
         // reported by the rule and falls back to the file (`MILE-166`).
@@ -514,6 +515,7 @@ pub(crate) fn compute_drifted_records_at(
         for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
             let locator_path = PathBuf::from(&locator);
             if let Some(pinned) = pin {
+                // Implements: ADR-67 (a pin drifts on its content hash)
                 // A pin replaces the git-history heuristic for this locator.
                 let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
                 let changed = current.is_some_and(|c| c != pinned);

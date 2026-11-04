@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZYQQ4ZT1R16B9JVYZ90W
-Status: Planned
+Status: Done
 Phase: '0'
 Track: embodiment-model
+Realized-by: code:rust/crates/urzua-cli/src/discovery.rs, code:rust/crates/urzua-core/src/rules/embodiment.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/evidence_pins_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs
 ---
 # 129 — Decide whether drifted evidence may carry a hash pin, a grace window, and an attributed re-baseline
 
@@ -47,3 +48,4 @@ The combination is settled: `ADR-67` (with its amendment of 2026-11-04) is Accep
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** pins, the grace window and the claim age are built as opt-in options (`embodiment.rs`, `evidence_pins_integration.rs`, merged in #174), drafted in `ADR-67`, which is still Proposed; the attributed re-baseline is not decided or built. A decision milestone is `Done` once the decision is accepted, which the maintainer owns. `Status` stays Planned. | **substantive** |
 > | 2026-11-04 | Checked against its Done condition after re-baselining shipped (#238, `MILE-181`): the three decided opt-ins are built and match `ADR-67`, and so is the attributed re-baseline the earlier row left out. `Status` stays `Planned`, with no `Realized-by`. **Why:** a decision milestone is `Done` once the decision is accepted, and `ADR-67` is still `Proposed`; acceptance is the maintainer's. What remains: accepting `ADR-67` (with its amendment of 2026-11-04), then setting `Realized-by` and `Done` here. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the maintainer accepted `ADR-67` on 2026-11-04, which is this record's Done condition; pins, the grace window, the claim age and the attributed re-baseline are built (#174, #182, #238). Checked against the Done means and the code. | **substantive** |

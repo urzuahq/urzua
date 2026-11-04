@@ -19,7 +19,7 @@ fn is_governed_record(path: &Path, config: &Config) -> bool {
         && config
             .record_types
             .values()
-            .any(|t| path.parent() == Some(Path::new(&t.dir)) && !t.excludes(name))
+            .any(|t| t.owns_dir(path.parent()) && !t.excludes(name))
 }
 
 /// Whether `path` is covered by any entry: a prefix, or a glob (`MILE-158`).

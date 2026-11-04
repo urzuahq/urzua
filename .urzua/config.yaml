@@ -2,6 +2,17 @@ schema_version: 2
 # Warnings fail this repository's own CI (MILE-145): the zero-warning state
 # must not regress. Both checks.yml steps read this, whole-repo and --base.
 fail_on: warning
+# The Embodiment vocabulary (MILE-144): the states evidence computes to, highest
+# tier first, and the evidence category that lifts a record to each. The engine
+# knows no state name; `claims_built` marks the states that say work was built.
+# `Deprecated` and `Inactive` are human-set and stay `sticky_states` below.
+embodiment:
+  drift: Drift detected
+  tiers:
+    - {state: Verified, evidence: test, claims_built: true}
+    - {state: Implemented, evidence: code, claims_built: true}
+    - {state: Specified, evidence: spec}
+  none: Not started
 record_types:
   adr:
     dir: "docs/adr"
@@ -22,11 +33,11 @@ record_types:
       - "Derives-from"
       - "Supersedes / Superseded-by"
     statuses:
-      values: ["Proposed", "Accepted", "Rejected", "Superseded"]
+      values: ["Proposed", "Accepted", "Rejected", "Superseded", "Retired"]
       success: ["Accepted"]
-      failure: ["Rejected", "Superseded"]
+      failure: ["Rejected", "Superseded", "Retired"]
       implementable: ["Accepted"]
-      claim_retained: ["Superseded"]
+      claim_retained: ["Superseded", "Retired"]
       # The type's placeholder vocabulary (MILE-153): whole values, and patterns. It
       # feeds field.pending and makes status.require count them as missing, so
       # an Accepted ADR whose Deciders reads "Unknown" is not decided.
@@ -288,7 +299,7 @@ rules:
   revision-log.change-class-required: error
   narrative-field.stale:
     level: warn
-    terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Done", "WontDo"]
+    terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Retired", "Done", "WontDo"]
   # Maintainer decision 2026-11-04: a 14-day grace window, so a code change can
   # land before its record catches up without breaking a zero-warning build (MILE-129).
   embodiment.consistency:
@@ -315,7 +326,7 @@ rules:
   claim.status-agreement:
     level: error
     claim_paths: [".changeset"]
-    closed_statuses: ["Fixed", "Done", "Accepted", "Rejected", "Superseded", "Withdrawn"]
+    closed_statuses: ["Fixed", "Done", "Accepted", "Rejected", "Superseded", "Retired", "Withdrawn"]
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]

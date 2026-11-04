@@ -1,0 +1,17 @@
+schema_version: 2
+record_types:
+  adr:
+    dir: decisions
+    extra_dirs: [archive]
+    prefix: ADR
+    required_fields: [Status]
+    known_fields: [Implements, Stable-Id]
+    header_shape: yaml-frontmatter
+    pointer_fields: [Implements]
+    narrative_fields: []
+rules:
+  header.required-fields: error
+  pointer.resolution: error
+  filename.identity-pattern: error
+  identity.collision: error
+  type.dir-matches-nothing: error

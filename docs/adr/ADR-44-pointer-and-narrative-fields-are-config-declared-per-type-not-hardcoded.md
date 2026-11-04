@@ -118,7 +118,7 @@ as originally decided rather than silently edited — shipped as `narrative_fiel
 
 ## Amendment (2026-11-04): the configuration file is `.urzua/config.yaml`
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 Wherever the Decision and its amendments say `.urzua/config.toml`, read `.urzua/config.yaml`.
 `ADR-52` moved the configuration to YAML, and the `pointer_fields` and `narrative_fields`
@@ -149,3 +149,4 @@ declarations now live there. The shape of the declarations and the rest of the D
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c922db8ee. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/pointer.rs` 4248952dc30f -> f25158f2e1d0, `rust/crates/urzua-core/src/rules/narrative.rs` ab1662309844 -> 9fff38b1c9f6, `rust/crates/urzua-core/src/graph.rs` 1638485fe98c -> 33b1c278a9ff. Reason: Re-verified: pointer_fields and narrative_fields resolution is unchanged; diffs are severity, exclude_files and fixtures. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Amendment added: `.urzua/config.toml` is now `.urzua/config.yaml` (`ADR-52`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

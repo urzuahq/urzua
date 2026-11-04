@@ -92,12 +92,14 @@ mod tests {
             schema_version: 2,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),
                 crate::config::RecordTypeConfig {
                     exclude_files: Vec::new(),
                     dir: format!("docs/{record_type}"),
+                    extra_dirs: Vec::new(),
                     identity: None,
                     fields: None,
                     sections: None,

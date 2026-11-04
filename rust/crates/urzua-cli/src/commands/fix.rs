@@ -406,6 +406,7 @@ fn build_report(
     }
 }
 
+// Implements: ADR-67 (attributed re-baselining of a pin)
 /// `urzua fix --rebaseline` (`MILE-181`): detect lists the records whose
 /// pinned evidence changed; apply re-pins the chosen ones. Selection, identity,
 /// lock and re-read-before-write are exactly Tier 1 apply's, so the two modes

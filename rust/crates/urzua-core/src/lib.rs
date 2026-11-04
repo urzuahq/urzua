@@ -11,6 +11,7 @@
 
 pub mod config;
 pub mod document_model;
+pub mod embodiment_model;
 pub mod field_state;
 pub mod fix;
 pub mod graph;

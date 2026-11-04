@@ -351,3 +351,48 @@ fn new_fills_differently_named_date_and_author_fields_from_the_declaration() {
     assert!(!content.contains("Owner: null"), "{content}");
     assert!(content.contains("Owner:"), "{content}");
 }
+
+/// MILE-130: a type declaring `extra_dirs` is one numbering namespace, so
+/// `new` numbers past the highest id in any of its directories, and past one
+/// claimed in an extra directory on another branch.
+#[test]
+fn new_numbers_across_every_directory_of_a_type() {
+    let dir = fixture_repo("namespace");
+    std::fs::create_dir_all(dir.join("docs/adr-archive")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {header.required-fields: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    extra_dirs: [\"docs/adr-archive\"]\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-3-a.md"),
+        "---\nStatus: Accepted\n---\n# ADR-3 — A\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr-archive/ADR-7-b.md"),
+        "---\nStatus: Accepted\n---\n# ADR-7 — B\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    // Claimed in the extra directory on a branch this clone has.
+    git(&dir, &["checkout", "-q", "-b", "other"]);
+    std::fs::write(
+        dir.join("docs/adr-archive/ADR-9-c.md"),
+        "---\nStatus: Accepted\n---\n# ADR-9 — C\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    git(&dir, &["checkout", "-q", "-"]);
+
+    let output = run_urzua(&dir, &["new", "adr", "Next"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let out: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(out["display_number"], 10);
+    // Written to the primary directory.
+    assert_eq!(out["path"], "docs/adr/ADR-10-next.md");
+}

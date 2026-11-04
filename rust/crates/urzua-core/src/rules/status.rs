@@ -109,7 +109,7 @@ pub struct DeliveryJudgement {
     pub status: String,
     /// The tier computed from the record's evidence (drift is not read: it says
     /// the evidence is stale, not that nothing was delivered).
-    pub tier: &'static str,
+    pub tier: String,
     /// What the evidence was, in words a repair row can cite.
     pub evidence: String,
     pub disagreement: Option<DeliveryDisagreement>,
@@ -152,6 +152,7 @@ pub fn judge_delivery(
     let cited_by_code = back_pointed.code.contains(&record.path);
     let cited_by_test = back_pointed.test.contains(&record.path);
     let tier = compute_embodiment(
+        &config.embodiment,
         &realized_by.map(parse_realized_by).unwrap_or_default(),
         false,
         cited_by_code,
@@ -177,7 +178,7 @@ pub fn judge_delivery(
     Ok(DeliveryJudgement {
         status_field: status_field.to_string(),
         status: status.to_string(),
-        tier,
+        tier: tier.to_string(),
         evidence,
         disagreement,
     })

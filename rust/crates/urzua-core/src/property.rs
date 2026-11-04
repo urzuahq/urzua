@@ -211,12 +211,14 @@ mod tests {
                 schema_version: 2,
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
+                embodiment: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
                     RecordTypeConfig {
                         exclude_files: Vec::new(),
                         dir: "docs/notes".to_string(),
+                        extra_dirs: Vec::new(),
                         identity: None,
                         fields: None,
                         sections: None,
@@ -332,6 +334,7 @@ mod tests {
         let config = Config {
             schema_version: 2,
             fail_on: Default::default(),
+            embodiment: Default::default(),
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -347,6 +350,7 @@ mod tests {
                 RecordTypeConfig {
                     exclude_files: Vec::new(),
                     dir: "docs/notes".to_string(),
+                    extra_dirs: Vec::new(),
                     identity: None,
                     fields: None,
                     sections: None,
@@ -535,12 +539,14 @@ mod tests {
                 schema_version: 2,
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
+                embodiment: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
                     RecordTypeConfig {
                         exclude_files: Vec::new(),
                         dir: dir.clone(),
+                        extra_dirs: Vec::new(),
                         identity: None,
                         fields: None,
                         sections: None,

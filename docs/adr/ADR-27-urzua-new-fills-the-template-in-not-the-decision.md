@@ -58,7 +58,7 @@ Additive: a new pure module (`new_record.rs`, following the same pure-render/imp
 
 ## Amendment (2026-11-04): the shapes it names are gone, author tiering is `gh` first, numbering skips every claimed ref
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 Three statements in the Decision no longer match the code. The decision that `urzua new` fills in the
 template and leaves `Status`, `Deciders` and `Embodiment` to the author is unchanged.
@@ -92,3 +92,4 @@ template and leaves `Status`, `Deciders` and `Embodiment` to the author is uncha
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 4bc0874fc. | **structural** |
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/new_record.rs`, `rust/crates/urzua-cli/src/commands/new.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: urzua new still fills the template and leaves the decision to the author; changes since are the declared identity pattern, padded H1, an always-written Stable-Id and the removal of the blockquote shapes. The Decision text on those shapes and author tiering is stale and is left for an amendment. | **structural** |
 > | 2026-11-04 | Amendment added: the blockquote and bold-list refusal no longer applies (`MILE-85`), `Author` resolves `gh api user` first (`ADR-31`), and numbering skips numbers claimed on other refs and follows the declared identity pattern (`MILE-89`, `MILE-151`, `BUG-188`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
