@@ -4,14 +4,12 @@ setup:
   - [init]
 invocation: [audit]
 expect_exit: 0
+# RFC-46 was rejected: a bare-numbered corpus is renamed, not tolerated, so
+# the one-sided Supersedes is not reported (no filename gives a record an
+# identity). What audit owes instead is the rename guidance, once per type
+# (MILE-120), naming the expected file name of every file.
 expect_findings:
-  - {rule: relation.supersession-reciprocity, file: records/0002-use-a-stream.md}
-known_gap:
-  ref: MILE-120
-  reason: >-
-    A bare-numbered filename gives a record no identity, so init declares no
-    prefix and audit's supersession-reciprocity rule is not-enabled: the
-    one-sided Supersedes goes unreported. RFC-46 was rejected: such a corpus is
-    renamed to TYPE-NNNN-slug, not tolerated. MILE-120 makes init and audit
-    report the mismatch with rename guidance, at which point this case's
-    expectation becomes that guidance.
+  - {rule: filename.identity-pattern, file: records}
+expect_stdout_contains:
+  - "0001-use-a-queue.md -> RECORD-0001-use-a-queue.md"
+  - "0002-use-a-stream.md -> RECORD-0002-use-a-stream.md"
