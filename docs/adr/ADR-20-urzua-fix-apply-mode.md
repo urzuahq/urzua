@@ -67,7 +67,7 @@ and why" is answerable without git at all.
 
 ## Amendment (2026-11-04): identity order and the revision-log requirement as built
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 Two statements in the Decision no longer match the code. The hard gates `--ids` or `--force`, the
 re-read before writing, the corpus lock and the single-line edit are unchanged.
@@ -99,3 +99,4 @@ re-read before writing, the corpus lock and the single-line edit are unchanged.
 > | 2026-11-04 | Amendment added: the identity order (`gh api user`, then `--by`, then `git config user.name`, per `ADR-31`) and the per-type Revision log requirement, both of which the Decision states otherwise. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/fix.rs`, `rust/crates/urzua-io/src/lib.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-pinned with the amendment above: the identity order and Revision log requirement are recorded as built; the hard gates the Decision lists are unchanged. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a, code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

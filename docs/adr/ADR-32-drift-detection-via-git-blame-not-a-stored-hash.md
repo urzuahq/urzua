@@ -92,7 +92,7 @@ exchange for correct history — cheap at this repo's size, revisit only if that
 
 ## Amendment (2026-11-04): missing history is an error, `fix` writes the drift, and pins refine it
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 Three statements in the Decision no longer match the code. Detection by `git blame` on the
 `Realized-by` line, nothing stored on the record and the computation living in the impure layer all
@@ -129,3 +129,4 @@ stand, and that blame comparison remains the path for an unpinned locator (`urzu
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit bf8a93c5a. | **structural** |
 > | 2026-11-04 | Amendment added: a git failure is now an error and not "no drift" (`#214`, `#229`), `fix` now writes `Drift detected`, and `ADR-67` made drift conditional on pins and the grace window. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-io/src/lib.rs` d738b6b7c5c7 -> 671f9e9b0ff5, `rust/crates/urzua-core/src/rules/embodiment.rs` a49eedaabcd0 -> 6b61cdfe6465, `rust/crates/urzua-cli/src/discovery.rs` 4cb230d9ff43 -> 0f25fa8cbe3e. Reason: Re-pinned with the amendment above: git-blame drift detection still holds for unpinned locators; the error handling, fix write and pin refinement are recorded. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

@@ -63,7 +63,7 @@ Fully additive: one config entry, one template, one new directory.
 
 ## Amendment (2026-11-04): the `bug` type declares five statuses
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 The Decision gives `Status` as `Open | Fixed | WontFix`. The `bug` type in `.urzua/config.yaml` now
 declares five: `Open`, `Fixed`, `WontFix`, `Not a bug` and `Rejected`. The required fields
@@ -86,3 +86,4 @@ list in the config is the authority; this text does not enumerate it again.
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 784fa758e. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `.urzua/config.yaml` e185c4da7b1f -> 8bc61e85bdcc, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a. Reason: Re-verified: the bug type still requires Status, Found-in and Regression-test; config.yaml growth is unrelated rule options and types. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Amendment added: the `bug` type declares five statuses, not the three the Decision lists. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
