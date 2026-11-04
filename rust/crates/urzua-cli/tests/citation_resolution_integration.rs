@@ -105,3 +105,48 @@ fn an_undeclared_rule_does_not_run() {
     );
     assert!(findings_of(&report, "citation.resolution").is_empty());
 }
+
+#[test]
+fn a_declared_external_id_is_skipped_and_counted_out_of_scope_end_to_end() {
+    let body = "# 1 — X\n\n> Status: Accepted\n\nSee ADR-4122 and ADR-99.\n";
+    let dir = fixture(
+        "external",
+        "{ citation.resolution: { level: error, external_ids: [\"ADR-4122\"] } }",
+        &[("ADR-1-x.md", body)],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 1, "{report}");
+    let found = findings_of(&report, "citation.resolution");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"].as_str().unwrap().contains("ADR-99"));
+    let pop = &execution(&report, "citation.resolution")["population"];
+    assert_eq!(
+        (
+            pop["eligible"].as_u64(),
+            pop["examined"].as_u64(),
+            pop["out_of_scope"].as_u64()
+        ),
+        (Some(2), Some(1), Some(1))
+    );
+}
+
+#[test]
+fn an_external_id_under_no_declared_prefix_fails_the_config_load() {
+    let dir = fixture(
+        "external-bad",
+        "{ citation.resolution: { level: error, external_ids: [\"FOO-1\"] } }",
+        &[("ADR-1-x.md", "# 1 — X\n\n> Status: Accepted\n")],
+    );
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["check", "docs/"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(output.status.code(), Some(0));
+    let all = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(all.contains("external_ids"), "{all}");
+}

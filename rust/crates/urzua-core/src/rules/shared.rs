@@ -470,7 +470,7 @@ pub(super) fn declared_cross_record_value<'a>(
 /// The record-identifier prefixes this repository's configuration declares,
 /// longest first so `DOC-ADR` is matched before `ADR`. The type's effective
 /// prefix, the same one `urzua new` mints and `check` resolves with.
-pub(super) fn declared_prefixes(config: &Config) -> Vec<String> {
+pub fn declared_prefixes(config: &Config) -> Vec<String> {
     let mut prefixes: Vec<String> = config
         .record_types
         .iter()
