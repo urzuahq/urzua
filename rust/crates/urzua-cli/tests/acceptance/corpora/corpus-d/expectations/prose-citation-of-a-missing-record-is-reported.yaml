@@ -1,0 +1,9 @@
+id: prose-citation-of-a-missing-record-is-reported
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: citation.resolution
+    file: records/ADR-0015-citations.md
+    severity: error
+    message_contains: "ADR-0777"

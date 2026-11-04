@@ -1,0 +1,48 @@
+schema_version: 2
+record_types:
+  doc:
+    dir: records/docs
+    prefix: DOC
+    required_fields: [Status]
+    known_fields: [Accepted-on, Relates, Related-by]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Open, Closed]
+      success: [Closed]
+      failure: []
+      implementable: [Open]
+      forbid:
+        - {when: [Open], fields: [Accepted-on]}
+    pointer_fields: []
+    narrative_fields: []
+    sections:
+      from: headings
+      required:
+        - {name: Options considered, shape: table-min-rows, min_rows: 2}
+        - {name: Decision, shape: y-statement, marker: 'TL;DR'}
+  note:
+    dir: records/notes
+    prefix: NOT
+    required_fields: [Status]
+    known_fields: [Relates, Related-by]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Open, Closed]
+      success: [Closed]
+      failure: []
+      implementable: [Open]
+    pointer_fields: []
+    narrative_fields: []
+relation_pairs:
+  - name: relates
+    forward: Relates
+    inverse: Related-by
+    reciprocity: none
+    cross_type: false
+    types: [doc, note]
+rules:
+  header.required-fields: error
+  header.case-variant-key: error
+  status.forbidden-field-present: error
+  section.shape: error
+  relation.cross-type-disallowed: error

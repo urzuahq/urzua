@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JW46AMFZNJ0MNECN7Z4VJ1
-Status: Planned
+Status: Done
 Phase: '0'
 Track: section-checks
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/section.rs, test:rust/crates/urzua-cli/tests/section_rules_integration.rs
 ---
 # 165 — Section heading aliases, and reading a Y-statement outside any section heading
 
@@ -26,3 +27,4 @@ A declared alias satisfies the section requirement and is reported as the alias 
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Built: a `sections.required` entry takes `aliases` (other headings that satisfy it; both rules follow them; `check` reports one info notice per alias in use) and `preamble: true` (a `y-statement` with a `marker` is read from the text before the first `##` when its section is absent, and judged by the same shape check). Exercised in this repository: the `bug` type requires `What was wrong` with three aliases that 19 older bug records use. The preamble reading has fixture coverage only, because no record of this repository carries a Y-statement outside a section. Documented in `SPEC-2` and `SPEC-3`. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #222: section `aliases` and `preamble: true` Y-statement reading. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

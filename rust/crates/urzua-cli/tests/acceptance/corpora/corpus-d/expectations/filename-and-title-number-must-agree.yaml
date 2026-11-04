@@ -1,0 +1,9 @@
+id: filename-and-title-number-must-agree
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: filename.title-consistency
+    file: records/ADR-0005-title-mismatch.md
+    severity: error
+    message_contains: "claims 6"

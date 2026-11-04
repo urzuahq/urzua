@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6CXZW5CJV2350GRPQ4XZRXK
-Status: Planned
+Status: Done
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
 Blocked-on: MILE-98 (the section parser this shape is built on)
+Realized-by: code:rust/crates/urzua-core/src/rules/section.rs, test:rust/crates/urzua-cli/tests/section_rules_integration.rs
 ---
 # 121 — A section content shape requiring a table with a minimum number of data rows
 
@@ -34,3 +35,4 @@ whether the options are real, per `AGENTS.md` ("Structural presence is not conte
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `RFC-17` names `table-min-rows` as a plausible second shape; a hand-written linter's row-count check needs a declared equivalent, so it is now planned. | **substantive** |
 > | 2026-11-04 | Built as shape `table-min-rows` on a required section, with `min_rows` declared per section (`SPEC-3`), checked by `section.shape`. `Status` stays `Planned`. **Why:** a considered-options table with one row has considered no alternative. The shape counts data rows of the largest table in the section, ignoring fenced code and rows whose every cell is empty; it checks row count only, never whether the options are real. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: shape `table-min-rows` with `min_rows` declared per section, checked by `section.shape`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

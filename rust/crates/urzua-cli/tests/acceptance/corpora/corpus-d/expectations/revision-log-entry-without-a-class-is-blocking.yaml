@@ -1,0 +1,9 @@
+id: revision-log-entry-without-a-class-is-blocking
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: revision-log.change-class-required
+    file: records/ADR-0016-revision-log.md
+    severity: error
+    message_contains: "2026-03-16"

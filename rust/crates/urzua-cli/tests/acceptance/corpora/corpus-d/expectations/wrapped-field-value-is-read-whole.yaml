@@ -1,0 +1,10 @@
+id: wrapped-field-value-is-read-whole
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+# Deciders starts on the line after its key. A reader that stops at the end of
+# the key's line sees it blank, and Accepted would then report it missing.
+expect_rules_ran:
+  - status.required-field-missing
+expect_no_findings:
+  - {file: records/ADR-0019-wrapped-field.md}

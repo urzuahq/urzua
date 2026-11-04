@@ -1,0 +1,56 @@
+# The two type directories are deliberately identical but for the type prefix.
+fixtures:
+  - path: .urzua/adr-only.yaml
+    irregularity: >-
+      declares one record type, adr; the gizmo directory is not declared; not a record.
+  - path: .urzua/with-gizmo.yaml
+    irregularity: >-
+      the same config plus one declared type, gizmo, whose name appears nowhere in the source; not a record.
+  - path: records/adr/ADR-0001-clean.md
+    irregularity: >-
+      none -- clean positive control.
+  - path: records/adr/ADR-0002-blank-owner.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/adr/ADR-0003-bad-status.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/adr/ADR-0004-bad-date.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/adr/ADR-0005-dangling.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/adr/ADR-0006-no-context.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/adr/ADR-0008-undeclared.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/adr/notes.md
+    irregularity: >-
+      file name carries no identity (mirrored in the other type directory).
+  - path: records/gizmo/GIZ-0001-clean.md
+    irregularity: >-
+      none -- clean positive control.
+  - path: records/gizmo/GIZ-0002-blank-owner.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/gizmo/GIZ-0003-bad-status.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/gizmo/GIZ-0004-bad-date.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/gizmo/GIZ-0005-dangling.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/gizmo/GIZ-0006-no-context.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/gizmo/GIZ-0008-undeclared.md
+    irregularity: >-
+      the same planted irregularity as its twin in the other type directory (clean for 0001).
+  - path: records/gizmo/notes.md
+    irregularity: >-
+      file name carries no identity (mirrored in the other type directory).

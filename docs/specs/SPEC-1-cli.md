@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -303,3 +303,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 > | 2026-11-04 | Moved two revision rows (2026-09-17, 2026-09-18) that sat above the revision log marker, outside its table, into the table. No wording changed. **Why:** the rows were orphaned from the log, so the revision-log table was not what `citation.path-exists` set aside. | **structural** |
 > | 2026-11-04 | Bumped to `0.9`. Added `urzua refs refresh`, which rewrites the committed snapshot of issue and pull request numbers from the GitHub REST API (token from `GITHUB_TOKEN` or `GH_TOKEN`, `curl` transport, deterministic sorted output, exit `2` and no write on any failure); it is the only command that touches the network. **Why:** `MILE-143` -- the issue and pull request half of the cited-reference check needs a snapshot that `check` can read offline. | **substantive** |
+> | 2026-11-04 | Bumped to `0.10`. A panic exits 2, the documented code for could not run, after printing its `not-run` result (Rust's default is 101); a closed stdout pipe ends the run without a panic. **Why:** `MILE-176` -- the hook's JSON contract and the process exit code disagreed, and `urzua check | head -1` panicked. | **substantive** |

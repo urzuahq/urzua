@@ -63,7 +63,7 @@ pub fn detect_repairs(
     let mut repairs = Vec::new();
     let sticky = crate::rules::sticky_states(config);
 
-    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+    let embodiment_outcome = |record: &Record, repairs: &mut Vec<Repair>| -> Outcome {
         let state_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentState);
         let locator_field =
@@ -119,30 +119,115 @@ pub fn detect_repairs(
             });
         }
         Outcome::Examined
+    };
+
+    let delivery_types = crate::rules::statuses_by_type(config);
+    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        let embodiment = embodiment_outcome(record, &mut repairs);
+        // `Status` against delivery evidence (`MILE-183`): the one case with a
+        // single correct value is repaired; the reverse is `unevidenced_successes`.
+        let status = match delivery_types.get(&record.record_type) {
+            Some(decl) if decl.delivery.is_some() => {
+                match crate::rules::judge_delivery(record, config, decl, back_pointed) {
+                    Ok(judged) => {
+                        if let Some(crate::rules::DeliveryDisagreement::DeliveredButNotDone {
+                            set_status,
+                        }) = judged.disagreement
+                        {
+                            repairs.push(Repair {
+                                record: record.path.clone(),
+                                field: judged.status_field.clone(),
+                                line: record
+                                    .header
+                                    .fields
+                                    .iter()
+                                    .find(|f| f.key.as_str() == judged.status_field)
+                                    .map_or(0, |f| f.line),
+                                current_value: judged.status.clone(),
+                                computed_value: set_status,
+                                tier: 1,
+                                evidence: format!(
+                                    "{} computes to {}",
+                                    judged.evidence, judged.tier
+                                ),
+                            });
+                        }
+                        Outcome::Examined
+                    }
+                    Err(outcome) => outcome,
+                }
+            }
+            _ => Outcome::Absent,
+        };
+        if embodiment == Outcome::Examined || status == Outcome::Examined {
+            Outcome::Examined
+        } else if embodiment != Outcome::Absent {
+            embodiment
+        } else {
+            status
+        }
     });
 
     (population, repairs)
+}
+
+/// Records whose success `Status` has no delivery evidence (`MILE-183`). `fix`
+/// does not downgrade them -- the repair is adding evidence, which only a person
+/// or the delivering change can supply -- so they are reported, never written.
+pub fn unevidenced_successes(
+    records: &[Record],
+    config: &Config,
+    back_pointed: &BackPointerEvidence,
+) -> Vec<crate::report::Notice> {
+    let declared = crate::rules::statuses_by_type(config);
+    records
+        .iter()
+        .filter_map(|record| {
+            let decl = declared.get(&record.record_type)?;
+            let judged = crate::rules::judge_delivery(record, config, decl, back_pointed).ok()?;
+            matches!(
+                judged.disagreement,
+                Some(crate::rules::DeliveryDisagreement::SuccessWithoutEvidence)
+            )
+            .then(|| crate::report::Notice {
+                severity: crate::report::NoticeSeverity::Warning,
+                subject: record.path.display().to_string(),
+                message: format!(
+                    "{} is '{}' with no delivery evidence (computes to '{}'); not downgraded -- add the evidence that delivered it",
+                    judged.status_field, judged.status, judged.tier
+                ),
+            })
+        })
+        .collect()
 }
 
 /// Computes the new file content for applying one Tier-1 repair. Pure --
 /// returns the new text; the caller performs the actual write, the identity
 /// resolution, and the re-verification-before-write RFC-0008 §4 requires.
 ///
-/// Refuses (rather than silently skipping the requirement) when the record
-/// has no revision-log section (its type's declared identity) to append to: ADR-0015's reversibility
-/// clause depends on that entry existing, so a write with nowhere to record
-/// itself is not a case this function will produce, not even once.
+/// When the type requires a revision log (the default), refuses rather than
+/// silently skipping the requirement if the record has no revision-log section
+/// (its type's declared identity) to append to: ADR-0015's reversibility clause
+/// depends on that entry existing. A type declared `revision_log: {required:
+/// false}` (`MILE-159`) takes the field edit alone, with no row.
 pub fn apply_repair(
     content: &str,
     repair: &Repair,
     today: &str,
     by: &str,
     log_id: &crate::config::RevisionLogId,
+    log_required: bool,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
 
+    // The field's own line first (`Status: Planned`), so a title or a prose line
+    // that mentions both words is not the one edited.
+    let own_line = format!("{}:", repair.field);
     let field_line = doc
-        .find_line(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
+        .find_line(|l| l.starts_with(&own_line) && l.contains(&repair.current_value))
+        .or_else(|| {
+            doc.find_line(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
+        })
         .ok_or_else(|| {
             format!(
                 "could not find a line containing both '{}' and '{}' to edit -- the record may have changed since detect ran",
@@ -156,9 +241,15 @@ pub fn apply_repair(
     );
     doc.replace_line(field_line, edited_line);
 
+    if !log_required {
+        return Ok(doc.to_string());
+    }
     let edited_content = doc.to_string();
     let entries = find_revision_log_entries(&edited_content, log_id).ok_or_else(|| {
-        "record has no Revision log section -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement)".to_string()
+        format!(
+            "record has no Revision log section (looked for {}) -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement); declare revision_log: {{required: false}} on the type to apply without a log",
+            log_id.describe()
+        )
     })?;
     let Some(last_entry) = entries.last() else {
         return Err(
@@ -174,12 +265,164 @@ pub fn apply_repair(
         .unwrap_or("> ")
         .to_string();
     let new_row = format!(
-        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value. | **structural** |",
-        repair.field, repair.evidence, repair.current_value
+        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value `{}`. | **structural** |",
+        repair.field, repair.evidence, repair.current_value, repair.computed_value
     );
     doc.insert_after(last_entry.line, new_row);
 
     Ok(doc.to_string())
+}
+
+/// One pinned locator whose current content no longer matches its pin
+/// (`MILE-181`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PinDrift {
+    pub locator: String,
+    pub recorded_hash: String,
+    pub current_hash: String,
+}
+
+/// A record whose `Realized-by` carries one or more stale `@sha256:` pins: the
+/// unit `urzua fix --rebaseline` lists and, on review, re-pins (`MILE-181`).
+/// A record is the selector, as in `--ids`; all its stale pins move together
+/// and one attributed revision row records them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Rebaseline {
+    pub record: PathBuf,
+    pub field: String,
+    pub line: usize,
+    pub pins: Vec<PinDrift>,
+}
+
+/// Lists the records whose pinned locators changed. Pure: `current_hash` is
+/// the CLI's content-hash lookup for a repo-relative locator path. A locator
+/// whose file cannot be read is not a stale pin (`embodiment.locator-exists`
+/// reports it), and an unpinned locator has nothing to re-pin.
+pub fn detect_rebaselines(
+    records: &[Record],
+    config: &Config,
+    current_hash: &dyn Fn(&str) -> Option<String>,
+) -> (Population, Vec<Rebaseline>) {
+    let mut found = Vec::new();
+    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        let locator_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
+        let Some(value) = record.header.get(locator_field) else {
+            return Outcome::Absent;
+        };
+        let mut pins: Vec<PinDrift> = Vec::new();
+        for (locator, pin) in crate::rules::realized_by_pinned_locators(value) {
+            let Some(recorded) = pin else { continue };
+            let Some(current) = current_hash(&locator) else {
+                continue;
+            };
+            if current != recorded
+                && !pins
+                    .iter()
+                    .any(|p| p.locator == locator && p.recorded_hash == recorded)
+            {
+                pins.push(PinDrift {
+                    locator,
+                    recorded_hash: recorded,
+                    current_hash: current,
+                });
+            }
+        }
+        if !pins.is_empty() {
+            found.push(Rebaseline {
+                record: record.path.clone(),
+                field: locator_field.to_string(),
+                line: record
+                    .header
+                    .fields
+                    .iter()
+                    .find(|f| f.key.as_str() == locator_field)
+                    .map_or(0, |f| f.line),
+                pins,
+            });
+        }
+        Outcome::Examined
+    });
+    (population, found)
+}
+
+/// New file content for re-pinning one record: each stale pin on the
+/// `Realized-by` line becomes the current hash and nothing else on the line
+/// moves, then one revision-log row names who attested and why. Pure. Fails
+/// when a pin is no longer on the line (a concurrent edit since detect) or the
+/// record has no revision log to record the attestation in.
+pub fn apply_rebaseline(
+    content: &str,
+    rebaseline: &Rebaseline,
+    today: &str,
+    by: &str,
+    reason: &str,
+    log_id: &crate::config::RevisionLogId,
+) -> Result<String, String> {
+    let mut doc = LineDoc::parse(content);
+    let prefix_key = format!("{}:", rebaseline.field);
+    let field_line = doc
+        .find_line(|l| l.trim_start().starts_with(&prefix_key))
+        .ok_or_else(|| {
+            format!(
+                "could not find the '{}' line to edit -- the record may have changed since detect ran",
+                rebaseline.field
+            )
+        })?;
+    let mut line = doc.line(field_line).unwrap_or_default().to_string();
+    for pin in &rebaseline.pins {
+        let old = format!("{}@sha256:{}", pin.locator, pin.recorded_hash);
+        if !line.contains(&old) {
+            return Err(format!(
+                "the pin on '{}' is no longer on the '{}' line -- the record may have changed since detect ran",
+                pin.locator, rebaseline.field
+            ));
+        }
+        line = line.replace(
+            &old,
+            &format!("{}@sha256:{}", pin.locator, pin.current_hash),
+        );
+    }
+    doc.replace_line(field_line, line);
+
+    let edited = doc.to_string();
+    let entries = find_revision_log_entries(&edited, log_id).ok_or_else(|| {
+        "record has no Revision log section -- refusing to re-baseline without one to record the attestation in".to_string()
+    })?;
+    let Some(last_entry) = entries.last() else {
+        return Err(
+            "record's Revision log section has no existing rows to append after".to_string(),
+        );
+    };
+    let row_prefix = doc
+        .line(last_entry.line)
+        .and_then(table_row_prefix)
+        .unwrap_or("> ")
+        .to_string();
+    let moved = rebaseline
+        .pins
+        .iter()
+        .map(|p| {
+            format!(
+                "`{}` {} -> {}",
+                p.locator,
+                short(&p.recorded_hash),
+                short(&p.current_hash)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    doc.insert_after(
+        last_entry.line,
+        format!(
+            "{row_prefix}| {today} | Re-baselined (attested by {by}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |"
+        ),
+    );
+    Ok(doc.to_string())
+}
+
+fn short(hash: &str) -> &str {
+    hash.get(..12).unwrap_or(hash)
 }
 
 #[cfg(test)]
@@ -395,6 +638,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         assert!(result.contains("Embodiment: Verified"));
@@ -414,9 +658,25 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap_err();
         assert!(err.contains("Revision log"));
+    }
+
+    #[test]
+    fn apply_repair_without_a_required_log_edits_only_the_field() {
+        let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n";
+        let result = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(result, "---\nEmbodiment: Verified\n---\n# 0001 — X\n");
     }
 
     #[test]
@@ -432,6 +692,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap_err();
         assert!(err.contains("could not find"));
@@ -446,6 +707,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         let last = result.lines().last().unwrap();
@@ -462,6 +724,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         assert!(result.starts_with(
@@ -487,5 +750,88 @@ mod tests {
             &Default::default(),
         );
         assert!(repairs.is_empty(), "{repairs:?}");
+    }
+
+    const H1: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+    const H2: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+
+    fn pinned(path: &str, hash: &str) -> Record {
+        record(
+            path,
+            &format!(
+                "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{hash}, test:t.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+            ),
+        )
+    }
+
+    #[test]
+    fn a_stale_pin_is_listed_with_both_hashes_and_a_current_one_is_not_observed_failing() {
+        let stale = pinned("docs/adr/0001-x.md", H1);
+        let current = pinned("docs/adr/0002-y.md", H2);
+        let lookup = |l: &str| (l == "src/a.rs").then(|| H2.to_string());
+        let (population, found) =
+            detect_rebaselines(&[stale, current], &no_relation_field_overrides(), &lookup);
+        assert_eq!(population.examined(), 2);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].pins[0].recorded_hash, H1);
+        assert_eq!(found[0].pins[0].current_hash, H2);
+    }
+
+    #[test]
+    fn re_pinning_moves_only_the_hash_and_logs_who_and_why_observed_failing() {
+        let r = pinned("docs/adr/0001-x.md", H1);
+        let lookup = |_: &str| Some(H2.to_string());
+        let (_, found) = detect_rebaselines(&[r], &no_relation_field_overrides(), &lookup);
+        let content = format!(
+            "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{H1}, test:t.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        );
+        let out = apply_rebaseline(
+            &content,
+            &found[0],
+            "2026-11-04",
+            "ana",
+            "Read the diff; the claim holds.",
+            &Default::default(),
+        )
+        .unwrap();
+        assert!(out.contains(&format!(
+            "Realized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{H2}, test:t.rs'"
+        )));
+        assert!(out.contains("attested by ana"));
+        assert!(out.contains("Read the diff; the claim holds."));
+        // Applying the same rebaseline again finds no pin to move.
+        assert!(apply_rebaseline(&out, &found[0], "d", "ana", "r", &Default::default()).is_err());
+    }
+
+    #[test]
+    fn a_status_repair_edits_the_status_line_not_a_title_that_mentions_both_words() {
+        let content = "---\nStatus: Planned\n---\n# Planned work whose Status is open\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Filed. | **structural** |\n";
+        let repair = Repair {
+            record: PathBuf::from("docs/milestones/MILE-1-x.md"),
+            field: "Status".to_string(),
+            line: 2,
+            current_value: "Planned".to_string(),
+            computed_value: "Done".to_string(),
+            tier: 1,
+            evidence: "Realized-by computes to Implemented".to_string(),
+        };
+        let result = apply_repair(
+            content,
+            &repair,
+            "2026-11-04",
+            "beau",
+            &Default::default(),
+            true,
+        )
+        .unwrap();
+        assert!(result.contains("\nStatus: Done\n"), "{result}");
+        assert!(
+            result.contains("# Planned work whose Status is open"),
+            "{result}"
+        );
+        assert!(
+            result.contains("disagreed with the computed value `Done`"),
+            "{result}"
+        );
     }
 }

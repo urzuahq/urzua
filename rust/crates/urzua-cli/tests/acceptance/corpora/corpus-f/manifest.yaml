@@ -1,0 +1,25 @@
+fixtures:
+  - path: records/docs/DOC-0001-clean.md
+    irregularity: >-
+      none -- the clean positive control for every rule in this corpus.
+  - path: records/docs/DOC-0002-forbidden.md
+    irregularity: >-
+      an Open record carrying Accepted-on, which the type forbids at Open.
+  - path: records/docs/DOC-0003-case-variant.md
+    irregularity: >-
+      one header writing both `Status` and `status`.
+  - path: records/docs/DOC-0004-thin-table.md
+    irregularity: >-
+      an Options considered table with one data row where two are required.
+  - path: records/docs/DOC-0005-no-y-statement.md
+    irregularity: >-
+      a Decision block under the TL;DR marker holding none of the five Y-statement phrases.
+  - path: records/docs/DOC-0006-cross-type.md
+    irregularity: >-
+      a Relates claim whose target is a different record type in a pair declaring cross_type false.
+  - path: records/notes/NOT-0001-note.md
+    irregularity: >-
+      none -- the other-type target of the cross-type claim.
+  - path: .urzua/config.yaml
+    irregularity: >-
+      two types and one relation pair; not a record.

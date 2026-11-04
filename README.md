@@ -122,6 +122,8 @@ $ urzua fix --apply --ids docs/adr/ADR-42-example.md --by beau
 
 Every applied write touches only the one field's line, byte-for-byte preserving the rest of the record; requires a resolved identity (`--by`, or `gh api user`, or `git config user.name`); and appends a structural entry to the record's own revision log. It refuses outright, per-record, if that log doesn't exist, rather than writing somewhere it can't be audited. Rationale, alternatives, and every hand-authored sentence stay permanently off-limits: this is a cache of a computation, never an editor.
 
+A pinned locator (`code:src/a.rs@sha256:...`) whose file changed is cleared the same way, by review: `urzua fix --rebaseline` lists each stale pin with its recorded and current hash, and `urzua fix --rebaseline --apply --ids <record> --by <who> --reason "<why it still holds>"` re-pins it and logs who attested and why.
+
 ## Run the gate in CI
 
 This repository ships a composite action that installs a pinned release (checksum and build provenance verified), checks the checkout has the history drift reads, runs `urzua check` and, on a pull request, `urzua check --base`, and reports the findings as inline annotations and one pull request comment that is updated in place:

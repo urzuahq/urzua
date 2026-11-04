@@ -6,3 +6,4 @@ expect_json:
   - {at: /status, equals: not-run}
 expect_stdout_contains:
   - "header shape 'bold-list' is no longer supported"
+mutation_exempt: a config error exit; no rule runs, so there is no rule to switch off.

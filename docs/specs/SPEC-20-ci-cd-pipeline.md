@@ -2,7 +2,7 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Accepted
 Date: 2026-09-10
-Version: '0.4'
+Version: '0.5'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -25,7 +25,7 @@ here is a `record_type`; this is process, realized entirely in `.github/workflow
 Deliberately unfiltered (no `branches:`/`paths:` restriction) — a filtered required check can fail
 to report on a PR that doesn't touch the filtered paths, deadlocking a merge that requires it.
 
-- **`rust` job**: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo build --release
+- **`rust` job**: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo machete`, `cargo deny check`, `cargo build --release
   --locked`, `cargo test --locked`, then `urzua check docs/` against this repo's own corpus — the
   literal self-hosting exit criterion (`SPEC-1`). Checkout uses `fetch-depth: 0`:
   `embodiment.consistency`'s drift check (`ADR-32`) reads git blame/log history on locators, and a
@@ -166,3 +166,4 @@ unrepresentable — including on a re-run, which replays the original payload.
 > | 2026-09-16 | Corrected three claims, all disproved by the `v0.2.1` run: the `no-changeset` no-op (`BUG-33`), `verify-ci`'s "it gated the merge" justification (`main` is unprotected), and the manual gate being one step rather than two (`BUG-34`). **Why:** this spec's standing purpose is to be the accurate, buildable reference, and each of these read as settled while being false -- the kind of claim that survives precisely because it is written down. | **substantive** |
 > | 2026-09-16 | Rewrote the release section: `publish-release.yml` now owns the whole publish (tag, release, binaries, upload) and `release.yml` is deleted. Documented the previously-undocumented manual approval the release PR's own `ci` run requires. **Why:** `BUG-28` -- the tag is bot-pushed, GitHub never triggers a workflow from a `GITHUB_TOKEN` event, so the separate tag-triggered build workflow silently never ran and `v0.2.0` published with zero binaries. This spec described a coupling that did not exist. | **substantive** |
 > | 2026-11-02 | Bumped to `0.4`. `Implements` no longer lists `ADR-29`. **Why:** `ADR-29` is Superseded by `ADR-45`, which was already listed and carries forward `knope`, the fragment format and the versioned-files config unchanged; `pointer.target-status` flagged the stale target. The body still cites `ADR-29` in prose for the fragment format and the changeset gate, which is lineage, not a claim to implement it. | **structural** |
+> | 2026-11-04 | Bumped to `0.5`. The `rust` job also runs `cargo machete` (unused dependencies) and `cargo deny check` (advisories, bans, licenses, sources; `rust/deny.toml`), both pinned prebuilt binaries verified by checksum; `make deny` and `make ci` run them locally. **Why:** `MILE-176` -- `yaml_serde` is a young single-supplier crate, and nothing failed on an unused dependency. | **substantive** |

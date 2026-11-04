@@ -1,0 +1,9 @@
+id: two-records-one-identity-is-a-collision
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: identity.collision
+    file: records/ADR-0017-twin-a.md
+    severity: error
+    message_contains: "ADR-17"

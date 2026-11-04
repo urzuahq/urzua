@@ -8,3 +8,4 @@ expect_json:
 expect_no_findings:
   - {severity: error}
   - {severity: warning}
+mutation_exempt: a positive control; it asserts that nothing fires, which no rule's absence changes.

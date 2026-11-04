@@ -1,10 +1,11 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M2VN4C5S5YSDEHK5P136XBAQ
 Phase: '0'
 Track: governance-process
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:.git-hooks/pre-push, code:Makefile
 ---
 # 99 — The pre-push hook runs `urzua check`, not only fmt and clippy
 
@@ -48,3 +49,4 @@ what level the rules are declared at.
 > |---|---|---|
 > | 2026-11-04 | Verified against `.git-hooks/pre-push`: it runs `cargo fmt --check`, `cargo clippy` and then `make records`, which builds the release binary and runs `urzua check` exactly as CI does (#134). The decision this record owns is thereby made in code: the hook acts on what `check` returns under the configured `fail_on: warning`, as CI does, with no merge-base baseline, and the corpus now reports no unwaived findings, so the 61 non-blocking findings that motivated the question are gone. The hook installs only through the opt-in `make hooks-install`, and the commit hook exits 0 when the binary is not built; making the hooks reach every contributor and verifiable by `urzua doctor` is `MILE-179`, and `ADR-71` records the layering. Milestones carry no declared evidence field on `main` yet, so the evidence is cited here and `Status` stays `Planned` for the maintainer to close once one lands. **Why:** the milestone is stale, not open work: its title is delivered, and what remains belongs to `MILE-179`. | **substantive** |
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s first success criterion names the pre-push hook alongside CI, and only CI was built. Surfaced by asking what Phase 0 actually exits on rather than reading the milestone list, which did not contain this. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #134: the pre-push hook runs `make records`, which runs `urzua check`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

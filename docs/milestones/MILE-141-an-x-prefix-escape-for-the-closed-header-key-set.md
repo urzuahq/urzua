@@ -1,9 +1,10 @@
 ---
 Stable-Id: 01M6HZ0P342ZYCS29CZ780Y9EV
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: RFC-33
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 141 — An x- prefix escape for the closed header-key set
 
@@ -25,3 +26,4 @@ A header key with the declared prefix passes the field-set rule and an unprefixe
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter accepts `x-` prefixed header keys as an escape from its closed key set, and urzua's closed set has no such escape. | **substantive** |
 > | 2026-11-04 | Built as a rule option, not a per-type config value: `header.field-set-consistency` takes `allow_extension_prefix: true` (off by default), which exempts header keys beginning `x-` in any case from that rule and nothing else. The prefix is fixed at `x-` rather than declared per type. An unprefixed undeclared key still fails, and a prefixed key is never a pointer or narrative field unless declared. **Why:** the rule's own closed set is per type, and the opt-in is the declared-not-voted choice the closed set already makes; a per-type prefix value would have been a second configuration axis with no adopter asking for one. Recorded here so the 'Done means' line's per-type wording is not read as the shipped shape. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #168: `header.field-set-consistency` takes `allow_extension_prefix`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

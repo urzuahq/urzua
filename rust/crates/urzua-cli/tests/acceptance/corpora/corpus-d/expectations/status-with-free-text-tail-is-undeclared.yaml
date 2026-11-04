@@ -1,0 +1,9 @@
+id: status-with-free-text-tail-is-undeclared
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: status.undeclared-value
+    file: records/ADR-0003-undeclared-status.md
+    severity: error
+    message_contains: "Acceptd with a free-text tail"

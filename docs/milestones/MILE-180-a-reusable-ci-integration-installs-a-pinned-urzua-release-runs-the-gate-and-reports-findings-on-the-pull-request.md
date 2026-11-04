@@ -5,6 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-71
 Blocked-on: —
+Realized-by: code:.github/actions/urzua-gate/action.yml, code:.github/actions/urzua-gate/render.sh, code:.github/actions/urzua-gate/install.sh, test:.github/actions/urzua-gate/test.sh, code:.github/workflows/checks.yml
 ---
 # 180 — A reusable CI integration installs a pinned urzua release, runs the gate and reports findings on the pull request
 

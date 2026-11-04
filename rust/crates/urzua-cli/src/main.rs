@@ -39,7 +39,16 @@ pub(crate) const NOTICE_RULE_APPLICABILITY: &str = "rule-applicability";
 /// the payload -- each `Report` stays its own real, fully-typed struct; this
 /// just gives every one of them the same last step.
 pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
-    println!("{}", serde_json::to_string_pretty(report).unwrap());
+    use std::io::Write;
+    // writeln!, not println!: a closed stdout (`urzua check | head -1`) must
+    // end the run quietly, not panic (MILE-176). The reader leaving is not an
+    // error of ours, so the write result is dropped and the exit code stays
+    // the report's.
+    let _ = writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(report).unwrap()
+    );
     report.exit_code()
 }
 
@@ -210,6 +219,17 @@ enum Command {
         /// default.
         #[arg(long)]
         force: bool,
+        /// Re-pin stale `@sha256:` evidence pins instead of repairing
+        /// Embodiment (`MILE-181`). Without --apply it lists each stale pin
+        /// with its recorded and current hash; with --apply and --ids (or
+        /// --force), --by and --reason it rewrites those records' pins and
+        /// appends an attributed revision row.
+        #[arg(long)]
+        rebaseline: bool,
+        /// Why the evidence still holds, recorded in the revision row.
+        /// Required by --rebaseline --apply.
+        #[arg(long)]
+        reason: Option<String>,
     },
 }
 
@@ -272,7 +292,16 @@ fn main() -> ExitCode {
         // with no output at all, defeating the hook's entire purpose.
         let _ = std::io::stdout().write_all(out.to_string().as_bytes());
         let _ = std::io::stdout().write_all(b"\n");
+        // The documented code for "could not run" is 2; Rust's default for an
+        // unwinding panic out of main is 101 (MILE-176).
+        std::process::exit(2);
     }));
+
+    // Debug builds only: lets the acceptance test prove the panic exit code.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("URZUA_TEST_PANIC").is_some() {
+        panic!("URZUA_TEST_PANIC set");
+    }
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
@@ -333,6 +362,8 @@ fn main() -> ExitCode {
             ids,
             by,
             force,
+            rebaseline,
+            reason,
         } => commands::fix::run(
             cli.config,
             commands::fix::FixArgs {
@@ -343,6 +374,8 @@ fn main() -> ExitCode {
                 ids,
                 by,
                 force,
+                rebaseline,
+                reason,
             },
         ),
     }

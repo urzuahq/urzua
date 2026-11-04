@@ -11,7 +11,7 @@ SHELL := /bin/bash
 RUST_DIR := rust
 
 .PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants gate-action-test hooks-install \
-	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint rust-clean
+	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint deny rust-clean
 
 help: ## Show available commands
 	@echo "Urzua — available commands:"
@@ -29,7 +29,7 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint rust-build test records rule-table-check release-guard release-invariants gate-action-test ## Run exactly what CI runs, locally
+ci: fmt-check lint deny rust-build test records rule-table-check release-guard release-invariants gate-action-test ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
 gate-action-test: ## Test the reusable CI gate action's scripts (recorded fixtures, no network)
@@ -60,6 +60,9 @@ rust-fmt-check: ## cargo fmt --check
 
 rust-lint: ## clippy, warnings denied
 	cd $(RUST_DIR) && cargo clippy --workspace --all-targets --locked -- -D warnings
+
+deny: ## Unused dependencies (cargo machete) and supply chain (cargo deny); needs both installed, versions pinned in checks.yml
+	cd $(RUST_DIR) && cargo machete && cargo deny check
 
 rust-clean: ## Remove the Rust target directory
 	cd $(RUST_DIR) && cargo clean
