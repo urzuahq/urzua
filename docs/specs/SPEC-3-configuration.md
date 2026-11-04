@@ -1,5 +1,5 @@
 ---
-Version: '0.42'
+Version: '0.43'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -195,6 +195,19 @@ Two details carry weight:
       marker, and a marker with no block after it, are each their own finding. With no `marker`,
       the block is the section's first paragraph. A leading `>` blockquote marker on a line is not part of
       the block, so a phrase that wraps across quoted lines still matches. Phrases outside the block never count.
+    - `aliases` (optional, any shape; `MILE-165`) lists other `##` heading texts that satisfy the
+      requirement, matched exactly after trimming: `{name: Decision, aliases: [Resolution]}`. The
+      `name` is tried first, then each alias in order. Both rules follow the alias, and `urzua check`
+      reports one `info` notice per (section, alias) naming the records that used it, so an alias
+      in use is visible and never moves the exit code. A blank alias, one repeating the `name` or
+      another alias, or a heading that two requirements claim, is a load-time error.
+    - `preamble: true` (optional; `MILE-165`) lets a `y-statement` whose `marker` is declared be read
+      from the preamble, the text before the first `##` heading, when the section itself is absent:
+      `section.required` is then satisfied and `section.shape` judges the preamble with the same
+      check, reporting its findings as the preamble's. It applies only when the section and its aliases
+      are absent and the marker is in the preamble; a preamble without the marker leaves the
+      section missing. It needs shape `y-statement` with a `marker` (without one, the block would be
+      the H1's first paragraph) and is a load-time error otherwise.
     - `table-min-rows` requires a table with at least `min_rows` (an integer of 1 or more) data rows;
       a data row with every cell empty does not count, the largest table in the section decides, and
       a table inside a fenced code block is not read.
@@ -794,3 +807,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.40`. Removed the `Last-audited: 2026-11-04` field from this spec's header. **Why:** it was added only to exercise `MILE-166` and no audit took place, so it attested to something that did not happen; the `Last-audited` declaration and `drift_audit_field` in the configuration are unchanged. | **structural** |
 > | 2026-11-04 | Bumped to `0.41`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |
 > | 2026-11-04 | Bumped to `0.42`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |
+> | 2026-11-04 | Bumped to `0.43`. `sections.required` entries take `aliases` (other headings satisfying the requirement, disclosed as an info notice per alias) and `preamble: true` (a `y-statement` with a `marker` read from the text before the first `##` when its section is absent). **Why:** `MILE-165` -- adopter records name a section differently or carry the Y-statement in the preamble. | **substantive** |
