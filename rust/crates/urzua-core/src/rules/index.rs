@@ -25,6 +25,11 @@ pub enum FormatSegment {
     Id,
     File,
     Title,
+    /// A declared header field of the index's record type, written `{Status}`
+    /// by its exact field name (`MILE-164`). A name that is not `id`, `file`
+    /// or `title` is a field; whether the type declares it is checked at
+    /// config load.
+    Field(String),
 }
 
 /// An entry format: one `Vec<FormatSegment>` per line of the entry. A single
@@ -33,7 +38,8 @@ pub enum FormatSegment {
 /// (`MILE-152`).
 pub type IndexFormat = Vec<Vec<FormatSegment>>;
 
-/// Splits an entry format into lines of literals and the three placeholders.
+/// Splits an entry format into lines of literals and placeholders: `{id}`,
+/// `{file}`, `{title}` and `{Field}` for a declared header field.
 /// Every reason it refuses is one that would leave the rule unable to match a
 /// line: a rule that cannot match reports nothing, which reads as a fresh
 /// index.
@@ -58,8 +64,8 @@ pub fn parse_index_format(format: &str) -> Result<IndexFormat, String> {
         lines.push(parse_format_line(text)?);
     }
     let all: Vec<&FormatSegment> = lines.iter().flatten().collect();
-    for placeholder in [FormatSegment::Id, FormatSegment::File, FormatSegment::Title] {
-        if all.iter().filter(|s| ***s == placeholder).count() > 1 {
+    for (n, placeholder) in all.iter().enumerate() {
+        if !matches!(placeholder, FormatSegment::Literal(_)) && all[..n].contains(placeholder) {
             return Err(format!("uses {placeholder:?} more than once"));
         }
     }
@@ -89,19 +95,15 @@ fn parse_format_line(format: &str) -> Result<Vec<FormatSegment>, String> {
             "id" => FormatSegment::Id,
             "file" => FormatSegment::File,
             "title" => FormatSegment::Title,
-            other => {
-                return Err(format!(
-                    "uses the placeholder '{{{other}}}'; the placeholders are {{id}}, {{file}} and {{title}}"
-                ))
+            other if other.trim().is_empty() => {
+                return Err("has an empty placeholder '{}'".to_string())
             }
+            other => FormatSegment::Field(other.to_string()),
         };
         if !literal.is_empty() {
             segments.push(FormatSegment::Literal(std::mem::take(&mut literal)));
         }
-        if matches!(
-            segments.last(),
-            Some(FormatSegment::Id | FormatSegment::File | FormatSegment::Title)
-        ) {
+        if matches!(segments.last(), Some(s) if !matches!(s, FormatSegment::Literal(_))) {
             return Err(
                 "has two placeholders with no text between them, so where one ends is ambiguous"
                     .to_string(),
@@ -122,6 +124,8 @@ struct Entry<'a> {
     id: Option<&'a str>,
     file: Option<&'a str>,
     title: Option<&'a str>,
+    /// `(field name, value)` for each `{Field}` placeholder read.
+    fields: Vec<(&'a str, &'a str)>,
 }
 
 impl<'a> Entry<'a> {
@@ -133,7 +137,7 @@ impl<'a> Entry<'a> {
 
 /// One committed line read back through the format, or `None` when it does
 /// not have the format's shape (or a placeholder captured nothing).
-fn match_entry<'a>(line: &'a str, segments: &[FormatSegment]) -> Option<Entry<'a>> {
+fn match_entry<'a>(line: &'a str, segments: &'a [FormatSegment]) -> Option<Entry<'a>> {
     let line = line.trim_end();
     let mut entry = Entry::default();
     let mut pos = 0;
@@ -158,6 +162,7 @@ fn match_entry<'a>(line: &'a str, segments: &[FormatSegment]) -> Option<Entry<'a
                 match placeholder {
                     FormatSegment::Id => entry.id = Some(value),
                     FormatSegment::File => entry.file = Some(value),
+                    FormatSegment::Field(name) => entry.fields.push((name.as_str(), value)),
                     _ => entry.title = Some(value),
                 }
                 pos = end;
@@ -368,6 +373,7 @@ pub fn index_freshness(
                     entry.id = entry.id.or(part.id);
                     entry.file = entry.file.or(part.file);
                     entry.title = entry.title.or(part.title);
+                    entry.fields.extend(part.fields);
                     consumed += 1;
                 }
                 at += consumed;
@@ -407,6 +413,25 @@ pub fn index_freshness(
                                 entry.name()
                             ),
                         );
+                    }
+                }
+                for (name, listed_value) in &entry.fields {
+                    match record.header.get(name).map(str::trim) {
+                        Some(actual) if actual == *listed_value => {}
+                        Some(actual) => push(
+                            Some(lineno),
+                            format!(
+                                "entry {} lists {name} '{listed_value}', but the record's {name} is '{actual}'",
+                                entry.name()
+                            ),
+                        ),
+                        None => push(
+                            Some(lineno),
+                            format!(
+                                "entry {} lists {name} '{listed_value}', but the record has no {name} field",
+                                entry.name()
+                            ),
+                        ),
                     }
                 }
                 if let (Some(listed_title), Some(actual)) =
@@ -491,6 +516,15 @@ pub fn render_index_entries(
                                 )
                             })?,
                     ),
+                    FormatSegment::Field(name) => {
+                        line.push_str(record.header.get(name).map(str::trim).ok_or_else(|| {
+                            format!(
+                                "index '{}': {} has no {name} field to put in {{{name}}}",
+                                spec.path,
+                                record.path.display()
+                            )
+                        })?)
+                    }
                     FormatSegment::Title => {
                         line.push_str(&record_title(record, full_text).ok_or_else(|| {
                             format!(
@@ -825,8 +859,17 @@ mod tests {
             "repeated placeholder"
         );
         assert!(
-            parse_index_format("{id} {nope}").is_err(),
-            "unknown placeholder"
+            parse_index_format("{id} {Status}").is_ok(),
+            "a field placeholder"
+        );
+        assert!(parse_index_format("{id} {}").is_err(), "empty placeholder");
+        assert!(
+            parse_index_format("{id} {Status} {Status}").is_err(),
+            "repeated field placeholder"
+        );
+        assert!(
+            parse_index_format("{id}{Status}").is_err(),
+            "adjacent field placeholder"
         );
         assert!(parse_index_format("{id} {").is_err(), "unclosed brace");
     }
@@ -1027,5 +1070,76 @@ mod tests {
         );
         let err = regenerate_index(&spec(false), &[r], &t, &IndexContent::Missing).unwrap_err();
         assert!(err.contains("no H1"), "{err}");
+    }
+
+    const FIELD_FORMAT: &str = "- {id} [{Status}] {Date}";
+
+    fn dated(n: u32, status: &str, date: Option<&str>) -> (Record, String) {
+        let path = format!("docs/adr/ADR-{n}-x.md");
+        let date_line = date.map(|d| format!("Date: {d}\n")).unwrap_or_default();
+        let text = format!("---\nStatus: {status}\n{date_line}---\n# {n} \u{2014} T\n");
+        let r = Record::parse_with_shape(
+            PathBuf::from(&path),
+            "adr".to_string(),
+            &text,
+            crate::header::HeaderShape::YamlFrontmatter,
+        );
+        (r, text)
+    }
+
+    fn run_fields(records: &[(Record, String)], body: &str) -> Vec<Finding> {
+        let mut sp = spec(false);
+        sp.format = FIELD_FORMAT.to_string();
+        let recs: Vec<Record> = records.iter().map(|(r, _)| r.clone()).collect();
+        let text: HashMap<PathBuf, String> = records
+            .iter()
+            .map(|(r, t)| (r.path.clone(), t.clone()))
+            .collect();
+        index_freshness(
+            &recs,
+            &text,
+            &[IndexArtifact {
+                spec: sp,
+                content: IndexContent::Text(body.to_string()),
+            }],
+        )
+        .1
+    }
+
+    #[test]
+    fn declared_field_columns_are_checked_against_the_record_observed_failing() {
+        let recs = [
+            dated(1, "Accepted", Some("2026-01-02")),
+            dated(2, "Draft", Some("2026-02-03")),
+        ];
+        let good = "- ADR-1 [Accepted] 2026-01-02\n- ADR-2 [Draft] 2026-02-03\n";
+        assert!(run_fields(&recs, good).is_empty());
+
+        let stale = "- ADR-1 [Draft] 2026-01-02\n- ADR-2 [Draft] 2026-02-04\n";
+        let named = msgs(&run_fields(&recs, stale));
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(named[0].contains("Status 'Draft'") && named[0].contains("is 'Accepted'"));
+        assert!(named[1].contains("Date '2026-02-04'") && named[1].contains("is '2026-02-03'"));
+    }
+
+    #[test]
+    fn a_listed_field_the_record_lacks_is_reported() {
+        let recs = [dated(1, "Accepted", None)];
+        let named = msgs(&run_fields(&recs, "- ADR-1 [Accepted] 2026-01-02\n"));
+        assert_eq!(named.len(), 1, "{named:?}");
+        assert!(named[0].contains("has no Date field"), "{named:?}");
+    }
+
+    #[test]
+    fn regeneration_fills_field_columns_and_a_missing_field_is_an_error() {
+        let mut sp = spec(false);
+        sp.format = FIELD_FORMAT.to_string();
+        let (a, ta) = dated(1, "Accepted", Some("2026-01-02"));
+        let (b, tb) = dated(2, "Draft", None);
+        let text: HashMap<PathBuf, String> = [(a.path.clone(), ta), (b.path.clone(), tb)].into();
+        let err = render_index_entries(&sp, &[a.clone(), b], &text).unwrap_err();
+        assert!(err.contains("no Date field"), "{err}");
+        let ok = render_index_entries(&sp, &[a], &text).unwrap();
+        assert_eq!(ok, vec!["- ADR-1 [Accepted] 2026-01-02".to_string()]);
     }
 }

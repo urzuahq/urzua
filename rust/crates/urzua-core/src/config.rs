@@ -1145,8 +1145,23 @@ fn index_problem(spec: &IndexSpec, config: &Config) -> Option<String> {
             spec.record_type
         ));
     }
-    if let Err(reason) = crate::rules::parse_index_format(&spec.format) {
-        return Some(format!("has an invalid format: {reason}"));
+    match crate::rules::parse_index_format(&spec.format) {
+        Err(reason) => return Some(format!("has an invalid format: {reason}")),
+        Ok(lines) => {
+            // A `{Field}` placeholder must name a field the type declares: a
+            // typo would otherwise fill nothing and compare nothing (MILE-164).
+            let declared = config.record_types[&spec.record_type].declared_fields();
+            for segment in lines.iter().flatten() {
+                if let crate::rules::FormatSegment::Field(name) = segment {
+                    if !declared.contains(&crate::values::FieldName::new(name.as_str())) {
+                        return Some(format!(
+                            "has an invalid format: the placeholder '{{{name}}}' is neither {{id}}, {{file}}, {{title}} nor a declared field (required_fields or known_fields) of the type '{}'",
+                            spec.record_type
+                        ));
+                    }
+                }
+            }
+        }
     }
     match (&spec.begin, &spec.end) {
         (None, None) => None,
@@ -2944,6 +2959,20 @@ record_types:
         format!(
             "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  index.freshness:\n    level: error\n    indexes: {indexes}\n"
         )
+    }
+
+    #[test]
+    fn an_index_field_placeholder_must_name_a_declared_field() {
+        let cfg = |format: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Date\"]\nrules:\n  index.freshness:\n    level: error\n    indexes: [{{path: docs/adr/README.md, type: adr, format: \"{format}\"}}]\n"
+            )
+        };
+        assert!(parse(&cfg("{id} {Status} {Date}")).is_ok());
+        for bad in ["{id} {Statuss}", "{id} {status}", "{id} {Owner}"] {
+            let err = parse(&cfg(bad)).unwrap_err().to_string();
+            assert!(err.contains("declared field"), "{bad}: {err}");
+        }
     }
 
     #[test]

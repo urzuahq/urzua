@@ -1,5 +1,5 @@
 ---
-Version: '0.41'
+Version: '0.42'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -342,7 +342,7 @@ rules:
         end: "<!-- urzua:index:end -->"
       - path: "docs/specs/README.md"
         type: spec
-        format: "- [{id}]({file})\n  {title}"
+        format: "- [{id}]({file}) \u2014 {Status}, {Date}\n  {title}"
         begin: "<!-- urzua:index:begin -->"
         end: "<!-- urzua:index:end -->"
 ```
@@ -351,8 +351,13 @@ rules:
   (a YAML mapping, or a link followed by a description); the artifact's non-blank lines are read
   that many at a time, and a block scalar's trailing newline is ignored. A blank line inside the
   format is refused, since blank lines are skipped when an index is read.
-- Placeholders: `{id}`, `{file}` (the record's file name) and `{title}`. Each appears at most once in
-  the whole entry. An entry must name its record, by `{id}` or, when no id is written, by `{file}`;
+- Placeholders: `{id}`, `{file}` (the record's file name), `{title}` and `{Field}` for a declared
+  header field, written by its exact field name (`{Status}`, `{Date}`; `MILE-164`). A field placeholder
+  is filled from the record's header and checked against the index: a listed value that differs, or a
+  record without the field, is a finding. The field must be in the index type's `required_fields` or
+  `known_fields`: a placeholder naming anything else is a configuration error at load (a typo would
+  otherwise compare nothing), and a name that is `id`, `file` or `title` is always the built-in one.
+  Each placeholder appears at most once in the whole entry. An entry must name its record, by `{id}` or, when no id is written, by `{file}`;
   `{title}` alone is refused as ambiguous.
 - `{title}` is the record's H1 without its identifier: a leading number (`# 12 -- Title`) or the
   record's own id (`# ADR-12: Title`, compared by value) is dropped with the separator after it.
@@ -362,7 +367,7 @@ rules:
   `--apply` rewrites the lines between `begin` and `end` (everything else is kept byte for byte), or
   the whole file when no markers are declared, and creates a missing artifact. Entries are in record
   id order, so a second run changes nothing and reports `current`. A record that cannot fill a
-  placeholder (no H1 for `{title}`), a file that is not text and a marker that is absent are
+  placeholder (no H1 for `{title}`, no `Date` header for `{Date}`), a file that is not text and a marker that is absent are
   failures naming the artifact, never a partial write.
 
 ## Scope declaration
@@ -788,3 +793,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.39`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
 > | 2026-11-04 | Bumped to `0.40`. Removed the `Last-audited: 2026-11-04` field from this spec's header. **Why:** it was added only to exercise `MILE-166` and no audit took place, so it attested to something that did not happen; the `Last-audited` declaration and `drift_audit_field` in the configuration are unchanged. | **structural** |
 > | 2026-11-04 | Bumped to `0.41`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |
+> | 2026-11-04 | Bumped to `0.42`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |
