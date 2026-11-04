@@ -1,0 +1,3 @@
+Recorded GitHub REST responses for the `urzua refs refresh` tests (`MILE-143`), as `curl --include` prints them.
+
+`issues-page1.http` to `issues-page3.http` are three consecutive pages of `GET /repos/{owner}/{repo}/issues?state=all&per_page=3` for this repository, trimmed to the fields the refresh reads (`number`, and `pull_request` where present) and to a stable `X-Ratelimit-*` set. Page 3 had issue 217 marked as a plain issue so that both kinds are exercised. `{{BASE}}` stands for the API origin and is substituted by the test. `rate-limited.http`, `not-found.http` and `bad-credentials.http` are the documented shapes of those failures.

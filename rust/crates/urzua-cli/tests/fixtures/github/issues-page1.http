@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+X-Ratelimit-Limit: 15000
+X-Ratelimit-Remaining: 14899
+X-Ratelimit-Reset: 1793792528
+Link: <{{BASE}}/repos/urzuahq/urzua/issues?state=all&per_page=3&page=2>; rel="next"
+Content-Length: 100
+
+[{"number":224,"pull_request":{}},{"number":223,"pull_request":{}},{"number":222,"pull_request":{}}]

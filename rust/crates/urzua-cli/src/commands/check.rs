@@ -561,6 +561,25 @@ pub fn run(
         .as_ref()
         .map(|c| c.changed.iter().cloned().collect());
 
+    // The committed snapshot of issue and pull request numbers (`MILE-143`),
+    // read only when the rule that uses it is enabled. A file read, never a
+    // request: `check` stays offline and deterministic.
+    let refs_snapshot = load_refs_snapshot(&config, &repo_root);
+    if let (Some(refs), Ok(snapshot)) = (issue_refs_declaration(&config), &refs_snapshot) {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: rules::RULE_CITATION_ISSUE_EXISTS.to_string(),
+            message: format!(
+                "citations were checked against {}, generated {} for {} ({} issues, {} pull requests); run `urzua refs refresh` to update it",
+                refs.snapshot,
+                snapshot.generated_at,
+                snapshot.repository,
+                snapshot.issues.len(),
+                snapshot.pulls.len(),
+            ),
+        });
+    }
+
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
             rules::header_required_fields(&records, &config)
@@ -827,6 +846,9 @@ pub fn run(
             };
             rules::citation_path_exists(&records, &config, &full_text, &present)
         }),
+        crate::gate::gated(&config, rules::RULE_CITATION_ISSUE_EXISTS, || {
+            rules::citation_issue_exists(&records, &config, &full_text, &refs_snapshot)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
@@ -896,9 +918,18 @@ pub fn run(
     // file lives under `claim_paths`, which no record-type `dir` scope covers,
     // and a narrower-than-unscoped `check <path>` silently dropping a real
     // finding is `BUG-86`'s own recurrence, not a new defect (`BUG-121`).
+    // `citation.issue-exists` also reports an unusable snapshot on the
+    // snapshot file itself, which is no record and belongs to every scope: a
+    // narrowed run that could check nothing must still say so.
+    let snapshot_path = issue_refs_declaration(&config).map(|r| PathBuf::from(&r.snapshot));
+    let is_snapshot_finding = |f: &Finding| {
+        f.rule == rules::RULE_CITATION_ISSUE_EXISTS
+            && snapshot_path.as_deref() == Some(f.file.as_path())
+    };
     if !requested_scopes.is_empty() {
         findings.retain(|f| {
             f.file == config_path.as_path()
+                || is_snapshot_finding(f)
                 || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
                 || requested_scopes.iter().any(|s| f.file.starts_with(s))
         });
@@ -911,6 +942,7 @@ pub fn run(
     if diff_scope.is_some() {
         findings.retain(|f| {
             f.file == config_path.as_path()
+                || is_snapshot_finding(f)
                 || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
                 // A file below a declared dir that no type owns is not a loaded
                 // record, so it is never in the examined set; the rule judges
@@ -1051,4 +1083,38 @@ pub fn run(
     };
 
     emit(&report)
+}
+
+/// `citation.issue-exists`'s `issue_refs`, when the rule is enabled.
+fn issue_refs_declaration(
+    config: &urzua_core::config::Config,
+) -> Option<&urzua_core::config::IssueRefs> {
+    config
+        .rules
+        .get(rules::RULE_CITATION_ISSUE_EXISTS)
+        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+        .and_then(|s| s.issue_refs.as_ref())
+}
+
+/// The snapshot `citation.issue-exists` judges against, or why it cannot be
+/// used. When the rule is not enabled nothing is read.
+fn load_refs_snapshot(
+    config: &urzua_core::config::Config,
+    repo_root: &std::path::Path,
+) -> Result<urzua_core::refs_snapshot::RefsSnapshot, String> {
+    let Some(refs) = issue_refs_declaration(config) else {
+        return Err("not enabled".to_string());
+    };
+    let path = repo_root.join(&refs.snapshot);
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!("{} does not exist", refs.snapshot)
+        } else {
+            format!("{} could not be read: {e}", refs.snapshot)
+        }
+    })?;
+    let parsed: urzua_core::refs_snapshot::RefsSnapshot = serde_json::from_str(&text)
+        .map_err(|e| format!("{} is not a valid snapshot: {e}", refs.snapshot))?;
+    urzua_core::refs_snapshot::validate_snapshot(parsed, &refs.repository)
+        .map_err(|why| format!("{} {why}", refs.snapshot))
 }
