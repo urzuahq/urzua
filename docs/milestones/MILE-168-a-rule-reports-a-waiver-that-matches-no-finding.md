@@ -25,3 +25,4 @@ The rule names each waiver that matches nothing and the rule and target it claim
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Built as `waiver.matches-nothing` (opt-in, enabled in this repository's config). Reports an expired waiver, a waiver naming an unknown rule, and an active waiver whose rule ran over the whole corpus and found nothing in its scope; a partial run does not judge a live waiver. **Why:** the Done-when contract; scope semantics chosen so `--base` and path-scoped runs produce no false stale report. | **substantive** |

@@ -1,5 +1,5 @@
 ---
-Version: '0.33'
+Version: '0.34'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -677,6 +677,11 @@ rules:
 - It adds no second notion of "a date": it reads the same field states and the same date validity as
   `date.field-valid`.
 
+`waiver.matches-nothing` (`MILE-168`) takes no options; enable it as `waiver.matches-nothing: warn`. It
+reports, on the waiver record, a waiver that is expired, names a rule this build does not have, or is
+active but matches no finding of a rule that ran over the whole corpus. A path-scoped or `--base`
+run, and a waiver whose target rule is off, leave a live waiver unjudged (eligible, unexamined).
+
 There is deliberately no dedicated acceptance-date rule. The acceptance date is required on an
 accepted-type status and forbidden on every other through the one mechanism for status-dependent
 fields, `statuses.require` / `statuses.forbid` (`MILE-132`), with `date.field-valid` owning the
@@ -747,4 +752,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.30`. `date_order` entries are mappings `{earlier, later}` instead of an `Earlier <= Later` string; a relation pair's `types` scoping counts a claim to an uncarried type as eligible and unexamined, not out of scope. **Why:** `ADR-64` (structured in, structured out) for `MILE-157`, and `MILE-155` -- a legitimate cross-type claim is not a configuration the tool cannot reach. | **substantive** |
 > | 2026-11-04 | Bumped to `0.31`. Documented the optional `skip_tables` option of `citation.path-exists` (markers naming tables whose rows are history and are not read; empty by default), and that a declared `external_ids` citation is counted eligible and unexamined, not out of scope. **Why:** `MILE-143` -- a revision log under `## References` names paths as they were; `BUG-186` -- a declared external id was reported by `config.scope-matches-nothing` as a misconfiguration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
-> | 2026-11-04 | Bumped to `0.33`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
+> | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
+> | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |

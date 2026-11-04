@@ -207,6 +207,8 @@ rules:
   date.field-order:
     level: error
     date_order: [{earlier: Date, later: Accepted-on}]
+  # A waiver that matches no finding, or has expired, is reported (MILE-168).
+  waiver.matches-nothing: warn
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
