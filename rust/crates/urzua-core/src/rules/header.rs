@@ -214,6 +214,12 @@ pub fn near_miss<'a>(
         .min()
 }
 
+/// `MILE-141`: a header key beginning `x-` in any case. Matched on the
+/// first two bytes only, so a multi-byte key never panics on a char boundary.
+fn is_extension_key(key: &str) -> bool {
+    key.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-"))
+}
+
 pub fn header_field_set_consistency(
     records: &[Record],
     config: &Config,
@@ -222,6 +228,13 @@ pub fn header_field_set_consistency(
     let allowed_by_type = &allowed_by_type;
     const RULE_ID: &str = RULE_HEADER_FIELD_SET_CONSISTENCY;
     let mut findings = Vec::new();
+    // Off unless declared (`MILE-141`): without the option an `x-` key is an
+    // undeclared key like any other, so existing corpora see no change.
+    let allow_extension_prefix = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.allow_extension_prefix)
+        .unwrap_or(false);
 
     // Eligible: records of a type declaring `known_fields`. An unparsed header
     // stays eligible and unexamined (BUG-78) rather than vanishing.
@@ -249,6 +262,9 @@ pub fn header_field_set_consistency(
             }
 
             for field in &record.header.fields {
+                if allow_extension_prefix && is_extension_key(field.key.as_str()) {
+                    continue;
+                }
                 if !field_is_declared(&field.key, allowed) {
                     findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -1069,5 +1085,56 @@ mod tests {
         assert_eq!(r.header.get("Status"), Some("A"));
         let (_, required) = header_required_fields(std::slice::from_ref(&r), &config);
         assert!(required.is_empty(), "{required:?}");
+    }
+
+    /// `MILE-141`: a repository declaring `allow_extension_prefix: true` lets
+    /// `x-` keys (any case) through the closed key set, and no other key.
+    fn field_set_config(allow: Option<bool>) -> Config {
+        let option = match allow {
+            Some(v) => format!("    allow_extension_prefix: {v}\n"),
+            None => String::new(),
+        };
+        let yaml = format!(
+            "schema_version: 2\nrules:\n  header.field-set-consistency:\n    level: warn\n{option}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Status\"]\n"
+        );
+        crate::config::parse(&yaml).expect("the fixture config loads")
+    }
+
+    #[test]
+    fn an_x_prefixed_key_is_exempt_when_the_option_is_declared_observed_failing() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Status: Accepted\n> x-Local: 1\n> X-Other: 2\n> Sponsor: someone\n",
+        );
+        let (exec, findings) = header_field_set_consistency(&[r], &field_set_config(Some(true)));
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("'Sponsor'"), "{findings:?}");
+    }
+
+    #[test]
+    fn an_unprefixed_unknown_key_stays_a_finding_when_the_option_is_declared() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "> Status: Accepted\n> xlocal: 1\n> x_local: 2\n> Local-x-: 3\n",
+        );
+        let (_, findings) = header_field_set_consistency(&[r], &field_set_config(Some(true)));
+        assert_eq!(findings.len(), 3, "{findings:?}");
+    }
+
+    #[test]
+    fn an_x_prefixed_key_is_a_finding_when_the_option_is_absent_or_false() {
+        for allow in [None, Some(false)] {
+            let r = record(
+                "docs/adr/0001-x.md",
+                "adr",
+                "> Status: Accepted\n> x-Local: 1\n",
+            );
+            let (_, findings) = header_field_set_consistency(&[r], &field_set_config(allow));
+            assert_eq!(findings.len(), 1, "allow={allow:?}: {findings:?}");
+            assert!(findings[0].message.contains("'x-Local'"), "{findings:?}");
+        }
     }
 }
