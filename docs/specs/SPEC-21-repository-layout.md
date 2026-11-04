@@ -37,7 +37,7 @@ inventory attached to it, which is what this spec now holds.
 | `.urzua/` | This repository's own `config.yaml` and record templates -- the tool's configuration of itself. |
 | `.github/` | Workflows, `release-paths` (`ADR-49`), and the release guard script (`BUG-48`). |
 | `.changeset/` | Pending release fragments (`ADR-29`), consumed by `knope` at release time. |
-| `.git-hooks/` | The pre-push hook installed by `make hooks-install`. |
+| `.git-hooks/` | The pre-commit and pre-push hooks installed by `make hooks-install`. |
 
 Root files: `Makefile`, `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
 `SECURITY.md`, `LICENSE`, `CHANGELOG.md`, `knope.toml`, `.coderabbit.yaml`, `.gitignore`.
