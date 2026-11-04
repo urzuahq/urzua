@@ -229,8 +229,14 @@ pub struct SectionsDecl {
 /// One required section: its heading text and the shape its content takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequiredSection {
-    /// The `##` heading text, matched exactly after trimming.
+    /// The heading text, matched exactly after trimming.
     pub name: String,
+    /// The heading level the section sits at: 2 for `##` (the default), 3 for
+    /// `###`. A level deeper than 2 needs the type's `depth` to reach it.
+    pub level: u8,
+    /// The heading text of the section one level up this one must sit under;
+    /// `None` accepts it under any parent. Only for a `level` of 3 or more.
+    pub under: Option<String>,
     pub shape: Option<SectionShape>,
     /// Other `##` heading texts that satisfy this requirement (`MILE-165`),
     /// matched exactly after trimming, in the order tried after `name`.
@@ -276,6 +282,10 @@ struct RawRequiredSection {
     aliases: Option<Vec<String>>,
     #[serde(default)]
     preamble: Option<bool>,
+    #[serde(default)]
+    level: Option<yaml_serde::Value>,
+    #[serde(default)]
+    under: Option<String>,
 }
 
 impl RawRequiredSection {
@@ -350,6 +360,24 @@ impl RawRequiredSection {
                 ));
             }
         }
+        let level = match &self.level {
+            None => 2,
+            Some(v) => v.as_u64().filter(|n| (2..=6).contains(n)).ok_or_else(|| {
+                format!("section '{name}': `level` must be an integer from 2 (`##`) to 6")
+            })? as u8,
+        };
+        let under = match self.under {
+            None => None,
+            Some(u) if u.trim().is_empty() => {
+                return Err(format!("section '{name}': `under` must not be blank"))
+            }
+            Some(_) if level < 3 => {
+                return Err(format!(
+                    "section '{name}': `under` names the section one level up, so it needs a `level` of 3 or more"
+                ))
+            }
+            Some(u) => Some(u.trim().to_string()),
+        };
         let preamble = self.preamble.unwrap_or(false);
         if preamble && !matches!(shape, Some(SectionShape::YStatement { marker: Some(_) })) {
             return Err(format!(
@@ -358,6 +386,8 @@ impl RawRequiredSection {
         }
         Ok(RequiredSection {
             name,
+            level,
+            under,
             shape,
             aliases,
             preamble,
@@ -374,7 +404,11 @@ fn deserialize_required<'de, D: serde::Deserializer<'de>>(
     for r in raw {
         let section = r.resolve().map_err(serde::de::Error::custom)?;
         for heading in section.headings() {
-            if out.iter().any(|o| o.headings().any(|h| h == heading)) {
+            if out.iter().any(|o| {
+                o.level == section.level
+                    && o.under == section.under
+                    && o.headings().any(|h| h == heading)
+            }) {
                 return Err(serde::de::Error::custom(format!(
                     "`required` names section '{heading}' twice"
                 )));
@@ -443,6 +477,22 @@ pub(crate) fn validate_declarations(
             CompiledIdentity::compile(i).map_err(|reason| invalid(name, "identity", reason))?;
         }
         if let Some(sd) = &sections {
+            for r in &sd.required {
+                if r.level > sd.depth.saturating_add(1) {
+                    return Err(invalid(
+                        name,
+                        "sections",
+                        format!(
+                            "section '{}' is at level {} but `depth` is {}, which reads headings only down to level {}; raise `depth` to {} or lower the `level`",
+                            r.name,
+                            r.level,
+                            sd.depth,
+                            sd.depth + 1,
+                            r.level - 1
+                        ),
+                    ));
+                }
+            }
             if sd.required.is_empty() && !sd.exempt_statuses.is_empty() {
                 return Err(invalid(
                     name,
@@ -828,6 +878,46 @@ mod tests {
         }
         let e = invalid(
             "    sections: {from: headings, required: [{name: A, aliases: [B]}, {name: B}]}\n",
+        );
+        assert!(e.contains("twice"), "{e}");
+    }
+
+    #[test]
+    fn a_required_section_declares_its_level_and_parent() {
+        let m = split(&cfg(
+            "    sections: {from: headings, depth: 2, required: [{name: Options}, {name: Pros, level: 3, under: Options}, {name: Notes, level: 3}]}\n",
+        ))
+        .unwrap();
+        let r = &m["adr"].sections.as_ref().unwrap().required;
+        assert_eq!((r[0].level, r[0].under.as_deref()), (2, None));
+        assert_eq!((r[1].level, r[1].under.as_deref()), (3, Some("Options")));
+        assert_eq!((r[2].level, r[2].under.as_deref()), (3, None));
+    }
+
+    #[test]
+    fn a_level_beyond_depth_or_a_misplaced_under_fails_the_load_not_a_silent_no_op() {
+        for (decl, needle) in [
+            ("depth: 1, required: [{name: A, level: 3}]", "depth"),
+            ("depth: 2, required: [{name: A, level: 4}]", "depth"),
+            ("depth: 2, required: [{name: A, level: 1}]", "level"),
+            ("depth: 2, required: [{name: A, level: x}]", "level"),
+            ("depth: 2, required: [{name: A, under: B}]", "under"),
+            (
+                "depth: 2, required: [{name: A, level: 3, under: ' '}]",
+                "under",
+            ),
+        ] {
+            let e = invalid(&format!("    sections: {{from: headings, {decl}}}\n"));
+            assert!(e.contains("adr") && e.contains(needle), "{decl}: {e}");
+        }
+    }
+
+    #[test]
+    fn the_same_name_at_a_different_level_or_parent_is_not_a_duplicate() {
+        let ok = "    sections: {from: headings, depth: 2, required: [{name: Notes}, {name: Notes, level: 3, under: A}, {name: Notes, level: 3, under: B}]}\n";
+        assert!(split(&cfg(ok)).is_ok());
+        let e = invalid(
+            "    sections: {from: headings, depth: 2, required: [{name: N, level: 3, under: A}, {name: N, level: 3, under: A}]}\n",
         );
         assert!(e.contains("twice"), "{e}");
     }
