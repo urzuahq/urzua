@@ -25,4 +25,4 @@ A declared pattern in `statuses.pending` makes every matching value read as pend
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
-> | 2026-11-04 | Built: `statuses.pending` accepts the structured entry `{pattern: "..."}` beside whole values (`SPEC-3` 0.35, `SPEC-2` 0.48); an invalid, blank or repeated pattern is a load error. Exercised by this repository's ADR type (a `TBD` / `to be decided` family) and `placeholder_vocabulary_integration.rs`. **Why:** the milestone's Done means. | **substantive** |
+> | 2026-11-04 | Built: `statuses.pending` accepts the structured entry `{pattern: "..."}` beside whole values (`SPEC-3` 0.36, `SPEC-2` 0.49); an invalid, blank or repeated pattern is a load error. Exercised by this repository's ADR type (a `TBD` / `to be decided` family) and `placeholder_vocabulary_integration.rs`. **Why:** the milestone's Done means. | **substantive** |
