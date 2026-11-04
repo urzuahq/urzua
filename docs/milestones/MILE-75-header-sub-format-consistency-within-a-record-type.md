@@ -31,6 +31,10 @@ can't tell a maintainer "these look inconsistent," which is a legitimate part of
 format consistency" (rules.rs's own doc comment for Rule 1) implies to a reader even though the
 implementation only checks required-field presence per a declared shape, not sub-format uniformity.
 
+## Done means
+
+A type's records agree on one header layout and `check` reports one that does not: `ADR-38` decided the `header_layout` option and the `header.layout-consistency` rule for this when blockquote sub-formats were interchangeable. `MILE-85` deleted the option, the rule and the sub-formats together with the shapes they policed, so what remains true is that `yaml-frontmatter` is the only shape and a type cannot mix layouts.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -38,3 +42,4 @@ implementation only checks required-field presence per a declared shape, not sub
 > | 2026-09-07 | Fixed and shipped (ADR-38): a `header_layout` config field (`one-per-line` \| `pipe-delimited`), declared per type, checked by a new `header.layout-consistency` rule. **Why:** two cheaper alternatives (majority-vote inference, deriving from the type's checked-in template) were considered and rejected -- majority-vote ratifies existing drift instead of catching it, and template-derivation is silently inert for `spec`, which has no template yet (MILE-74) and is exactly the type that motivated this. Declaring it explicitly works regardless of template state. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Superseded by `MILE-85`; `Status` stays Done. **Why:** the closure audit of #234 swept the Done milestones for later removals. `header.layout-consistency`, the `header_layout` option and the sub-formats they policed were deleted by `MILE-85` together with the blockquote and bold-list shapes. The milestone delivered the rule when it shipped; the rule no longer exists. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

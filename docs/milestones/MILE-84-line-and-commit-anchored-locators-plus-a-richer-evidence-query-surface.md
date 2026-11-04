@@ -36,7 +36,13 @@ specific commit" — which matters most exactly where an inline code comment can
 now, finding all the evidence for a record means grep-ing `Realized-by` across the corpus by hand
 and manually opening each file; `explain` only does the first half.
 
+## Done means
+
+A `Realized-by` locator can name a line or a pinned commit (a shape such as `code:path/to/file.rs@<short-sha>:<line>`) and still resolve after an unrelated refactor of the same file; `check` reports a pinned line or commit that no longer exists; an evidence-query surface answers which records cite a given path, line or commit beyond `explain`'s file-level answer; the locator syntax is decided in an ADR, documented in `SPEC-2`, and used by at least one of urzua's own records.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

@@ -35,8 +35,13 @@ indefinitely with `RFC-22`/`MILE-87`/`MILE-88`/`MILE-89` -- the noise is real an
 PR that adds another `Realized-by` citation, unlike those other open items which aren't actively
 compounding.
 
+## Done means
+
+A `claim` record type exists in `.urzua/config.yaml` with its own directory, template and required fields (a single locator and the records that cite it), a record's `Realized-by` can point at a claim instead of a raw locator, `embodiment.locator-promotion-candidate`'s findings have a real record to be promoted to, `urzua new claim` works, and AND/OR composites, weakest-link confidence and cycle detection stay out (`MILE-16`); urzua's own repeated locators are promoted and the rule reports none left.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial milestone, `Status: Planned`. Not yet scoped into a concrete schema for `claim`'s own required fields (the locator itself, which records cite it, and how `Realized-by` on a citing record points at a `claim` instead of a raw locator) -- that design decision comes before implementation starts. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
