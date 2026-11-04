@@ -22,6 +22,9 @@ fn all_options() -> Vec<&'static str> {
         .iter()
         .flat_map(|d| d.options.iter().copied())
         .collect();
+    // `issue_refs` is one structured declaration read whole by its own
+    // helper (`issue_refs_declaration`), not a list re-read.
+    v.retain(|o| *o != "issue_refs");
     v.sort();
     v.dedup();
     v

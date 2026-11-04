@@ -65,6 +65,15 @@ rule and the existing schema untouched.
 - `spec` stays unchecked by this rule until MILE-74 resolves its canonical field set -- SPEC-1's
   `Embodiment`/`Author`/`Derives-from` remain visible drift, tracked, not silently accepted.
 
+## Amendment (2026-11-04): `spec` now declares `known_fields`
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+The Decision and its Consequences leave `known_fields` undeclared for `spec` until `MILE-74` settles
+the spec field set. `.urzua/config.yaml` now declares `known_fields` for `spec`, so
+`header.field-set-consistency` checks specs like the other types. The mechanism (a per-type
+`known_fields` list, additive to `required_fields`, opt-in per type) is unchanged.
+
 ## References
 
 - RFC-10 — the closed-header model this decision extends to a new axis (which fields exist, not
@@ -82,3 +91,4 @@ rule and the existing schema untouched.
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 9f42b6db5. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/header.rs` 17e08ea792a9 -> 7c679be9601d. Reason: Re-verified: header.field-set-consistency exists and known_fields is still per-type and additive to required_fields. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Amendment added: `spec` declares `known_fields` in `.urzua/config.yaml`, where the Decision leaves it undeclared pending `MILE-74`. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |

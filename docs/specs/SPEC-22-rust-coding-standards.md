@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-23
 Status: Accepted
 Author: beauwilliams
@@ -128,7 +128,7 @@ as a reason to choose Rust in the first place — only startup cost and static d
 ### The impure half is a separate crate; the core takes no filesystem, no `Path`
 
 `urzua-core` never touches a `Path` — filesystem and `git` access live in `urzua-io`, and the CLI
-(`urzua-cli`) is the only crate that sees both. `read_claim_files`, `compute_drifted_records`, and
+(`urzua-cli`) is the only crate that sees both. `read_claim_files`, `read_index_artifacts`, `compute_drifted_records`, and
 similar I/O live in `urzua-cli/src/discovery.rs` precisely because `urzua-core`'s rules are pure
 functions over already-loaded data (`ADR-5`, `ADR-6` for why `git` is shelled out to rather than
 linked as a library).
@@ -241,3 +241,4 @@ occurrence rule applied to the registry (`MILE-171`).
 > | 2026-11-04 | Bumped to `0.5`. The convention names the table's `phase` and `run` fields and the runner that owns gating and severity. **Why:** `MILE-171` step 2: the 51 hand-written gating closures in `check` become table entries, so a rule that is in the table cannot be left unwired. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. The convention names the anchor and the scope filter the runner owns. **Why:** `MILE-171` step 3: `check` named two rule ids to scope their findings; the anchor on the rule's entry replaces them. | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. The convention names the options a rule accepts as a table field. **Why:** `MILE-171` step 4: the config loader kept its own list of which rule owns which option. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. The I/O-in-discovery convention names the claim and index readers and the symlink policy as living there, and a command's verdict as a pure function (`derive_status`). **Why:** `MILE-172`: `check::run` held the filesystem walkers and a five-branch status derivation testable only end to end. | **substantive** |

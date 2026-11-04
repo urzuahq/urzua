@@ -137,7 +137,7 @@ impl RuleOpts for SourceAndRecordsMixedOpts {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::Config;
+    use crate::config::{Config, RuleOpts};
     use crate::rules::*;
 
     fn config(rules: &str) -> Config {
@@ -168,12 +168,12 @@ mod tests {
 
     #[test]
     fn an_absent_optional_option_is_not_an_empty_one() {
-        let absent =
-            config("  pointer.target-status:\n    level: error\n    not_in: [Superseded]\n");
-        let o: PointerTargetOpts = absent.rule_opts(RULE_POINTER_TARGET_STATUS);
+        let setting = |y: &str| -> crate::config::RuleSetting { yaml_serde::from_str(y).unwrap() };
+        let o = PointerTargetOpts::from_setting(&setting("level: error\nnot_in: [Superseded]\n"));
         assert_eq!(o.fields, None);
-        let set = config("  pointer.target-status:\n    level: error\n    not_in: [Superseded]\n    fields: [Implements]\n");
-        let o: PointerTargetOpts = set.rule_opts(RULE_POINTER_TARGET_STATUS);
+        let o = PointerTargetOpts::from_setting(&setting(
+            "level: error\nnot_in: [Superseded]\nfields: [Implements]\n",
+        ));
         assert_eq!(o.fields, Some(vec!["Implements".to_string()]));
     }
 }
