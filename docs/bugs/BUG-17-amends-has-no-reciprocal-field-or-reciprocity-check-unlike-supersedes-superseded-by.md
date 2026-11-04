@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M26CKB9RQXDTJ7PP53THBQ1F
-Status: Open
+Status: Fixed
 Found-in: 'surfaced while scoping a new RFC to amend RFC-2 -- asked why `Amends` has no `relation.supersession-reciprocity`-style check the way `Supersedes / Superseded-by` does, and found no ADR or RFC ever actually decided the asymmetry either way'
-Regression-test: 'not yet written -- fix scope (reciprocal field vs. reciprocity-only check, one-directional-by-design vs. genuinely fixed) not yet decided'
+Regression-test: 'rust/crates/urzua-core/src/rules/relation.rs::an_inverse_claim_the_forward_side_does_not_echo_is_a_finding, rust/crates/urzua-cli/tests/provisional_claim_integration.rs::an_accepted_amendment_the_peer_has_not_echoed_is_an_error'
 ---
 # 17 — Amends has no reciprocal field or reciprocity check, unlike Supersedes / Superseded-by
 
@@ -48,3 +48,4 @@ real decision, which is exactly how this was found.
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right fix is a reciprocal `Amended-by` field, a reciprocity check reusing the existing combined-field pattern, or a deliberate decision that one-directional is correct after all (and documenting that decision explicitly, closing this without a code change) is not yet decided. | **structural** |
 > | 2026-11-04 | `relation_pairs` (`MILE-122`) now lets a repository declare `Amends` / `Amended-by` and have it echoed; this repository declares no pair, so the finding set is unchanged. Whether `Amends` should be one-way here is still undecided, so `Status` and the fix scope stand. **Why:** the general mechanism the fix needed now exists. | **substantive** |
+> | 2026-11-04 | `Status` set to `Fixed`; `Regression-test` filled. Fixed in #163 (`MILE-122`: declared `relation_pairs` and a general reciprocity rule); this repository declares the `amendment` pair (`Amends` / `Amended-by`, `reciprocity: required`, `rfc` only) in `.urzua/config.yaml`, with a provisional level while the claimant is a Draft (`MILE-155`, `MILE-163`). **Why:** `Amends` is now checked for a reciprocal field the way `Supersedes / Superseded-by` is, and the pair is declared per repository rather than hardcoded to one relation. | **substantive** |

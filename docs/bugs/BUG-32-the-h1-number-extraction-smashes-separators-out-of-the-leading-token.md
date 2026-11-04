@@ -54,3 +54,4 @@ what the rule reports when it does not.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial record, `Status: Open`. Not fixed -- it needs a decision about what shape a leading token must have, not a wording change, and `BUG-23`/`BUG-29`/`BUG-30` already change this function once. | **structural** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `first_h1` (`rules/filename.rs`) still builds the number with `.chars().filter(char::is_ascii_digit)`, so `# 2026-09-16 Notes` yields `20260916`. **Why:** the shape a leading token must have is the decision the record names, tied to `RFC-29` and `RFC-44`. | **substantive** |
