@@ -20,3 +20,4 @@ ADR-32 explicitly named this as separate follow-up work, not implied by drift de
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-03 | Built: `fix` detects and `--apply` writes `Drift detected`, using the drifted-record set `check` computes (`SPEC-8` `0.6`). **Why:** the work this milestone planned; `Status` is left for a human to move. | **substantive** |

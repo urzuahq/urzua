@@ -31,6 +31,10 @@ Adopt mode's tests assert on the configuration `init` writes. None runs `check` 
 configuration and asserts the proposed rules reached a verdict. A config that is well-formed and
 inert passes every test there is.
 
+## Decision (2026-11-04)
+
+`init` stops proposing the five declaration-dependent rules (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.layout-consistency` and `header.pointer-field-clean`) until their declarations exist, and tells the adopter what to declare first. It infers nothing from the corpus (`ADR-33`).
+
 ## References
 
 - `BUG-61` and `BUG-70`, the same judgement applied to options and to identity.
@@ -41,3 +45,4 @@ inert passes every test there is.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | Recorded the chosen fix: `init` stops proposing the five declaration-dependent rules until their declarations exist and tells the adopter what to declare first; it infers nothing from the corpus (`ADR-33`). `Status` stays `Open`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

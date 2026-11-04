@@ -4,7 +4,6 @@ Stable-Id: 01M1Y5JTH1RN024BFKVMV0Q6XF
 Phase: '1'
 Track: review-workflow
 Implements: —
-Blocked-on: RFC-48
 ---
 # 27 — Depends-on/Blocked-by relationship with cycle detection
 
@@ -20,4 +19,5 @@ Named explicitly in ADR-34/SPEC-6 as deferred until a real case needs it -- Phas
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | `Blocked-on: RFC-48` removed. **Why:** `RFC-48` is accepted; this milestone is buildable. | **substantive** |
 > | 2026-11-02 | `Blocked-on` moved from the trigger to `RFC-48`. **Why:** The trigger fired: planning Phase 0 needed an order `Phase`/`Track` could not express; `RFC-48` proposes the design. | **substantive** |
