@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+regex = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 yaml_serde = { workspace = true }

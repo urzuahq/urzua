@@ -3054,6 +3054,10 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
         ("identity.collision", "reads the filename identifier only"),
         ("filename.title-consistency", "reads filename and H1 only"),
         ("revision-log.change-class-required", "reads body text only"),
+        (
+            "citation.resolution",
+            "reads body text only; a header-less record is read whole",
+        ),
         // Claim-level: judges claim files, not records.
         (
             "claim.status-agreement",

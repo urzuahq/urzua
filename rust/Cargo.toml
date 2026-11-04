@@ -32,6 +32,9 @@ yaml_serde = "0.10"
 # verified compiling under the pinned toolchain before choosing.
 ulid = "3.0"
 clap = { version = "4", features = ["derive"] }
+# Pure Rust, no I/O (finite automata over in-memory text). Admitted to
+# urzua-core for the declared `identity.pattern` (MILE-98, RFC-33 layer 1).
+regex = "1"
 
 [profile.release]
 # The CLI runs in the commit hot path (ADR-0001). Optimize for startup and
