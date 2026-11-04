@@ -165,6 +165,14 @@ enum Command {
     /// any one repository enabled.
     Rules,
 
+    /// Regenerate the declared index artifacts (`index.freshness`'s
+    /// `indexes`) from the records. Detect mode by default: reports which
+    /// artifacts differ and writes nothing; `--apply` writes them.
+    Index {
+        #[arg(long)]
+        apply: bool,
+    },
+
     /// Detect fields whose stated value disagrees with what the tool
     /// computes (ADR-0015). Read-only by default. Only Tier 1 (Embodiment)
     /// exists.
@@ -284,6 +292,7 @@ fn main() -> ExitCode {
         Command::Init { dry_run } => commands::init::run(dry_run),
         Command::Doctor => commands::doctor::run(),
         Command::Rules => commands::rules::run(),
+        Command::Index { apply } => commands::index::run(cli.config, apply),
         Command::Fix {
             tier,
             apply,

@@ -1,5 +1,5 @@
 ---
-Version: '0.27'
+Version: '0.28'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -284,6 +284,46 @@ rules:
 - A file exists when git tracks it and it is on disk; a directory exists when a tracked file is below
   it. The check is offline and deterministic. Cited issue and pull request numbers are not covered by
   this rule.
+
+## Index artifacts: `index.freshness`'s `indexes`
+
+`index.freshness` compares each declared index with the records of its type (`MILE-139`); `urzua
+index` regenerates it (`MILE-152`):
+
+```yaml
+rules:
+  index.freshness:
+    level: error
+    indexes:
+      - path: "docs/adr/README.md"
+        type: adr
+        format: "- [{title}]({file})"
+        begin: "<!-- urzua:index:begin -->"
+        end: "<!-- urzua:index:end -->"
+      - path: "docs/specs/README.md"
+        type: spec
+        format: "- [{id}]({file})\n  {title}"
+        begin: "<!-- urzua:index:begin -->"
+        end: "<!-- urzua:index:end -->"
+```
+
+- `format` writes one entry. Its lines are separated by `\n`, so an entry may span several lines
+  (a YAML mapping, or a link followed by a description); the artifact's non-blank lines are read
+  that many at a time, and a block scalar's trailing newline is ignored. A blank line inside the
+  format is refused, since blank lines are skipped when an index is read.
+- Placeholders: `{id}`, `{file}` (the record's file name) and `{title}`. Each appears at most once in
+  the whole entry. An entry must name its record, by `{id}` or, when no id is written, by `{file}`;
+  `{title}` alone is refused as ambiguous.
+- `{title}` is the record's H1 without its identifier: a leading number (`# 12 -- Title`) or the
+  record's own id (`# ADR-12: Title`, compared by value) is dropped with the separator after it.
+- Only records with an identifier are the type's records: a README in the type's directory is not
+  listed unless it is also declared as one.
+- `urzua index` is read-only by default and reports each artifact as `current`, `stale` or `missing`;
+  `--apply` rewrites the lines between `begin` and `end` (everything else is kept byte for byte), or
+  the whole file when no markers are declared, and creates a missing artifact. Entries are in record
+  id order, so a second run changes nothing and reports `current`. A record that cannot fill a
+  placeholder (no H1 for `{title}`), a file that is not text and a marker that is absent are
+  failures naming the artifact, never a partial write.
 
 ## Scope declaration
 
@@ -670,3 +710,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |
 > | 2026-11-04 | Bumped to `0.27`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.28`. Documented the `indexes` entry shape of `index.freshness`: multi-line `format`, `{file}` in place of `{id}`, `{title}` without the id, and regeneration with `urzua index`. **Why:** `MILE-152` -- a YAML or link-list index could not be declared, and nothing regenerated one. | **substantive** |

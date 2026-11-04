@@ -195,7 +195,7 @@ fn read_claim_files(
 /// not text are handed over as such, never as empty. A path that resolves
 /// outside the repository, or any other I/O failure, aborts: an artifact the
 /// rule could not read is one it did not compare.
-fn read_index_artifacts(
+pub(crate) fn read_index_artifacts(
     repo_root: &std::path::Path,
     specs: &[urzua_core::config::IndexSpec],
 ) -> Result<Vec<rules::IndexArtifact>, String> {

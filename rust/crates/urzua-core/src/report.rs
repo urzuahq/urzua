@@ -688,6 +688,72 @@ impl Report for FixReport {
     }
 }
 
+/// `urzua index`'s report (`MILE-152`): each declared index artifact, and
+/// whether regenerating it from the records changes it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct IndexReport {
+    pub status: IndexStatus,
+    pub indexes: Vec<IndexResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IndexStatus {
+    /// No index is declared, or the declaration could not be read: nothing ran.
+    NotRun,
+    /// At least one artifact could not be regenerated or written.
+    PartialFailure,
+    /// Every artifact already matches what regeneration produces.
+    Ok,
+    /// Detect mode: at least one artifact differs; nothing was written.
+    RegenerationAvailable,
+    /// Apply mode wrote at least one artifact, and none failed.
+    Applied,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IndexOutcome {
+    /// Already what regeneration produces; nothing to do.
+    Current,
+    /// Differs; detect mode left it alone.
+    Stale,
+    /// Differed; apply mode rewrote it.
+    Written,
+    /// Did not exist; apply mode created it.
+    Created,
+    /// Missing in detect mode; apply mode would create it.
+    Missing,
+    Failed,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct IndexResult {
+    pub path: PathBuf,
+    pub outcome: IndexOutcome,
+    /// Records the regenerated index lists.
+    pub entries: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl Report for IndexReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        match self.status {
+            IndexStatus::NotRun => ExitCode::from(2),
+            IndexStatus::PartialFailure => ExitCode::from(1),
+            IndexStatus::Ok | IndexStatus::RegenerationAvailable | IndexStatus::Applied => {
+                ExitCode::from(0)
+            }
+        }
+    }
+}
+
 /// `urzua migrate schema --report`'s report (SPEC-0014) -- read-only preview,
 /// same `Ok`-only status axis as `ExplainReport`/`GraphReport`.
 #[derive(Debug, Clone, serde::Serialize)]
