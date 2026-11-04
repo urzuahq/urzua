@@ -81,7 +81,7 @@ no format lock-in, since the output is plain Markdown.
 ## References
 
 - ADR-28 — the verification-only decision this supersedes.
-- `.changeset/README.md` — the fragment format, for contributors.
+- The fragment format, for contributors, was documented in a changeset README that is no longer in the repository; the mechanism it described was replaced (`ADR-45`).
 - `knope.toml`, `.github/workflows/ci.yml`, `.github/workflows/prepare-release.yml`.
 
 > **Revision log**
@@ -92,3 +92,4 @@ no format lock-in, since the output is plain Markdown.
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/ci.yml, code:.github/workflows/prepare-release.yml` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | `Embodiment` set to `Deprecated`, a state a human sets that no evidence computes. **Why:** this decision is `Superseded` by `ADR-45`, and the mechanism it describes was replaced, so its `Realized-by` files changing is no longer drift in a claim anyone relies on (`MILE-148`); the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit d3048beee. | **structural** |
+> | 2026-11-04 | References corrected: the changeset README it cited is gone with no successor (the mechanism was replaced, `ADR-45`), and the reference now says so instead of naming a path. `Status` and the decision are untouched. **Why:** `citation.path-exists` (`MILE-143`) is now enabled in this repository and reported the path as missing. | **structural** |

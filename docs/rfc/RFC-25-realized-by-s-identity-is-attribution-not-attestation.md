@@ -84,8 +84,8 @@ is correct as shipped and is not reconsidered here.
 - ADR-31 — accepted RFC-2's tiering; uses "verified" without restating RFC-2's caveat.
 - MILE-66 — built the fix; same pattern.
 - BUG-16 — the finding that prompted this RFC.
-- `.changeset/identity-verified-first.md` — the specific, time-sensitive artifact this RFC's
-  Proposal §1 asks to be corrected before release.
+- The `identity-verified-first` changeset fragment — the specific, time-sensitive artifact this RFC's
+  Proposal §1 asks to be corrected before release. It was consumed by the 0.2.0 release and no longer exists in the repository.
 
 > **Revision log**
 >
@@ -93,3 +93,4 @@ is correct as shipped and is not reconsidered here.
 > |---|---|---|
 > | 2026-09-10 | Initial RFC, `Status: Draft`. | **structural** |
 > | 2026-09-10 | Proposal §1 executed ahead of formal acceptance: reworded `.changeset/identity-verified-first.md` per this RFC's own text, since it named this as time-sensitive (the fragment ships into `CHANGELOG.md` the moment `ADR-45`'s release PR merges). `Status` stays `Draft` -- executing one time-sensitive proposal item isn't the same as accepting the RFC itself. | **substantive** |
+> | 2026-11-04 | References corrected: the changeset fragment it cited was consumed by the 0.2.0 release and is gone with no successor, and the reference now says so instead of naming a path. `Status` stays `Draft` and the proposal is untouched. **Why:** `citation.path-exists` (`MILE-143`) is now enabled in this repository and reported the path as missing. | **structural** |

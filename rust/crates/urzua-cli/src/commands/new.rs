@@ -124,8 +124,10 @@ pub fn run(
         _ => format!("{type_prefix}-{display_number}-{slug}.md"),
     };
 
-    // A closed field set (`known_fields` declared) rejects a field it does not
-    // list, so `Stable-Id` is written only when the type admits it (`BUG-182`).
+    // Every record gets a `Stable-Id` (`ADR-21`). A closed field set
+    // (`known_fields`) that does not list it is a configuration inconsistency
+    // the author must resolve, so it is disclosed below rather than answered by
+    // writing a record with no identity (`BUG-182` had omitted it).
     let admits_stable_id = type_config.known_fields.is_none()
         || type_config
             .declared_fields()
@@ -153,7 +155,7 @@ pub fn run(
             .map(String::as_str),
         status_field: type_config.relation_field(urzua_core::config::RelationRole::Status),
         title: &title,
-        stable_id: admits_stable_id.then(|| stable_id.as_str()),
+        stable_id: stable_id.as_str(),
         author: &identity.name,
         today: &today,
     };
@@ -223,7 +225,8 @@ pub fn run(
             subject: "stable-id".to_string(),
             message: format!(
                 "record type '{record_type}' declares a closed field set (`known_fields`) that does not list \
-                 `Stable-Id`, so none was written; add `Stable-Id` to its `known_fields` to give new records one"
+                 `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and \
+                 `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`"
             ),
         });
     }
@@ -235,7 +238,7 @@ pub fn run(
             .unwrap_or(&file_path)
             .to_path_buf(),
         display_number,
-        stable_id: admits_stable_id.then(|| stable_id.as_str().to_string()),
+        stable_id: Some(stable_id.as_str().to_string()),
         notices,
     })
 }

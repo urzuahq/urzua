@@ -93,12 +93,18 @@ pub fn type_record_outside_declared_dir(
 /// it never examined. `claim_paths` has a load-time guard for the same hazard
 /// (`BUG-56`); `dir` has none.
 ///
-/// `matched` is supplied by the caller, which is where discovery happens.
+/// Also reports an `exclude_files` entry that names no tracked file directly in
+/// the type's `dir` (`MILE-150`): a stale exclusion is the same hazard as a
+/// misdeclared `dir`, a declaration that silently does nothing.
+///
+/// `matched` and `tracked` (every live tracked path, excluded files included)
+/// are supplied by the caller, which is where discovery happens.
 pub fn type_dir_matches_nothing(
     config: &Config,
     config_path: &std::path::Path,
     matched: &HashMap<String, usize>,
     dir_exists: &dyn Fn(&str) -> bool,
+    tracked: &[std::path::PathBuf],
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
     let mut findings = Vec::new();
@@ -106,6 +112,27 @@ pub fn type_dir_matches_nothing(
     let names = config.sorted_type_names();
 
     let population = census(PopulationUnit::RecordType, names, |name| {
+        let type_dir = std::path::Path::new(&config.record_types[*name].dir);
+        for entry in &config.record_types[*name].exclude_files {
+            let present = tracked.iter().any(|p| {
+                p.parent() == Some(type_dir) && p.file_name().is_some_and(|n| n == entry.as_str())
+            });
+            if !present {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    message: format!(
+                        "record type '{name}' declares exclude_files entry '{entry}', but no such file is \
+                         directly in '{}' -- the exclusion does nothing; remove it or correct the name",
+                        config.record_types[*name].dir
+                    ),
+                });
+            }
+        }
         if matched.get(*name).copied().unwrap_or(0) == 0 {
             let dir = &config.record_types[*name].dir;
             // A directory that exists and is empty is a type declared and not

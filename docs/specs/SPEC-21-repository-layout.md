@@ -1,5 +1,5 @@
 ---
-Version: '0.1'
+Version: '0.2'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Drift detected
@@ -70,7 +70,7 @@ the speculative reservation this spec exists to stop accumulating.
 - ADR-37 -- `scripts/generate-dashboard.py`.
 - ADR-49 -- `.github/release-paths`.
 - SPEC-1 -- restated this layout until 2026-09-19, when it was narrowed to the CLI.
-- MILE-101 -- builds `SPEC-4`'s fixtures, and claims `corpora/` when it does.
+- MILE-101 -- builds `SPEC-4`'s fixtures, and claims a `corpora` directory, which does not exist yet, when it does.
 
 > **Revision log**
 >
@@ -81,3 +81,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-09-19 | Success criterion 1 names `ls -A`, not `ls`. **Why:** plain `ls` hides `.urzua/`, `.changeset/`, `.github/` and `.git-hooks/` -- four of the nine entries this table lists -- so the criterion could not have detected the omission it was written to prevent, and did not. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:Makefile, test:.github/workflows/checks.yml` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Bumped to `0.2`. The reference to the not-yet-created corpora directory now says it does not exist yet, instead of naming a path that `citation.path-exists` correctly reports as missing. **Why:** `MILE-143` -- the rule is now enabled in this repository. | **structural** |

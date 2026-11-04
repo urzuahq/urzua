@@ -705,6 +705,28 @@ mod tests {
         assert_eq!(findings.len(), 1, "Verified disagrees with Implemented");
     }
 
+    /// `MILE-150`: an `exclude_files` entry that names no tracked file directly
+    /// in the type's `dir` is a stale exclusion, reported rather than ignored.
+    #[test]
+    fn an_exclude_files_entry_matching_no_file_is_a_warning_observed_failing() {
+        let yaml = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    exclude_files: [\"README.md\", \"gone.md\"]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let path = PathBuf::from(".urzua/config.yaml");
+        let tracked = vec![
+            PathBuf::from("docs/adr/README.md"),
+            PathBuf::from("docs/adr/ADR-1-a.md"),
+            // Same name one level down is not directly in `dir`.
+            PathBuf::from("docs/adr/sub/gone.md"),
+        ];
+        let (_, findings) =
+            type_dir_matches_nothing(&config, &path, &HashMap::new(), &|_| true, &tracked);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        assert_eq!(findings[0].file, path);
+        assert!(findings[0].message.contains("gone.md"), "{findings:?}");
+        assert!(findings[0].message.contains("'adr'"), "{findings:?}");
+    }
+
     /// BUG-49, found live: `ADR-42` named `.urzua/config.toml` for two days
     /// after `ADR-52` deleted it, and nothing reported it.
     /// A declared type with no records may be exactly right, so the finding is
@@ -717,7 +739,8 @@ mod tests {
 
         // docs/present exists and is empty; docs/absent does not exist.
         let exists = |d: &str| d == "docs/present";
-        let (exec, findings) = type_dir_matches_nothing(&config, &path, &HashMap::new(), &exists);
+        let (exec, findings) =
+            type_dir_matches_nothing(&config, &path, &HashMap::new(), &exists, &[]);
 
         assert_eq!(examined(&exec), 2, "both types are examined");
         assert_eq!(findings.len(), 1);
