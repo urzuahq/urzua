@@ -15,7 +15,7 @@
 //!       failure: [WontFix]        # terminal failure
 //!       implementable: [Open]     # code may cite it (optional)
 //!       claim_retained: []        # may keep an Implemented claim (optional)
-//!       pending: [pending, "not yet written"]
+//!       pending: [pending, "not yet written", {pattern: "^\\(pending"}]
 //!       require: [{when: [Fixed], fields: [Regression-test]}]
 //!       forbid:  [{when: [Open], fields: [Fixed-in]}]
 //! ```
@@ -50,11 +50,63 @@ pub struct StatusDecl {
     /// Whole field values that mean "not done yet", replacing the compiled-in
     /// substring match for this type (BUG-65). Omitted keeps that match.
     #[serde(default)]
-    pub pending: Option<Vec<String>>,
+    pub pending: Option<Vec<PendingEntry>>,
     #[serde(default)]
     pub require: Vec<StatusFieldRule>,
     #[serde(default)]
     pub forbid: Vec<StatusFieldRule>,
+}
+
+/// One entry of `statuses.pending` (`MILE-162`): a whole value, or a pattern
+/// for a family of placeholders that share a stem and differ in a tail. The
+/// pattern is structured config (`{pattern: "^\\(pending"}`), not a string DSL;
+/// it is an ordinary `regex` expression searched in the trimmed value, so the
+/// author anchors it (`^`, `$`) as wanted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PendingEntry {
+    Value(String),
+    Pattern(PendingPattern),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PendingPattern {
+    pub pattern: String,
+}
+
+impl<'de> Deserialize<'de> for PendingEntry {
+    /// Read by hand so a malformed entry is named, instead of serde's generic
+    /// "did not match any variant".
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let value = yaml_serde::Value::deserialize(d)?;
+        match value {
+            yaml_serde::Value::String(s) => Ok(PendingEntry::Value(s)),
+            m @ yaml_serde::Value::Mapping(_) => yaml_serde::from_value::<PendingPattern>(m)
+                .map(PendingEntry::Pattern)
+                .map_err(|e| {
+                    D::Error::custom(format!(
+                        "a `pending` pattern entry is `{{pattern: \"...\"}}` with no other key: {e}"
+                    ))
+                }),
+            _ => Err(D::Error::custom(
+                "a `pending` entry is a whole value (a string) or `{pattern: \"...\"}`",
+            )),
+        }
+    }
+}
+
+impl PendingEntry {
+    fn matches(&self, value: &str) -> bool {
+        match self {
+            PendingEntry::Value(v) => v.trim().eq_ignore_ascii_case(value),
+            // Validated at load, so a pattern that does not compile here (a
+            // hand-built declaration) simply matches nothing.
+            PendingEntry::Pattern(p) => regex::Regex::new(&p.pattern)
+                .map(|re| re.is_match(value))
+                .unwrap_or(false),
+        }
+    }
 }
 
 /// Fields tied to the statuses in `when`.
@@ -78,12 +130,13 @@ impl StatusDecl {
             .any(|v| v == status)
     }
 
-    /// Whether a whole field value is one of the declared pending values.
+    /// Whether a field value is a declared pending whole value, or matches a
+    /// declared pending pattern (`MILE-162`).
     /// `None` when the type declares no pending vocabulary.
     pub fn is_pending_value(&self, value: &str) -> Option<bool> {
         let pending = self.pending.as_ref()?;
         let value = value.trim();
-        Some(pending.iter().any(|p| p.trim().eq_ignore_ascii_case(value)))
+        Some(pending.iter().any(|p| p.matches(value)))
     }
 
     pub fn required_at(&self, status: &str) -> Vec<&str> {
@@ -142,6 +195,43 @@ fn check_list(what: &str, list: &[String], allow_empty: bool) -> Result<(), Stri
     Ok(())
 }
 
+/// `pending` must hold at least one entry; whole values are non-blank and
+/// distinct, patterns compile and are distinct (a pattern that cannot compile
+/// would otherwise match nothing, silently).
+fn check_pending(entries: &[PendingEntry]) -> Result<(), String> {
+    if entries.is_empty() {
+        return Err("`pending` must list at least one entry".into());
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for entry in entries {
+        match entry {
+            PendingEntry::Value(v) => {
+                if v.trim().is_empty() {
+                    return Err("`pending` has a blank entry".into());
+                }
+                if !seen.insert(format!("v:{v}")) {
+                    return Err(format!("`pending` lists '{v}' twice"));
+                }
+            }
+            PendingEntry::Pattern(p) => {
+                if p.pattern.is_empty() {
+                    return Err("`pending` has a blank pattern".into());
+                }
+                regex::Regex::new(&p.pattern).map_err(|e| {
+                    format!(
+                        "`pending` pattern '{}' is not a valid regular expression: {e}",
+                        p.pattern
+                    )
+                })?;
+                if !seen.insert(format!("p:{}", p.pattern)) {
+                    return Err(format!("`pending` lists the pattern '{}' twice", p.pattern));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
     check_list("values", &d.values, false)?;
     check_list("success", &d.success, true)?;
@@ -149,7 +239,7 @@ fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
     check_list("implementable", &d.implementable, true)?;
     check_list("claim_retained", &d.claim_retained, true)?;
     if let Some(p) = &d.pending {
-        check_list("pending", p, false)?;
+        check_pending(p)?;
     }
     for (what, list) in [
         ("success", &d.success),
@@ -256,6 +346,38 @@ mod tests {
         assert_eq!(d.forbidden_at("Open"), vec!["Fixed-in"]);
         assert_eq!(d.is_pending_value(" Pending "), Some(true));
         assert_eq!(d.is_pending_value("pending review"), Some(false));
+    }
+
+    #[test]
+    fn a_pending_pattern_matches_a_placeholder_family_beside_whole_values_observed_failing() {
+        let c = parse(&cfg("      values: [Open]\n      pending: [\"not yet written\", {pattern: \"^\\\\(pending\"}]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert_eq!(d.is_pending_value("(pending review)"), Some(true));
+        assert_eq!(d.is_pending_value("(pending ADR-9)"), Some(true));
+        assert_eq!(d.is_pending_value(" Not Yet Written "), Some(true));
+        // Matches no whole value and no pattern: a real value.
+        assert_eq!(d.is_pending_value("pending review"), Some(false));
+        assert_eq!(d.is_pending_value("Ana"), Some(false));
+    }
+
+    #[test]
+    fn an_invalid_or_malformed_pending_pattern_fails_the_load_observed_failing() {
+        assert!(
+            err("      values: [Open]\n      pending: [{pattern: \"(\"}]\n")
+                .contains("regular expression")
+        );
+        assert!(err("      values: [Open]\n      pending: [{pattern: \"\"}]\n").contains("blank"));
+        assert!(err(
+            "      values: [Open]\n      pending: [{pattern: \"^a\"}, {pattern: \"^a\"}]\n"
+        )
+        .contains("twice"));
+        assert!(
+            err("      values: [Open]\n      pending: [{regex: \"^a\"}]\n").contains("pending")
+        );
+        assert!(
+            err("      values: [Open]\n      pending: [{pattern: \"a\", flags: i}]\n")
+                .contains("pending")
+        );
     }
 
     #[test]

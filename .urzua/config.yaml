@@ -27,10 +27,16 @@ record_types:
       failure: ["Rejected", "Superseded"]
       implementable: ["Accepted"]
       claim_retained: ["Superseded"]
-      # The type's placeholder vocabulary (MILE-153): whole values only. It
+      # The type's placeholder vocabulary (MILE-153): whole values, and patterns. It
       # feeds field.pending and makes status.require count them as missing, so
       # an Accepted ADR whose Deciders reads "Unknown" is not decided.
-      pending: ["pending", "unknown", "none recorded"]
+      # A pattern entry (MILE-162) declares a placeholder family with a variable
+      # tail once: `TBD`, `TBD -- awaiting the board`, `to be decided by Q3`.
+      pending:
+        - "pending"
+        - "unknown"
+        - "none recorded"
+        - {pattern: '(?i)^(tbd|to be (decided|determined))\b'}
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"

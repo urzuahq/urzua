@@ -1,5 +1,5 @@
 ---
-Version: '0.34'
+Version: '0.35'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -223,7 +223,7 @@ Two details carry weight:
         failure: [WontFix]                # terminal, it ended without being done
         implementable: [Open]             # statuses at which code may implement the record
         claim_retained: []                # statuses that may keep an Implemented/Verified claim
-        pending: [pending, "not yet written"]
+        pending: [pending, "not yet written", {pattern: "^\\(pending"}]
         require: [{when: [Fixed], fields: [Regression-test]}]
         forbid:  [{when: [Open], fields: [Fixed-in]}]
   ```
@@ -239,6 +239,14 @@ Two details carry weight:
   with no value is a load-time error naming the record type and `statuses`. Transitions between
   statuses are not declared here (`MILE-144`).
 
+  A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
+  stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
+  regular expression searched in the trimmed value, so the author anchors it (`^`, `$`) and writes
+  `(?i)` for case-insensitivity. A whole value is still compared case-insensitively. A value that
+  matches no entry and no pattern is a real value. A pattern that is not a valid expression, is blank
+  or repeated, or an entry with any other key (`{pattern, flags}`) is a load-time error naming the
+  type and `statuses`.
+
   A type that declares no `statuses` behaves exactly as before. A declaration is read by:
 
   - `status.undeclared-value`: a `Status` outside `values`.
@@ -250,7 +258,7 @@ Two details carry weight:
     or `none recorded` can be declared once and no longer satisfies a requirement. A type that omits
     `pending` keeps the old reading, where such a value is present.
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
-    case-insensitive) equals one of the entries. It **replaces** the compiled-in match, which treats
+    case-insensitive) equals one of the whole-value entries or matches one of the pattern entries. It **replaces** the compiled-in match, which treats
     any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
     real value. A type that omits `pending` keeps the compiled-in match.
   - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
@@ -754,3 +762,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
+> | 2026-11-04 | Bumped to `0.35`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
