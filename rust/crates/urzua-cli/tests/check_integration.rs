@@ -3133,6 +3133,10 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "embodiment.back-pointer-resolution" => {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
+            "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
+            "date.acceptance-by-status" => format!(
+                "{id}: {{level: error, acceptance_field: \"Accepted-on\", accepted_statuses: [\"Done\"]}}"
+            ),
             _ => format!("{id}: error"),
         })
         .collect();
@@ -3141,7 +3145,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    statuses: {{values: [Open, Done], require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
+            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    statuses: {{values: [Open, Done], require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
             rules.join(", ")
         ),
     )

@@ -713,6 +713,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         crate::gate::gated(&config, rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT, || {
             rules::status_forbidden_field_present(&records, &config)
         }),
+        crate::gate::gated(&config, rules::RULE_DATE_FIELD_VALID, || {
+            rules::date_field_valid(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_DATE_ACCEPTANCE_BY_STATUS, || {
+            rules::date_acceptance_by_status(&records, &config)
+        }),
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
         }),
