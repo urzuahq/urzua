@@ -1,5 +1,5 @@
 ---
-Version: '0.28'
+Version: '0.29'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -104,8 +104,10 @@ Two details carry weight:
   for the diff gate. Only the named file is excluded: any other file in the directory that is not a
   record is still a record that failed to match, and `filename.identity-pattern` still reports it.
   An entry that is empty, `.`, `..`, or holds a path separator or a glob character (`/`, `\`, `*`,
-  `?`, `[`) is a load-time error naming the record type, because it would exclude nothing. Omitted
-  or empty, the type loads as it always did.
+  `?`, `[`) is a load-time error naming the record type, because it would exclude nothing. An entry that
+  names no file directly in the type's `dir` is reported by `type.dir-matches-nothing` as a warning
+  naming the type and the entry, so a stale exclusion is visible. Omitted or empty, the type loads
+  as it always did.
 - **A record type may declare its document model: `identity`, `fields` and `sections`**
   (`RFC-33` layer 1, `MILE-98`). Three optional keys under a record type, each a mapping with a
   required `from`:
@@ -711,3 +713,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |
 > | 2026-11-04 | Bumped to `0.27`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.28`. Documented the `indexes` entry shape of `index.freshness`: multi-line `format`, `{file}` in place of `{id}`, `{title}` without the id, and regeneration with `urzua index`. **Why:** `MILE-152` -- a YAML or link-list index could not be declared, and nothing regenerated one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.29`. An `exclude_files` entry that matches no file directly in the type's `dir` is reported as a `type.dir-matches-nothing` warning. **Why:** `MILE-150` -- an exclusion that silently does nothing hides a renamed or removed file and violates the no-silent-no-op principle. | **substantive** |

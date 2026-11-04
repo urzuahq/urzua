@@ -3689,6 +3689,32 @@ fn an_undeclared_stray_file_is_reported_beside_a_declared_exclusion() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `MILE-150`: an exclusion that matches no file is a stale declaration, so it
+/// is reported (no silent no-op); one that matches is not.
+#[test]
+fn an_exclude_files_entry_matching_no_file_is_reported_observed_failing() {
+    let rules = "{type.dir-matches-nothing: warn}";
+    let dir = excluded_files_repo(
+        "exclude-stale",
+        "    exclude_files: [\"README.md\", \"_template.md\"]\n",
+        &["ADR-1-a.md", "README.md"],
+        rules,
+    );
+    let parsed = check_json(&dir);
+    let hits: Vec<_> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "type.dir-matches-nothing")
+        .collect();
+    assert_eq!(hits.len(), 1, "{parsed}");
+    assert_eq!(hits[0]["severity"], "warning", "{parsed}");
+    assert_eq!(hits[0]["file"], ".urzua/config.yaml", "{parsed}");
+    let m = hits[0]["message"].as_str().unwrap();
+    assert!(m.contains("_template.md") && !m.contains("README"), "{m}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// A type whose only other file is the excluded one has no record to match, so
 /// the rule must not report "none of the type's 1 file(s) matches".
 #[test]

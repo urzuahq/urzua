@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -52,9 +52,11 @@ without an edit:
   expression cannot be run backwards, so the name is kept only if the pattern reads it back as the
   type's prefix and the number; a pattern no such name fits is a refusal naming the pattern, before
   anything is written. A type with no `identity` is numbered and named exactly as before.
-- **Field set.** `Stable-Id` is written unless the type declares a closed field set (`known_fields`)
-  that does not list it, which `header.field-set-consistency` would report. Then it is left out, the
-  report's `stable_id` is `null`, and a warning notice says how to give new records one.
+- **Field set.** `Stable-Id` is always written (ADR-21: every record type gets one). When the type
+  declares a closed field set (`known_fields`) that does not list it, the declaration contradicts
+  ADR-21 and `header.field-set-consistency` will report the new record; `new` does not hide that by
+  omitting the identity. It writes the `Stable-Id` anyway and adds a warning notice naming the
+  inconsistency and the fix (add `Stable-Id` to the type's `known_fields`).
 
 ## Display-number assignment
 
@@ -84,7 +86,7 @@ one the numbering scan recognises, so the number would be reissued (`BUG-167`).
 
 ## Output
 
-Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id` (`null` when none was written), plus an optional
+Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id` (always populated), plus an optional
 `notices` array (ADR-46) carrying non-fatal observations -- e.g. an explicit `--by` diverging from
 the identity `resolve_identity` actually used -- omitted entirely when empty. `new` still does not
 echo the generated content back; the caller reads the file at `path` if it needs to.
@@ -126,3 +128,4 @@ take content and parameters, returning a string.
 > | 2026-11-02 | §Display-number assignment now also skips numbers used on other local branches and remote-tracking refs, naming them on stderr, and documents that unfetched refs are invisible (`MILE-89`). Bumped to `0.5`. **Why:** `urzua new` re-assigned numbers already claimed by open PR branches. | **substantive** |
 > | 2026-11-02 | Bumped to `0.6`. A title with no slug is refused. **Why:** `new` wrote a slug-less `ADR-N-.md` that its own numbering scan ignored, so the next `new` reissued `N` (`BUG-167`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. A type's declared `identity` now decides numbering, the file name's padding and the H1's `PREFIX-N` form; the status field starts at the first declared status value instead of a literal `null`; `Stable-Id` is left out (report `stable_id: null`, warning notice) when a closed `known_fields` does not list it. A pattern `new` cannot name a file for is refused. **Why:** `MILE-151` and `BUG-182` -- the generator and the checker read two grammars, so its output failed `filename.identity-pattern` and `field.quality`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. `Stable-Id` is always written and the report's `stable_id` always populated; a closed `known_fields` that omits it yields a warning notice naming the inconsistency instead of an omitted identity. **Why:** `MILE-151` omitted it, contradicting ADR-21 (every record type gets a Stable-Id) and leaving a record with no identity. | **substantive** |

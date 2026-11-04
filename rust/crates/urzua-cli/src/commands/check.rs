@@ -702,7 +702,13 @@ pub fn run(
                 *matched.entry(r.record_type.clone()).or_insert(0) += 1;
             }
             let dir_exists = |d: &str| repo_root.join(d).is_dir();
-            rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists)
+            let live: Vec<std::path::PathBuf> = discovered
+                .paths
+                .iter()
+                .filter(|p| !discovered.staged_deletions.contains(*p))
+                .cloned()
+                .collect();
+            rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists, &live)
         }),
         crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
             rules::identity_collision(&records, identity_collisions)

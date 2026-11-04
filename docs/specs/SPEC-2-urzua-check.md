@@ -1,5 +1,5 @@
 ---
-Version: '0.40'
+Version: '0.41'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -232,7 +232,7 @@ which stays only for what genuinely isn't built yet.
 | `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
 | `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
-| `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. |
+| `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
 | `header.deprecated-shape` | Which configured types still declare a deprecated `header_shape` (`blockquote`/`bold-list`) instead of `yaml-frontmatter` (ADR-33). Parsing support for the deprecated shapes stays; this rule only surfaces which types haven't migrated. |
@@ -505,3 +505,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.38`. Added the opt-in `citation.path-exists` rule: a backtick-quoted repository path in a declared reference section must exist in the working tree (population unit: the cited path). The rule table is regenerated. **Why:** `MILE-143` -- `embodiment.locator-exists` covers only `Realized-by`, so a stale path cited in References passed every rule. Cited issue and pull request numbers remain unbuilt. | **substantive** |
 > | 2026-11-04 | Bumped to `0.39`. Added `date.field-order` to the generated rule table: an opt-in rule over a `date_order` entry (`Earlier <= Later`). **Why:** `MILE-157` -- cross-field date ordering, with well-formedness left to `date.field-valid`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.40`. `index.freshness` reads multi-line entries (a `format` of several lines), accepts a `format` with `{file}` and no `{id}`, and `{title}` now excludes the record's own id as well as a leading number; the rule table is regenerated. A new `urzua index [--apply]` command regenerates the declared indexes. **Why:** `MILE-152` -- index checking read one line per entry and required a visible id, and nothing regenerated an index. | **substantive** |
+> | 2026-11-04 | Bumped to `0.41`. `type.dir-matches-nothing` also reports a type's `exclude_files` entry that names no tracked file directly in its `dir`. Rule table regenerated. **Why:** `MILE-150` -- a stale exclusion is a declaration that silently does nothing. | **substantive** |

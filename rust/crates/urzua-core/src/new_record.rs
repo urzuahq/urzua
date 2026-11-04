@@ -261,9 +261,9 @@ pub struct NewRecordParams<'a> {
     /// (`RecordTypeConfig::relation_field`), not a literal.
     pub status_field: &'a str,
     pub title: &'a str,
-    /// `None` when the type's closed field set does not declare `Stable-Id`,
-    /// which would reject it.
-    pub stable_id: Option<&'a str>,
+    /// Always assigned (`ADR-21`): every record type gets one, whether or not
+    /// the type's field set declares it.
+    pub stable_id: &'a str,
     pub author: &'a str,
     pub today: &'a str,
 }
@@ -317,14 +317,13 @@ pub fn render_from_template(template: &str, params: &NewRecordParams) -> String 
         .iter()
         .position(|l| l.trim_start().starts_with('>') || l.trim_start().starts_with("- **"));
     if let Some(idx) = first_header_line {
-        if let Some(stable_id) = params.stable_id {
-            let stable_id_line = if lines[idx].trim_start().starts_with('>') {
-                format!("> Stable-Id: {stable_id}")
-            } else {
-                format!("- **Stable-Id:** {stable_id}")
-            };
-            lines.insert(idx + 1, stable_id_line);
-        }
+        let stable_id = params.stable_id;
+        let stable_id_line = if lines[idx].trim_start().starts_with('>') {
+            format!("> Stable-Id: {stable_id}")
+        } else {
+            format!("- **Stable-Id:** {stable_id}")
+        };
+        lines.insert(idx + 1, stable_id_line);
     }
 
     lines.join("\n") + "\n"
@@ -355,12 +354,10 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
     use yaml_serde::Value;
 
     let mut mapping = yaml_serde::Mapping::new();
-    if let Some(stable_id) = params.stable_id {
-        mapping.insert(
-            Value::String("Stable-Id".to_string()),
-            Value::String(stable_id.to_string()),
-        );
-    }
+    mapping.insert(
+        Value::String("Stable-Id".to_string()),
+        Value::String(params.stable_id.to_string()),
+    );
     for field in required_fields {
         let value = match field.as_str() {
             "Date" => Value::String(params.today.to_string()),
@@ -407,7 +404,7 @@ mod tests {
             status_field: "Status",
             display_number: 42,
             title: "Use a real title",
-            stable_id: Some("01ABC"),
+            stable_id: "01ABC",
             author: "beau",
             today: "2026-09-06",
         };
@@ -427,7 +424,7 @@ mod tests {
             status_field: "Status",
             display_number: 28,
             title: "X",
-            stable_id: Some("01ABC"),
+            stable_id: "01ABC",
             author: "beau",
             today: "2026-09-06",
         };
@@ -445,7 +442,7 @@ mod tests {
             status_field: "Status",
             display_number: 1,
             title: "X",
-            stable_id: Some("01ABC"),
+            stable_id: "01ABC",
             author: "beau",
             today: "2026-09-06",
         };
@@ -629,7 +626,7 @@ mod tests {
             status_field: "Status",
             display_number: 1,
             title: "X",
-            stable_id: Some("01ABC"),
+            stable_id: "01ABC",
             author: "beau",
             today: "2026-09-06",
         };
@@ -660,7 +657,7 @@ mod tests {
             status_field: "Status",
             display_number: 4,
             title: "X",
-            stable_id: Some("01ABC"),
+            stable_id: "01ABC",
             author: "Doe, J: Platform",
             today: "2026-09-06",
         };
@@ -681,7 +678,7 @@ mod tests {
             status_field: "Status",
             display_number: 1,
             title: "X",
-            stable_id: Some("01ABC"),
+            stable_id: "01ABC",
             author: "0.2",
             today: "2026-09-06",
         };
@@ -756,13 +753,13 @@ mod tests {
             initial_status: Some("Proposed"),
             status_field: "State",
             title: "T",
-            stable_id: None,
+            stable_id: "01ABC",
             author: "a",
             today: "2026-11-04",
         };
         let rendered = render_synthetic_yaml(&params, &["State".to_string()]);
         assert!(rendered.contains("State: Proposed\n"), "{rendered}");
-        assert!(!rendered.contains("Stable-Id"), "{rendered}");
+        assert!(rendered.contains("Stable-Id: 01ABC"), "{rendered}");
         assert!(rendered.contains("# ADR-4 — T\n"), "{rendered}");
         params.initial_status = None;
         let rendered = render_synthetic_yaml(&params, &["State".to_string()]);
