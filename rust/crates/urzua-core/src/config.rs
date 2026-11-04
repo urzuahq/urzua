@@ -218,6 +218,12 @@ pub struct IssueRefs {
     /// The citation forms read: `number` is `#123`, `url` is a full link to an
     /// issue or pull request of `repository`. A form not listed is not read.
     pub forms: Vec<RefForm>,
+    /// Header fields whose values are also read for citations, named as the
+    /// type declares them (`Found-in`), so a number in a field is judged as one
+    /// in a reference section is. Absent by default: only `reference_sections`
+    /// are read. A name no record type declares is refused at load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
@@ -1204,6 +1210,17 @@ fn issue_refs_problem(refs: &IssueRefs) -> Option<String> {
     if refs.forms.is_empty() {
         return Some("declares no forms; give 'number', 'url' or both".to_string());
     }
+    if let Some(fields) = &refs.fields {
+        if fields.is_empty() || fields.iter().any(|f| f.trim().is_empty()) {
+            return Some("declares an empty or blank 'fields' entry".to_string());
+        }
+        let mut names: Vec<&String> = fields.iter().collect();
+        names.sort();
+        names.dedup();
+        if names.len() != fields.len() {
+            return Some("names a field twice in 'fields'".to_string());
+        }
+    }
     let mut seen = refs.forms.clone();
     seen.sort();
     seen.dedup();
@@ -1448,6 +1465,19 @@ pub fn parse_with_document_models(
                 rule: name.clone(),
                 reason,
             });
+        }
+        // A field no type declares reads nothing: refuse it rather than pass.
+        for field in refs.fields.iter().flatten() {
+            let known = config.record_types.values().any(|t| {
+                t.declared_fields()
+                    .contains(&crate::values::FieldName::from(field.as_str()))
+            });
+            if !known {
+                return Err(ConfigError::InvalidIssueRefs {
+                    rule: name.clone(),
+                    reason: format!("'fields' names '{field}', which no record type declares"),
+                });
+            }
         }
     }
     // A list of blanks is an empty list wearing a value.
@@ -3173,6 +3203,28 @@ record_types:
             .contains("does not take the option 'issue_refs'"));
         let off = issue_config("").replace("level: warn", "level: off");
         assert!(parse(&off).is_ok());
+    }
+
+    #[test]
+    fn issue_refs_fields_must_be_declared_header_fields_and_never_blank() {
+        let base = |fields: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  bug:\n    dir: \"docs/bugs\"\n    required_fields: [Status, Found-in]\n    known_fields: [Fixed-in]\nrules:\n  citation.issue-exists:\n    level: warn\n    reference_sections: [References]\n    issue_refs: {{snapshot: s.json, repository: o/r, forms: [number]{fields}}}\n"
+            )
+        };
+        assert!(parse(&base(", fields: [Found-in, Fixed-in]")).is_ok());
+        assert!(parse(&base("")).is_ok());
+        for bad in [
+            ", fields: []",
+            ", fields: ['']",
+            ", fields: [Found-in, Found-in]",
+        ] {
+            let err = parse(&base(bad)).unwrap_err().to_string();
+            assert!(err.contains("issue_refs"), "{bad}: {err}");
+        }
+        // A name no record type declares would match nothing.
+        let err = parse(&base(", fields: [Nope]")).unwrap_err().to_string();
+        assert!(err.contains("Nope") && err.contains("issue_refs"), "{err}");
     }
 
     #[test]

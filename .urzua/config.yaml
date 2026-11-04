@@ -340,6 +340,8 @@ rules:
       snapshot: ".urzua/known-refs.json"
       repository: "urzuahq/urzua"
       forms: [number, url]
+      # Header fields that carry a PR or issue number (BUG `Found-in`).
+      fields: ["Found-in"]
   # The two generated directory indexes (MILE-152): `urzua index --apply`
   # rewrites them from the records. The ADR list names no id (the file name
   # identifies the record); the spec list writes each entry over two lines and

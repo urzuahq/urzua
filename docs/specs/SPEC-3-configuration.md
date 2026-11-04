@@ -1,5 +1,5 @@
 ---
-Version: '0.46'
+Version: '0.47'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -333,6 +333,7 @@ rules:
       snapshot: ".urzua/known-refs.json"
       repository: "owner/name"
       forms: [number, url]
+      fields: ["Found-in"]   # optional
 ```
 
 - `snapshot` is the file, relative to the repository root. `repository` is the GitHub repository it
@@ -346,6 +347,15 @@ rules:
 - A number is held to the snapshot's issues and pull requests together, since GitHub shares one
   number space and redirects either kind of URL to the other.
 - `skip_revision_log` behaves as for `citation.path-exists`.
+- `fields` (optional, absent by default) names header fields, as a type declares them, whose values
+  are read for the same `forms` in addition to the `reference_sections`: a number in `Found-in` is
+  held to the snapshot as one under `## References` is. A finding names the field and its header
+  line. Each name must be non-blank, listed once and declared (`required_fields` or `known_fields`)
+  by some record type; anything else is a load-time error, so a misspelt field cannot read nothing.
+  A record without the field is not examined. Body prose outside `reference_sections` is not
+  readable by an option: a bare `#N` there is as often an example, a heading counter or a quoted
+  number as a citation, and a repository that wants a prose section checked names its heading in
+  `reference_sections`.
 - The snapshot is `{schema_version, repository, generated_at, issues, pulls}`, written by
   `urzua refs refresh` (`SPEC-1`) and committed. If it is absent, unparsable, of another
   `schema_version` or of another repository, the rule reports one finding on the snapshot path and
@@ -858,3 +868,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.44`. `citation.resolution` takes the optional `skip_revision_log` option, with the meaning it has for `citation.path-exists`. **Why:** `MILE-156` -- revision logs are append-only history, so an id they cite as it was must not be reported or rewritten. | **substantive** |
 > | 2026-11-04 | Bumped to `0.45`. `field.pending` takes the optional `pending_until_required` option, off unless declared `true`: a pending value in a field the type's `statuses.require` ties to certain statuses is not reported before the record reaches one of them, and the skipped slot stays eligible and unexamined. **Why:** `MILE-169` -- a placeholder `Regression-test` is legitimate on an `Open` bug and a gap on a `Fixed` one; `status.required-field-missing` already judges the latter. | **substantive** |
 > | 2026-11-04 | Bumped to `0.46`. Documented the opt-in `citation.issue-exists` rule and its structured `issue_refs` option (`snapshot`, `repository`, `forms: [number, url]`); `reference_sections` and `skip_revision_log` are also accepted by it. **Why:** `MILE-143` -- the issue and pull request half; `SPEC-1` documents the `urzua refs refresh` command that writes the snapshot. | **substantive** |
+> | 2026-11-04 | Bumped to `0.47`. `citation.issue-exists`'s `issue_refs` takes the optional `fields` list of header field names to read for citations, off unless declared, validated against the types' declared fields. **Why:** `MILE-143` -- a wrong number in a header field such as a BUG's `Found-in` went unchecked. | **substantive** |
