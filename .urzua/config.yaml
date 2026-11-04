@@ -204,7 +204,7 @@ rules:
   # An acceptance date may not precede the record's own date (MILE-157).
   date.field-order:
     level: error
-    date_order: ["Date <= Accepted-on"]
+    date_order: [{earlier: Date, later: Accepted-on}]
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error

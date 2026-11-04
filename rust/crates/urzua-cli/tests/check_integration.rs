@@ -3144,7 +3144,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
             "date.field-order" => {
-                format!("{id}: {{level: error, date_order: [\"Date <= Accepted-on\"]}}")
+                format!("{id}: {{level: error, date_order: [{{earlier: Date, later: Accepted-on}}]}}")
             }
             "citation.path-exists" => {
                 format!("{id}: {{level: error, reference_sections: [\"References\"]}}")
