@@ -4,7 +4,7 @@ Stable-Id: 01M1Y5JEPZRBT40QA2DEXT2CM2
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
-Blocked-on: MILE-98
+Blocked-on: —
 Realized-by: code:rust/crates/urzua-core/src/rules/section.rs, test:rust/crates/urzua-cli/tests/section_rules_integration.rs
 ---
 # 5 — Build the y-statement content shape
@@ -32,3 +32,4 @@ A required section can declare `shape: y-statement` with a marker, and the opt-i
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: opt-in rule `section.shape` with shape `y-statement` checks the five phrases on word boundaries and reports a marker with no block. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | `Blocked-on` now reads `MILE-98`. **Why:** `narrative-field.stale` flagged a blocker that reached `Done`, and the delivery backfill of `MILE-183` set it; the remaining blocker is still open. `Status` unchanged. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |

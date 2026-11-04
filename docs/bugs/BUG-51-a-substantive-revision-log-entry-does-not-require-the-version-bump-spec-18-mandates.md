@@ -3,7 +3,7 @@ Stable-Id: 01M2W0QA0YMGXD5V5XBXN80PKB
 Status: Open
 Found-in: 'A code review of PR #74 -- SPEC-1 was rewritten by roughly 60%% with two substantive entries and its Version left at 0.3'
 Regression-test: 'not yet written -- a spec gaining a `substantive` revision entry without a `Version` change must be a finding; a `structural` entry, or an unchanged spec, must not'
-Blocked-on: MILE-98
+Blocked-on: —
 ---
 # 51 — A substantive revision-log entry does not require the `Version` bump `SPEC-18` mandates
 
@@ -43,3 +43,4 @@ shape, not new I/O in `urzua-core`.
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
 > | 2026-09-19 | Scope corrected to include `structural` entries. **Why:** `SPEC-18` reads *"a substantive **or structural** change is a `Version` bump plus a Why-bearing revision-log entry"*, and this record named only the substantive half -- which would have built a rule enforcing half a decision, the same shape as `MILE-7` being filed as an exemption when the requirement runs both ways. | **substantive** |
+> | 2026-11-04 | `Blocked-on` cleared (`MILE-98` is Done); `Status` stays Open, and the fix needs a design decision. **Why:** the declared model supplies the fields (`Version`) and the revision log's identity (`revision_log`, `MILE-167`), but the rule is a diff question: it must compare a record's revision rows and `Version` against the base, and `check --base` hands rules only the changed paths (`diff_gate.rs`), not the base text. Building it means a new diff-content input from the caller, as `embodiment.consistency` has for history, and a choice of which change classes require the bump and how that is declared. That is a rule-vocabulary decision (`ADR-53` left the function set open) for the maintainer. | **substantive** |

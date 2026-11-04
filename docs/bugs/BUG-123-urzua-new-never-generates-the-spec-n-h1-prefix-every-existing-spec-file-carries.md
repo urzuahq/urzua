@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M3689KQV7S5AEX1VPCCJQ6VZ
-Status: Open
+Status: Fixed
 Found-in: "Asked directly whether generated records were consistent; verified by running urzua new for every type in a scratch repo and diffing the raw output"
-Regression-test: "not yet written -- blocked on RFC-44's decision"
-Blocked-on: MILE-98
+Regression-test: "rust/crates/urzua-cli/tests/own_config_integration.rs::new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number"
+Blocked-on: —
 ---
 # 123 — urzua new never generates the SPEC-N H1 prefix every existing spec file carries
 
@@ -61,3 +61,4 @@ This bug closes once `RFC-44` is decided and its `identity` type is implemented.
 > | 2026-09-23 | Filed, not fixed. **Why:** the user asked directly whether generated records were consistent; verified by running the actual generator for every type in a scratch repo rather than trusting memory, and the divergence turned out to be between the corpus's existing specs and the generator's own template, not between the tool's handling of different types. The fix direction is a real editorial/design decision, not an obvious patch. | **substantive** |
 > | 2026-11-04 | Unblocked by `RFC-44`'s outcome ("declared per type"): each type declares its title form through `MILE-98`'s identity pattern, and this repository declares the `SPEC-` prefix for specs and the bare number for every other type. `Status` is unchanged. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Blocked-on` moved from `RFC-44` to `MILE-98`. **Why:** `RFC-44` is decided (declared per type); the fix now waits on the identity declaration it is built on. | **substantive** |
+> | 2026-11-04 | Fixed. The `spec` type in `.urzua/config.yaml` declares `identity: {from: filename, pattern: '^(?P<prefix>SPEC)-(?P<number>\d+)-(?P<slug>.+)$'}`, so `urzua new spec` opens the title `# SPEC-N` (`SPEC-12`, `MILE-151`) and `filename.title-consistency` checks it; the other types declare none and keep the bare number, as the maintainer decided. `Blocked-on` cleared (`MILE-98` is Done). `Regression-test` filled. **Why:** the test ran `urzua new` for every type against this repository's own config and failed on the spec title before the declaration was added; the engine needed no change, the declaration was the fix. | **substantive** |
