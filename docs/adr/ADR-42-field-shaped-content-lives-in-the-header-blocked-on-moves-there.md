@@ -86,7 +86,7 @@ lives physically in the file.
 
 ## Amendment (2026-11-04): the stale-blocker rule is config-driven
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 The Decision describes a rule `blocked_on_stale` with "a small, hardcoded per-type terminal-status
 set", at `Warning` severity, "MVP, not config-driven". That rule no longer exists under that name.
@@ -117,3 +117,4 @@ dangling reference is still `pointer.resolution`'s finding, not this rule's.
 > | 2026-11-04 | Amendment added: `blocked_on_stale` and its hardcoded terminal-status set became the config-driven `narrative-field.stale` (`ADR-44`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision's header-placement ruling is unchanged. | **substantive** |
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/rules/narrative.rs`, `.urzua/templates/milestone.md`, `.urzua/config.yaml`, `scripts/generate-dashboard.py` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-pinned with the amendment above: the header-placement decision holds and the rule change is recorded. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/rules/narrative.rs@sha256:9fff38b1c9f672afd6c4c90788b14d177a9c12cebec643448a344e1291c572b6, code:.urzua/templates/milestone.md@sha256:0abec9285fd32135b348a4646a24a99173689397f6863186c863314087d26bc5, code:.urzua/config.yaml@sha256:8bc61e85bdcce1d754a31cf5b9d304cd0df564d848a7fb50cc263e82b7fe5d46, code:scripts/generate-dashboard.py@sha256:b163ade4df40293fc53b8eb0f8d045d6c0d5d1b125c1d42012f30de782ef07bb, test:rust/crates/urzua-core/src/rules/narrative.rs@sha256:9fff38b1c9f672afd6c4c90788b14d177a9c12cebec643448a344e1291c572b6` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

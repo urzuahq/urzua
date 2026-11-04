@@ -29,6 +29,10 @@ open question is whether a prefix on the type is enough, whether the identity pa
 route, and how `ADR-1` and `ADR-0001` relate. The reproduction was recorded when this was filed; re-run it
 when the decision is taken.
 
+## Done means
+
+The decision is recorded: a record whose filename is a bare zero-padded number (`0001-a.md`) gets no identity from the filename, and such a corpus is renamed to `TYPE-NNNN-slug.md` (`ADR-36`), where `ADR-0173` resolves against `ADR-173` numerically; a declared `identity` pattern must capture the type prefix; `RFC-46` is rejected and this record's revision log and `ADR-36` carry the decision.
+
 ## References
 
 - `BUG-99` -- `audit` exits 2 on the config `init` writes for a corpus with no type prefix.
@@ -47,3 +51,4 @@ when the decision is taken.
 > | 2026-11-02 | Decision recorded from `RFC-46`'s rejection. **Why:** The question this milestone asked is now answered. | **substantive** |
 > | 2026-11-04 | `MILE-98`'s declared `identity` pattern must capture the type prefix, so a bare zero-padded filename (`0001-a.md`) still gets no identity and the decision stands: such a corpus is renamed to `TYPE-NNNN-slug.md` (`ADR-36`), where `ADR-0173` resolves against `ADR-173` numerically. A pattern without a `(?P<prefix>...)` group fails the config load. **Why:** `RFC-46` was rejected; the declaration is not a back door to the bare-number identity it declined. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: the decision is recorded in the revision log (a bare zero-padded filename gets no identity; such a corpus is renamed to `TYPE-NNNN-slug.md`) and in the accepted `ADR-36`; `RFC-46` was rejected. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

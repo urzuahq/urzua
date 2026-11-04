@@ -29,6 +29,10 @@ it.
 
 A code comment citing a decision (`Implements: ADR-N`) counts as realization evidence, and a comment citing a record that does not exist is reported.
 
+## Done means
+
+A whole-line `Implements: <id>[, <id>]` comment in a file under a declared `back_pointer_paths` entry is code-tier evidence in `embodiment.consistency` and `urzua fix`, the opt-in rule `embodiment.back-pointer-resolution` reports a back-pointer citing no record, the decision is recorded in `ADR-66` (Accepted), and `back_pointer_integration.rs` covers a resolving and a dangling back-pointer.
+
 ## References
 
 - `RFC-5` -- section 2: the pointer lives on the record.
@@ -44,3 +48,4 @@ A code comment citing a decision (`Implements: ADR-N`) counts as realization evi
 > | 2026-11-04 | Implemented as opt-in rule `embodiment.back-pointer-resolution`: a whole-line `Implements: <id>[, <id>]` comment under a `back_pointer_paths` entry is code-tier evidence in `embodiment.consistency` and `urzua fix`, and a back-pointer citing no record is reported. Recorded in `ADR-66` (Proposed). `Status` stays `Planned`. **Why:** the 2026-11-04 decision; narrowed to a fixed marker, whole-line comments and code tier, with the wider forms left as open questions in the ADR. | **substantive** |
 > | 2026-11-04 | Reads the rule's description and option as part of the `SPEC-2` rule table. **Why:** the rule table is generated from the rule catalog, so the description is the rule's one statement of the narrowest reading. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #170: the decision is recorded in the accepted `ADR-66` and built as `embodiment.back-pointer-resolution`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

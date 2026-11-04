@@ -37,6 +37,10 @@ rewrite an Accepted decision") any correction goes in a dated note in their Cons
 record that narrows them. The Draft RFCs, `AGENTS.md` (through `SPEC-19`) and the `config.rs` comment
 can change in place.
 
+## Done means
+
+Each place that relies on there being no external adopters (`AGENTS.md`'s "Don't build speculative capability" and the other six places the What lists, each checked by grep) is read, the ones that still hold are kept and the ones that do not are rewritten, and the outcome is recorded; an Accepted record is left alone and corrected by a dated note, and a grep for the premise's wording lists only places with an outcome.
+
 ## References
 
 - `MILE-102` -- replace a hand-written linter outright; the first adopter this premise predates.
@@ -49,3 +53,4 @@ can change in place.
 > | 2026-11-02 | Filed. **Why:** A first real adopter corpus is now the Phase 0 target while seven places still justify decisions by there being none; filed to re-read each, leaving Accepted records to dated notes. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 1 to Phase 0 (pulled into Phase 0 as foundation work); `Status` unchanged. **Why:** Maintainer decision of 2026-11-04 defining Phase 0 as parity on a solid codebase (`SPEC-1`'s Phase 0 exit): it decides whether config and output changes may break callers, which gates every refactor in the foundation set, and adoption follows Phase 0. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

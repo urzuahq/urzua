@@ -90,7 +90,7 @@ any other workflow in this repo.
 
 ## Amendment (2026-11-04): the release gate and the guard on an empty release are those of `ADR-47` and `BUG-48`
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 Several statements in the Decision and in the two earlier amendments no longer describe the
 workflows. The two-step flow (a prepare workflow opening the release PR, a publish workflow running
@@ -204,3 +204,4 @@ nobody reads.
 > | 2026-11-04 | Amendment added: the empty-release guard (`BUG-48`), `ADR-47`'s checks on the merge commit in place of `verify-ci`, and `ADR-48`'s changesets-only trigger replace what the Decision and its two amendments describe. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Pinned `knope.toml`, `.github/workflows/prepare-release.yml`, `.github/workflows/publish-release.yml` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-pinned with the amendment above: the two-step flow holds and the changes since the last verification are recorded. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml@sha256:8557a6d8ecaa3736fb1ebc6ad20b976967de3289bd0e1be6ec5ac8ffe529f9d9, code:.github/workflows/prepare-release.yml@sha256:50c0f37fa931de7590fb4970a294785df44f88375e3075883115fc4a01515c19, code:.github/workflows/publish-release.yml@sha256:f8fb928d07b3111e943f644be05b48656b7e796bdd8d0b4fb86237400b173591` -- stated `Drift detected` disagreed with the computed value `Implemented`. | **structural** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

@@ -21,6 +21,10 @@ its tree keeps internal references out of it by convention only, which is the fa
 to remove, and an adopter replacing a hand-written linter outright (`MILE-102`) has to be able to
 delete whatever script enforces the boundary today.
 
+## Done means
+
+A declared set of published paths (`published_paths`) makes `boundary.published-path-reference` report a record identifier cited from inside one, the rule's level is the boundary's severity, and the parts of `RFC-11` sections 1 to 3 still unbuilt are built or decided against: a boundary's `kind` and `reason`, glob matching, and the ignore-marker and fixture-exclusion questions; a fixture covers each, and urzua's own `.urzua/config.yaml` declares its published paths and `check` reports none unwaived.
+
 ## References
 
 - `RFC-11` -- declared boundaries; sections 1 to 3.
@@ -33,3 +37,4 @@ delete whatever script enforces the boundary today.
 > | 2026-11-02 | Filed. **Why:** `RFC-11` (Accepted) decided declared published-path boundaries and nothing builds them. | **substantive** |
 > | 2026-11-03 | Built `boundary.published-path-reference` (`published_paths` option; the rule's level is the boundary's severity) in `rules/boundary.rs`. **Why:** `RFC-11` sections 1 to 3 decided it. Section 1's `kind` and `reason`, glob matching, and the ignore-marker and fixture-exclusion questions are not built; `Status` is unchanged. | **substantive** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** `boundary.published-path-reference` (`rules/boundary.rs`, `published_boundary_integration.rs`, merged in #158) is built; `RFC-11` section 1's `kind` and `reason`, glob matching and the ignore-marker and fixture-exclusion questions are not. `Status` stays Planned. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

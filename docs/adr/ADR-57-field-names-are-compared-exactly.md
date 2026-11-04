@@ -110,7 +110,7 @@ a reversal cannot be silent.
 
 ## Amendment (2026-11-04): reserved keys are read case-insensitively
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 The Decision says the rule "applies to every comparison of a field *name*". `Header::get_reserved`
 (`rust/crates/urzua-core/src/header.rs`, `#102`) is a deliberate exception: for the keys the engine
@@ -140,3 +140,4 @@ waiver loader. `Header::get`, and every comparison of an adopter-declared field 
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit ce6048953. | **structural** |
 > | 2026-11-04 | Amendment added: `Header::get_reserved` reads the engine's reserved keys case-insensitively (`#102`), an exception to "every comparison of a field name". **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/header.rs` 17e08ea792a9 -> 7c679be9601d, `rust/crates/urzua-core/src/header.rs` 7eeae176eeeb -> 5c7df87d90f4, `rust/crates/urzua-core/src/property.rs` 78acfe16ded9 -> dd31b4f429bc. Reason: Re-pinned with the amendment above: Header::get and declared-field comparison remain exact; the reserved-key exception is recorded. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

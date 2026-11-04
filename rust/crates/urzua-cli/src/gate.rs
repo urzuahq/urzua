@@ -27,3 +27,82 @@ pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) ->
     use urzua_core::report::RuleStatus;
     executed.iter().any(|e| e.status == RuleStatus::Ran)
 }
+
+/// The verdict of a `check` run, from what it established. Pure, so each
+/// branch is testable without a repository.
+///
+/// - `blocking` settles the question first: a blocking finding is something
+///   established, so it must never read `not-run` beside `blocking: true`.
+/// - `empty_diff`: the run was asked about nothing (no governed record changed
+///   and nothing reaches one). If a rule looked it is `ok`, never `not-run`.
+/// - otherwise a run that examined no record, or in which no rule looked,
+///   established nothing: `not-run` (ADR-55).
+/// - otherwise the verdict is the unwaived findings.
+///
+/// `active_findings` counts findings that are not waived.
+pub(crate) fn derive_status(
+    blocking: bool,
+    empty_diff: bool,
+    examined: usize,
+    executed: &[urzua_core::report::RuleExecution],
+    active_findings: usize,
+) -> urzua_core::report::ReportStatus {
+    use urzua_core::report::ReportStatus;
+    let from_findings = if active_findings == 0 {
+        ReportStatus::Ok
+    } else {
+        ReportStatus::FindingsPresent
+    };
+    if blocking {
+        ReportStatus::FindingsPresent
+    } else if empty_diff && any_rule_looked(executed) {
+        from_findings
+    } else if examined == 0 || !any_rule_looked(executed) {
+        ReportStatus::NotRun
+    } else {
+        from_findings
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use urzua_core::report::{ReportStatus, RuleExecution, RuleStatus};
+
+    fn exec(status: RuleStatus) -> RuleExecution {
+        RuleExecution {
+            rule: "t".to_string(),
+            population: None,
+            status,
+            examined_records: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn derives_each_branch() {
+        let looked = [exec(RuleStatus::Ran)];
+        let none_looked = [exec(RuleStatus::NotEnabled)];
+        use ReportStatus::*;
+        // (blocking, empty_diff, examined, executed, active, expected)
+        let table = [
+            (true, false, 0, &none_looked[..], 1, FindingsPresent),
+            (true, true, 0, &looked, 1, FindingsPresent),
+            (false, true, 0, &looked, 0, Ok),
+            (false, true, 0, &looked, 2, FindingsPresent),
+            (false, true, 0, &none_looked, 0, NotRun),
+            (false, false, 0, &looked, 0, NotRun),
+            (false, false, 3, &none_looked, 0, NotRun),
+            (false, false, 3, &[], 0, NotRun),
+            (false, false, 3, &looked, 0, Ok),
+            (false, false, 3, &looked, 2, FindingsPresent),
+            (false, false, 0, &none_looked, 2, NotRun),
+        ];
+        for (blocking, empty, examined, executed, active, expected) in table {
+            assert_eq!(
+                derive_status(blocking, empty, examined, executed, active),
+                expected,
+                "blocking={blocking} empty_diff={empty} examined={examined} active={active}"
+            );
+        }
+    }
+}

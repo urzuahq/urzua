@@ -23,6 +23,10 @@ decision-before-implementation idea `MILE-14` leaves undecided: this rule asks o
 changed, never that it is the right one, per `AGENTS.md`'s limit on what `check` may claim. `MILE-14`
 remains the place to decide whether such a gate should exist by default.
 
+## Done means
+
+The opt-in rule `diff.source-requires-record` takes declared `source_paths` and, in a `--base` diff, reports one error per changed source path when no governed record (a changed `.md` file directly in a configured record type's `dir`) changed in the same diff; a fixture covers a source change with and without a record change, and it depends on the diff-scoped run of `MILE-123`.
+
 ## References
 
 - `MILE-14` -- decide RFC-12's decision-before-implementation gate.
@@ -37,3 +41,4 @@ remains the place to decide whether such a gate should exist by default.
 > | 2026-11-04 | Built as `diff.source-requires-record` (`rules/diff_gate.rs`): with the declared `source_paths` option, one error per changed source path when no governed record changed in the same `--base` diff. "A governed record" is the narrowest reading: a changed `.md` file directly in a configured record type's `dir`, deleted ones included; whether it is the right record is not judged. On a run with no `--base` it reports `not-applicable`, never clean. `Status` unchanged. **Why:** filed work is the adopter-replacement rule `MILE-102` needs; the diff-scoped run it waited on (`MILE-123`) has merged. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #169: opt-in rule `diff.source-requires-record`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared. **Why:** `MILE-123` (the diff-scoped run) is `Done` and this milestone is `Done`; `narrative-field.stale` flagged the leftover. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

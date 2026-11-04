@@ -296,26 +296,26 @@ pub fn run() -> ExitCode {
     let type_names = config.sorted_type_names();
     for name in type_names {
         let cfg = &config.record_types[name];
-        let dir_path = repo_root.join(&cfg.dir);
-        if dir_path.is_dir() {
-            checks.push(DoctorCheck {
-                check: "record-type-dir".to_string(),
-                layer: None,
-                state: None,
-                status: DoctorStatus::Ok,
-                message: format!("record type '{name}' -> {} exists", cfg.dir),
-            });
-        } else {
-            checks.push(DoctorCheck {
-                check: "record-type-dir".to_string(),
-                layer: None,
-                state: None,
-                status: DoctorStatus::Error,
-                message: format!(
-                    "record type '{name}' declares dir '{}', which does not exist",
-                    cfg.dir
-                ),
-            });
+        for dir in cfg.all_dirs() {
+            if repo_root.join(dir).is_dir() {
+                checks.push(DoctorCheck {
+                    check: "record-type-dir".to_string(),
+                    layer: None,
+                    state: None,
+                    status: DoctorStatus::Ok,
+                    message: format!("record type '{name}' -> {dir} exists"),
+                });
+            } else {
+                checks.push(DoctorCheck {
+                    check: "record-type-dir".to_string(),
+                    layer: None,
+                    state: None,
+                    status: DoctorStatus::Error,
+                    message: format!(
+                        "record type '{name}' declares dir '{dir}', which does not exist"
+                    ),
+                });
+            }
         }
         if cfg.required_fields.is_empty() {
             checks.push(DoctorCheck {

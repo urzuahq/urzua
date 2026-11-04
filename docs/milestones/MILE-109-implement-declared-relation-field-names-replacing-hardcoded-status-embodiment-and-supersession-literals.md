@@ -37,9 +37,14 @@ Full test suite (219 tests, 10 new), `cargo fmt`, `clippy -D warnings`, `make ci
 observed failing against the pre-fix literal and passing after, plus a CodeRabbit-review-prompted fix
 making every finding message report the resolved field name instead of the pre-`RFC-42` literal.
 
+## Done means
+
+A per-type `relation_fields` map declares the `status`, `embodiment_state`, `embodiment_locator` and `supersession` field names, each defaulting to its pre-`RFC-42` literal (`Status`, `Embodiment`, `Realized-by`, `Supersedes / Superseded-by`), the seven call sites that hardcoded them read the map, `relation_field_literals.rs` fails when a rule restates one, and a fixture with renamed fields passes the same rules.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and implemented in one round. **Why:** `RFC-42`/`ADR-61` decided the design the same day a round-18 review surfaced the recurring defect shape; scheduled and built together so the gap didn't sit open for a later release. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
