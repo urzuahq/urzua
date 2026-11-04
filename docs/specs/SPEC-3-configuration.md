@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -375,33 +375,45 @@ option-on-a-rule-that-does-not-take-it load error.
 
 ### Date fields and the acceptance date (`MILE-137`)
 
-Two opt-in rules validate dates. Which fields are dates, and which one is the acceptance date,
-are rule options; the engine names no field itself.
+One opt-in rule validates dates, `date.field-valid`. Which fields are dates is a rule option; the
+engine names no field itself.
 
 ```yaml
 rules:
   date.field-valid:
     level: error
     date_fields: [Date, Accepted-on]     # each must hold a real YYYY-MM-DD date
-  date.acceptance-by-status:
-    level: error
-    acceptance_field: Accepted-on        # required on accepted-type statuses, forbidden elsewhere
-    accepted_statuses: [Accepted]        # optional: only for a type declaring no statuses.success
 ```
 
 - `date_fields` (required, non-empty): a value that is not `YYYY-MM-DD`, or is not a real calendar
   date (`2026-02-30`, `2026-02-29` outside a leap year), is an error. A blank, placeholder or
-  pending value is not a date value and is not examined.
-- `acceptance_field` (required): the one field holding the acceptance date. Only a type that
-  declares it in `required_fields` or `known_fields` is examined.
-- Accepted-type statuses are the type's declared `statuses.success`. A type declaring none (or an
-  empty `success`) uses `accepted_statuses`; with neither, the type is not examined. The field is
-  required there (blank, placeholder and pending do not count) and forbidden on every other
-  status, where a blank or placeholder is tolerated. The date's shape is `date.field-valid`'s
-  business, so list the acceptance field in `date_fields` too. The same requirement can be written
-  as `statuses.require` / `statuses.forbid`; this rule derives it from the success terminals so the
-  two cannot disagree.
-- Either option on any other rule, or a missing required option, is a load-time error.
+  pending value is not a date value and is not examined. A missing option is a load-time error, as
+  is the option on any other rule.
+
+There is deliberately no dedicated acceptance-date rule. The acceptance date is required on an
+accepted-type status and forbidden on every other through the one mechanism for status-dependent
+fields, `statuses.require` / `statuses.forbid` (`MILE-132`), with `date.field-valid` owning the
+date's well-formedness:
+
+```yaml
+record_types:
+  adr:
+    known_fields: [Accepted-on]
+    statuses:
+      values: [Proposed, Accepted, Superseded, Rejected]
+      success: [Accepted, Superseded]
+      require: [{when: [Accepted, Superseded], fields: [Accepted-on]}]
+      forbid:  [{when: [Proposed, Rejected], fields: [Accepted-on]}]
+rules:
+  status.required-field-missing: error   # Accepted without Accepted-on
+  status.forbidden-field-present: error  # Proposed carrying Accepted-on
+  date.field-valid: {level: error, date_fields: [Accepted-on]}
+```
+
+A blank or placeholder value counts as missing on the required side, and is tolerated on the
+forbidden side. The integration test
+`the_acceptance_date_by_status_is_expressed_with_statuses_require_forbid_and_date_field_valid`
+proves this configuration produces the three findings.
 
 > **Revision log**
 >
@@ -426,3 +438,4 @@ rules:
 > | 2026-11-04 | Bumped to `0.9`. Documented the `drift_grace_days` and `claim_max_age_days` options of `embodiment.consistency` and the `@sha256:` locator pin. **Why:** `MILE-129` -- all three opt-in and off by default, so drift can be pinned to content, held back for a fresh change, and an old claim flagged. | **substantive** |
 > | 2026-11-04 | Bumped to `0.11`. Documented the `date_fields`, `acceptance_field` and `accepted_statuses` options of the new opt-in `date.field-valid` and `date.acceptance-by-status` rules. **Why:** `MILE-137` Phase 0: which fields are dates and which is the acceptance date are repository configuration, read from rule options (the `fields` declaration names no field types) and from the declared `statuses.success`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. Documented the `field_levels` option of `field.quality`, `field.pending` and `status.required-field-missing`. **Why:** `MILE-140` -- severity set per field within one rule, so a missing `Deciders` on an accepted record can be an error while a missing `Reviewers` is a warning. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.12`. Removed the `acceptance_field` option and the `date.acceptance-by-status` rule from the date section; the acceptance date is now documented as a `statuses.require` / `statuses.forbid` declaration plus `date.field-valid`. `accepted_statuses` stays, owned by `embodiment.back-pointer-decision-accepted`. **Why:** maintainer decision of 2026-11-04 (`MILE-137`): one mechanism for status-dependent fields, not two that could disagree. | **substantive** |

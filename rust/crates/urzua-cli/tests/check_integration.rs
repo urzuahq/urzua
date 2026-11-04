@@ -3139,9 +3139,6 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
-            "date.acceptance-by-status" => format!(
-                "{id}: {{level: error, acceptance_field: \"Accepted-on\", accepted_statuses: [\"Done\"]}}"
-            ),
             _ => format!("{id}: error"),
         })
         .collect();
@@ -3515,4 +3512,65 @@ fn check_reports_an_unechoed_claim_in_a_declared_cross_type_relation_pair() {
     );
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// MILE-137: the acceptance date is required on Accepted and forbidden on
+/// Proposed through the declared `statuses.require` / `statuses.forbid`, and
+/// `date.field-valid` owns its well-formedness. One mechanism, no dedicated rule.
+#[test]
+fn the_acceptance_date_by_status_is_expressed_with_statuses_require_forbid_and_date_field_valid() {
+    let dir = fixture_repo("acceptance-date-by-status");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {status.required-field-missing: error, status.forbidden-field-present: error, date.field-valid: {level: error, date_fields: [Accepted-on]}}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    header_shape: yaml-frontmatter\n    required_fields: [\"Status\"]\n    known_fields: [\"Accepted-on\"]\n    statuses: {values: [Proposed, Accepted], success: [Accepted], require: [{when: [Accepted], fields: [Accepted-on]}], forbid: [{when: [Proposed], fields: [Accepted-on]}]}\n",
+    )
+    .unwrap();
+    let write = |name: &str, status: &str, extra: &str| {
+        std::fs::write(
+            dir.join(format!("docs/adr/{name}.md")),
+            format!("---\nStatus: {status}\n{extra}---\n# X\n"),
+        )
+        .unwrap();
+    };
+    write("ADR-1-accepted-without-date", "Accepted", "");
+    write(
+        "ADR-2-accepted-with-date",
+        "Accepted",
+        "Accepted-on: 2026-01-01\n",
+    );
+    write(
+        "ADR-3-proposed-with-date",
+        "Proposed",
+        "Accepted-on: 2026-01-01\n",
+    );
+    write("ADR-4-proposed-without-date", "Proposed", "");
+    write(
+        "ADR-5-accepted-bad-date",
+        "Accepted",
+        "Accepted-on: 2026-02-30\n",
+    );
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let mut hits: Vec<(String, String)> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            (
+                f["rule"].as_str().unwrap().to_string(),
+                f["file"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    hits.sort();
+    let hit = |rule: &str, file: &str| hits.iter().any(|(r, f)| r == rule && f.contains(file));
+    assert!(hit("status.required-field-missing", "ADR-1-"), "{parsed}");
+    assert!(hit("status.forbidden-field-present", "ADR-3-"), "{parsed}");
+    assert!(hit("date.field-valid", "ADR-5-"), "{parsed}");
+    assert_eq!(hits.len(), 3, "no other record may be flagged: {parsed}");
+    assert_eq!(parsed["blocking"], true);
+    assert_eq!(output.status.code(), Some(1));
 }
