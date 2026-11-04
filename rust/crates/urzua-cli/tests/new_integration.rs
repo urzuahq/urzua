@@ -236,7 +236,10 @@ fn new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing
     assert!(content.contains("\nStatus: Proposed\n"), "{content}");
     assert!(!content.contains("null"), "{content}");
     assert!(content.contains("\nStable-Id: "), "{content}");
-    assert!(content.contains("\n# ADR-4 — Second thing\n"), "{content}");
+    assert!(
+        content.contains("\n# ADR-0004 — Second thing\n"),
+        "the H1 id is padded exactly as the file name is: {content}"
+    );
     check_is_clean(&dir);
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -297,5 +300,30 @@ fn new_numbers_from_the_declared_pattern() {
     commit_all(&dir);
     let report = new_report(&dir, "Next");
     assert_eq!(report["path"], "docs/adr/ADR-0013-next.md");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `BUG-188`: a type's template names header fields the type declares but does
+/// not require; the new record keeps them, blank, and `check` stays clean. A
+/// template field the type does not declare is not carried.
+#[test]
+fn new_keeps_the_templates_declared_non_required_header_fields_observed_failing() {
+    let dir = padded_repo(
+        "template-fields",
+        "[\"Stable-Id\", \"Deciders\"]",
+        PADDED_PATTERN,
+    );
+    std::fs::write(
+        dir.join(".urzua/templates/adr.md"),
+        "# NNNN — Title\n\n> Status: Proposed | Accepted\n> Deciders: name(s) (optional)\n> Mood: not declared by the type\n\n## Context\n\nx\n",
+    )
+    .unwrap();
+    let report = new_report(&dir, "Second thing");
+    let path = report["path"].as_str().unwrap().to_string();
+    let content = std::fs::read_to_string(dir.join(&path)).unwrap();
+    assert!(content.contains("\nDeciders: null\n"), "{content}");
+    assert!(!content.contains("Mood"), "{content}");
+    assert!(content.contains("## Context"), "{content}");
+    check_is_clean(&dir);
     std::fs::remove_dir_all(&dir).ok();
 }

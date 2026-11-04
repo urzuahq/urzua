@@ -148,6 +148,12 @@ pub fn run(
     let status_decl = type_config.status_decl();
     let params = urzua_core::new_record::NewRecordParams {
         display_number,
+        // The H1 id is padded exactly as the file name is: the width of the
+        // `number` the declared pattern reads back from it (`BUG-188`).
+        h1_width: compiled
+            .as_ref()
+            .and_then(|c| c.identify(&filename).number)
+            .map_or(0, |n| n.len()),
         h1_prefix: compiled.as_ref().map(|_| type_prefix.as_str()),
         initial_status: status_decl
             .as_ref()
@@ -173,9 +179,28 @@ pub fn run(
     // (MILE-85 removed the blockquote and bold-list shapes a template's own
     // header could once have been rendered in).
     let content = {
-        let mut out =
-            urzua_core::new_record::render_synthetic_yaml(&params, &type_config.required_fields);
-        if let Ok(template) = urzua_io::read_to_string(&template_path) {
+        let template = urzua_io::read_to_string(&template_path).ok();
+        // The header fields the template names beyond the required ones stay
+        // on the new record, blank, when the type declares them (`BUG-188`);
+        // one the type does not declare would only trip
+        // `header.field-set-consistency`, so it is left out.
+        let declared = type_config.declared_fields();
+        let template_fields: Vec<String> = template
+            .as_deref()
+            .map(urzua_core::new_record::template_header_fields)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|f| {
+                type_config.known_fields.is_none()
+                    || declared.contains(&urzua_core::values::FieldName::new(f.as_str()))
+            })
+            .collect();
+        let mut out = urzua_core::new_record::render_synthetic_yaml(
+            &params,
+            &type_config.required_fields,
+            &template_fields,
+        );
+        if let Some(template) = template {
             if let Some(body) = urzua_core::new_record::template_body(&template) {
                 out.push('\n');
                 out.push_str(body);

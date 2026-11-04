@@ -245,6 +245,88 @@ pub(crate) fn compute_drifted_records(
 pub(crate) struct DriftedRecords {
     pub(crate) drifted: HashSet<PathBuf>,
     pub(crate) fresh: HashSet<PathBuf>,
+    /// Git failures met while computing drift, deduplicated. A failure is a
+    /// record git could not judge, never "no drift" (`MILE-159`).
+    pub(crate) git_problems: Vec<String>,
+    /// The repository is a shallow clone, detected once per run: the history
+    /// drift reads is truncated, so a zero here proves nothing (`MILE-159`).
+    pub(crate) shallow: bool,
+}
+
+/// Notice subject for git trouble in the drift computation (`MILE-159`).
+pub(crate) const NOTICE_DRIFT_GIT: &str = "embodiment-drift-git";
+
+/// The notices a drift computation owes the reader: one for a shallow clone,
+/// one summarizing git failures (the first few named, the rest counted).
+pub(crate) fn drift_notices(shallow: bool, problems: &[String]) -> Vec<urzua_core::report::Notice> {
+    use urzua_core::report::{Notice, NoticeSeverity};
+    let mut out = Vec::new();
+    if shallow {
+        out.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_DRIFT_GIT.to_string(),
+            message: "the repository is a shallow clone, so the git history that embodiment drift reads is truncated: a result of no drift cannot be trusted (fetch full history, e.g. `git fetch --unshallow`)".to_string(),
+        });
+    }
+    if !problems.is_empty() {
+        const SHOWN: usize = 3;
+        let shown = problems
+            .iter()
+            .take(SHOWN)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("; ");
+        let more = problems.len().saturating_sub(SHOWN);
+        out.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_DRIFT_GIT.to_string(),
+            message: format!(
+                "{} git call(s) failed while computing embodiment drift, so the affected record(s) were not judged for drift: {shown}{}",
+                problems.len(),
+                if more > 0 {
+                    format!(" (and {more} more)")
+                } else {
+                    String::new()
+                }
+            ),
+        });
+    }
+    out
+}
+
+/// `git blame` for many (path, line) pairs at once, on a few threads: blame
+/// is the dominant cost of a drift run and the calls are independent
+/// (`MILE-159`). Results come back in input order.
+fn blame_lines_parallel(
+    repo_root: &Path,
+    work: &[(PathBuf, usize)],
+) -> Vec<Result<Option<String>, String>> {
+    if work.len() < 4 {
+        return work
+            .iter()
+            .map(|(p, l)| urzua_io::commit_for_line(repo_root, p, *l))
+            .collect();
+    }
+    let threads = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .clamp(2, 8);
+    let chunk = work.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = work
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .map(|(p, l)| urzua_io::commit_for_line(repo_root, p, *l))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap_or_default())
+            .collect()
+    })
 }
 
 /// The seconds in one day, for the `MILE-129` day-denominated options.
@@ -263,6 +345,19 @@ pub(crate) fn compute_drifted_records_at(
 ) -> DriftedRecords {
     let mut drifted = HashSet::new();
     let mut fresh_records = HashSet::new();
+    let mut problems: Vec<String> = Vec::new();
+    let note = |problems: &mut Vec<String>, e: String| {
+        if !problems.contains(&e) {
+            problems.push(e);
+        }
+    };
+    let shallow = match urzua_io::is_shallow_repository(repo_root) {
+        Ok(b) => b,
+        Err(e) => {
+            note(&mut problems, e);
+            false
+        }
+    };
     let grace_secs = config
         .rules
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
@@ -288,6 +383,28 @@ pub(crate) fn compute_drifted_records_at(
     let mut last_commit_for_path: HashMap<PathBuf, Option<String>> = HashMap::new();
     let mut strictly_before: HashMap<(String, String), bool> = HashMap::new();
 
+    // One blame per record that carries a locator field, run up front on a
+    // few threads (the per-record loop below stays sequential and cheap).
+    let locator_line = |record: &Record| -> Option<usize> {
+        let locator_field = rules::relation_field_name(
+            config,
+            &record.record_type,
+            urzua_core::config::RelationRole::EmbodimentLocator,
+        );
+        record.header.get(locator_field)?;
+        record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.as_str() == locator_field)
+            .map(|f| f.line)
+    };
+    let work: Vec<(PathBuf, usize)> = records
+        .iter()
+        .filter_map(|r| locator_line(r).map(|l| (r.path.clone(), l)))
+        .collect();
+    let mut blames = blame_lines_parallel(repo_root, &work).into_iter();
+
     for record in records {
         let locator_field = rules::relation_field_name(
             config,
@@ -297,18 +414,16 @@ pub(crate) fn compute_drifted_records_at(
         let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
-        let Some(field) = record
-            .header
-            .fields
-            .iter()
-            .find(|f| f.key.as_str() == locator_field)
-        else {
+        if locator_line(record).is_none() {
             continue;
-        };
-        let Ok(Some(reference_commit)) =
-            urzua_io::commit_for_line(repo_root, &record.path, field.line)
-        else {
-            continue;
+        }
+        let reference_commit = match blames.next() {
+            Some(Ok(Some(c))) => c,
+            Some(Err(e)) => {
+                note(&mut problems, e);
+                continue;
+            }
+            _ => continue,
         };
 
         for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
@@ -321,7 +436,12 @@ pub(crate) fn compute_drifted_records_at(
                     && last_commit_for_path
                         .entry(locator_path.clone())
                         .or_insert_with(|| {
-                            urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or(None)
+                            urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or_else(
+                                |e| {
+                                    note(&mut problems, e);
+                                    None
+                                },
+                            )
                         })
                         .as_deref()
                         .is_some_and(&mut within_grace);
@@ -337,7 +457,10 @@ pub(crate) fn compute_drifted_records_at(
             let Some(locator_commit) = last_commit_for_path
                 .entry(locator_path.clone())
                 .or_insert_with(|| {
-                    urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or(None)
+                    urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or_else(|e| {
+                        note(&mut problems, e);
+                        None
+                    })
                 })
             else {
                 continue;
@@ -346,6 +469,10 @@ pub(crate) fn compute_drifted_records_at(
                 .entry((reference_commit.clone(), locator_commit.clone()))
                 .or_insert_with(|| {
                     urzua_io::commit_strictly_before(repo_root, &reference_commit, locator_commit)
+                        .unwrap_or_else(|e| {
+                            note(&mut problems, e);
+                            false
+                        })
                 });
             if drifted_pair {
                 if within_grace(locator_commit) {
@@ -363,6 +490,8 @@ pub(crate) fn compute_drifted_records_at(
     DriftedRecords {
         drifted,
         fresh: fresh_records,
+        git_problems: problems,
+        shallow,
     }
 }
 
@@ -374,15 +503,16 @@ pub(crate) fn compute_claim_ages(
     records: &[Record],
     config: &Config,
     now_unix: i64,
-) -> HashMap<PathBuf, u64> {
+) -> (HashMap<PathBuf, u64>, Vec<String>) {
     let mut ages = HashMap::new();
+    let mut problems: Vec<String> = Vec::new();
     if config
         .rules
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
         .and_then(|s| s.claim_max_age_days)
         .is_none()
     {
-        return ages;
+        return (ages, problems);
     }
     for record in records {
         let locator_field = rules::relation_field_name(
@@ -398,9 +528,15 @@ pub(crate) fn compute_claim_ages(
         else {
             continue;
         };
-        let Ok(Some(commit)) = urzua_io::commit_for_line(repo_root, &record.path, field.line)
-        else {
-            continue;
+        let commit = match urzua_io::commit_for_line(repo_root, &record.path, field.line) {
+            Ok(Some(c)) => c,
+            Ok(None) => continue,
+            Err(e) => {
+                if !problems.contains(&e) {
+                    problems.push(e);
+                }
+                continue;
+            }
         };
         let Some(time) = urzua_io::commit_unix_time(repo_root, &commit) else {
             continue;
@@ -410,7 +546,7 @@ pub(crate) fn compute_claim_ages(
             u64::try_from((now_unix - time) / DAY_SECS).unwrap_or(0),
         );
     }
-    ages
+    (ages, problems)
 }
 
 /// Reads every tracked file under one of the declared path prefixes, for the

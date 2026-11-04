@@ -55,7 +55,21 @@ pub fn run(
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+    // Drift is the expensive part (several `git` subprocesses per record) and
+    // its only consumer is `embodiment.consistency`; with that rule off `fix`
+    // has no embodiment verdict to repair, so say so instead of computing a
+    // verdict from an empty drift set (`MILE-159`, as `check` gates it).
+    if !config
+        .rules
+        .get(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
+    {
+        return emit(&CouldNotRun::from(
+            "urzua fix repairs the Embodiment field that embodiment.consistency judges, and that rule is off or undeclared in the configuration: nothing to repair",
+        ));
+    }
     let drift = crate::discovery::compute_drifted_records(&repo_root, &records, &config);
+    let drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
     let back_pointed =
         match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
             Ok(Some(sources)) => {
@@ -86,6 +100,7 @@ pub fn run(
             Vec::new(),
             None,
             false,
+            drift_notices,
         ));
     }
 
@@ -165,6 +180,7 @@ pub fn run(
         failed,
         identity.warning,
         true,
+        drift_notices,
     ))
 }
 
@@ -181,6 +197,7 @@ fn build_fix_report(
     failed: Vec<(PathBuf, String)>,
     warning: Option<String>,
     ran_apply: bool,
+    extra_notices: Vec<Notice>,
 ) -> FixReport {
     let status = if population.examined() == 0 && !ran_apply {
         FixStatus::NotRun
@@ -209,6 +226,7 @@ fn build_fix_report(
                 subject: NOTICE_IDENTITY.to_string(),
                 message,
             })
+            .chain(extra_notices)
             .collect(),
     }
 }
