@@ -17,6 +17,153 @@ struct DoctorCheck {
     check: String,
     status: DoctorStatus,
     message: String,
+    /// The git hook this check is about (`hook-wired` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    layer: Option<String>,
+    /// The layer's wiring state, machine-readable (`hook-wired` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<HookState>,
+}
+
+/// How one local hook layer is wired (ADR-71: wiring is verifiable).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum HookState {
+    NotInstalled,
+    InstalledRunningUrzua,
+    InstalledNotRunningUrzua,
+    /// Present but without the execute bit, which git silently ignores.
+    InstalledNotExecutable,
+}
+
+/// The local layers ADR-71 names; the editor layer is ADR-69's.
+const HOOK_LAYERS: [&str; 2] = ["pre-commit", "pre-push"];
+
+/// The directory git runs hooks from: `core.hooksPath` (relative paths are
+/// relative to the working tree root) or the repository's own hooks dir.
+fn hooks_dir(repo_root: &std::path::Path) -> Result<PathBuf, String> {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| format!("could not run git: {e}"))
+    };
+    let configured = git(&["config", "--get", "core.hooksPath"])?;
+    let value = String::from_utf8_lossy(&configured.stdout)
+        .trim()
+        .to_string();
+    if configured.status.success() && !value.is_empty() {
+        let p = PathBuf::from(&value);
+        return Ok(if p.is_absolute() {
+            p
+        } else {
+            repo_root.join(p)
+        });
+    }
+    let out = git(&["rev-parse", "--git-path", "hooks"])?;
+    if !out.status.success() {
+        return Err(format!(
+            "git could not locate the hooks directory: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let p = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+    Ok(if p.is_absolute() {
+        p
+    } else {
+        repo_root.join(p)
+    })
+}
+
+fn hook_state(path: &std::path::Path) -> Result<HookState, String> {
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(HookState::NotInstalled),
+        Err(e) => return Err(format!("could not read {}: {e}", path.display())),
+    };
+    if !meta.is_file() {
+        return Ok(HookState::NotInstalled);
+    }
+    #[cfg(unix)]
+    let executable = {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    };
+    // Windows has no execute bit; git runs the hook through its shell.
+    #[cfg(not(unix))]
+    let executable = true;
+    if !executable {
+        return Ok(HookState::InstalledNotExecutable);
+    }
+    let content =
+        std::fs::read(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+    let content = String::from_utf8_lossy(&content);
+    Ok(
+        if content.contains("urzua") || content.contains("make records") {
+            HookState::InstalledRunningUrzua
+        } else {
+            HookState::InstalledNotRunningUrzua
+        },
+    )
+}
+
+fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
+    let dir = match hooks_dir(repo_root) {
+        Ok(d) => d,
+        Err(message) => {
+            return HOOK_LAYERS
+                .iter()
+                .map(|layer| DoctorCheck {
+                    check: "hook-wired".to_string(),
+                    status: DoctorStatus::Error,
+                    message: format!("{layer}: {message} -- cannot tell whether the hook is wired"),
+                    layer: Some((*layer).to_string()),
+                    state: None,
+                })
+                .collect();
+        }
+    };
+    HOOK_LAYERS
+        .iter()
+        .map(|layer| {
+            let path = dir.join(layer);
+            let (status, state, message) = match hook_state(&path) {
+                Err(message) => (DoctorStatus::Error, None, message),
+                Ok(state) => {
+                    let (status, message) = match state {
+                        HookState::InstalledRunningUrzua => (
+                            DoctorStatus::Ok,
+                            format!("{} runs urzua", path.display()),
+                        ),
+                        HookState::NotInstalled => (
+                            DoctorStatus::Warn,
+                            format!(
+                                "no {layer} hook at {} -- run `make hooks-install`; CI remains the guarantee (ADR-71)",
+                                path.display()
+                            ),
+                        ),
+                        HookState::InstalledNotRunningUrzua => (
+                            DoctorStatus::Warn,
+                            format!("{} does not run urzua", path.display()),
+                        ),
+                        HookState::InstalledNotExecutable => (
+                            DoctorStatus::Warn,
+                            format!("{} is not executable, so git ignores it", path.display()),
+                        ),
+                    };
+                    (status, Some(state), message)
+                }
+            };
+            DoctorCheck {
+                check: "hook-wired".to_string(),
+                status,
+                message,
+                layer: Some((*layer).to_string()),
+                state,
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -66,6 +213,8 @@ pub fn run() -> ExitCode {
     if !config_path.exists() {
         checks.push(DoctorCheck {
             check: "config-exists".to_string(),
+            layer: None,
+            state: None,
             status: DoctorStatus::Error,
             message: format!(
                 "{} does not exist -- run `urzua init` to adopt this corpus",
@@ -81,6 +230,8 @@ pub fn run() -> ExitCode {
     }
     checks.push(DoctorCheck {
         check: "config-exists".to_string(),
+        layer: None,
+        state: None,
         status: DoctorStatus::Ok,
         message: format!("{} exists", config_path.display()),
     });
@@ -89,6 +240,8 @@ pub fn run() -> ExitCode {
         Ok(c) => {
             checks.push(DoctorCheck {
                 check: "config-parses".to_string(),
+                layer: None,
+                state: None,
                 status: DoctorStatus::Ok,
                 message: "config parses (no unrecognized keys)".to_string(),
             });
@@ -97,6 +250,8 @@ pub fn run() -> ExitCode {
         Err(e) => {
             checks.push(DoctorCheck {
                 check: "config-parses".to_string(),
+                layer: None,
+                state: None,
                 status: DoctorStatus::Error,
                 message: format!("config does not parse: {e}"),
             });
@@ -112,6 +267,8 @@ pub fn run() -> ExitCode {
     if config.record_types.is_empty() {
         checks.push(DoctorCheck {
             check: "record-types-declared".to_string(),
+            layer: None,
+            state: None,
             status: DoctorStatus::Error,
             message: "no record_types declared -- check will never examine anything".to_string(),
         });
@@ -127,6 +284,8 @@ pub fn run() -> ExitCode {
     {
         checks.push(DoctorCheck {
             check: "rules-enabled".to_string(),
+            layer: None,
+            state: None,
             status: DoctorStatus::Error,
             message:
                 "no rule is enabled under `rules:` -- check will report not-run and examine nothing"
@@ -141,12 +300,16 @@ pub fn run() -> ExitCode {
         if dir_path.is_dir() {
             checks.push(DoctorCheck {
                 check: "record-type-dir".to_string(),
+                layer: None,
+                state: None,
                 status: DoctorStatus::Ok,
                 message: format!("record type '{name}' -> {} exists", cfg.dir),
             });
         } else {
             checks.push(DoctorCheck {
                 check: "record-type-dir".to_string(),
+                layer: None,
+                state: None,
                 status: DoctorStatus::Error,
                 message: format!(
                     "record type '{name}' declares dir '{}', which does not exist",
@@ -157,6 +320,8 @@ pub fn run() -> ExitCode {
         if cfg.required_fields.is_empty() {
             checks.push(DoctorCheck {
                 check: "record-type-required-fields".to_string(),
+                layer: None,
+                state: None,
                 status: DoctorStatus::Warn,
                 message: format!(
                     "record type '{name}' has no required_fields -- field.quality and field.pending will never fire for it"
@@ -221,6 +386,8 @@ pub fn run() -> ExitCode {
     match &ci_wired {
         Err(message) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
+            layer: None,
+            state: None,
             status: DoctorStatus::Error,
             message: format!(
                 "{message} -- cannot tell whether the checker is wired in, which is not the same as it not being"
@@ -228,11 +395,15 @@ pub fn run() -> ExitCode {
         }),
         Ok(true) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
+            layer: None,
+            state: None,
             status: DoctorStatus::Ok,
             message: "a workflow invokes `urzua check`, `make records` or the urzua-gate action".to_string(),
         }),
         Ok(false) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
+            layer: None,
+            state: None,
             status: DoctorStatus::Warn,
             message: format!(
                 "no workflow in {} invokes `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
@@ -240,6 +411,12 @@ pub fn run() -> ExitCode {
             ),
         }),
     }
+
+    // Local hook layers (ADR-71, MILE-179). Warn, not error, when absent:
+    // a local layer is a convenience and only CI is the guarantee, so a clone
+    // without hooks is reported but does not fail doctor. A hook directory
+    // that cannot be read is an error: not-knowing is not the same as absent.
+    checks.extend(hook_checks(&repo_root));
 
     let has_error = checks.iter().any(|c| c.status == DoctorStatus::Error);
     let has_warn = checks.iter().any(|c| c.status == DoctorStatus::Warn);

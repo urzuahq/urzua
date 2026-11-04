@@ -10,9 +10,16 @@ genuinely open rather than settled.
 
 ```sh
 git clone https://github.com/urzuahq/urzua && cd urzua
+make build     # builds the binary and wires the git hooks (core.hooksPath=.git-hooks)
 make ci        # exactly what CI runs: fmt-check, clippy, build, test
-make hooks-install   # optional: fmt-check, clippy and `urzua check` on every push
 ```
+
+The first `make build` of a clone wires the versioned hooks: `pre-commit` runs `urzua check --base HEAD`
+and `pre-push` runs fmt, clippy and `urzua check`. `make hooks-install` does only the wiring. When
+the binary is not built, or `check` cannot run, the commit hook prints a `NOT RUN` banner on stderr
+and lets the commit through, because CI is the guarantee (ADR-71); blocking findings stop the
+commit. `urzua doctor` reports each hook's state. If you already use a `core.hooksPath` of your own,
+the build leaves it alone and says so.
 
 `make help` lists every target. Native `cargo` commands work fine inside `rust/` for anyone who
 prefers them; `make ci` is the thing CI actually runs, so it's the one to trust before pushing.

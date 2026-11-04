@@ -147,7 +147,7 @@ A run that could not run fails the job and is shown as NOT RUN; it is never a pa
 ## Adopt without a rewrite
 
 ```sh
-git clone https://github.com/urzuahq/urzua && cd urzua && make build
+git clone https://github.com/urzuahq/urzua && cd urzua && make build # also wires the git hooks (`urzua doctor` verifies them)
 cd /path/to/your-repo
 /path/to/urzua/rust/target/release/urzua init --dry-run # preview .urzua/config.yaml from what's already there
 /path/to/urzua/rust/target/release/urzua init           # writes it; never moves or rewrites a single record
