@@ -196,7 +196,12 @@ pub fn run() -> ExitCode {
                 }
                 match std::fs::read_to_string(&path) {
                     Ok(content) => {
-                        if content.contains("urzua check") || content.contains("make records") {
+                        // `urzua-gate` is urzua's own reusable action
+                        // (MILE-180), which runs `urzua check` for the caller.
+                        if content.contains("urzua check")
+                            || content.contains("make records")
+                            || content.contains("actions/urzua-gate")
+                        {
                             found = true;
                             break;
                         }
@@ -224,7 +229,7 @@ pub fn run() -> ExitCode {
         Ok(true) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
             status: DoctorStatus::Ok,
-            message: "a workflow invokes `urzua check` or `make records`".to_string(),
+            message: "a workflow invokes `urzua check`, `make records` or the urzua-gate action".to_string(),
         }),
         Ok(false) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
