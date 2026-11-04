@@ -31,3 +31,4 @@ delete whatever script enforces the boundary today.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `RFC-11` (Accepted) decided declared published-path boundaries and nothing builds them. | **substantive** |
+> | 2026-11-03 | Built `boundary.published-path-reference` (`published_paths` option; the rule's level is the boundary's severity) in `rules/boundary.rs`. **Why:** `RFC-11` sections 1 to 3 decided it. Section 1's `kind` and `reason`, glob matching, and the ignore-marker and fixture-exclusion questions are not built; `Status` is unchanged. | **substantive** |
