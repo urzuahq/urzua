@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 /// other value is a parse-time error, not a silent best-effort read.
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub schema_version: u32,
@@ -459,7 +459,7 @@ impl RecordTypeConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordTypeConfig {
     pub dir: String,
