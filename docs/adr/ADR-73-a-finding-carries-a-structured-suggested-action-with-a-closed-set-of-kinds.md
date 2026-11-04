@@ -50,18 +50,18 @@ Keys are snake_case and kinds kebab-case, like the rest of the report. `MILE-44`
 
 | kind | required `target` keys | optional `target` keys | `op` (required) | `value` |
 |---|---|---|---|---|
-| `edit-field` | `file`, `field` | `line` | `set`, `remove`, `append`, `rename` | for `set`, `append`, `rename` (the new name), only when derivable and single-valued; omitted means a human chooses |
+| `edit-field` | `file`, `field` | `line` | `set`, `remove`, `append`, `rename` | a string (a list-valued header uses the comma-separated form `SPEC-2` reads). For `set`, `append` and `rename` (the new name) only when derivable and single-valued; omitted means a human chooses. For `remove`, omitted removes the whole field and a value names the entry removed from a list field |
 | `edit-section` | `file`, `section` | `line` | `add`, `set`, `remove` | never (prose) |
-| `edit-config` | `file`, `key_path` (array of path segments, never a dotted string) | | `set`, `remove`, `append` | only when single-valued |
+| `edit-config` | `file`, `key_path` (array of path segments, never a dotted string) | | `set`, `remove`, `append` | only when single-valued: the YAML value as JSON (a string, a list of strings, or a boolean). For `remove`, omitted removes the whole key and a value names the entry removed from a list |
 | `add-record` | | `type` (omitted when not determinable), `file` (path to create, if known) | none | never |
 | `run-command` | `argv` (array) | | none | never |
-| `waive` | `rule`, `scope` | | none | never |
 
 - `file` is repository-root-relative, as in findings (`SPEC-2`, `BUG-185`), and need not equal the finding's `file`: for the reciprocity rules the finding sits on the claimant and the edit belongs on the counterpart. `line` is given only where it differs from the finding's. `field` is the declared spelling.
 - One flat key vocabulary: `file`, `field`, `section`, `type`, `rule`, `scope`, `key_path`, `argv`, `line`. A new key is added to this table, not invented per rule.
-- A key or `value` that was not computed is omitted, never `null`. The same holds for an absent `suggested_action`.
-- `run-command` means: run exactly this command; the command is the source of truth for what it writes. It is offered only when the command would produce that repair for this finding: `urzua fix --apply --ids <record>` for `embodiment.consistency` and `status.delivery-agreement`, `urzua index --apply` for `index.freshness`, `urzua refs refresh` for `citation.issue-exists`. Because it carries no `value`, a `fix` repair stays the one place its computed value lives; `edit-field` carries a value only where no `fix` repair exists (relation reciprocity, `field.untrimmed-value`, `header.field-case-mismatch`, `config.pointer-declaration-missing`). "Derivable" follows `ADR-15`'s eligibility clauses. A test asserts that every finding offering `urzua fix` has a matching repair in `urzua fix` output for that record and field. A `run-command` can still be refused by the command's own gates (`--ids`, revision-log requirements); the finding promises the command, not its success.
-- `waive` is a policy escape, not a repair. It is never a rule's declared primary action (every rule is waivable, so it would make the coverage test vacuous); it is offered only as a secondary action where a violation can be intentional, and it is separate from `add-record` only because an agent must not apply it automatically.
+- `value` is any JSON value of the types in the table: a string, a list of strings, or a boolean; no other type occurs in the appendix. A key or `value` that was not computed is omitted, never `null`. The same holds for an absent `suggested_action`.
+- `argv` is concrete in the emitted finding (no placeholders), `argv[0]` is `urzua`, and a consumer adds `--by` only when no identity resolves (`SPEC-8`).
+- `run-command` means: run exactly this command; the command is the source of truth for what it writes. For `fix` and `index --apply` it is offered only when the command would produce that repair for this finding (a test checks each): `urzua fix --apply --ids <record>` for `embodiment.consistency` and `status.delivery-agreement`, `urzua index --apply` for `index.freshness`, `urzua refs refresh` for `citation.issue-exists`, which is not judged by that test: it needs the network and a token, and an unresolved citation may be a typo, so that command is a lead and `citation.issue-exists` declares `edit-section` set as its action instead. Because it carries no `value`, a `fix` repair stays the one place its computed value lives; `edit-field` carries a value only where no `fix` repair exists (relation reciprocity, `field.untrimmed-value`, `header.field-case-mismatch`, `config.pointer-declaration-missing`). "Derivable" follows `ADR-15`'s eligibility clauses. A test asserts that every finding offering `urzua fix` has a matching repair in `urzua fix` output for that record and field. A `run-command` can still be refused by the command's own gates (`--ids`, revision-log requirements); the finding promises the command, not its success.
+- `waive` is not in the first release. A finding carries exactly one `suggested_action`, so there is no slot for a secondary action, and a kind with no producing rule would be a contract without a test. Adding `waive` (a waiver is a record of the `waiver` type, `ADR-11`) and a secondary-action mechanism such as an `alternatives` array are a later, separate decision; both are non-breaking under the compatibility rule.
 - There is no `note` key: `message` is the prose and is always present.
 
 ### Declaration
@@ -70,11 +70,9 @@ The declaration is per finding variant, in `RULE_TABLE` (`MILE-171`): for every 
 
 ### Compatibility
 
-The set of kinds, `op` values and `target` keys is closed per release and extensible across releases. Adding a kind, an `op` value or an optional `target` key is non-breaking. Renaming or removing one, changing its meaning, or changing which keys are required is breaking. Consumers MUST treat an unrecognised `kind` as non-actionable and fall back to `message`, and MUST ignore unrecognised `target` keys. `SPEC-2` states this in its output contract. The report has no output version field today; if one is added it is a separate record and kind additions stay minor.
+The set of kinds, `op` values and `target` keys is closed per release and extensible across releases. Adding a kind, an `op` value or an optional `target` key is non-breaking. Renaming or removing one, changing its meaning, or changing which keys are required is breaking. Consumers MUST treat an unrecognised `kind`, or an unrecognised `op` on a known kind, as non-actionable and fall back to `message`, and MUST ignore unrecognised `target` keys. `SPEC-2` states this in its output contract. The report has no output version field today; if one is added it is a separate record and kind additions stay minor.
 
 ### Per-rule declaration (appendix; exemptions carry the reason)
-
-No rule in this table relies on `waive`.
 
 | Rule | Declared action |
 |---|---|
@@ -82,14 +80,14 @@ No rule in this table relies on `waive`.
 | `pointer.resolution` | `edit-field` set (repoint), no value |
 | `pointer.target-status` | `edit-field` set, no value |
 | `field.quality`, `field.pending` | `edit-field` set, no value |
-| `claim.status-agreement` | `edit-field` set on the record's `Status`, no value (the claim file is exempt, below) |
+| `claim.status-agreement` | exempt: the rule catches a claim that may be false, so the right fix is often the claim file (a non-record file, no kind yet) and editing `Status` would be the mechanical answer and possibly wrong |
 | `filename.title-consistency` | exempt: a rename or an H1 edit, no kind yet |
 | `relation.supersession-reciprocity`, `relation.pair-reciprocity` | `edit-field` append on the counterpart, value computed |
 | `relation.cross-type-disallowed` | `edit-field` remove on the claim |
 | `relation.target-status-undeclared` | `edit-config` set |
 | `revision-log.change-class-required` | `edit-section` set on the revision log |
 | `embodiment.consistency` | `run-command` `urzua fix --apply --ids <record>` |
-| `embodiment.requires-accepted-status` | `edit-field` remove on `Embodiment`, no value (`ADR-15`: never auto-lower) |
+| `embodiment.requires-accepted-status` | `edit-field` set on `Embodiment`, no value (`Embodiment` is a declared header field, so removing it can trip `header.required-fields`; `ADR-15`: never auto-lower) |
 | `embodiment.back-pointer-resolution`, `embodiment.back-pointer-decision-accepted` | exempt: edits a source file, no kind for a non-record file yet |
 | `embodiment.locator-exists` | `edit-field` set on `Realized-by`, no value |
 | `embodiment.locator-promotion-candidate` | exempt: advisory, never auto-promoted |
@@ -116,7 +114,7 @@ No rule in this table relies on `waive`.
 | `date.field-valid`, `date.field-order` | `edit-field` set, no value |
 | `citation.resolution` | exempt: prose located by line, no kind yet |
 | `citation.path-exists` | `edit-section` set on the named reference section |
-| `citation.issue-exists` | `run-command` `urzua refs refresh` |
+| `citation.issue-exists` | `edit-section` set on the named reference section, no value (`urzua refs refresh` is not offered: it needs the network and may not apply to a typo) |
 | `boundary.published-path-reference` | exempt: edits a published non-record file |
 | `section.required` | `edit-section` add |
 | `section.shape` | `edit-section` set |
@@ -124,7 +122,7 @@ No rule in this table relies on `waive`.
 | `diff.source-requires-record` | `add-record`, `type` when determinable |
 | `diff.source-and-records-mixed` | exempt: process advice, no file edit |
 | `config.scope-matches-nothing` | `edit-config` set, no value |
-| `waiver.matches-nothing` | `edit-field` set on the waiver's `Rule` or `Scope`; deleting the waiver is exempt, no kind yet |
+| `waiver.matches-nothing` | expired: `edit-field` set on `Expires`, no value; unknown rule: `edit-field` set on `Rule`, no value; no finding matched: `edit-field` set on `Scope`, no value; deleting the waiver is exempt for each, no kind yet |
 
 The exemptions that say "no kind yet" (non-record file edit, rename or move, delete a record, prose by line) are the four capabilities deferred from the first release. Adding `edit-file`, `rename-file`, `remove-record` and a line-located prose edit later is non-breaking under the compatibility rule.
 
@@ -135,7 +133,7 @@ The exemptions that say "no kind yet" (non-record file edit, rename or move, del
 
 ## Reversibility
 
-Adding kinds, `op` values and optional keys is additive for the engine and, under the compatibility rule, for conforming consumers. Renaming or removing any of them, or changing required keys, is breaking for every parser of `check` output, and there is no output version to negotiate it. Consumers that model `kind` as an exhaustive enum would fail on the first new kind, which is why the compatibility rule is part of the decision. The vocabulary should be reviewed before acceptance; the first release uses the six kinds above.
+Adding kinds, `op` values and optional keys is additive for the engine and, under the compatibility rule, for conforming consumers. Renaming or removing any of them, or changing required keys, is breaking for every parser of `check` output, and there is no output version to negotiate it. Consumers that model `kind` as an exhaustive enum would fail on the first new kind, which is why the compatibility rule is part of the decision. The vocabulary should be reviewed before acceptance; the first release uses the five kinds above.
 
 ## Consequences
 
@@ -149,7 +147,7 @@ Adding kinds, `op` values and optional keys is additive for the engine and, unde
 - `ADR-64` -- structured in, structured out.
 - `ADR-15`, `RFC-8` -- name `suggested_action` on `fix` entries; `SPEC-8` -- the shipped repairs.
 - `RFC-3`, `ADR-7` -- agent-native JSON output.
-- `ADR-11` -- the waiver record.
+- `ADR-11` -- the waiver record (`waive` is a candidate future kind).
 - `MILE-44`, `MILE-171`, `MILE-72`, `BUG-21`, `SPEC-2`.
 
 > **Revision log**
@@ -158,3 +156,4 @@ Adding kinds, `op` values and optional keys is additive for the engine and, unde
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed. **Why:** `MILE-44` needs a structured shape that no accepted record defines and that is hard to reverse once agents parse it. | **substantive** |
 > | 2026-11-04 | Reworked after independent review: normative per-kind key table, `run-command` replaces `fix-apply`, required `op`, per-variant declaration with reasoned exemptions, compatibility rule, per-rule appendix, `note` dropped, `MILE-72` relation settled. **Why:** the first draft left target keys unspecified, mixed what changes with who performs it, and gave consumers no rule for later kinds. | **substantive** |
+> | 2026-11-04 | Re-review amendments: `waive` dropped from the first release, `value` types and `remove` semantics stated, unknown `op` covered, `citation.issue-exists`, `claim.status-agreement`, `embodiment.requires-accepted-status` and `waiver.matches-nothing` declarations corrected. **Why:** the re-review found a kind with no producer and an unstated `value` type. | **substantive** |
