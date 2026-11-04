@@ -1,12 +1,13 @@
 ---
 Stable-Id: 01M6M6574BD7S9HVGNT8H5TTTF
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
-Deciders: null
+Deciders: beauwilliams
 Embodiment: null
 Supersedes / Superseded-by: null
-Derives-from: null
+Derives-from: RFC-1
 ---
 # 72 — Allowed status transitions are declared per type as a graph over the declared statuses
 
@@ -60,3 +61,4 @@ is a config migration for each of them.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed. **Why:** building `MILE-144`'s declared transitions is part of `RFC-1`'s proposal, which needs its own ADR; awaiting maintainer acceptance. | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
