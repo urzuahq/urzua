@@ -94,6 +94,183 @@ pub fn citation_resolution(
     )
 }
 
+/// `citation.path-exists` (`MILE-143`): a repository path cited in backticks
+/// inside a declared reference section exists.
+///
+/// Reads only the `##` sections named by `reference_sections`; a record without
+/// one is out of scope (counted, not examined). What counts as a cited path is
+/// deliberately narrow so a warning is almost always right: see
+/// [`cited_path`]. `present` is supplied by the caller (this crate does not
+/// touch the filesystem) and answers "tracked and on disk" for a file, or "has
+/// a tracked file below it" for a directory. The population's unit is the
+/// cited path, so a corpus that cites none reports `0` examined.
+pub fn citation_path_exists(
+    records: &[Record],
+    config: &Config,
+    full_text: &HashMap<PathBuf, String>,
+    present: &dyn Fn(&str) -> bool,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_CITATION_PATH_EXISTS;
+    let sections: Vec<String> = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.reference_sections.clone())
+        .unwrap_or_default();
+
+    struct Cited<'a> {
+        record: &'a Record,
+        line: usize,
+        raw: String,
+        path: String,
+    }
+    let mut candidates: Vec<Cited> = Vec::new();
+    for record in records {
+        let Some(text) = full_text.get(&record.path) else {
+            continue;
+        };
+        for section in super::section::record_sections(record, text)
+            .iter()
+            .filter(|s| sections.iter().any(|name| name == &s.heading))
+        {
+            for (line, content) in super::section::prose_lines(section) {
+                for span in code_spans(content) {
+                    if let Some(path) = cited_path(&span, &record.path) {
+                        candidates.push(Cited {
+                            record,
+                            line,
+                            raw: span,
+                            path,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    let mut findings = Vec::new();
+    let (population, examined_records) = census_records(
+        PopulationUnit::Citation,
+        candidates,
+        |c| c.record.path.clone(),
+        |c| {
+            if !present(&c.path) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: c.record.path.clone(),
+                    line: Some(c.line),
+                    waived: None,
+                    declared_severity: None,
+                    message: format!("cites `{}`, which is not in the working tree", c.raw),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// The contents of every inline code span on `line`: a run of N backticks
+/// closed by the next run of exactly N.
+fn code_spans(line: &str) -> Vec<String> {
+    let bytes = line.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'`' {
+            i += 1;
+            continue;
+        }
+        let open = bytes[i..].iter().take_while(|b| **b == b'`').count();
+        let start = i + open;
+        let mut j = start;
+        let mut closed = None;
+        while j < bytes.len() {
+            if bytes[j] == b'`' {
+                let run = bytes[j..].iter().take_while(|b| **b == b'`').count();
+                if run == open {
+                    closed = Some(j);
+                    break;
+                }
+                j += run;
+            } else {
+                j += 1;
+            }
+        }
+        match closed {
+            Some(end) => {
+                out.push(line[start..end].trim().to_string());
+                i = end + open;
+            }
+            None => i = start,
+        }
+    }
+    out
+}
+
+/// The repository-relative path a code span cites, or `None` when it is not
+/// read as a path. Narrow on purpose: no whitespace; a `/` present; no `://`;
+/// none of `*?<>{}$|` (glob or placeholder); not absolute or `~`/`@`-led; the
+/// first segment is not a host name (a `.` inside it, unless it is a dot
+/// directory such as `.github`); and the last segment carries an extension, or
+/// the span ends in `/`. A trailing `:line[:col]` or `#anchor` is dropped.
+/// `./` and `../` resolve from the directory of `record_path`, then the result
+/// is lexically normalised; a path escaping the repository is returned as
+/// written and so matches nothing.
+fn cited_path(span: &str, record_path: &std::path::Path) -> Option<String> {
+    let mut s = span;
+    if let Some((head, _)) = s.split_once('#') {
+        s = head;
+    }
+    // `path:12` or `path:12:3`.
+    while let Some((head, tail)) = s.rsplit_once(':') {
+        if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) {
+            s = head;
+        } else {
+            break;
+        }
+    }
+    if s.is_empty()
+        || s.contains(char::is_whitespace)
+        || !s.contains('/')
+        || s.contains("://")
+        || s.contains(['*', '?', '<', '>', '{', '}', '$', '|', ':'])
+        || s.starts_with(['/', '~', '@'])
+    {
+        return None;
+    }
+    let is_dir = s.ends_with('/');
+    let trimmed = s.trim_end_matches('/');
+    let last = trimmed.rsplit('/').next().unwrap_or("");
+    if !is_dir && !last.trim_start_matches('.').contains('.') {
+        return None;
+    }
+    let first = trimmed.split('/').next().unwrap_or("");
+    if first != "." && first != ".." && !first.starts_with('.') && first.contains('.') {
+        return None;
+    }
+    let joined = if first == "." || first == ".." {
+        let dir = record_path
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned());
+        match dir {
+            Some(d) if !d.is_empty() => format!("{d}/{trimmed}"),
+            _ => trimmed.to_string(),
+        }
+    } else {
+        trimmed.to_string()
+    };
+    Some(normalize_locator(&joined))
+}
+
 /// One declared external id: an exact prefixed number or an inclusive range
 /// under one prefix (`MILE-156`). Numbers compare by value, like record ids.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -435,5 +612,94 @@ mod tests {
         ] {
             assert!(parse_external_id(bad, &prefixes).is_err(), "{bad:?}");
         }
+    }
+
+    fn paths(docs: &[(&str, &str)], present: &[&str]) -> (RuleExecution, Vec<Finding>) {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        let mut config = config_with_types(vec![("adr", type_config(None))]);
+        let setting: crate::config::RuleSetting =
+            yaml_serde::from_str("level: warn\nreference_sections: [References]\n").unwrap();
+        config
+            .rules
+            .insert(RULE_CITATION_PATH_EXISTS.to_string(), setting);
+        let present: Vec<String> = present.iter().map(|p| p.to_string()).collect();
+        citation_path_exists(&records, &config, &full_text, &|p| {
+            present.iter().any(|q| q == p)
+        })
+    }
+
+    const ADR: &str = "docs/adr/ADR-1-y.md";
+
+    #[test]
+    fn a_cited_path_that_does_not_exist_is_reported_and_one_that_does_is_not_observed_failing() {
+        let body = "# 1\n\n## References\n\n- `docs/specs/SPEC-1.md` and `docs/gone.md`\n";
+        let (exec, findings) = paths(&[(ADR, body)], &["docs/specs/SPEC-1.md"]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("docs/gone.md"));
+        assert_eq!(findings[0].line, Some(5));
+        assert_eq!(findings[0].rule, RULE_CITATION_PATH_EXISTS);
+        assert_eq!(examined(&exec), 2);
+    }
+
+    #[test]
+    fn only_the_declared_sections_are_read_and_a_record_without_one_cites_nothing() {
+        let body = "# 1\n\nSee `docs/gone.md`.\n\n## Context\n\n`docs/also-gone.md`\n";
+        let (exec, findings) = paths(&[(ADR, body)], &[]);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn fenced_blocks_in_a_reference_section_are_not_read() {
+        let body = "# 1\n\n## References\n\n```\n`docs/gone.md`\n```\n";
+        let (_, findings) = paths(&[(ADR, body)], &[]);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn directories_anchors_line_numbers_and_relative_paths_resolve() {
+        let body = "# 1\n\n## References\n\n`docs/adr/` `docs/a.md#top` `rust/x.rs:12:3` `../specs/S.md` `./b.md`\n";
+        let present = [
+            "docs/adr",
+            "docs/a.md",
+            "rust/x.rs",
+            "docs/specs/S.md",
+            "docs/adr/b.md",
+        ];
+        let (exec, findings) = paths(&[(ADR, body)], &present);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(examined(&exec), 5);
+    }
+
+    #[test]
+    fn things_that_are_not_paths_are_not_read() {
+        let body = "# 1\n\n## References\n\n`Accepted/Rejected` `https://x.org/a.md` `example.com/a.md` `docs/*.md` `docs/<n>.md` `/abs/a.md` `make records` `Makefile` `@scope/pkg` `a/b` `x/y.rs z`\n";
+        let (exec, findings) = paths(&[(ADR, body)], &[]);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn a_dot_directory_is_a_path_not_a_host() {
+        let body = "# 1\n\n## References\n\n`.github/workflows/ci.yml`\n";
+        let (_, findings) = paths(&[(ADR, body)], &[]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_path_escaping_the_repository_matches_nothing() {
+        let body = "# 1\n\n## References\n\n`../../../etc/x.conf`\n";
+        let (_, findings) = paths(&[(ADR, body)], &["etc/x.conf"]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn double_backtick_spans_are_read() {
+        assert_eq!(code_spans("a ``b`c`` d `e`"), vec!["b`c", "e"]);
+        assert!(code_spans("`unclosed").is_empty());
     }
 }

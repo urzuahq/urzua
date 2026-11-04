@@ -1,5 +1,5 @@
 ---
-Version: '0.25'
+Version: '0.26'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -260,6 +260,29 @@ rules:
   visible in the report and never hidden. An id the list does not name is still resolved against the
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
+
+## Cited paths: `citation.path-exists`
+
+`citation.path-exists` (`MILE-143`) checks that a repository path cited in a record's references
+exists. Where to look is configuration, not engine knowledge, so the rule requires
+`reference_sections`:
+
+```yaml
+rules:
+  citation.path-exists:
+    level: warn
+    reference_sections: ["References"]
+```
+
+- `reference_sections` lists `##` heading texts, matched exactly after trimming. Only backtick-quoted
+  code spans inside those sections are read; a record with no such section is out of scope.
+- A span is read as a path only when it is plainly one: no whitespace, a `/` present, ending in a
+  file name with an extension or in `/`, not a URL or host-led path, not absolute, and no glob or
+  placeholder character. A bare file name without a directory (`Makefile`) is not read. A trailing
+  `:line` or `#anchor` is dropped; `./` and `../` resolve from the record's directory.
+- A file exists when git tracks it and it is on disk; a directory exists when a tracked file is below
+  it. The check is offline and deterministic. Cited issue and pull request numbers are not covered by
+  this rule.
 
 ## Scope declaration
 
@@ -643,4 +666,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |
 > | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
 > | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
-> | 2026-11-04 | Bumped to `0.25`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |
+> | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |

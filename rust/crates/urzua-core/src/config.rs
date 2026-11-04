@@ -175,6 +175,11 @@ pub struct RuleSetting {
     /// record prefix. Only meaningful to `citation.resolution`; optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_ids: Option<Vec<String>>,
+    /// The `##` headings whose backtick-quoted paths `citation.path-exists`
+    /// reads (`MILE-143`), matched exactly after trimming. Only meaningful to
+    /// that rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_sections: Option<Vec<String>>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -291,6 +296,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             accepted_statuses: Option<Vec<String>>,
             #[serde(default)]
             external_ids: Option<Vec<String>>,
+            #[serde(default)]
+            reference_sections: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -335,6 +342,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
                 external_ids: table.external_ids,
+                reference_sections: table.reference_sections,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -361,6 +369,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 field_levels: None,
                 accepted_statuses: None,
                 external_ids: None,
+                reference_sections: None,
             })
         }
     }
@@ -910,6 +919,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: true,
     },
     RuleOption {
+        name: "reference_sections",
+        owners: &[crate::rules::RULE_CITATION_PATH_EXISTS],
+        consequence_if_missing: "reads no section and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "external_ids",
         owners: &[crate::rules::RULE_CITATION_RESOLUTION],
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
@@ -951,6 +966,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         "external_ids" => setting.external_ids.as_ref(),
+        "reference_sections" => setting.reference_sections.as_ref(),
         "test_paths" => setting.test_paths.as_ref(),
         "sticky_states" => setting.sticky_states.as_ref(),
         _ => None,
@@ -1956,6 +1972,25 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'back_pointer_paths'"));
+    }
+
+    #[test]
+    fn reference_sections_is_required_by_citation_path_exists_and_by_no_other() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        assert!(parse(&format!("{base}  citation.path-exists: warn\n"))
+            .unwrap_err()
+            .to_string()
+            .contains("reference_sections"));
+        assert!(parse(&format!(
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n"
+        ))
+        .is_ok());
+        assert!(parse(&format!(
+            "{base}  field.quality:\n    level: error\n    reference_sections: [\"References\"]\n"
+        ))
+        .unwrap_err()
+        .to_string()
+        .contains("does not take the option 'reference_sections'"));
     }
 
     #[test]
