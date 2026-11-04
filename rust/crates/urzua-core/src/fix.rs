@@ -13,6 +13,7 @@ use crate::record::Record;
 use crate::report::{census, Outcome, Population, PopulationUnit};
 use crate::rules::{
     compute_embodiment, find_revision_log_entries, parse_realized_by, relation_field_name,
+    BackPointerEvidence,
 };
 
 /// One mechanically-detected disagreement between a record's stated value
@@ -53,9 +54,10 @@ pub fn detect_repairs(
     config: &Config,
     drifted: &HashSet<PathBuf>,
     fresh_drift: &HashSet<PathBuf>,
-    back_pointed: &HashSet<PathBuf>,
+    back_pointed: &BackPointerEvidence,
 ) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
+    let sticky = crate::rules::sticky_states(config);
 
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         let state_field =
@@ -65,17 +67,27 @@ pub fn detect_repairs(
         let Some(stated) = record.header.get(state_field) else {
             return Outcome::Absent;
         };
-        let Some(realized_by_value) = record.header.get(locator_field) else {
+        // A sticky state is a human's; there is nothing to recompute (`MILE-148`).
+        if sticky.contains(stated.trim()) {
+            return Outcome::Examined;
+        }
+        let cited_by_code = back_pointed.code.contains(&record.path);
+        let cited_by_test = back_pointed.test.contains(&record.path);
+        // No `Realized-by` is repaired only when a back-pointer cites the
+        // record, as `embodiment.consistency` judges it (`MILE-149`).
+        let realized_by_value = record.header.get(locator_field);
+        if realized_by_value.is_none() && !(cited_by_code || cited_by_test) {
             return Outcome::Absent;
-        };
+        }
 
         // Drift (ADR-32) is computed by the caller from git history and
         // handed in as plain data, the same shape `embodiment_consistency`
         // takes, so this function stays pure (MILE-15).
         let computed = compute_embodiment(
-            &parse_realized_by(realized_by_value),
+            &realized_by_value.map(parse_realized_by).unwrap_or_default(),
             drifted.contains(&record.path),
-            back_pointed.contains(&record.path),
+            cited_by_code,
+            cited_by_test,
         );
         let stated = stated.trim();
         // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
@@ -87,7 +99,13 @@ pub fn detect_repairs(
                 current_value: stated.to_string(),
                 computed_value: computed.to_string(),
                 tier: 1,
-                evidence: format!("{locator_field}: {realized_by_value}"),
+                evidence: match realized_by_value {
+                    Some(value) => format!("{locator_field}: {value}"),
+                    None => format!(
+                        "no {locator_field} field; cited by {} back-pointers",
+                        if cited_by_test { "test" } else { "source" }
+                    ),
+                },
             });
         }
         Outcome::Examined
@@ -173,6 +191,33 @@ mod tests {
     }
 
     #[test]
+    fn a_sticky_state_is_never_repaired_and_a_neighbour_still_is() {
+        let mut config = no_relation_field_overrides();
+        config.rules.insert(
+            crate::rules::RULE_EMBODIMENT_CONSISTENCY.to_string(),
+            yaml_serde::from_str("{level: warn, sticky_states: [Deprecated]}").unwrap(),
+        );
+        let sticky = record(
+            "docs/adr/0001-x.md",
+            "> Embodiment: Deprecated\n> Realized-by: spec:docs/x.md\n",
+        );
+        let neighbour = record(
+            "docs/adr/0002-y.md",
+            "> Embodiment: Verified\n> Realized-by: spec:docs/x.md\n",
+        );
+        let (population, repairs) = detect_repairs(
+            &[sticky, neighbour],
+            &config,
+            &HashSet::new(),
+            &HashSet::new(),
+            &Default::default(),
+        );
+        assert_eq!(population.examined(), 2);
+        assert_eq!(repairs.len(), 1);
+        assert!(repairs[0].record.ends_with("0002-y.md"));
+    }
+
+    #[test]
     fn a_back_pointed_record_repairs_to_implemented_not_specified_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
@@ -184,7 +229,10 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &cited,
+            &BackPointerEvidence {
+                code: cited.clone(),
+                ..Default::default()
+            },
         );
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].computed_value, "Implemented");
@@ -201,7 +249,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1);
@@ -223,7 +271,7 @@ mod tests {
             &no_relation_field_overrides(),
             &drifted,
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].computed_value, "Drift detected");
@@ -240,7 +288,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(repairs.is_empty());
@@ -290,7 +338,7 @@ mod tests {
             &config,
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1, "{repairs:?}");
@@ -309,7 +357,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 0));
         assert!(repairs.is_empty());
@@ -389,7 +437,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &fresh,
-            &HashSet::new(),
+            &Default::default(),
         );
         assert!(repairs.is_empty(), "{repairs:?}");
     }

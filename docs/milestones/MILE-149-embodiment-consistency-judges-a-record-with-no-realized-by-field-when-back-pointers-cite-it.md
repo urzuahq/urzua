@@ -25,3 +25,4 @@ A record with cited code and no `Realized-by` field is judged; a record with nei
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Records with no `Realized-by` judged when cited (`SPEC-2` `0.30`): exercised here by `ADR-2`, `ADR-3`, `ADR-5` and `ADR-6`, whose crates cite them and whose stated `Not started` was corrected to the computed value; a fixture covers cited, uncited and the finding text. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |

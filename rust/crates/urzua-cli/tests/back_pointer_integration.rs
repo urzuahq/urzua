@@ -1,6 +1,8 @@
 //! `embodiment.back-pointer-resolution` (`MILE-128`) against the real binary:
 //! an `Implements:` source comment is code-tier evidence for the record it
 //! cites, in `check` and in `fix`, and one citing no record is reported.
+//!
+//! Verifies: ADR-66
 
 use std::path::Path;
 use std::process::Command;

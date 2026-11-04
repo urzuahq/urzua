@@ -47,6 +47,7 @@ record_types:
       - "Stable-Id"
       - "Supersedes / Superseded-by"
       - "Amends"
+      - "Amended-by"
       - "Implements"
     statuses:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
@@ -133,9 +134,10 @@ record_types:
       - "Blocked-on"
   waiver:
     dir: "docs/waiver"
-    # No waiver exists yet, so the padded form is free to choose (MILE-151):
-    # `urzua new waiver` fits its file name and H1 to this pattern, and the
-    # identity rules read the same grammar back.
+    # The padded form, chosen so the declared identity is exercised here
+    # (MILE-151): `urzua new waiver` fits its file name and H1 to this pattern,
+    # and the identity rules read the same grammar back. The one existing
+    # waiver was renamed to it.
     identity: {from: filename, pattern: '^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$'}
     required_fields:
       - "Rule"
@@ -148,6 +150,22 @@ record_types:
     spec: "SPEC-10"
     pointer_fields: []
     narrative_fields: []
+
+# An RFC that amends another is echoed by the amended RFC's Amended-by. A claim
+# from an RFC that is not yet accepted is provisional (MILE-154, MILE-127): it
+# is a warning while the claimant is a Draft or in Discussion, and an error
+# once it is accepted without the amended RFC naming it back.
+relation_pairs:
+  - name: amendment
+    forward: "Amends"
+    inverse: "Amended-by"
+    reciprocity: required
+    # Only RFCs carry the pair (MILE-155): an RFC that amends an ADR claims
+    # something the ADR cannot echo, since an ADR is amended by a dated section.
+    types: ["rfc"]
+    provisional:
+      statuses: ["Draft", "Discussion"]
+      level: warn
 
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
@@ -185,6 +203,7 @@ rules:
   filename.title-consistency: error
   filename.identity-pattern: warn
   relation.supersession-reciprocity: error
+  relation.pair-reciprocity: error
   relation.target-status-undeclared: error
   revision-log.change-class-required: error
   narrative-field.stale:
@@ -195,6 +214,9 @@ rules:
   embodiment.consistency:
     level: warn
     drift_grace_days: 14
+    # States a human sets that no evidence can compute (MILE-148): a record
+    # stating one is not reported as drift, and `urzua fix` leaves it alone.
+    sticky_states: ["Deprecated", "Inactive"]
   embodiment.locator-exists: error
   # Off: an advisory suggestion, and several ADRs citing one rule module is
   # expected now that the rule engine is split into modules (MILE-131).
@@ -222,6 +244,14 @@ rules:
   embodiment.back-pointer-decision-accepted:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+  # Source comments are realization evidence (MILE-128): `Implements: ADR-12`
+  # is code tier, and `Verifies: ADR-12` in a file under `test_paths` is test
+  # tier (MILE-146), so a record is computed Verified from the tests that cite
+  # it rather than from a restated `test:` locator.
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/urzua-core/tests"]
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.

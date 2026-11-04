@@ -216,6 +216,14 @@ impl PairSlot<'_> {
     }
 }
 
+/// Whether a record type carries a pair: every type does unless the pair
+/// declares `types` (`MILE-155`).
+fn pair_carried_by(pair: &crate::config::RelationPair, record_type: &str) -> bool {
+    pair.types
+        .as_ref()
+        .is_none_or(|types| types.iter().any(|t| t == record_type))
+}
+
 /// Every `(record, pair, side)` where the record's type declares the side's
 /// field, for the pairs `keep` selects. A type that does not declare a pair's
 /// field is not that pair's business, the same gate `ADR-60` gives `Status`.
@@ -228,6 +236,9 @@ fn pair_slots<'a>(
     let mut slots = Vec::new();
     for pair in config.relation_pairs.iter().filter(|p| keep(p)) {
         for record in records {
+            if !pair_carried_by(pair, &record.record_type) {
+                continue;
+            }
             let Some(declared) = declared_by_type.get(&record.record_type) else {
                 continue;
             };
@@ -263,6 +274,37 @@ fn pair_slot_claims(slot: &PairSlot) -> Result<Vec<String>, Outcome> {
         return Err(Outcome::Examined);
     }
     Ok(extract_references(value))
+}
+
+fn status_field<'a>(record: &Record, config: &'a Config) -> &'a str {
+    relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::Status,
+    )
+}
+
+fn claimant_status<'a>(record: &'a Record, config: &Config) -> Option<&'a str> {
+    record.header.get(status_field(record, config))
+}
+
+/// The severity a claim from `record` is held to when the pair declares a
+/// provisional split and the claimant's status is one of its statuses.
+/// `None` means the rule's own level applies (`MILE-154`).
+fn provisional_severity(
+    pair: &crate::config::RelationPair,
+    record: &Record,
+    config: &Config,
+) -> Option<FindingSeverity> {
+    let prov = pair.provisional.as_ref()?;
+    let status = claimant_status(record, config)?;
+    prov.statuses
+        .iter()
+        .any(|s| s == status)
+        .then_some(match prov.level {
+            crate::config::ProvisionalLevel::Warn => FindingSeverity::Warning,
+            crate::config::ProvisionalLevel::Error => FindingSeverity::Error,
+        })
 }
 
 /// Rule (`RFC-47`, `MILE-122`): reciprocity over every declared relation pair.
@@ -324,19 +366,40 @@ pub fn relation_pair_reciprocity(
                     excluded += 1;
                     continue;
                 }
+                // A target of a type outside a scoped pair cannot hold the
+                // inverse field, so the claim cannot be echoed: judged by the
+                // scoping, disclosed as out of scope, not an unechoed claim
+                // (`MILE-155`).
+                if !pair_carried_by(slot.pair, &target.record_type) {
+                    excluded += 1;
+                    continue;
+                }
                 let names_back = extract_references(target.header.get(echo).unwrap_or(""))
                     .iter()
                     .any(|r| crate::values::RecordId::new(r) == normalized_id);
                 if !names_back {
+                    // A claim from a record not yet at an accepted status is
+                    // provisional (`MILE-154`): the pair's own level applies
+                    // instead of the rule's. Anything else keeps the rule's.
+                    let declared_severity = provisional_severity(slot.pair, record, config);
+                    let note = if declared_severity.is_some() {
+                        format!(
+                            " (provisional: {} is '{}')",
+                            status_field(record, config),
+                            claimant_status(record, config).unwrap_or_default()
+                        )
+                    } else {
+                        String::new()
+                    };
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
+                        severity: declared_severity.unwrap_or(FindingSeverity::Error),
                         file: record.path.clone(),
                         line: None,
                         waived: None,
-                        declared_severity: None,
+                        declared_severity,
                         message: format!(
-                            "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}",
+                            "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
                             slot.pair.name
                         ),
                     });
@@ -672,6 +735,8 @@ mod tests {
             inverse: inv.to_string(),
             reciprocity: crate::config::PairReciprocity::Required,
             cross_type,
+            provisional: None,
+            types: None,
         }
     }
 
@@ -913,6 +978,152 @@ mod tests {
         assert!(findings[0].message.contains("RFC-2's"), "{findings:?}");
         assert_eq!(findings[0].file, records[2].path);
         assert_eq!(examined(&exec), 3);
+    }
+
+    fn provisional_config() -> Config {
+        let mut p = pair("amendment", "Amends", "Amended-by", false);
+        p.provisional = Some(crate::config::ProvisionalClaim {
+            statuses: vec!["Draft".to_string()],
+            level: crate::config::ProvisionalLevel::Warn,
+        });
+        pair_config(
+            vec![(
+                "rfc",
+                &["Status", "Amends", "Amended-by", "Amended-by-pending"],
+            )],
+            vec![p],
+        )
+    }
+
+    #[test]
+    fn a_draft_claim_echoed_only_in_a_pending_field_is_provisional_observed_failing() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "> Status: Accepted\n> Amended-by: —\n> Amended-by-pending: RFC-2\n",
+        );
+        let draft = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Draft\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&provisional_config(), &[base, draft]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        assert_eq!(
+            findings[0].declared_severity,
+            Some(FindingSeverity::Warning)
+        );
+        assert!(findings[0].message.contains("provisional"), "{findings:?}");
+    }
+
+    #[test]
+    fn an_accepted_claim_with_the_same_gap_keeps_the_full_severity_observed_failing() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "> Status: Accepted\n> Amended-by: —\n> Amended-by-pending: RFC-2\n",
+        );
+        let accepted = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Accepted\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&provisional_config(), &[base, accepted]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert_eq!(findings[0].declared_severity, None);
+        assert!(!findings[0].message.contains("provisional"), "{findings:?}");
+    }
+
+    #[test]
+    fn a_draft_claim_the_peer_settles_is_not_reported() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "> Status: Accepted\n> Amended-by: RFC-2\n",
+        );
+        let draft = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Draft\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&provisional_config(), &[base, draft]);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_pair_declaring_no_provisional_split_is_unchanged_by_status() {
+        let base = record("docs/rfc/RFC-1-a.md", "rfc", "> Status: Accepted\n");
+        let draft = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Draft\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&amend_config(), &[base, draft]);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert_eq!(findings[0].declared_severity, None);
+    }
+
+    fn scoped_config(types: Option<Vec<&str>>) -> Config {
+        let mut p = pair("amendment", "Amends", "Amended-by", true);
+        p.types = types.map(|t| t.into_iter().map(String::from).collect());
+        pair_config(
+            vec![("rfc", &["Amends", "Amended-by"]), ("adr", &["Title"])],
+            vec![p],
+        )
+    }
+
+    #[test]
+    fn a_claim_to_a_type_outside_a_scoped_pair_is_out_of_scope_not_an_error_observed_failing() {
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Title: x\n");
+        let records = [rfc, adr];
+        let (exec, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &records);
+        assert!(findings.is_empty(), "{findings:?}");
+        let pop = exec.population.unwrap();
+        assert_eq!(pop.out_of_scope(), 1, "{pop:?}");
+    }
+
+    #[test]
+    fn the_same_claim_in_a_global_pair_still_errors() {
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Title: x\n");
+        let records = [rfc, adr];
+        let (_, findings) = run_pairs(&scoped_config(None), &records);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_scoped_pair_still_judges_claims_between_its_own_types() {
+        let a = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-2\n");
+        let b = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let (_, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &[a, b]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_record_of_a_type_outside_a_scoped_pair_is_not_its_business() {
+        let config = pair_config(
+            vec![
+                ("rfc", &["Amends", "Amended-by"]),
+                ("adr", &["Amends", "Amended-by"]),
+            ],
+            vec![{
+                let mut p = pair("amendment", "Amends", "Amended-by", true);
+                p.types = Some(vec!["rfc".to_string()]);
+                p
+            }],
+        );
+        let adr = record("docs/adr/ADR-1-a.md", "adr", "> Amends: RFC-2\n");
+        let rfc = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let (exec, findings) = run_pairs(&config, &[adr, rfc]);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(
+            exec.population.unwrap().eligible(),
+            2,
+            "only the rfc's two sides"
+        );
     }
 
     #[test]

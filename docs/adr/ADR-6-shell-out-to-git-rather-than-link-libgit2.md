@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Not started
+Embodiment: Implemented
 Date: 2026-09-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -65,3 +65,9 @@ change that doesn't touch `urzua-core` or `urzua-cli` at all.
   decision lives inside.
 - [ADR-1](ADR-1-rust-as-implementation-language.md) — the commit-hot-path startup argument this
   decision protects.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed: `Not started` to `Implemented`, by hand with the row `urzua fix` would write. **Why:** the `urzua-io` crate cites this record with an `Implements:` back-pointer, and `embodiment.consistency` now judges a record with no `Realized-by` field that a back-pointer cites (`MILE-149`); the Decision is unchanged. | **structural** |
