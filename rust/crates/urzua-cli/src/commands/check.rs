@@ -449,6 +449,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_HEADER_FIELD_CASE_MISMATCH, || {
             rules::header_field_case_mismatch(&records, &config)
         }),
+        crate::gate::gated(&config, rules::RULE_HEADER_CASE_VARIANT_KEY, || {
+            rules::header_case_variant_key(&records, &config)
+        }),
         crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
             let terminal = config
                 .rules
