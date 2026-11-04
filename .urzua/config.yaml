@@ -42,8 +42,11 @@ record_types:
     spec: "SPEC-16"
     # How this type's revision log is found (MILE-167): the line itself, not
     # any line that mentions the text. This is the default, declared here so
-    # the repository's own records exercise the declaration.
-    revision_log: {marker: "**Revision log**"}
+    # the repository's own records exercise the declaration. `required: true`
+    # (also the default) makes `urzua fix --apply` refuse a record with no log
+    # to record the write in; `required: false` would apply without a row
+    # (MILE-159).
+    revision_log: {marker: "**Revision log**", required: true}
     pointer_fields:
       - "Derives-from"
     narrative_fields: []
