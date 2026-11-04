@@ -247,6 +247,9 @@ rules:
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.
+  # Integration tests sit in each crate's tests/ directory, so a change to
+  # them alone is not a change to behaviour needing a record (MILE-158).
   diff.source-requires-record:
     level: error
     source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests"]

@@ -100,16 +100,18 @@ pub struct RuleSetting {
     /// records (`MILE-139`). Only meaningful to that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexes: Option<Vec<IndexSpec>>,
-    /// Path prefixes of source code that must change with a governed record.
-    /// Only meaningful to `diff.source-requires-record` (`MILE-124`).
+    /// Path prefixes or globs of source code that must change with a governed
+    /// record. Only meaningful to `diff.source-requires-record` (`MILE-124`,
+    /// `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_paths: Option<Vec<String>>,
     /// Path prefixes of application source. Only meaningful to
     /// `diff.source-and-records-mixed` (`MILE-142`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub application_paths: Option<Vec<String>>,
-    /// Path prefixes removed from `application_paths` (tests, fixtures). Only
-    /// meaningful to `diff.source-and-records-mixed`.
+    /// Path prefixes or globs removed from `application_paths` or
+    /// `source_paths` (tests, fixtures). Only meaningful to the two diff rules
+    /// (`MILE-142`, `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_paths: Option<Vec<String>>,
     /// Admit header keys beginning `x-` (case-insensitive) as extension keys
@@ -831,8 +833,11 @@ const RULE_OPTIONS: &[RuleOption] = &[
     },
     RuleOption {
         name: "exclude_paths",
-        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
-        consequence_if_missing: "excludes nothing from the application source",
+        owners: &[
+            crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
+            crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        ],
+        consequence_if_missing: "excludes nothing from the source",
         optional: true,
     },
     RuleOption {
@@ -1218,6 +1223,23 @@ pub fn parse_with_document_models(
             for entry in paths.iter_mut() {
                 let normalised = normalize_published_path(entry);
                 if level != RuleLevel::Off {
+                    // The diff rules' options take globs (`MILE-158`): one that
+                    // cannot compile would match nothing, which reads as clean.
+                    let diff_option = matches!(
+                        option,
+                        "source_paths" | "application_paths" | "exclude_paths"
+                    );
+                    if diff_option
+                        && crate::rules::is_path_glob(&normalised)
+                        && crate::rules::path_glob_regex(&normalised).is_err()
+                    {
+                        return Err(ConfigError::InvalidPublishedPath {
+                            rule: name.clone(),
+                            option,
+                            entry: entry.clone(),
+                            reason: "is not a valid glob (an unclosed or empty `[` class)",
+                        });
+                    }
                     if let Some(reason) = published_path_problem(&normalised) {
                         return Err(ConfigError::InvalidPublishedPath {
                             rule: name.clone(),
@@ -2243,6 +2265,23 @@ record_types:
                 "{bad} must be refused"
             );
         }
+    }
+
+    #[test]
+    fn a_diff_path_option_takes_globs_and_refuses_a_broken_one() {
+        let cfg = |entry: &str| {
+            format!("schema_version: 2\nrules:\n  diff.source-requires-record:\n    level: error\n    source_paths: [\"src\"]\n    exclude_paths: [\"{entry}\"]\nrecord_types: {{}}\n")
+        };
+        let c = parse(&cfg("**/*.test.*")).unwrap();
+        let setting = &c.rules["diff.source-requires-record"];
+        assert_eq!(
+            setting.exclude_paths.as_deref(),
+            Some(&["**/*.test.*".to_string()][..])
+        );
+        assert!(parse(&cfg("src/[ab")).is_err());
+        // exclude_paths belongs to the diff rules only.
+        let other = "schema_version: 2\nrules:\n  header.required-fields:\n    level: error\n    exclude_paths: [\"x\"]\nrecord_types: {}\n";
+        assert!(parse(other).is_err());
     }
 
     #[test]

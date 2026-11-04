@@ -22,8 +22,9 @@ fn is_governed_record(path: &Path, config: &Config) -> bool {
             .any(|t| path.parent() == Some(Path::new(&t.dir)) && !t.excludes(name))
 }
 
-fn under_any(path: &Path, prefixes: &[String]) -> bool {
-    prefixes.iter().any(|p| path_is_published(path, p))
+/// Whether `path` is covered by any entry: a prefix, or a glob (`MILE-158`).
+fn under_any(path: &Path, entries: &[String]) -> bool {
+    entries.iter().any(|e| path_matches_entry(path, e))
 }
 
 fn not_applicable(rule: &str) -> (RuleExecution, Vec<Finding>) {
@@ -58,11 +59,14 @@ fn sorted(changed: &[PathBuf]) -> Vec<&PathBuf> {
 }
 
 /// A diff that changes declared source paths but no governed record
-/// (`MILE-124`). Population: every changed path, examined when it is source or
-/// a record.
+/// (`MILE-124`). A changed path matching `exclude_paths` is not source (a test
+/// file beside the code, `MILE-158`) and is counted out of scope, so a diff
+/// that touches only excluded files is not a trigger. Population: every
+/// changed path, examined when it is source or a record.
 pub fn source_requires_record(
     changed: Option<&[PathBuf]>,
     source_paths: &[String],
+    exclude_paths: &[String],
     config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_DIFF_SOURCE_REQUIRES_RECORD;
@@ -78,6 +82,9 @@ pub fn source_requires_record(
         }
         if !under_any(path, source_paths) {
             return Outcome::Absent;
+        }
+        if under_any(path, exclude_paths) {
+            return Outcome::OutOfScope;
         }
         if !record_changed {
             findings.push(finding(
@@ -170,7 +177,7 @@ mod tests {
     #[test]
     fn no_diff_is_not_applicable_for_both_rules() {
         let src = vec!["src".to_string()];
-        let (e, f) = source_requires_record(None, &src, &config());
+        let (e, f) = source_requires_record(None, &src, &[], &config());
         assert_eq!(e.status, RuleStatus::NotApplicable);
         assert!(e.population.is_none() && f.is_empty());
         let (e, f) = source_and_records_mixed(None, &src, &[], &config());
@@ -184,15 +191,61 @@ mod tests {
         let record = format!("{dir}/ADR-1-x.md");
         let src = vec!["src".to_string()];
         let changed = paths(&["src/a.rs", &record]);
-        assert!(source_requires_record(Some(&changed), &src, &config())
+        assert!(source_requires_record(Some(&changed), &src, &[], &config())
             .1
             .is_empty());
         let nested = paths(&["src/a.rs", &format!("{dir}/sub/ADR-1-x.md")]);
         assert_eq!(
-            source_requires_record(Some(&nested), &src, &config())
+            source_requires_record(Some(&nested), &src, &[], &config())
                 .1
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn a_diff_touching_only_excluded_files_is_not_a_trigger_observed_failing() {
+        let src = vec!["src".to_string()];
+        let exclude = vec!["**/*.test.*".to_string(), "src/tests".to_string()];
+        let only_tests = paths(&["src/a.test.ts", "src/deep/b.test.ts", "src/tests/c.rs"]);
+        let (exec, findings) = source_requires_record(Some(&only_tests), &src, &exclude, &config());
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().out_of_scope(), 3);
+        // Code beside the tests still triggers, and names only the code file.
+        let mixed = paths(&["src/a.test.ts", "src/a.ts"]);
+        let (_, findings) = source_requires_record(Some(&mixed), &src, &exclude, &config());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].file, PathBuf::from("src/a.ts"));
+    }
+
+    #[test]
+    fn a_glob_source_path_selects_by_pattern_and_a_prefix_config_is_unchanged() {
+        let changed = paths(&["pkg/a/src/x.rs", "pkg/a/docs/y.md"]);
+        let glob = vec!["pkg/*/src".to_string()];
+        assert_eq!(
+            source_requires_record(Some(&changed), &glob, &[], &config())
+                .1
+                .len(),
+            1
+        );
+        let prefix = vec!["pkg".to_string()];
+        assert_eq!(
+            source_requires_record(Some(&changed), &prefix, &[], &config())
+                .1
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn exclude_globs_also_narrow_the_mixed_rule() {
+        let dir = config().record_types["adr"].dir.clone();
+        let changed = paths(&["src/a.test.ts", &format!("{dir}/ADR-1-x.md")]);
+        let app = vec!["src".to_string()];
+        let (_, findings) = source_and_records_mixed(Some(&changed), &app, &[], &config());
+        assert_eq!(findings.len(), 1);
+        let exclude = vec!["**/*.test.*".to_string()];
+        let (_, findings) = source_and_records_mixed(Some(&changed), &app, &exclude, &config());
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }

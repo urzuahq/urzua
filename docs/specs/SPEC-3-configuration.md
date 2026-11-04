@@ -1,5 +1,5 @@
 ---
-Version: '0.21'
+Version: '0.22'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -284,6 +284,33 @@ fail_on: warning   # error (default) | warning
 - Only the exit code changes. The report is byte-identical under either value: `blocking` and
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
+
+## Diff rule path options
+
+`diff.source-requires-record` (`source_paths`, `exclude_paths`) and `diff.source-and-records-mixed`
+(`application_paths`, `exclude_paths`) take path entries that are either a **prefix** or a **glob**
+(`MILE-158`). An entry with none of `*`, `?` or `[` is a prefix, compared by whole path component
+exactly as before, so a prefix-only configuration is unchanged. A glob is anchored to the whole
+repository-relative path with forward slashes:
+
+- `*` matches within one path component, `**` across components (`**/` also matches no directory),
+  `?` one character other than `/`, `[abc]` and `[!abc]` a character class.
+- A glob matches the path itself and anything below it, so `rust/crates/*/tests` covers every file
+  in each crate's `tests` directory, as a prefix would.
+- `exclude_paths` removes matching paths from the rule's source set. A changed path under a source
+  entry that an exclusion also matches is not a trigger and is counted out of scope in the rule's
+  population, so a test-only diff shows what was set aside instead of looking like a clean pass.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
+```
+
+A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
+`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
 
 ## Relation pairs
 
@@ -570,3 +597,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.20`. Documented the `test_paths` option of `embodiment.back-pointer-resolution` and what source back-pointers compute: `Implements:` is code tier, `Verifies:` in a declared test file is test tier, and a record with no `Realized-by` field that a back-pointer cites is judged on that evidence. **Why:** `MILE-146` and `MILE-149` -- a record whose tests cite it should compute `Verified` without a hand-maintained `test:` list, and a field added only to make a checker look is restated evidence. | **substantive** |
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.22`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
