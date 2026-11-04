@@ -129,7 +129,8 @@ pub fn status_undeclared_value(
     )
 }
 
-/// A field the record's status requires, blank or unedited template text.
+/// A field the record's status requires, blank, unedited template text or a
+/// value from the type's declared `pending` vocabulary.
 pub fn status_required_field_missing(
     records: &[Record],
     config: &Config,
@@ -144,8 +145,16 @@ pub fn status_required_field_missing(
                 .required_at(j.status)
                 .into_iter()
                 .filter_map(|field| {
-                    let state = classify(j.record.header.get(field));
-                    matches!(state, FieldState::Blank | FieldState::Placeholder).then(|| {
+                    // A declared pending vocabulary (MILE-153) is the type's own
+                    // placeholder list: its whole values are missing here too. A
+                    // type declaring none keeps the old reading, so the compiled-in
+                    // `contains("pending")` match never reaches this rule.
+                    let state = classify_with(j.record.header.get(field), Some(j.decl));
+                    let declared_pending =
+                        state == FieldState::Pending && j.decl.pending.is_some();
+                    (matches!(state, FieldState::Blank | FieldState::Placeholder)
+                        || declared_pending)
+                        .then(|| {
                         (
                             Some(field.to_string()),
                             format!(
@@ -259,6 +268,42 @@ mod tests {
         let (_, findings) =
             status_required_field_missing(&[adr("Accepted", "Deciders: name\n")], &config);
         assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_declared_pending_value_does_not_satisfy_a_requirement_observed_failing() {
+        let with_pending = format!(
+            "{VOCAB}      pending: [\"(pending review)\", \"none recorded\", \"—\", Unknown]\n"
+        );
+        let config = typed(&with_pending);
+        for v in [
+            "(pending review)",
+            "none recorded",
+            "—",
+            "Unknown",
+            "unknown",
+        ] {
+            let extra = format!("Deciders: '{v}'\n");
+            let (_, findings) = status_required_field_missing(&[adr("Accepted", &extra)], &config);
+            assert_eq!(findings.len(), 1, "{v}: {findings:?}");
+            assert!(findings[0].message.contains("Deciders"), "{findings:?}");
+        }
+        // A real value that merely contains the word is not reported.
+        for v in ["Unknown Person", "Ana (pending nothing)", "Ana"] {
+            let extra = format!("Deciders: '{v}'\n");
+            let (_, findings) = status_required_field_missing(&[adr("Accepted", &extra)], &config);
+            assert!(findings.is_empty(), "{v}: {findings:?}");
+        }
+    }
+
+    #[test]
+    fn without_a_declared_pending_vocabulary_a_dash_or_pending_text_still_satisfies() {
+        let config = typed(VOCAB);
+        for v in ["—", "Unknown", "pending review"] {
+            let extra = format!("Deciders: '{v}'\n");
+            let (_, findings) = status_required_field_missing(&[adr("Accepted", &extra)], &config);
+            assert!(findings.is_empty(), "{v}: {findings:?}");
+        }
     }
 
     #[test]

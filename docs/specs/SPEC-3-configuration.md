@@ -1,5 +1,5 @@
 ---
-Version: '0.15'
+Version: '0.16'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -199,8 +199,12 @@ Two details carry weight:
 
   - `status.undeclared-value`: a `Status` outside `values`.
   - `status.required-field-missing` / `status.forbidden-field-present`: a `require` field that is
-    blank or unedited template text at the record's status, and a `forbid` field that carries a
-    value. Both read the status by exact comparison, as every other rule does.
+    blank, unedited template text or, when the type declares `pending`, one of its whole pending
+    values (`MILE-153`) at the record's status, and a `forbid` field that carries a value. Both read
+    the status by exact comparison, as every other rule does. `pending` is the type's one declared
+    placeholder vocabulary: `field.pending` and this rule read the same list, so `Unknown`, a dash
+    or `none recorded` can be declared once and no longer satisfies a requirement. A type that omits
+    `pending` keeps the old reading, where such a value is present.
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
     case-insensitive) equals one of the entries. It **replaces** the compiled-in match, which treats
     any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
@@ -467,3 +471,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.13`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documented the top-level `fail_on` key (`error` or `warning`, default `error`) and `urzua check --fail-on`. **Why:** `MILE-145` -- warnings could never fail a build, so a repository at zero warnings had nothing to keep it there. | **substantive** |
+> | 2026-11-04 | Bumped to `0.16`. `statuses.require` counts a value in the type's declared `pending` vocabulary as missing, the same list `field.pending` reads. **Why:** `MILE-153` -- an Accepted record whose required field read `Unknown` passed; the vocabulary is declared once, in configuration. | **substantive** |
