@@ -180,6 +180,12 @@ pub struct RuleSetting {
     /// that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_sections: Option<Vec<String>>,
+    /// Markers naming tables `citation.path-exists` does not read: a line
+    /// containing a marker (`**Revision log**`) and the pipe table that follows
+    /// it. For append-only history that names a path as it was. Only
+    /// meaningful to that rule; optional, and empty by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_tables: Option<Vec<String>>,
 }
 
 /// One `date_order` entry (`MILE-157`, `ADR-64`): two header field names, the
@@ -307,6 +313,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             external_ids: Option<Vec<String>>,
             #[serde(default)]
             reference_sections: Option<Vec<String>>,
+            #[serde(default)]
+            skip_tables: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -352,6 +360,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 accepted_statuses: table.accepted_statuses,
                 external_ids: table.external_ids,
                 reference_sections: table.reference_sections,
+                skip_tables: table.skip_tables,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -379,6 +388,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 accepted_statuses: None,
                 external_ids: None,
                 reference_sections: None,
+                skip_tables: None,
             })
         }
     }
@@ -934,6 +944,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "skip_tables",
+        owners: &[crate::rules::RULE_CITATION_PATH_EXISTS],
+        consequence_if_missing: "reads every table in a reference section, including append-only history",
+        optional: true,
+    },
+    RuleOption {
         name: "external_ids",
         owners: &[crate::rules::RULE_CITATION_RESOLUTION],
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
@@ -1022,6 +1038,10 @@ fn option_field<'a>(
             .map(std::borrow::Cow::Borrowed),
         "reference_sections" => setting
             .reference_sections
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "skip_tables" => setting
+            .skip_tables
             .as_deref()
             .map(std::borrow::Cow::Borrowed),
         "test_paths" => setting
@@ -2048,6 +2068,29 @@ rules:
         .unwrap_err()
         .to_string()
         .contains("does not take the option 'reference_sections'"));
+    }
+
+    #[test]
+    fn skip_tables_belongs_to_citation_path_exists_and_is_optional() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_tables: [\"**Revision log**\"]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["citation.path-exists"].skip_tables,
+            Some(vec!["**Revision log**".to_string()])
+        );
+        assert!(parse(&format!(
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_tables: []\n"
+        ))
+        .is_err());
+        assert!(parse(&format!(
+            "{base}  field.quality:\n    level: error\n    skip_tables: [\"x\"]\n"
+        ))
+        .unwrap_err()
+        .to_string()
+        .contains("does not take the option 'skip_tables'"));
     }
 
     #[test]

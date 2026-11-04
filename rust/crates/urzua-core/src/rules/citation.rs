@@ -14,8 +14,8 @@ use super::*;
 /// declares. The optional `external_ids` option (`MILE-156`) names ids that
 /// share a record prefix but are not records (a public standard number such as
 /// `RFC-4122` under an `RFC` prefix): a matching citation is counted out of
-/// scope rather than resolved, so it is visible in the population and never
-/// reported as dangling. The header region is not read (the pointer and
+/// scope rather than resolved, so it is visible in the population as eligible
+/// and unexamined and never reported as dangling or as a misconfiguration. The header region is not read (the pointer and
 /// narrative rules own it) and fenced code blocks are skipped; an inline code
 /// span is read, since nothing declares otherwise. The population's unit is the
 /// citation, so a run over a corpus that cites nothing reports `0` examined,
@@ -66,7 +66,11 @@ pub fn citation_resolution(
         |c| c.record.path.clone(),
         |c| {
             if external.iter().any(|e| e.matches(&c.token)) {
-                return Outcome::OutOfScope;
+                // Set aside on purpose, so eligible and unexamined (`Absent`), not
+                // `OutOfScope`: `config.scope-matches-nothing` reads that as a
+                // configuration the rule cannot reach, and a declared external
+                // id is the declaration working.
+                return Outcome::Absent;
             }
             if !index.contains_key(&crate::values::RecordId::new(&c.token)) {
                 findings.push(Finding {
@@ -116,6 +120,11 @@ pub fn citation_path_exists(
         .get(RULE_ID)
         .and_then(|s| s.reference_sections.clone())
         .unwrap_or_default();
+    let skip_tables: Vec<String> = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.skip_tables.clone())
+        .unwrap_or_default();
 
     struct Cited<'a> {
         record: &'a Record,
@@ -132,7 +141,12 @@ pub fn citation_path_exists(
             .iter()
             .filter(|s| sections.iter().any(|name| name == &s.heading))
         {
-            for (line, content) in super::section::prose_lines(section) {
+            let lines = super::section::prose_lines(section);
+            let skipped = skipped_table_lines(&lines, &skip_tables);
+            for (line, content) in lines {
+                if skipped.contains(&line) {
+                    continue;
+                }
                 for span in code_spans(content) {
                     if let Some(path) = cited_path(&span, &record.path) {
                         candidates.push(Cited {
@@ -176,6 +190,37 @@ pub fn citation_path_exists(
         },
         findings,
     )
+}
+
+/// The line numbers set aside by `skip_tables`: each line containing a marker,
+/// and the pipe table after it (blank or `>`-only lines may sit between, as in
+/// a blockquoted table; the table ends at the first line that is not a row).
+/// Append-only history in such a table names paths as they were.
+fn skipped_table_lines(lines: &[(usize, &str)], markers: &[String]) -> HashSet<usize> {
+    let mut skipped = HashSet::new();
+    if markers.is_empty() {
+        return skipped;
+    }
+    // None outside a skipped block; Some(seen_a_row) inside one.
+    let mut block: Option<bool> = None;
+    for (number, content) in lines {
+        if markers.iter().any(|m| content.contains(m.as_str())) {
+            block = Some(false);
+            skipped.insert(*number);
+            continue;
+        }
+        let Some(seen_row) = block else { continue };
+        let stripped = content.trim_start().trim_start_matches('>').trim();
+        if stripped.starts_with('|') {
+            block = Some(true);
+            skipped.insert(*number);
+        } else if stripped.is_empty() && !seen_row {
+            skipped.insert(*number);
+        } else {
+            block = None;
+        }
+    }
+    skipped
 }
 
 /// The contents of every inline code span on `line`: a run of N backticks
@@ -559,8 +604,10 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("RFC-99"));
         let p = exec.population.unwrap();
-        // The external citation is counted, as out of scope, never dropped.
-        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (2, 1, 1));
+        // The external citation is counted, as eligible and unexamined (set
+        // aside on purpose, never dropped), and is not out of scope, which
+        // `config.scope-matches-nothing` reads as a misconfiguration.
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (2, 1, 0));
     }
 
     #[test]
@@ -578,7 +625,19 @@ mod tests {
         let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
         assert_eq!(named.len(), 2, "{named:?}");
         assert!(named[0].contains("RFC-3999") && named[1].contains("RFC-5000"));
-        assert_eq!(exec.population.unwrap().out_of_scope(), 3);
+        let p = exec.population.unwrap();
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (5, 2, 0));
+    }
+
+    #[test]
+    fn declared_external_ids_do_not_make_scope_matches_nothing_fire_observed_failing() {
+        let body = "# 1 — Y\n\nUUIDs follow RFC-4122 and RFC-822.\n";
+        let (exec, _) = run_external(&[(RFC_DOC, body)], &["RFC-4122", "RFC-822"]);
+        let (_, findings) = crate::rules::config_scope_matches_nothing(
+            &[exec],
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -615,14 +674,24 @@ mod tests {
     }
 
     fn paths(docs: &[(&str, &str)], present: &[&str]) -> (RuleExecution, Vec<Finding>) {
+        paths_skipping(docs, present, "")
+    }
+
+    fn paths_skipping(
+        docs: &[(&str, &str)],
+        present: &[&str],
+        extra: &str,
+    ) -> (RuleExecution, Vec<Finding>) {
         let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
         let full_text: HashMap<PathBuf, String> = docs
             .iter()
             .map(|(p, c)| (PathBuf::from(p), c.to_string()))
             .collect();
         let mut config = config_with_types(vec![("adr", type_config(None))]);
-        let setting: crate::config::RuleSetting =
-            yaml_serde::from_str("level: warn\nreference_sections: [References]\n").unwrap();
+        let setting: crate::config::RuleSetting = yaml_serde::from_str(&format!(
+            "level: warn\nreference_sections: [References]\n{extra}"
+        ))
+        .unwrap();
         config
             .rules
             .insert(RULE_CITATION_PATH_EXISTS.to_string(), setting);
@@ -695,6 +764,40 @@ mod tests {
         let body = "# 1\n\n## References\n\n`../../../etc/x.conf`\n";
         let (_, findings) = paths(&[(ADR, body)], &["etc/x.conf"]);
         assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    const LOG_RECORD: &str = "# 1\n\n## References\n\n- `docs/live.md` and `docs/gone-now.md`\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Named `src/old/path.rs`. | **substantive** |\n> | 2026-01-02 | Named `src/older.rs`. | **substantive** |\n\nAfter: `docs/after-gone.md`\n";
+
+    #[test]
+    fn without_skip_tables_a_revision_log_row_is_read_observed_failing() {
+        let (_, findings) = paths(&[(ADR, LOG_RECORD)], &["docs/live.md"]);
+        let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(named.len(), 4, "{named:?}");
+    }
+
+    #[test]
+    fn a_declared_skip_table_is_set_aside_and_the_rest_of_the_section_is_still_read() {
+        let (exec, findings) = paths_skipping(
+            &[(ADR, LOG_RECORD)],
+            &["docs/live.md"],
+            "skip_tables: [\"**Revision log**\"]\n",
+        );
+        let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(named[0].contains("docs/gone-now.md"));
+        assert!(named[1].contains("docs/after-gone.md"));
+        // The skipped paths are not in the population at all.
+        assert_eq!(exec.population.unwrap().eligible(), 3);
+    }
+
+    #[test]
+    fn a_skip_table_marker_matching_nothing_changes_nothing() {
+        let (_, findings) = paths_skipping(
+            &[(ADR, LOG_RECORD)],
+            &["docs/live.md"],
+            "skip_tables: [\"**Other**\"]\n",
+        );
+        assert_eq!(findings.len(), 4);
     }
 
     #[test]
