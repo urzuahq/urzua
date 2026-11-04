@@ -182,6 +182,158 @@ pub fn apply_repair(
     Ok(doc.to_string())
 }
 
+/// One pinned locator whose current content no longer matches its pin
+/// (`MILE-181`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PinDrift {
+    pub locator: String,
+    pub recorded_hash: String,
+    pub current_hash: String,
+}
+
+/// A record whose `Realized-by` carries one or more stale `@sha256:` pins: the
+/// unit `urzua fix --rebaseline` lists and, on review, re-pins (`MILE-181`).
+/// A record is the selector, as in `--ids`; all its stale pins move together
+/// and one attributed revision row records them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Rebaseline {
+    pub record: PathBuf,
+    pub field: String,
+    pub line: usize,
+    pub pins: Vec<PinDrift>,
+}
+
+/// Lists the records whose pinned locators changed. Pure: `current_hash` is
+/// the CLI's content-hash lookup for a repo-relative locator path. A locator
+/// whose file cannot be read is not a stale pin (`embodiment.locator-exists`
+/// reports it), and an unpinned locator has nothing to re-pin.
+pub fn detect_rebaselines(
+    records: &[Record],
+    config: &Config,
+    current_hash: &dyn Fn(&str) -> Option<String>,
+) -> (Population, Vec<Rebaseline>) {
+    let mut found = Vec::new();
+    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        let locator_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
+        let Some(value) = record.header.get(locator_field) else {
+            return Outcome::Absent;
+        };
+        let mut pins: Vec<PinDrift> = Vec::new();
+        for (locator, pin) in crate::rules::realized_by_pinned_locators(value) {
+            let Some(recorded) = pin else { continue };
+            let Some(current) = current_hash(&locator) else {
+                continue;
+            };
+            if current != recorded
+                && !pins
+                    .iter()
+                    .any(|p| p.locator == locator && p.recorded_hash == recorded)
+            {
+                pins.push(PinDrift {
+                    locator,
+                    recorded_hash: recorded,
+                    current_hash: current,
+                });
+            }
+        }
+        if !pins.is_empty() {
+            found.push(Rebaseline {
+                record: record.path.clone(),
+                field: locator_field.to_string(),
+                line: record
+                    .header
+                    .fields
+                    .iter()
+                    .find(|f| f.key.as_str() == locator_field)
+                    .map_or(0, |f| f.line),
+                pins,
+            });
+        }
+        Outcome::Examined
+    });
+    (population, found)
+}
+
+/// New file content for re-pinning one record: each stale pin on the
+/// `Realized-by` line becomes the current hash and nothing else on the line
+/// moves, then one revision-log row names who attested and why. Pure. Fails
+/// when a pin is no longer on the line (a concurrent edit since detect) or the
+/// record has no revision log to record the attestation in.
+pub fn apply_rebaseline(
+    content: &str,
+    rebaseline: &Rebaseline,
+    today: &str,
+    by: &str,
+    reason: &str,
+    log_id: &crate::config::RevisionLogId,
+) -> Result<String, String> {
+    let mut doc = LineDoc::parse(content);
+    let prefix_key = format!("{}:", rebaseline.field);
+    let field_line = doc
+        .find_line(|l| l.trim_start().starts_with(&prefix_key))
+        .ok_or_else(|| {
+            format!(
+                "could not find the '{}' line to edit -- the record may have changed since detect ran",
+                rebaseline.field
+            )
+        })?;
+    let mut line = doc.line(field_line).unwrap_or_default().to_string();
+    for pin in &rebaseline.pins {
+        let old = format!("{}@sha256:{}", pin.locator, pin.recorded_hash);
+        if !line.contains(&old) {
+            return Err(format!(
+                "the pin on '{}' is no longer on the '{}' line -- the record may have changed since detect ran",
+                pin.locator, rebaseline.field
+            ));
+        }
+        line = line.replace(
+            &old,
+            &format!("{}@sha256:{}", pin.locator, pin.current_hash),
+        );
+    }
+    doc.replace_line(field_line, line);
+
+    let edited = doc.to_string();
+    let entries = find_revision_log_entries(&edited, log_id).ok_or_else(|| {
+        "record has no Revision log section -- refusing to re-baseline without one to record the attestation in".to_string()
+    })?;
+    let Some(last_entry) = entries.last() else {
+        return Err(
+            "record's Revision log section has no existing rows to append after".to_string(),
+        );
+    };
+    let row_prefix = doc
+        .line(last_entry.line)
+        .and_then(table_row_prefix)
+        .unwrap_or("> ")
+        .to_string();
+    let moved = rebaseline
+        .pins
+        .iter()
+        .map(|p| {
+            format!(
+                "`{}` {} -> {}",
+                p.locator,
+                short(&p.recorded_hash),
+                short(&p.current_hash)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    doc.insert_after(
+        last_entry.line,
+        format!(
+            "{row_prefix}| {today} | Re-baselined (attested by {by}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |"
+        ),
+    );
+    Ok(doc.to_string())
+}
+
+fn short(hash: &str) -> &str {
+    hash.get(..12).unwrap_or(hash)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,5 +639,56 @@ mod tests {
             &Default::default(),
         );
         assert!(repairs.is_empty(), "{repairs:?}");
+    }
+
+    const H1: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+    const H2: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+
+    fn pinned(path: &str, hash: &str) -> Record {
+        record(
+            path,
+            &format!(
+                "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{hash}, test:t.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+            ),
+        )
+    }
+
+    #[test]
+    fn a_stale_pin_is_listed_with_both_hashes_and_a_current_one_is_not_observed_failing() {
+        let stale = pinned("docs/adr/0001-x.md", H1);
+        let current = pinned("docs/adr/0002-y.md", H2);
+        let lookup = |l: &str| (l == "src/a.rs").then(|| H2.to_string());
+        let (population, found) =
+            detect_rebaselines(&[stale, current], &no_relation_field_overrides(), &lookup);
+        assert_eq!(population.examined(), 2);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].pins[0].recorded_hash, H1);
+        assert_eq!(found[0].pins[0].current_hash, H2);
+    }
+
+    #[test]
+    fn re_pinning_moves_only_the_hash_and_logs_who_and_why_observed_failing() {
+        let r = pinned("docs/adr/0001-x.md", H1);
+        let lookup = |_: &str| Some(H2.to_string());
+        let (_, found) = detect_rebaselines(&[r], &no_relation_field_overrides(), &lookup);
+        let content = format!(
+            "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{H1}, test:t.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        );
+        let out = apply_rebaseline(
+            &content,
+            &found[0],
+            "2026-11-04",
+            "ana",
+            "Read the diff; the claim holds.",
+            &Default::default(),
+        )
+        .unwrap();
+        assert!(out.contains(&format!(
+            "Realized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{H2}, test:t.rs'"
+        )));
+        assert!(out.contains("attested by ana"));
+        assert!(out.contains("Read the diff; the claim holds."));
+        // Applying the same rebaseline again finds no pin to move.
+        assert!(apply_rebaseline(&out, &found[0], "d", "ana", "r", &Default::default()).is_err());
     }
 }
