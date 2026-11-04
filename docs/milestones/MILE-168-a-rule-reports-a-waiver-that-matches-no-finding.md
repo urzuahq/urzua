@@ -1,0 +1,27 @@
+---
+Stable-Id: 01M6JW47RYART844WMEJMRVWTD
+Status: Planned
+Phase: '0'
+Track: governance-process
+Implements: SPEC-1
+Blocked-on: —
+---
+# 168 — A rule reports a waiver that matches no finding
+
+## What
+
+Add a rule that reports a waiver which matches no current finding.
+
+## Why
+
+A stale waiver is a silent no-op today: the finding it covered is gone but the exception stays on file, hiding that the exception is no longer needed and leaving room to cover a future finding by accident. The no-silent-no-op principle applies to the waiver record as much as to a rule.
+
+## Done means
+
+The rule names each waiver that matches nothing and the rule and target it claimed; a waiver that matches a finding is not reported; the rule is enabled in urzua's own `.urzua/config.yaml` and `urzua check` is clean over this repository's waivers, not only in unit tests
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
