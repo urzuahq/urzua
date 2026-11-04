@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6M7237A9CBQAHZJKYEK5ET7
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -157,3 +158,4 @@ Adding kinds, `op` values and optional keys is additive for the engine and, unde
 > | 2026-11-04 | Drafted as Proposed. **Why:** `MILE-44` needs a structured shape that no accepted record defines and that is hard to reverse once agents parse it. | **substantive** |
 > | 2026-11-04 | Reworked after independent review: normative per-kind key table, `run-command` replaces `fix-apply`, required `op`, per-variant declaration with reasoned exemptions, compatibility rule, per-rule appendix, `note` dropped, `MILE-72` relation settled. **Why:** the first draft left target keys unspecified, mixed what changes with who performs it, and gave consumers no rule for later kinds. | **substantive** |
 > | 2026-11-04 | Re-review amendments: `waive` dropped from the first release, `value` types and `remove` semantics stated, unknown `op` covered, `citation.issue-exists`, `claim.status-agreement`, `embodiment.requires-accepted-status` and `waiver.matches-nothing` declarations corrected. **Why:** the re-review found a kind with no producer and an unstated `value` type. | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04, conditional on an independent review; the review and re-review found no remaining blockers once the re-review amendments were made. | **substantive** |
