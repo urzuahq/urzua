@@ -1,5 +1,5 @@
 ---
-Version: '0.15'
+Version: '0.16'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -150,7 +150,8 @@ Two details carry weight:
       set is fixed, not declarable). With a `marker`, the block starts at the first line of the
       section containing it and runs to the next blank line or list item; a section without the
       marker, and a marker with no block after it, are each their own finding. With no `marker`,
-      the block is the section's first paragraph. Phrases outside the block never count.
+      the block is the section's first paragraph. A leading `>` blockquote marker on a line is not part of
+      the block, so a phrase that wraps across quoted lines still matches. Phrases outside the block never count.
     - `table-min-rows` requires a table with at least `min_rows` (an integer of 1 or more) data rows;
       a data row with every cell empty does not count, the largest table in the section decides, and
       a table inside a fenced code block is not read.
@@ -467,3 +468,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.13`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documented the top-level `fail_on` key (`error` or `warning`, default `error`) and `urzua check --fail-on`. **Why:** `MILE-145` -- warnings could never fail a build, so a repository at zero warnings had nothing to keep it there. | **substantive** |
+> | 2026-11-04 | Bumped to `0.16`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
