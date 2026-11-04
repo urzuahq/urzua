@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/new_record.rs, code:rust/crates/urzua-cli/src/commands/new.rs, test:rust/crates/urzua-core/src/new_record.rs
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1e4723c81adcaf65d6b3c61d7714a09b5b07dbafed80986922d35f00156ba384, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -69,3 +69,4 @@ Additive: a new pure module (`new_record.rs`, following the same pure-render/imp
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 4bc0874fc. | **structural** |
+> | 2026-11-04 | Pinned `rust/crates/urzua-core/src/new_record.rs`, `rust/crates/urzua-cli/src/commands/new.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: urzua new still fills the template and leaves the decision to the author; changes since are the declared identity pattern, padded H1, an always-written Stable-Id and the removal of the blockquote shapes. The Decision text on those shapes and author tiering is stale and is left for an amendment. | **structural** |

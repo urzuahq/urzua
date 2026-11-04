@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1ZHBEPZ8S9XNM9WYRCA0JP3
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:f8fe5e070ddb8ef7a7a080a4ca9cbfed4fe099cfa2180210f870c472e9891cf4, code:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:e2c01a1981cd80051fe760308e8f5623d05543cfba41d185c6e3c591da42fdf2, test:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:e2c01a1981cd80051fe760308e8f5623d05543cfba41d185c6e3c591da42fdf2
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:251b70ec14f1d01f8af3431c4b36757fc05754f81929fad6910912011a941b87, code:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:8dddf55562e6e74cd5297fa93137c564cce36f875ff2d566629c5a9fc4caf29d, test:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:8dddf55562e6e74cd5297fa93137c564cce36f875ff2d566629c5a9fc4caf29d
 Date: 2026-09-08
 Accepted-on: 2026-09-08
 Author: beauwilliams
@@ -84,3 +84,4 @@ either leaves every other rule and the existing schema untouched.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 27929a050. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/type_scope.rs` e2c01a1981cd -> 8dddf55562e6. Reason: Re-verified: type.no-declared-spec is unchanged; the added exclude_files warning is a sibling rule in the same file. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

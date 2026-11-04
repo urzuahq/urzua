@@ -1,7 +1,7 @@
 ---
 Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-core/src/fix.rs
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a, code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -65,6 +65,23 @@ and why" is answerable without git at all.
   leaves `fix.lock` behind, requiring manual removal — acceptable for a first cut, a real gap) and
   Tier 2/3 repairs (still only Embodiment, still only Tier 1).
 
+## Amendment (2026-11-04): identity order and the revision-log requirement as built
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+Two statements in the Decision no longer match the code. The hard gates `--ids` or `--force`, the
+re-read before writing, the corpus lock and the single-line edit are unchanged.
+
+- **Identity order.** The Decision says "`--by` wins outright; else `gh api user`; else `git config
+  user.name`". `resolve_identity` (`urzua-io/src/lib.rs`) now resolves `gh api user`, then an explicit
+  `--by`, then `git config user.name`, then an error. `gh api user` outranks `--by`; when the two
+  differ the caller reports a warning instead of discarding `--by` silently. This is the order
+  `ADR-31`'s amendment of 2026-09-10 decided; this ADR was not amended when it was built.
+- **Missing Revision log.** The Decision says a missing Revision log section refuses that record's
+  write outright. It now refuses only for a type that requires a log: a type that declares
+  `revision_log: {required: false}` is applied without one. A type that requires a log, and every
+  `--rebaseline` write, still refuse a record with no log section.
+
 ## References
 
 - ADR-19 — the detect-mode-only decision this ADR completes.
@@ -79,3 +96,6 @@ and why" is answerable without git at all.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Embodiment` set to `Drift detected`. **Why:** Re-verified against current code; maintainer decision 2026-11-04. The Decision says `--by` wins outright, but `resolve_identity` in `urzua-io/src/lib.rs` now lets `gh api user` outrank `--by` (`ADR-31` amendment). | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 45f33fd12. | **structural** |
+> | 2026-11-04 | Amendment added: the identity order (`gh api user`, then `--by`, then `git config user.name`, per `ADR-31`) and the per-type Revision log requirement, both of which the Decision states otherwise. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Pinned `rust/crates/urzua-core/src/fix.rs`, `rust/crates/urzua-io/src/lib.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-pinned with the amendment above: the identity order and Revision log requirement are recorded as built; the hard gates the Decision lists are unchanged. | **structural** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a, code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
