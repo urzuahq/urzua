@@ -681,6 +681,11 @@ pub struct RelationFields {
     pub embodiment_state: Option<String>,
     pub embodiment_locator: Option<String>,
     pub supersession: Option<String>,
+    /// The field `urzua new` fills with today's date (`MILE-176`). Not a
+    /// relation role: it only names a field, so it is not in `RelationRole`.
+    pub date: Option<String>,
+    /// The field `urzua new` fills with the author (`MILE-176`).
+    pub author: Option<String>,
 }
 
 impl RelationFields {
@@ -727,6 +732,24 @@ impl RecordTypeConfig {
             .chain(self.known_fields.iter().flatten())
             .map(|s| crate::values::FieldName::new(s.as_str()))
             .collect()
+    }
+
+    /// The field `urzua new` fills with today's date, declared under
+    /// `relation_fields.date` or defaulting to `Date` (`MILE-176`).
+    pub fn date_field(&self) -> &str {
+        self.relation_fields
+            .as_ref()
+            .and_then(|r| r.date.as_deref())
+            .unwrap_or("Date")
+    }
+
+    /// The field `urzua new` fills with the author, declared under
+    /// `relation_fields.author` or defaulting to `Author` (`MILE-176`).
+    pub fn author_field(&self) -> &str {
+        self.relation_fields
+            .as_ref()
+            .and_then(|r| r.author.as_deref())
+            .unwrap_or("Author")
     }
 
     /// The field name this type uses for `role`, declared or defaulted

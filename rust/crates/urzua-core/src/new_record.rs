@@ -264,6 +264,10 @@ pub struct NewRecordParams<'a> {
     /// The field that holds the status, as the type declares it
     /// (`RecordTypeConfig::relation_field`), not a literal.
     pub status_field: &'a str,
+    /// The fields filled with `today` and `author`, as the type declares them
+    /// (`RecordTypeConfig::date_field`/`author_field`), not literals.
+    pub date_field: &'a str,
+    pub author_field: &'a str,
     pub title: &'a str,
     /// Always assigned (`ADR-21`): every record type gets one, whether or not
     /// the type's field set declares it.
@@ -322,8 +326,8 @@ pub fn render_synthetic_yaml(
     );
     for field in required_fields {
         let value = match field.as_str() {
-            "Date" => Value::String(params.today.to_string()),
-            "Author" => Value::String(params.author.to_string()),
+            f if f == params.date_field => Value::String(params.today.to_string()),
+            f if f == params.author_field => Value::String(params.author.to_string()),
             f if f == params.status_field => params
                 .initial_status
                 .map_or(Value::Null, |s| Value::String(s.to_string())),
@@ -569,6 +573,8 @@ mod tests {
             h1_width: 0,
             initial_status: None,
             status_field: "Status",
+            date_field: "Date",
+            author_field: "Author",
             display_number: 1,
             title: "X",
             stable_id: "01ABC",
@@ -601,6 +607,8 @@ mod tests {
             h1_width: 0,
             initial_status: None,
             status_field: "Status",
+            date_field: "Date",
+            author_field: "Author",
             display_number: 4,
             title: "X",
             stable_id: "01ABC",
@@ -623,6 +631,8 @@ mod tests {
             h1_width: 0,
             initial_status: None,
             status_field: "Status",
+            date_field: "Date",
+            author_field: "Author",
             display_number: 1,
             title: "X",
             stable_id: "01ABC",
@@ -704,6 +714,28 @@ mod tests {
     }
 
     #[test]
+    fn date_and_author_are_filled_by_their_declared_field_names() {
+        let params = NewRecordParams {
+            display_number: 1,
+            h1_prefix: None,
+            h1_width: 0,
+            initial_status: None,
+            status_field: "Status",
+            date_field: "Created",
+            author_field: "Owner",
+            title: "T",
+            stable_id: "01ABC",
+            author: "beau",
+            today: "2026-11-04",
+        };
+        let required = vec!["Created".to_string(), "Owner".to_string(), "Date".to_string()];
+        let rendered = render_synthetic_yaml(&params, &required, &[]);
+        assert!(rendered.contains("Created: '2026-11-04'") || rendered.contains("Created: 2026-11-04"), "{rendered}");
+        assert!(rendered.contains("Owner: beau"), "{rendered}");
+        assert!(rendered.contains("Date: null"), "{rendered}");
+    }
+
+    #[test]
     fn the_status_field_starts_at_the_initial_status_and_stays_blank_without_one() {
         let mut params = NewRecordParams {
             display_number: 4,
@@ -711,6 +743,8 @@ mod tests {
             h1_width: 0,
             initial_status: Some("Proposed"),
             status_field: "State",
+            date_field: "Date",
+            author_field: "Author",
             title: "T",
             stable_id: "01ABC",
             author: "a",

@@ -39,7 +39,16 @@ pub(crate) const NOTICE_RULE_APPLICABILITY: &str = "rule-applicability";
 /// the payload -- each `Report` stays its own real, fully-typed struct; this
 /// just gives every one of them the same last step.
 pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
-    println!("{}", serde_json::to_string_pretty(report).unwrap());
+    use std::io::Write;
+    // writeln!, not println!: a closed stdout (`urzua check | head -1`) must
+    // end the run quietly, not panic (MILE-176). The reader leaving is not an
+    // error of ours, so the write result is dropped and the exit code stays
+    // the report's.
+    let _ = writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(report).unwrap()
+    );
     report.exit_code()
 }
 
@@ -243,7 +252,16 @@ fn main() -> ExitCode {
         // with no output at all, defeating the hook's entire purpose.
         let _ = std::io::stdout().write_all(out.to_string().as_bytes());
         let _ = std::io::stdout().write_all(b"\n");
+        // The documented code for "could not run" is 2; Rust's default for an
+        // unwinding panic out of main is 101 (MILE-176).
+        std::process::exit(2);
     }));
+
+    // Debug builds only: lets the acceptance test prove the panic exit code.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("URZUA_TEST_PANIC").is_some() {
+        panic!("URZUA_TEST_PANIC set");
+    }
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,

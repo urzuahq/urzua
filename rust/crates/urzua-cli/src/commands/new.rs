@@ -160,6 +160,8 @@ pub fn run(
             .and_then(|d| d.values.first())
             .map(String::as_str),
         status_field: type_config.relation_field(urzua_core::config::RelationRole::Status),
+        date_field: type_config.date_field(),
+        author_field: type_config.author_field(),
         title: &title,
         stable_id: stable_id.as_str(),
         author: &identity.name,
