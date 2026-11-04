@@ -1,5 +1,5 @@
 ---
-Version: '0.36'
+Version: '0.37'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -617,8 +617,10 @@ rules:
   must match at least one such file (else a finding), and a glob that cannot compile is a load error.
 - `embodiment.consistency` judges a record with `Embodiment` but no `Realized-by` field when a
   back-pointer cites it, computing from the back-pointers alone; the finding says so. A record
-  neither cited nor carrying `Realized-by` is still not judged. `urzua fix` repairs the same
-  records.
+  neither cited nor carrying `Realized-by` is judged only when it states `Verified` or
+  `Implemented`: that claim has no evidence of either kind, so it is reported against the computed
+  `Not started`. A record stating any other value there is not judged and stays unexamined in the
+  census. `urzua fix` repairs the cited records only.
 
 The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
 option-on-a-rule-that-does-not-take-it load error.
@@ -761,3 +763,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
 > | 2026-11-04 | Bumped to `0.35`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
 > | 2026-11-04 | Bumped to `0.36`. `test_paths` accepts globs as well as prefixes, matched by the diff rules' glob matcher. **Why:** `MILE-160` -- test files named by suffix cannot be named by a prefix list. | **substantive** |
+> | 2026-11-04 | Bumped to `0.37`. Documented that `embodiment.consistency` reports a record stating `Verified` or `Implemented` with no `Realized-by` field and no citing back-pointer. **Why:** `MILE-161` -- a claim with no evidence passed silently. | **substantive** |

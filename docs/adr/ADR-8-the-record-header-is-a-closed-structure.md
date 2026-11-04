@@ -1,6 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Implemented
+Realized-by: code:rust/crates/urzua-core/src/header.rs
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams

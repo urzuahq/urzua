@@ -1,6 +1,7 @@
 ---
 Status: Superseded
 Embodiment: Implemented
+Realized-by: code:.github/workflows/ci.yml
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
