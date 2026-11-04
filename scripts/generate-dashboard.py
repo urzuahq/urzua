@@ -58,13 +58,19 @@ def field(record: dict, name: str, default: str = "—") -> str:
     return default
 
 
-def section(content: str, name: str) -> str:
-    # No record type declares sections yet (MILE-98), so `export` hands over
-    # one raw string; this is the only text-shaping left in this script.
-    m = re.search(
-        rf"^## {name}\n\n(.+?)(?=\n## |\n> \*\*Revision log\*\*|\Z)", content, re.M | re.S
-    )
-    return m.group(1).strip().replace("\n", " ") if m else ""
+def section(record: dict, name: str) -> str:
+    """A declared section's content as `urzua export` parsed it, on one line.
+
+    `sections` is null when the type declares none; say so rather than
+    return an empty string that looks like a missing section.
+    """
+    if record["sections"] is None:
+        raise SystemExit(f"{record['path']}: type {record['type']} declares no sections")
+    for s in record["sections"]:
+        if s["name"] == name:
+            text = s["content"].split("> **Revision log**")[0]
+            return text.strip().replace("\n", " ")
+    return ""
 
 
 def title_of(record: dict) -> str:
@@ -103,8 +109,8 @@ def parse_milestones(exported: dict):
             "phase": field(r, "Phase"),
             "track": field(r, "Track"),
             "implements": field(r, "Implements"),
-            "what": section(r["raw_text"], "What"),
-            "why": section(r["raw_text"], "Why"),
+            "what": section(r, "What"),
+            "why": section(r, "Why"),
             "blocked": field(r, "Blocked-on"),
             "file": r["path"],
         }
