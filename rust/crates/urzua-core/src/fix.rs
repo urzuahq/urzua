@@ -205,16 +205,18 @@ pub fn unevidenced_successes(
 /// returns the new text; the caller performs the actual write, the identity
 /// resolution, and the re-verification-before-write RFC-0008 §4 requires.
 ///
-/// Refuses (rather than silently skipping the requirement) when the record
-/// has no revision-log section (its type's declared identity) to append to: ADR-0015's reversibility
-/// clause depends on that entry existing, so a write with nowhere to record
-/// itself is not a case this function will produce, not even once.
+/// When the type requires a revision log (the default), refuses rather than
+/// silently skipping the requirement if the record has no revision-log section
+/// (its type's declared identity) to append to: ADR-0015's reversibility clause
+/// depends on that entry existing. A type declared `revision_log: {required:
+/// false}` (`MILE-159`) takes the field edit alone, with no row.
 pub fn apply_repair(
     content: &str,
     repair: &Repair,
     today: &str,
     by: &str,
     log_id: &crate::config::RevisionLogId,
+    log_required: bool,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
 
@@ -239,9 +241,15 @@ pub fn apply_repair(
     );
     doc.replace_line(field_line, edited_line);
 
+    if !log_required {
+        return Ok(doc.to_string());
+    }
     let edited_content = doc.to_string();
     let entries = find_revision_log_entries(&edited_content, log_id).ok_or_else(|| {
-        "record has no Revision log section -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement)".to_string()
+        format!(
+            "record has no Revision log section (looked for {}) -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement); declare revision_log: {{required: false}} on the type to apply without a log",
+            log_id.describe()
+        )
     })?;
     let Some(last_entry) = entries.last() else {
         return Err(
@@ -478,6 +486,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         assert!(result.contains("Embodiment: Verified"));
@@ -497,9 +506,25 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap_err();
         assert!(err.contains("Revision log"));
+    }
+
+    #[test]
+    fn apply_repair_without_a_required_log_edits_only_the_field() {
+        let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n";
+        let result = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(result, "---\nEmbodiment: Verified\n---\n# 0001 — X\n");
     }
 
     #[test]
@@ -515,6 +540,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap_err();
         assert!(err.contains("could not find"));
@@ -529,6 +555,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         let last = result.lines().last().unwrap();
@@ -545,6 +572,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         assert!(result.starts_with(
