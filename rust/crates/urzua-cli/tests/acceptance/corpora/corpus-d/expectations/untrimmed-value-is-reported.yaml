@@ -1,0 +1,9 @@
+id: untrimmed-value-is-reported
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: field.untrimmed-value
+    file: records/ADR-0010-untrimmed.md
+    severity: error
+    message_contains: "'Author'"

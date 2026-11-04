@@ -1,0 +1,9 @@
+id: impossible-date-is-reported
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: date.field-valid
+    file: records/ADR-0012-bad-date.md
+    severity: error
+    message_contains: "2026-13-45"

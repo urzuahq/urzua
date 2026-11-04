@@ -7,3 +7,6 @@ expect_findings:
 expect_stdout_contains:
   - "written as a bold-list"
   - "no longer reads"
+mutation_exempt: >-
+  header.required-fields is the only rule this config enables, so switching it
+  off leaves a config with no rule, which is rejected rather than missed.

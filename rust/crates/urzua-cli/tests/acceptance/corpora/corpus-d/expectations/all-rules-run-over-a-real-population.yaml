@@ -1,0 +1,12 @@
+id: all-rules-run-over-a-real-population
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_json:
+  - {at: /files_examined, equals: 21}
+expect_rules_ran:
+  - header.required-fields
+  - field.quality
+  - pointer.resolution
+  - status.undeclared-value
+  - section.required

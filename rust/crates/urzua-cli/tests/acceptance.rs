@@ -13,6 +13,15 @@
 //! behaviour that does not hold yet. The case is still run: failing is the
 //! expected outcome (reported KNOWN-GAP); passing is a failure of the suite,
 //! because the gap closed and the marker must go. A gap can never go stale.
+//!
+//! Mutation proof (MILE-170): SPEC-4 says "a case that passes against a build
+//! with the rule removed is not a case". Every case therefore names the rules
+//! it proves (`proves`, defaulting to the rules in `expect_findings` and
+//! `expect_rules_ran`), and the runner re-runs it with each of those rules
+//! switched off in the case's own config; the case must then FAIL. A case that
+//! proves no rule says why in `mutation_exempt`. The rules proven this way are
+//! reported against `ALL_RULES`, and the ones no case proves are listed, so a
+//! gap in coverage is visible on every run instead of silent.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -36,6 +45,24 @@ struct Case {
     expect_findings: Vec<Matcher>,
     #[serde(default)]
     expect_no_findings: Vec<Matcher>,
+    /// Pairs of path prefixes whose findings must name the same non-empty set
+    /// of rules: the same planted violations in two record types must be met
+    /// by the same rules (SPEC-4's "Nth record type" claim).
+    #[serde(default)]
+    expect_mirrored: Vec<Mirror>,
+    /// Rules that must appear in `rules_executed` with status `ran` and a
+    /// non-empty examined population. Only the first is switched off for the
+    /// mutation proof (the assertion is the same for each), which keeps a case
+    /// over this repository's whole corpus to two runs.
+    #[serde(default)]
+    expect_rules_ran: Vec<String>,
+    /// Rules this case proves, beyond those it names in `expect_findings` and
+    /// `expect_rules_ran`. Each is switched off in turn and the case must fail.
+    #[serde(default)]
+    proves: Vec<String>,
+    /// Why this case proves no rule (a positive control, a config error). A
+    /// case with neither a rule to prove nor this reason is rejected.
+    mutation_exempt: Option<String>,
     known_gap: Option<KnownGap>,
 }
 
@@ -45,6 +72,13 @@ struct KnownGap {
     #[serde(rename = "ref")]
     reference: String,
     reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Mirror {
+    left: String,
+    right: String,
 }
 
 #[derive(Deserialize)]
@@ -61,6 +95,7 @@ struct Matcher {
     rule: Option<String>,
     file: Option<String>,
     severity: Option<String>,
+    message_contains: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -176,6 +211,41 @@ fn matches(f: &serde_json::Value, m: &Matcher) -> bool {
     m.rule.as_deref().is_none_or(|r| field("rule") == r)
         && m.severity.as_deref().is_none_or(|s| field("severity") == s)
         && m.file.as_deref().is_none_or(|p| field("file").ends_with(p))
+        && m.message_contains
+            .as_deref()
+            .is_none_or(|t| field("message").contains(t))
+}
+
+/// Rules a case proves: the explicit list plus those it asserts on.
+fn proven_rules(case: &Case) -> Vec<String> {
+    let mut rules: Vec<String> = case.proves.clone();
+    rules.extend(case.expect_rules_ran.iter().cloned());
+    rules.extend(case.expect_findings.iter().filter_map(|m| m.rule.clone()));
+    rules.sort();
+    rules.dedup();
+    rules
+}
+
+/// Config with `rule` switched off, as YAML text.
+fn config_with_rule_off(text: &str, rule: &str) -> Result<String, String> {
+    let mut doc: yaml_serde::Value = yaml_serde::from_str(text).map_err(|e| e.to_string())?;
+    let root = doc.as_mapping_mut().ok_or("config is not a mapping")?;
+    let key = yaml_serde::Value::String("rules".into());
+    if !root.contains_key(&key) {
+        root.insert(
+            key.clone(),
+            yaml_serde::Value::Mapping(yaml_serde::Mapping::new()),
+        );
+    }
+    let rules = root
+        .get_mut(&key)
+        .and_then(|r| r.as_mapping_mut())
+        .ok_or("`rules` is not a mapping")?;
+    rules.insert(
+        yaml_serde::Value::String(rule.into()),
+        yaml_serde::Value::String("off".into()),
+    );
+    yaml_serde::to_string(&doc).map_err(|e| e.to_string())
 }
 
 /// Removes a case's temporary repository on every exit path, including the
@@ -188,15 +258,36 @@ impl Drop for TempDir {
     }
 }
 
+type SharedRun = std::sync::Arc<std::sync::OnceLock<(Option<i32>, String)>>;
+
+fn repo_runs() -> &'static std::sync::Mutex<std::collections::HashMap<String, SharedRun>> {
+    static RUNS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, SharedRun>>,
+    > = std::sync::OnceLock::new();
+    RUNS.get_or_init(Default::default)
+}
+
+struct TempFile(PathBuf);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Run one case; returns the list of unmet expectations (empty = all met).
-fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
+/// With `mutate`, the config the case runs under has that rule switched off
+/// after `setup` has run, and a config the mutation breaks is a harness error
+/// (a rejected config proves nothing about the rule).
+fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<String>, String> {
     let (cwd, temp) = if case.corpus == "@repo" {
         (repo_root(), None)
     } else {
         let t = std::env::temp_dir().join(format!(
-            "urzua-acceptance-{}-{}",
+            "urzua-acceptance-{}-{}{}",
             std::process::id(),
-            case.id
+            case.id,
+            mutate.map(|r| format!("-off-{r}")).unwrap_or_default()
         ));
         let _ = std::fs::remove_dir_all(&t);
         let guard = TempDir(t.clone());
@@ -222,12 +313,65 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
             return Err(format!("setup {step:?} exited {:?}", out.status.code()));
         }
     }
-    let out = run(&case.invocation)?;
+    let mut invocation = case.invocation.clone();
+    let mut mutated_config = None;
+    if let Some(rule) = mutate {
+        let at = invocation.iter().position(|a| a == "--config");
+        let source = match at {
+            Some(i) => cwd.join(invocation.get(i + 1).ok_or("--config has no value")?),
+            None => cwd.join(".urzua/config.yaml"),
+        };
+        let text = std::fs::read_to_string(&source)
+            .map_err(|e| format!("mutation: cannot read {}: {e}", source.display()))?;
+        let path = std::env::temp_dir().join(format!(
+            "urzua-acceptance-{}-{}-off-{rule}.yaml",
+            std::process::id(),
+            case.id
+        ));
+        std::fs::write(&path, config_with_rule_off(&text, rule)?).map_err(|e| e.to_string())?;
+        let value = path.to_string_lossy().to_string();
+        match at {
+            Some(i) => invocation[i + 1] = value,
+            None => {
+                invocation.insert(0, "--config".into());
+                invocation.insert(1, value);
+            }
+        }
+        mutated_config = Some(TempFile(path));
+    }
+    // Runs over this repository in place are read-only and many cases ask the
+    // same question, so an identical (config, invocation) is run once.
+    let shared = case.corpus == "@repo" && case.setup.is_empty();
+    let key = format!("{mutate:?}|{invocation:?}");
+    let out: (Option<i32>, String) = if shared {
+        let cell = repo_runs().lock().unwrap().entry(key).or_default().clone();
+        cell.get_or_init(|| match run(&invocation) {
+            Ok(o) => (
+                o.status.code(),
+                String::from_utf8_lossy(&o.stdout).to_string(),
+            ),
+            Err(e) => (None, format!("harness error: {e}")),
+        })
+        .clone()
+    } else {
+        let o = run(&invocation)?;
+        (
+            o.status.code(),
+            String::from_utf8_lossy(&o.stdout).to_string(),
+        )
+    };
     drop(temp);
+    drop(mutated_config);
+    if mutate.is_some() && out.0 == Some(2) && case.expect_exit != 2 {
+        return Err(format!(
+            "switching {} off made the config invalid (exit 2); the mutation proves nothing",
+            mutate.unwrap_or_default()
+        ));
+    }
 
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stdout = out.1;
     let mut unmet = Vec::new();
-    let code = out.status.code().unwrap_or(-1);
+    let code = out.0.unwrap_or(-1);
     if code != case.expect_exit {
         unmet.push(format!("exit {code}, expected {}", case.expect_exit));
     }
@@ -239,7 +383,9 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
     let json: Option<serde_json::Value> = serde_json::from_str(&stdout).ok();
     let needs_json = !case.expect_json.is_empty()
         || !case.expect_findings.is_empty()
-        || !case.expect_no_findings.is_empty();
+        || !case.expect_no_findings.is_empty()
+        || !case.expect_rules_ran.is_empty()
+        || !case.expect_mirrored.is_empty();
     if needs_json && json.is_none() {
         unmet.push("stdout is not JSON".to_string());
     }
@@ -261,8 +407,9 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
                 }
             }
         }
-        let has_finding_matchers =
-            !case.expect_findings.is_empty() || !case.expect_no_findings.is_empty();
+        let has_finding_matchers = !case.expect_findings.is_empty()
+            || !case.expect_no_findings.is_empty()
+            || !case.expect_mirrored.is_empty();
         let findings = match j.get("findings").and_then(|f| f.as_array()) {
             Some(f) => f.clone(),
             None => {
@@ -272,6 +419,46 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
                 Vec::new()
             }
         };
+        for m in &case.expect_mirrored {
+            let rules_under = |prefix: &str| -> std::collections::BTreeSet<String> {
+                findings
+                    .iter()
+                    .filter(|f| {
+                        f.get("file")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(|p| p.starts_with(prefix))
+                    })
+                    .filter_map(|f| f.get("rule").and_then(|r| r.as_str()).map(String::from))
+                    .collect()
+            };
+            let (l, r) = (rules_under(&m.left), rules_under(&m.right));
+            if l.is_empty() || l != r {
+                unmet.push(format!(
+                    "findings under {} ({l:?}) and {} ({r:?}) are not the same non-empty set of rules",
+                    m.left, m.right
+                ));
+            }
+        }
+        let executed = j
+            .get("rules_executed")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
+        for rule in &case.expect_rules_ran {
+            let entry = executed
+                .iter()
+                .find(|e| e.get("rule").and_then(|r| r.as_str()) == Some(rule));
+            let status = entry.and_then(|e| e.get("status")).and_then(|s| s.as_str());
+            let examined = entry
+                .and_then(|e| e.pointer("/population/examined"))
+                .and_then(|n| n.as_u64())
+                .unwrap_or(0);
+            if status != Some("ran") || examined == 0 {
+                unmet.push(format!(
+                    "rule {rule} did not run over a non-empty population (status {status:?}, examined {examined})"
+                ));
+            }
+        }
         for m in &case.expect_findings {
             if !findings.iter().any(|f| matches(f, m)) {
                 unmet.push(format!(
@@ -289,22 +476,88 @@ fn evaluate(case: &Case, corpus_dir: &Path) -> Result<Vec<String>, String> {
     Ok(unmet)
 }
 
-fn run_case(case: &Case, corpus_dir: &Path) -> Outcome {
-    let unmet = match evaluate(case, corpus_dir) {
+/// Run the case, then prove each rule it names: with the rule off in the
+/// case's own config the case must fail. Returns the outcome and the rules
+/// whose proof held.
+fn run_case(case: &Case, corpus_dir: &Path) -> (Outcome, Vec<String>) {
+    let unmet = match evaluate(case, corpus_dir, None) {
         Ok(u) => u,
-        Err(e) => return Outcome::Fail(vec![format!("harness error: {e}")]),
-    };
-    match (&case.known_gap, unmet.is_empty()) {
-        (None, true) => Outcome::Pass,
-        (None, false) => Outcome::Fail(unmet),
-        (Some(g), false) if !g.reason.trim().is_empty() && !g.reference.trim().is_empty() => {
-            Outcome::KnownGap(format!("{} -- {}", g.reference, unmet.join("; ")))
+        Err(e) => {
+            return (
+                Outcome::Fail(vec![format!("harness error: {e}")]),
+                Vec::new(),
+            )
         }
-        (Some(_), false) => Outcome::Fail(vec!["known_gap needs a ref and a reason".into()]),
-        (Some(g), true) => Outcome::Fail(vec![format!(
-            "known gap {} has closed: the case now passes, remove its known_gap",
-            g.reference
-        )]),
+    };
+    let rules = proven_rules(case);
+    if let Some(g) = &case.known_gap {
+        let outcome = match (
+            unmet.is_empty(),
+            g.reason.trim().is_empty() || g.reference.trim().is_empty(),
+        ) {
+            (_, true) => Outcome::Fail(vec!["known_gap needs a ref and a reason".into()]),
+            (false, false) => Outcome::KnownGap(format!("{} -- {}", g.reference, unmet.join("; "))),
+            (true, false) => Outcome::Fail(vec![format!(
+                "known gap {} has closed: the case now passes, remove its known_gap",
+                g.reference
+            )]),
+        };
+        return (outcome, Vec::new());
+    }
+    if !unmet.is_empty() {
+        return (Outcome::Fail(unmet), Vec::new());
+    }
+    let mut problems = Vec::new();
+    if let Some(reason) = &case.mutation_exempt {
+        // Exempt: the case asserts something no single rule produces, so there
+        // is nothing to switch off. It proves no rule and is not counted.
+        return if reason.trim().is_empty() {
+            (
+                Outcome::Fail(vec!["mutation_exempt needs a reason".into()]),
+                Vec::new(),
+            )
+        } else {
+            (Outcome::Pass, Vec::new())
+        };
+    }
+    if rules.is_empty() {
+        problems.push(
+            "the case proves no rule: name one in expect_findings, expect_rules_ran or proves, or give mutation_exempt a reason"
+                .to_string(),
+        );
+    }
+    let mut proven = Vec::new();
+    // `expect_rules_ran` asserts the same way for every rule it lists, so one
+    // sampled rule is switched off to show the assertion can fail; the rest
+    // are counted once that held. Findings and `proves` are mutated one by one.
+    let sampled = case.expect_rules_ran.first().cloned();
+    for rule in &rules {
+        if !urzua_core::rules::ALL_RULES.contains(&rule.as_str()) {
+            problems.push(format!("{rule} is not a rule this build ships"));
+            continue;
+        }
+        let only_ran = case.expect_rules_ran.contains(rule)
+            && !case.proves.contains(rule)
+            && !case
+                .expect_findings
+                .iter()
+                .any(|m| m.rule.as_ref() == Some(rule));
+        if only_ran && sampled.as_ref() != Some(rule) {
+            proven.push(rule.clone());
+            continue;
+        }
+        match evaluate(case, corpus_dir, Some(rule)) {
+            Ok(m) if m.is_empty() => problems.push(format!(
+                "passes with {rule} switched off, so it does not prove {rule}"
+            )),
+            Ok(_) => proven.push(rule.clone()),
+            Err(e) => problems.push(format!("mutation of {rule}: {e}")),
+        }
+    }
+    if problems.is_empty() {
+        (Outcome::Pass, proven)
+    } else {
+        (Outcome::Fail(problems), proven)
     }
 }
 
@@ -347,6 +600,8 @@ fn main() {
 
     let (mut pass, mut gaps, mut fail, mut total) = (0, 0, 0, 0);
     let mut seen_ids = std::collections::HashSet::new();
+    // (corpus name, corpus dir, case) in discovery order.
+    let mut queue: Vec<(String, PathBuf, Case)> = Vec::new();
     for root in &roots {
         let dirs = match corpus_dirs(root) {
             Ok(d) => d,
@@ -392,28 +647,63 @@ fn main() {
                 {
                     continue;
                 }
-                total += 1;
-                match run_case(&case, &dir) {
-                    Outcome::Pass => {
-                        pass += 1;
-                        println!("ok         [{name}] {}", case.id);
-                    }
-                    Outcome::KnownGap(why) => {
-                        gaps += 1;
-                        println!("KNOWN-GAP  [{name}] {} ({why})", case.id);
-                    }
-                    Outcome::Fail(why) => {
-                        fail += 1;
-                        println!("FAIL       [{name}] {}", case.id);
-                        for w in why {
-                            println!("             - {w}");
-                        }
-                    }
+                queue.push((name.clone(), dir.clone(), case));
+            }
+        }
+    }
+
+    // Cases are independent (each owns a throwaway repo), so run them on a few
+    // threads; results are printed in discovery order, so output is stable.
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let results: std::sync::Mutex<Vec<Option<(Outcome, Vec<String>)>>> =
+        std::sync::Mutex::new((0..queue.len()).map(|_| None).collect());
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2)
+        .clamp(1, 8);
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let Some((_, dir, case)) = queue.get(i) else {
+                    break;
+                };
+                let r = run_case(case, dir);
+                results.lock().unwrap()[i] = Some(r);
+            });
+        }
+    });
+    let results = results.into_inner().unwrap();
+
+    let mut proven: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for ((name, _, case), result) in queue.iter().zip(results) {
+        total += 1;
+        let (outcome, rules) = result.expect("every queued case ran");
+        proven.extend(rules);
+        match outcome {
+            Outcome::Pass => {
+                pass += 1;
+                println!("ok         [{name}] {}", case.id);
+            }
+            Outcome::KnownGap(why) => {
+                gaps += 1;
+                println!("KNOWN-GAP  [{name}] {} ({why})", case.id);
+            }
+            Outcome::Fail(why) => {
+                fail += 1;
+                println!("FAIL       [{name}] {}", case.id);
+                for w in why {
+                    println!("             - {w}");
                 }
             }
         }
     }
     println!("acceptance: {total} cases, {pass} ok, {gaps} known-gap, {fail} failed");
+    // A name filter runs part of the suite, so the coverage of the rest is
+    // unknown and is not reported.
+    if filter.is_none() {
+        report_coverage(&proven);
+    }
     // A name filter (`cargo test <name>` passes it to every target) may
     // legitimately match no case; only an unfiltered run with no cases fails.
     let empty_unfiltered = total == 0 && filter.is_none();
@@ -422,5 +712,32 @@ fn main() {
             println!("acceptance: no cases ran");
         }
         std::process::exit(1);
+    }
+}
+
+/// States which shipped rules have an acceptance case whose mutation proof
+/// held and which have none. Printed on every unfiltered run: the gap is
+/// reported, not enforced, because a rule another change adds has no case yet.
+fn report_coverage(proven: &std::collections::BTreeSet<String>) {
+    let all = urzua_core::rules::ALL_RULES;
+    let uncovered: Vec<&str> = all
+        .iter()
+        .copied()
+        .filter(|r| !proven.contains(*r))
+        .collect();
+    println!(
+        "acceptance coverage: {} of {} rules have a case that fails with the rule off",
+        all.len() - uncovered.len(),
+        all.len()
+    );
+    if uncovered.is_empty() {
+        return;
+    }
+    println!(
+        "acceptance coverage: {} rules have NO acceptance case:",
+        uncovered.len()
+    );
+    for r in uncovered {
+        println!("  uncovered  {r}");
     }
 }

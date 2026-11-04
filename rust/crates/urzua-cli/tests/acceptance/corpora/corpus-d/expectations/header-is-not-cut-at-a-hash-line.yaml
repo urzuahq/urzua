@@ -1,0 +1,11 @@
+id: header-is-not-cut-at-a-hash-line
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+# A line beginning with # inside the header is a YAML comment, not the first
+# heading. A reader that slices the header at the first such line loses Date
+# and Author and reports both missing.
+expect_rules_ran:
+  - header.required-fields
+expect_no_findings:
+  - {file: records/ADR-0020-header-comment.md}

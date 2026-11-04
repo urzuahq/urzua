@@ -1,0 +1,9 @@
+id: accepted-requires-its-declared-fields
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: status.required-field-missing
+    file: records/ADR-0013-accepted-no-deciders.md
+    severity: error
+    message_contains: "Deciders"

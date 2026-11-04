@@ -1,0 +1,9 @@
+id: decision-without-the-five-phrases-fails-its-shape
+corpus: corpus-f
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: section.shape
+    file: records/docs/DOC-0005-no-y-statement.md
+    severity: error
+    message_contains: "Y-statement is missing"
