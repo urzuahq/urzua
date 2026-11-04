@@ -25,6 +25,26 @@ pub enum HeaderNone {
     Exempt(&'static str),
 }
 
+/// A per-type declaration that a rule reads and that an adopted corpus starts
+/// without. Named by the config key, which is what an adopter writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Declaration {
+    RequiredFields,
+    KnownFields,
+    PointerFields,
+}
+
+impl Declaration {
+    /// The record-type config key that carries the declaration.
+    pub fn key(self) -> &'static str {
+        match self {
+            Declaration::RequiredFields => "required_fields",
+            Declaration::KnownFields => "known_fields",
+            Declaration::PointerFields => "pointer_fields",
+        }
+    }
+}
+
 /// One rule, with every property of it that anything outside the rule needs.
 /// The single place a rule is registered: the shipped rule set, `urzua rules`,
 /// `SPEC-2`'s rule table, config validation and `init`'s proposal are all
@@ -44,6 +64,11 @@ pub struct RuleDef {
     /// Enabling it with no `relation_pairs` declared is a config load error
     /// (`RFC-47`).
     pub requires_relation_pairs: bool,
+    /// The per-type declaration the rule reads, without which it examines
+    /// nothing. `urzua init` writes none of these (`ADR-33`), so it does not
+    /// propose such a rule: it would report `ran` over zero records
+    /// (`BUG-73`). `None` for a rule that reads no per-type declaration.
+    pub reads_declaration: Option<Declaration>,
     pub header_none: HeaderNone,
     /// The `RuleSetting` options the rule accepts, by name. Declaring one on any
     /// other rule is a load-time error: a silently ignored option is a check
@@ -104,6 +129,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -118,6 +144,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -132,6 +159,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["not_in", "fields"],
         phase: Phase::Main,
@@ -147,6 +175,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: Some(Declaration::RequiredFields),
         header_none: HeaderNone::OutOfScope,
         options: &["field_levels"],
         phase: Phase::Main,
@@ -161,6 +190,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: Some(Declaration::RequiredFields),
         header_none: HeaderNone::OutOfScope,
         options: &["pending_until_required", "field_levels"],
         phase: Phase::Main,
@@ -175,6 +205,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Outside,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is claims, not records"),
         options: &["claim_paths", "closed_statuses"],
         phase: Phase::Main,
@@ -190,6 +221,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads the filename and H1 only"),
         options: &[],
         phase: Phase::Main,
@@ -204,6 +236,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -216,6 +249,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: true,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -230,6 +264,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: true,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -244,6 +279,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -256,6 +292,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads body text only"),
         options: &[],
         phase: Phase::Main,
@@ -268,6 +305,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["drift_grace_days", "drift_audit_field", "claim_max_age_days", "sticky_states"],
         phase: Phase::Main,
@@ -289,6 +327,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["accepted_statuses"],
         phase: Phase::Main,
@@ -301,6 +340,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Outside,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is source files, not records"),
         options: &["back_pointer_paths", "test_paths"],
         phase: Phase::Main,
@@ -326,6 +366,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Outside,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is source files, not records"),
         options: &["back_pointer_paths", "accepted_statuses"],
         phase: Phase::Main,
@@ -354,6 +395,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -385,6 +427,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -397,6 +440,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: Some(Declaration::KnownFields),
         header_none: HeaderNone::OutOfScope,
         options: &["allow_extension_prefix"],
         phase: Phase::Main,
@@ -411,6 +455,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -425,6 +470,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -437,6 +483,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -451,6 +498,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -465,6 +513,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["terminal_statuses"],
         phase: Phase::Main,
@@ -480,6 +529,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -499,6 +549,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads the filename identifier only"),
         options: &[],
         phase: Phase::Main,
@@ -513,6 +564,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::ChangedPath,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges tracked paths against the declared directories"),
         options: &[],
         phase: Phase::Main,
@@ -532,6 +584,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -546,6 +599,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: Some(Declaration::PointerFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -560,6 +614,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -572,6 +627,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -586,6 +642,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -598,6 +655,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -610,6 +668,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -624,6 +683,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         phase: Phase::Main,
@@ -636,6 +696,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Directory,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads the filename only"),
         options: &[],
         phase: Phase::Main,
@@ -650,6 +711,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -664,6 +726,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["field_levels"],
         phase: Phase::Main,
@@ -678,6 +741,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -720,6 +784,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &[],
         phase: Phase::Main,
@@ -734,6 +799,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["date_fields"],
         phase: Phase::Main,
@@ -748,6 +814,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
         options: &["date_order"],
         phase: Phase::Main,
@@ -762,6 +829,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads body text only; a header-less record is read whole"),
         options: &["external_ids", "skip_revision_log"],
         phase: Phase::Main,
@@ -776,6 +844,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads body text only; a header-less record is read whole"),
         options: &["reference_sections", "skip_revision_log"],
         phase: Phase::Main,
@@ -816,6 +885,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         }),
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads body text only; a header-less record is read whole"),
         options: &["reference_sections", "skip_revision_log", "issue_refs"],
         phase: Phase::Main,
@@ -830,6 +900,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is published files, not records"),
         options: &["published_paths"],
         phase: Phase::Main,
@@ -842,6 +913,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)"),
         options: &[],
         phase: Phase::Main,
@@ -856,6 +928,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("reads body sections, as section.required does"),
         options: &[],
         phase: Phase::Main,
@@ -870,6 +943,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Outside,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is index artifacts, not records"),
         options: &["indexes"],
         phase: Phase::Main,
@@ -884,6 +958,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Outside,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is changed paths, and only on a --base run"),
         options: &["source_paths", "exclude_paths"],
         phase: Phase::Main,
@@ -900,6 +975,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Outside,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("population is changed paths, and only on a --base run"),
         options: &["application_paths", "exclude_paths"],
         phase: Phase::Main,
@@ -921,6 +997,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges other rules' populations"),
         options: &[],
         phase: Phase::AfterRules,
@@ -933,6 +1010,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
+        reads_declaration: None,
         header_none: HeaderNone::Exempt("judges waiver records against the run's findings, not a configured header"),
         options: &[],
         phase: Phase::AfterScoping,
@@ -1054,6 +1132,23 @@ mod tests {
     /// A rule that judges the configuration reports on the configuration; one
     /// that reads files outside the corpus is anchored there. Declared once, in
     /// the entry, which is what a scoped run reads.
+    #[test]
+    fn the_rules_that_read_a_per_type_declaration_name_it() {
+        let reads: Vec<(&str, Declaration)> = RULE_TABLE
+            .iter()
+            .filter_map(|d| d.reads_declaration.map(|r| (d.id, r)))
+            .collect();
+        assert_eq!(
+            reads,
+            vec![
+                (RULE_FIELD_QUALITY, Declaration::RequiredFields),
+                (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
+                (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
+            ]
+        );
+    }
+
     #[test]
     fn a_rule_anchor_agrees_with_its_scope() {
         for def in RULE_TABLE {

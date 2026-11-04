@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -79,6 +79,17 @@ in a `header-shape` notice that names the form (`2 in the removed bold-list form
 reports each such record as unreadable until its header is rewritten as YAML frontmatter. A type whose
 records are all frontmatter gets no notice. A type with no records is proposed `yaml-frontmatter`.
 Each `proposed` entry reports the chosen `header_shape`.
+
+## Proposed rules
+
+`init` proposes each shipped rule at `warn`, except a rule that cannot examine anything on the corpus it
+just adopted: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
+a rule that resolves identity on a corpus where no type has a prefix, and a rule that reads a per-type
+declaration `init` does not write. `init` writes `required_fields: []` and infers no `known_fields` or
+`pointer_fields` (`ADR-33`), so `field.quality`, `field.pending`, `header.field-set-consistency` and
+`header.pointer-field-clean` are not proposed. A `rule-applicability` notice (severity `info`) lists them
+with the declaration each reads, so the adopter knows what to declare on a record type before enabling
+the rule. Each rule's declaration is the `reads_declaration` of its entry in the rule table.
 
 ## Safety
 
@@ -163,3 +174,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.7`. `init` proposes only `yaml-frontmatter` and reports, in a `header-shape` notice, the existing records written in a removed `blockquote` or `bold-list` form; it no longer infers a shape from the corpus and no longer declares `header.deprecated-shape`. **Why:** `MILE-85` removed those shapes. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. Added `## Proposed rules`: `init` does not propose a rule that reads a per-type declaration it leaves empty (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and names each in a `rule-applicability` notice with the declaration to write. **Why:** `BUG-73`; the four rules ran over zero records on every adopted corpus. | **substantive** |

@@ -1587,6 +1587,57 @@ fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
     );
 }
 
+/// `BUG-73`: the config `init` writes must not enable a rule that reads a
+/// declaration `init` left empty -- it would report `ran` over zero records --
+/// and `init` says which declaration turns each one on.
+#[test]
+fn init_does_not_propose_rules_that_would_examine_nothing_on_the_corpus_it_adopted() {
+    let dir = fixture_repo("init-withholds-inert-rules");
+    std::fs::write(
+        dir.join("docs/adr/ADR-0001-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let init = run_urzua(&dir, &["init"]);
+    let init_stdout = String::from_utf8_lossy(&init.stdout).to_string();
+    assert!(init.status.success(), "{init_stdout}");
+    for needle in [
+        "field.quality",
+        "required_fields",
+        "known_fields",
+        "pointer_fields",
+    ] {
+        assert!(
+            init_stdout.contains(needle),
+            "the notice must name {needle}: {init_stdout}"
+        );
+    }
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    for rule in [
+        "field.quality",
+        "field.pending",
+        "header.field-set-consistency",
+        "header.pointer-field-clean",
+    ] {
+        let execution = parsed["rules_executed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["rule"] == rule)
+            .unwrap_or_else(|| panic!("{rule} missing: {stdout}"));
+        assert_eq!(
+            execution["status"], "not-enabled",
+            "{rule} must not be enabled by init: {stdout}"
+        );
+    }
+}
+
 #[test]
 fn audit_with_neither_of_its_rules_declared_is_not_ok() {
     let dir = one_adr_repo(
