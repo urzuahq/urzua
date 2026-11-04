@@ -74,6 +74,14 @@ pub(crate) fn load_records(
     let type_names = config.sorted_type_names();
     for type_name in type_names {
         let type_config = &config.record_types[type_name];
+        let model = urzua_core::document_model::declared_model(type_name, type_config)
+            .map_err(|e| e.to_string())?
+            .map(|m| {
+                m.resolve()
+                    .map_err(|e| format!("record type '{type_name}': {e}"))
+            })
+            .transpose()?
+            .unwrap_or_default();
         let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
             // This directory, not this subtree (RFC-35). Prefix matching let
@@ -97,12 +105,13 @@ pub(crate) fn load_records(
                         .prefix
                         .clone()
                         .unwrap_or_else(|| type_name.to_ascii_uppercase());
-                    records.push(Record::parse_with_shape_and_prefix(
+                    records.push(Record::parse_with_model(
                         rel_path.clone(),
                         type_name.clone(),
                         &content,
                         type_config.header_shape,
                         type_prefix,
+                        &model,
                     ));
                     full_text.insert(rel_path.clone(), content);
                 }

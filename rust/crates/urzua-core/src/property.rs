@@ -238,6 +238,7 @@ mod tests {
                 record_type: "note".to_string(),
                 type_prefix: "NOTE".to_string(),
                 header: crate::header::parse(&body),
+                identity: None,
             };
 
             // The parser must recover the key before the rule can be held to
@@ -305,6 +306,7 @@ mod tests {
             record_type: "note".to_string(),
             type_prefix: "NOTE".to_string(),
             header: crate::header::parse(body),
+            identity: None,
         };
         let records = [record];
         let record_index = rules::build_normalized_index(&records);
