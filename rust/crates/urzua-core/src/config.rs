@@ -2088,7 +2088,7 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
     }
     // A pair rule with nothing to pair is a check that ran on nothing.
     if config.relation_pairs.is_empty() {
-        for rule in crate::rules::RULES_REQUIRING_RELATION_PAIRS.iter().copied() {
+        for rule in crate::rules::rule_ids_where(|d| d.requires_relation_pairs) {
             if config
                 .rules
                 .get(rule)

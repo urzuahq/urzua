@@ -251,7 +251,7 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         }
         // Pairs are declared, never inferred: enabling these with none
         // declared is a load error, so adopt mode cannot propose them.
-        if urzua_core::rules::RULES_REQUIRING_RELATION_PAIRS.contains(id) {
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_relation_pairs) {
             continue;
         }
         // A corpus whose filenames carry no type prefix has no identity for
@@ -264,7 +264,7 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         // filename yields no identity, so one prefix-less directory costs only
         // its own records -- dropping the rule outright would cost the rest of
         // the corpus its checks (BUG-70).
-        if urzua_core::rules::IDENTITY_DEPENDENT_RULES.contains(id)
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.needs_identity_index)
             && proposed.iter().all(|rt| rt.prefix.is_none())
         {
             continue;
