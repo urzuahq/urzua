@@ -10,8 +10,12 @@ use super::*;
 /// reports each that no record answers to, comparing numbers by value so
 /// `ADR-0012` and `ADR-12` are one id.
 ///
-/// Opt-in and option-free: the prefixes come from the record types the
-/// repository already declares. The header region is not read (the pointer and
+/// Opt-in. The prefixes come from the record types the repository already
+/// declares. The optional `external_ids` option (`MILE-156`) names ids that
+/// share a record prefix but are not records (a public standard number such as
+/// `RFC-4122` under an `RFC` prefix): a matching citation is counted out of
+/// scope rather than resolved, so it is visible in the population and never
+/// reported as dangling. The header region is not read (the pointer and
 /// narrative rules own it) and fenced code blocks are skipped; an inline code
 /// span is read, since nothing declares otherwise. The population's unit is the
 /// citation, so a run over a corpus that cites nothing reports `0` examined,
@@ -25,6 +29,16 @@ pub fn citation_resolution(
     const RULE_ID: &str = RULE_CITATION_RESOLUTION;
 
     let prefixes = declared_prefixes(config);
+    // Validated at config load; an entry that does not parse here cannot
+    // match anything, and a config built in code is not trusted to be loaded.
+    let external: Vec<ExternalId> = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.external_ids.as_ref())
+        .into_iter()
+        .flatten()
+        .filter_map(|e| parse_external_id(e, &prefixes).ok())
+        .collect();
 
     struct Citation<'a> {
         record: &'a Record,
@@ -51,6 +65,9 @@ pub fn citation_resolution(
         candidates,
         |c| c.record.path.clone(),
         |c| {
+            if external.iter().any(|e| e.matches(&c.token)) {
+                return Outcome::OutOfScope;
+            }
             if !index.contains_key(&crate::values::RecordId::new(&c.token)) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -75,6 +92,71 @@ pub fn citation_resolution(
         },
         findings,
     )
+}
+
+/// One declared external id: an exact prefixed number or an inclusive range
+/// under one prefix (`MILE-156`). Numbers compare by value, like record ids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExternalId {
+    prefix: String,
+    low: u128,
+    high: u128,
+}
+
+impl ExternalId {
+    /// Whether `token` (`PREFIX-N`, as `cited_identifiers` yields it) is this
+    /// external id.
+    pub fn matches(&self, token: &str) -> bool {
+        let Some((prefix, digits)) = token.rsplit_once('-') else {
+            return false;
+        };
+        prefix == self.prefix
+            && digits
+                .parse::<u128>()
+                .is_ok_and(|n| (self.low..=self.high).contains(&n))
+    }
+}
+
+/// Parse one `external_ids` entry: `PREFIX-N` or `PREFIX-LOW..HIGH`, the
+/// prefix one of `prefixes` (the repository's declared record prefixes). An
+/// entry under no declared prefix could never match a citation, so it is an
+/// error rather than a silent no-op.
+pub fn parse_external_id(entry: &str, prefixes: &[String]) -> Result<ExternalId, String> {
+    if entry.trim() != entry || entry.is_empty() {
+        return Err("is empty or has surrounding whitespace".to_string());
+    }
+    let (prefix, number) = entry
+        .rsplit_once('-')
+        .ok_or_else(|| "must look like PREFIX-N or PREFIX-LOW..HIGH".to_string())?;
+    if !prefixes.iter().any(|p| p == prefix) {
+        return Err(format!(
+            "uses the prefix '{prefix}', which no record type declares (declared: {})",
+            prefixes.join(", ")
+        ));
+    }
+    let number_of = |s: &str| {
+        if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(format!("'{s}' is not a whole number"));
+        }
+        s.parse::<u128>().map_err(|_| format!("'{s}' is too large"))
+    };
+    let (low, high) = match number.split_once("..") {
+        Some((a, b)) => (number_of(a)?, number_of(b)?),
+        None => {
+            let n = number_of(number)?;
+            (n, n)
+        }
+    };
+    if low > high {
+        return Err(format!(
+            "is a range whose start {low} is after its end {high}"
+        ));
+    }
+    Ok(ExternalId {
+        prefix: prefix.to_string(),
+        low,
+        high,
+    })
 }
 
 /// Every `(line, identifier)` in `text` outside the header region and outside
@@ -268,5 +350,90 @@ mod tests {
         ]);
         let p = exec.population.unwrap();
         assert_eq!((p.eligible(), p.examined()), (3, 3));
+    }
+
+    fn run_external(docs: &[(&str, &str)], external: &[&str]) -> (RuleExecution, Vec<Finding>) {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "rfc", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        let mut config = config_with_types(vec![("rfc", type_config(None))]);
+        let list = external
+            .iter()
+            .map(|e| format!("\"{e}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let setting: crate::config::RuleSetting =
+            yaml_serde::from_str(&format!("level: error\nexternal_ids: [{list}]\n")).unwrap();
+        config
+            .rules
+            .insert(RULE_CITATION_RESOLUTION.to_string(), setting);
+        let (index, _) = build_index_reporting_collisions(&records);
+        citation_resolution(&records, &config, &full_text, &index)
+    }
+
+    const RFC_DOC: &str = "docs/rfc/RFC-1-y.md";
+
+    #[test]
+    fn a_declared_external_id_is_skipped_and_a_dangling_one_is_still_reported_observed_failing() {
+        let body = "# 1 — Y\n\nUUIDs follow RFC-4122; also see RFC-99.\n";
+        let (exec, findings) = run_external(&[(RFC_DOC, body)], &["RFC-4122"]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("RFC-99"));
+        let p = exec.population.unwrap();
+        // The external citation is counted, as out of scope, never dropped.
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (2, 1, 1));
+    }
+
+    #[test]
+    fn without_a_declaration_the_colliding_standard_number_is_reported() {
+        let body = "# 1 — Y\n\nUUIDs follow RFC-4122.\n";
+        let (_, findings) = run_external(&[(RFC_DOC, body)], &["RFC-9999"]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("RFC-4122"));
+    }
+
+    #[test]
+    fn an_external_range_matches_inclusively_and_numerically() {
+        let body = "# 1 — Y\n\nRFC-4000 RFC-04122 RFC-4999 RFC-3999 RFC-5000\n";
+        let (exec, findings) = run_external(&[(RFC_DOC, body)], &["RFC-4000..4999"]);
+        let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(named[0].contains("RFC-3999") && named[1].contains("RFC-5000"));
+        assert_eq!(exec.population.unwrap().out_of_scope(), 3);
+    }
+
+    #[test]
+    fn an_external_declaration_never_hides_an_id_of_another_prefix() {
+        let docs = [
+            (RFC_DOC, "# 1 — Y\n\nRFC-4122 and ADR-4122.\n"),
+            ("docs/rfc/RFC-2-z.md", "# 2 — Z\n"),
+        ];
+        let (_, findings) = run_external(&docs, &["RFC-4122"]);
+        // ADR is not a configured prefix here, so it is simply not a citation.
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn parse_external_id_accepts_exact_and_range_and_refuses_the_rest() {
+        let prefixes = vec!["RFC".to_string(), "DOC-ADR".to_string()];
+        assert!(parse_external_id("RFC-4122", &prefixes).is_ok());
+        assert!(parse_external_id("DOC-ADR-7..9", &prefixes).is_ok());
+        for bad in [
+            "",
+            "RFC",
+            "RFC-",
+            "RFC-x",
+            "RFC-1..",
+            "RFC-9..1",
+            "RFC-1..2..3",
+            "FOO-1",
+            "RFC-1x",
+            "RFC-*",
+            " RFC-1",
+        ] {
+            assert!(parse_external_id(bad, &prefixes).is_err(), "{bad:?}");
+        }
     }
 }
