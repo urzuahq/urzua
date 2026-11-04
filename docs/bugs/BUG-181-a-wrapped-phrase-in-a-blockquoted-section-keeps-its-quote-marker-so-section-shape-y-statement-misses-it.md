@@ -2,7 +2,7 @@
 Stable-Id: 01M6JKNX8RP2B6G73ZDAAFGPCQ
 Status: Open
 Found-in: 'a trial run over a real adopter corpus (2026-11-04)'
-Regression-test: pending
+Regression-test: 'not yet written -- Status: Open, the fix has not been made'
 ---
 # 181 — A wrapped phrase in a blockquoted section keeps its quote marker so section.shape y-statement misses it
 

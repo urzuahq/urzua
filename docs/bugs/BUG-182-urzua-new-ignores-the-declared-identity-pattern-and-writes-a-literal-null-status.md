@@ -2,7 +2,7 @@
 Stable-Id: 01M6JKNXV24H9XAAQW3NFJ7D5S
 Status: Open
 Found-in: 'a trial run over a real adopter corpus (2026-11-04)'
-Regression-test: pending
+Regression-test: 'not yet written -- Status: Open, the fix has not been made'
 ---
 # 182 — Urzua new ignores the declared identity pattern and writes a literal null status
 

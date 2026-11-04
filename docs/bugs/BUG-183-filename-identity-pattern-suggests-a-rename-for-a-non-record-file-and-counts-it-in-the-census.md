@@ -2,7 +2,7 @@
 Stable-Id: 01M6JKNYCZFWAQJ90KRWT13CBJ
 Status: Open
 Found-in: 'a trial run over a real adopter corpus (2026-11-04)'
-Regression-test: pending
+Regression-test: 'not yet written -- Status: Open, the fix has not been made'
 ---
 # 183 — Filename.identity-pattern suggests a rename for a non-record file and counts it in the census
 
