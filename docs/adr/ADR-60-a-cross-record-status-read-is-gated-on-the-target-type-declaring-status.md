@@ -2,6 +2,7 @@
 Stable-Id: 01M3461YQSAZGTR3GP66ZXQQB4
 Status: Accepted
 Date: 2026-09-22
+Accepted-on: 2026-09-22
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: BUG-109
@@ -76,3 +77,4 @@ this decision are unaffected.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Decided. **Why:** `BUG-109` named two options and needed a real decision before a fix; gating on declaration was chosen because the alternative (reserving `Status`) would have made it a uniquely privileged field with no principled reason `ADR-57` supports elsewhere. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 055f434c3. | **structural** |

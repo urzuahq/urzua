@@ -4,6 +4,7 @@ Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:.github/release-paths, code:.github/workflows/ci.yml
 Date: 2026-09-16
+Accepted-on: 2026-09-16
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -98,3 +99,4 @@ format changes.
 > | 2026-09-16 | Initial decision. **Why:** three of four PRs merged that day touched nothing an installer receives, and each still required a label asserting it -- a question the repository's own structure already answers. Recorded as a decision rather than a workflow tweak because it narrows what `ADR-29`'s gate means. | **structural** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Implemented`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/release-paths, code:.github/workflows/ci.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 08222833f. | **structural** |

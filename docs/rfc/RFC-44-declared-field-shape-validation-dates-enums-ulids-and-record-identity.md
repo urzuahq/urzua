@@ -2,6 +2,7 @@
 Stable-Id: 01M368EHQFV7N8SBF13G98EE93
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-11-04
 Author: beauwilliams
 ---
 # 44 — declared field shape validation: dates, enums, ULIDs, and record identity
@@ -122,3 +123,4 @@ inventing its own check.
 > |---|---|---|
 > | 2026-09-23 | Filed as `Draft`. **Why:** started as a narrow H1-title-format fix (`BUG-123`); the user correctly pushed back that the real gap is the document model having no field type system at all, of which H1 identity is one instance among several (enums, dates, ULIDs) already named as unbuilt elsewhere (`SPEC-2`). Reframed before implementation started, not after. | **substantive** |
 > | 2026-11-04 | `Draft` -> `Accepted`, with the outcome "declared per type": each record type declares its title form in config through `MILE-98`'s identity pattern; this repository declares the `SPEC-` prefix for specs and the bare number for every other type. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 8cda15573. | **structural** |

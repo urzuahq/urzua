@@ -2,6 +2,7 @@
 Stable-Id: 01M2PGCECD2YDR7V0KGNKBGAK7
 Status: Accepted
 Date: 2026-09-16
+Accepted-on: 2026-09-17
 Author: beauwilliams
 ---
 # 33 — The engine ships rule primitives; a repo's governance is a configuration of them
@@ -463,3 +464,4 @@ header, or `ADR-44`'s declared-fields model — this generalizes `ADR-44`, it do
 > | 2026-09-17 | Config examples converted to YAML per `ADR-52`, and the `[rules]` example's keys corrected. **Why:** this RFC describes config that does not exist yet, so unlike the specs -- which describe shipped TOML and deliberately stay as they are until the implementing change -- it should show the decided format. The same block still carried two withdrawn grid keys. A draft of this entry also proposed quoting a bare `off` against YAML 1.1's boolean reading; that was dropped after testing the parser, which follows the 1.2 core schema and returns `String("off")` -- nothing but urzua reads this file, so there is no 1.1 reader to defend against. | **substantive** |
 > | 2026-09-17 | `sections` gains `depth` and `items`; falsification test #1 run against MADR and its result recorded. **Why:** the nine functions cleared a second foreign corpus without needing a tenth, but `sections.from = "h2"` could not express two ordinary MADR rules, because `###` and list items are not in the document model at all. The model's reach is the ceiling on extensibility -- what it cannot name, no rule can address and no configuration can recover -- so this is a general limit rather than one template's accommodation. Measured the same day: 18 of this repo's own 84 records use `###`, this RFC among them, and `check` is blind to all of it. | **substantive** |
 > | 2026-09-17 | `Status: Draft` → `Accepted`; decided by `ADR-53`. **Why:** the principle and the declared document model are settled, and neither depends on the remaining open question. The function vocabulary is explicitly **not** decided there -- `ADR-40` → `ADR-44` and this RFC's own withdrawn grid are two prior instances of naming things specifically ahead of the evidence, and a third corpus is the cheap gate still outstanding. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit d53141f9c. | **structural** |

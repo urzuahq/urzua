@@ -27,10 +27,52 @@ pub enum FormatSegment {
     Title,
 }
 
-/// Splits an entry format into literals and the three placeholders. Every
-/// reason it refuses is one that would leave the rule unable to match a line:
-/// a rule that cannot match reports nothing, which reads as a fresh index.
-pub fn parse_index_format(format: &str) -> Result<Vec<FormatSegment>, String> {
+/// An entry format: one `Vec<FormatSegment>` per line of the entry. A single
+/// line is the common case; a multi-line format (a YAML-style entry, or a
+/// link followed by a description line) writes its lines separated by `\n`
+/// (`MILE-152`).
+pub type IndexFormat = Vec<Vec<FormatSegment>>;
+
+/// Splits an entry format into lines of literals and the three placeholders.
+/// Every reason it refuses is one that would leave the rule unable to match a
+/// line: a rule that cannot match reports nothing, which reads as a fresh
+/// index.
+///
+/// A placeholder appears at most once in the whole entry. The entry must name
+/// its record: `{id}`, or `{file}` when no id is written (a link list). A
+/// trailing newline (a YAML block scalar) is ignored; a blank line inside the
+/// format is refused, since index checking skips blank lines.
+pub fn parse_index_format(format: &str) -> Result<IndexFormat, String> {
+    let format = format.strip_suffix('\n').unwrap_or(format);
+    if format.is_empty() {
+        return Err("is empty".to_string());
+    }
+    let mut lines: IndexFormat = Vec::new();
+    for (n, text) in format.split('\n').enumerate() {
+        if text.trim().is_empty() {
+            return Err(format!(
+                "has a blank line {} (blank lines are skipped when an index is read, so an entry cannot contain one)",
+                n + 1
+            ));
+        }
+        lines.push(parse_format_line(text)?);
+    }
+    let all: Vec<&FormatSegment> = lines.iter().flatten().collect();
+    for placeholder in [FormatSegment::Id, FormatSegment::File, FormatSegment::Title] {
+        if all.iter().filter(|s| ***s == placeholder).count() > 1 {
+            return Err(format!("uses {placeholder:?} more than once"));
+        }
+    }
+    if !all.contains(&&FormatSegment::Id) && !all.contains(&&FormatSegment::File) {
+        return Err(
+            "has neither {id} nor {file}, so an entry names no record ({title} alone is ambiguous)"
+                .to_string(),
+        );
+    }
+    Ok(lines)
+}
+
+fn parse_format_line(format: &str) -> Result<Vec<FormatSegment>, String> {
     let mut segments: Vec<FormatSegment> = Vec::new();
     let mut literal = String::new();
     let mut rest = format;
@@ -56,9 +98,6 @@ pub fn parse_index_format(format: &str) -> Result<Vec<FormatSegment>, String> {
         if !literal.is_empty() {
             segments.push(FormatSegment::Literal(std::mem::take(&mut literal)));
         }
-        if segments.contains(&segment) {
-            return Err(format!("uses {segment:?} more than once"));
-        }
         if matches!(
             segments.last(),
             Some(FormatSegment::Id | FormatSegment::File | FormatSegment::Title)
@@ -75,17 +114,21 @@ pub fn parse_index_format(format: &str) -> Result<Vec<FormatSegment>, String> {
     if !literal.is_empty() {
         segments.push(FormatSegment::Literal(literal));
     }
-    if !segments.contains(&FormatSegment::Id) {
-        return Err("has no {id} placeholder, so an entry names no record".to_string());
-    }
     Ok(segments)
 }
 
 #[derive(Default)]
 struct Entry<'a> {
-    id: &'a str,
+    id: Option<&'a str>,
     file: Option<&'a str>,
     title: Option<&'a str>,
+}
+
+impl<'a> Entry<'a> {
+    /// What the entry calls its record, for a message.
+    fn name(&self) -> &'a str {
+        self.id.or(self.file).unwrap_or_default()
+    }
 }
 
 /// One committed line read back through the format, or `None` when it does
@@ -113,7 +156,7 @@ fn match_entry<'a>(line: &'a str, segments: &[FormatSegment]) -> Option<Entry<'a
                     return None;
                 }
                 match placeholder {
-                    FormatSegment::Id => entry.id = value,
+                    FormatSegment::Id => entry.id = Some(value),
                     FormatSegment::File => entry.file = Some(value),
                     _ => entry.title = Some(value),
                 }
@@ -125,13 +168,19 @@ fn match_entry<'a>(line: &'a str, segments: &[FormatSegment]) -> Option<Entry<'a
     (pos == line.len()).then_some(entry)
 }
 
-/// The title the H1 carries after its number and separator
-/// (`# 139 \u{2014} Title` is `Title`). `None` when the record has no H1.
+/// The title the H1 carries without its identifier (`MILE-152`): the leading
+/// number (`# 139 \u{2014} Title`) or the record's own id (`# ADR-139: Title`,
+/// compared by value so padding does not matter) is dropped along with the
+/// separator after it. `None` when the record has no H1.
 fn record_title(record: &Record, full_text: &HashMap<PathBuf, String>) -> Option<String> {
     let text = full_text.get(&record.path)?;
     let h1 = first_h1(text, record.header.region)?;
     let numbered = !h1.first_token.is_empty() && h1.first_token.chars().all(|c| c.is_ascii_digit());
-    let title = if numbered {
+    let own_id = record_id(record).is_some_and(|id| {
+        crate::values::RecordId::new(h1.first_token.trim_end_matches([':', ',', '.']))
+            == crate::values::RecordId::new(&id)
+    });
+    let title = if numbered || own_id {
         h1.text[h1.first_token.len()..].trim_start_matches(|c: char| {
             c.is_whitespace() || matches!(c, '\u{2014}' | '\u{2013}' | '-' | ':')
         })
@@ -204,7 +253,7 @@ pub fn index_freshness(
                     return Outcome::Unreadable;
                 }
             };
-            let Ok(segments) = parse_index_format(&spec.format) else {
+            let Ok(format) = parse_index_format(&spec.format) else {
                 // Refused at config load; reaching here means the caller skipped
                 // that, and a silent pass would hide it.
                 push(
@@ -248,43 +297,103 @@ pub fn index_freshness(
                 _ => (0, lines.len()),
             };
 
-            let expected: Vec<(crate::values::RecordId, &Record)> = records
+            // A file of the type's directory with no identifier (the index
+            // itself, a stray README) is not one of its records.
+            let expected: Vec<&Record> = records
                 .iter()
-                .filter(|r| r.record_type == spec.record_type)
-                .filter_map(|r| record_id(r).map(|id| (crate::values::RecordId::new(&id), r)))
+                .filter(|r| r.record_type == spec.record_type && record_id(r).is_some())
                 .collect();
-            let by_id: HashMap<&crate::values::RecordId, &Record> =
-                expected.iter().map(|(id, r)| (id, *r)).collect();
+            let by_id: HashMap<crate::values::RecordId, &Record> = expected
+                .iter()
+                .filter_map(|r| record_id(r).map(|id| (crate::values::RecordId::new(&id), *r)))
+                .collect();
+            let by_file: HashMap<&str, &Record> = expected
+                .iter()
+                .filter_map(|r| Some((r.path.file_name()?.to_str()?, *r)))
+                .collect();
 
-            let mut listed: HashSet<crate::values::RecordId> = HashSet::new();
-            for (offset, line) in lines[first..last].iter().enumerate() {
-                if line.trim().is_empty() {
-                    continue;
-                }
-                let lineno = first + offset + 1;
-                let Some(entry) = match_entry(line, &segments) else {
+            // Entries are read from the non-blank lines of the region, `K`
+            // lines at a time for a format of `K` lines. A line that does not
+            // start an entry is reported and skipped alone, so one stray line
+            // does not misalign every entry after it.
+            let region: Vec<(usize, &str)> = lines[first..last]
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| !l.trim().is_empty())
+                .map(|(offset, l)| (first + offset + 1, *l))
+                .collect();
+            let width = format.len();
+            let mut listed: HashSet<PathBuf> = HashSet::new();
+            let mut at = 0;
+            while at < region.len() {
+                let (lineno, line) = region[at];
+                let Some(head) = match_entry(line, &format[0]) else {
                     push(
                         Some(lineno),
                         format!(
                             "line does not match the format '{}': {}",
-                            spec.format,
+                            spec.format.trim_end(),
                             line.trim()
+                        ),
+                    );
+                    at += 1;
+                    continue;
+                };
+                let mut entry = head;
+                let mut consumed = 1;
+                let mut complete = true;
+                for (k, segments) in format.iter().enumerate().skip(1) {
+                    let Some((next_no, next)) = region.get(at + k).copied() else {
+                        push(
+                            Some(lineno),
+                            format!(
+                                "the entry starting here is incomplete: the format has {width} lines and the region ends after {k}"
+                            ),
+                        );
+                        complete = false;
+                        break;
+                    };
+                    let Some(part) = match_entry(next, segments) else {
+                        push(
+                            Some(next_no),
+                            format!(
+                                "line {} of the entry starting at line {lineno} does not match the format: {}",
+                                k + 1,
+                                next.trim()
+                            ),
+                        );
+                        complete = false;
+                        break;
+                    };
+                    entry.id = entry.id.or(part.id);
+                    entry.file = entry.file.or(part.file);
+                    entry.title = entry.title.or(part.title);
+                    consumed += 1;
+                }
+                at += consumed;
+                if !complete {
+                    continue;
+                }
+                let found = match (entry.id, entry.file) {
+                    (Some(id), _) => by_id.get(&crate::values::RecordId::new(id)).copied(),
+                    (None, Some(file)) => by_file.get(file).copied(),
+                    (None, None) => None,
+                };
+                let Some(record) = found else {
+                    push(
+                        Some(lineno),
+                        format!(
+                            "entry {} names no {} record",
+                            entry.name(),
+                            spec.record_type
                         ),
                     );
                     continue;
                 };
-                let id = crate::values::RecordId::new(entry.id);
-                let Some(record) = by_id.get(&id) else {
+                if !listed.insert(record.path.clone()) {
                     push(
                         Some(lineno),
-                        format!("entry {} names no {} record", entry.id, spec.record_type),
-                    );
-                    continue;
-                };
-                if !listed.insert(id) {
-                    push(
-                        Some(lineno),
-                        format!("entry {} is listed more than once", entry.id),
+                        format!("entry {} is listed more than once", entry.name()),
                     );
                     continue;
                 }
@@ -294,9 +403,9 @@ pub fn index_freshness(
                         push(
                             Some(lineno),
                             format!(
-                            "entry {} lists the file '{listed_file}', but the record is '{actual}'",
-                            entry.id
-                        ),
+                                "entry {} lists the file '{listed_file}', but the record is '{actual}'",
+                                entry.name()
+                            ),
                         );
                     }
                 }
@@ -305,22 +414,22 @@ pub fn index_freshness(
                 {
                     if listed_title != actual {
                         push(
-                        Some(lineno),
-                        format!(
-                            "entry {} lists the title '{listed_title}', but the record's title is '{actual}'",
-                            entry.id
-                        ),
-                    );
+                            Some(lineno),
+                            format!(
+                                "entry {} lists the title '{listed_title}', but the record's title is '{actual}'",
+                                entry.name()
+                            ),
+                        );
                     }
                 }
             }
-            for (id, record) in &expected {
-                if !listed.contains(id) {
+            for record in &expected {
+                if !listed.contains(&record.path) {
                     push(
                         None,
                         format!(
                             "{} has no entry in '{}'",
-                            record_id(record).unwrap_or_default(),
+                            record_id(record).unwrap_or_else(|| record.path.display().to_string()),
                             spec.path
                         ),
                     );
@@ -339,6 +448,153 @@ pub fn index_freshness(
         },
         findings,
     )
+}
+
+/// The entry lines a committed index of `spec.record_type` should hold, one
+/// formatted entry (its lines joined by `\n`) per record, in record-id order
+/// (`MILE-152`). A record that cannot fill a placeholder the format uses (no
+/// identifier, no H1) is an error naming it, never an entry with a hole.
+pub fn render_index_entries(
+    spec: &IndexSpec,
+    records: &[Record],
+    full_text: &HashMap<PathBuf, String>,
+) -> Result<Vec<String>, String> {
+    let format = parse_index_format(&spec.format)
+        .map_err(|e| format!("index '{}': the format {e}", spec.path))?;
+    // Only records with an identifier are the type's records, as in
+    // `index.freshness`; ordered by id value, so ADR-2 precedes ADR-10.
+    let mut chosen: Vec<(&Record, String)> = records
+        .iter()
+        .filter(|r| r.record_type == spec.record_type)
+        .filter_map(|r| record_id(r).map(|id| (r, id)))
+        .collect();
+    chosen.sort_by_cached_key(|(r, id)| (record_number_key(id), r.path.clone()));
+    let mut out = Vec::new();
+    for (record, id) in chosen {
+        let mut lines = Vec::new();
+        for segments in &format {
+            let mut line = String::new();
+            for segment in segments {
+                match segment {
+                    FormatSegment::Literal(text) => line.push_str(text),
+                    FormatSegment::Id => line.push_str(&id),
+                    FormatSegment::File => line.push_str(
+                        record
+                            .path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .ok_or_else(|| {
+                                format!(
+                                    "index '{}': {} has no file name",
+                                    spec.path,
+                                    record.path.display()
+                                )
+                            })?,
+                    ),
+                    FormatSegment::Title => {
+                        line.push_str(&record_title(record, full_text).ok_or_else(|| {
+                            format!(
+                                "index '{}': {} has no H1 title to put in {{title}}",
+                                spec.path,
+                                record.path.display()
+                            )
+                        })?)
+                    }
+                }
+            }
+            lines.push(line);
+        }
+        out.push(lines.join("\n"));
+    }
+    Ok(out)
+}
+
+/// (prefix, number) so ids order by numeric value within a prefix.
+fn record_number_key(id: &str) -> (String, u64) {
+    match id.rsplit_once('-') {
+        Some((prefix, number)) => (prefix.to_string(), number.parse().unwrap_or(u64::MAX)),
+        None => (id.to_string(), u64::MAX),
+    }
+}
+
+/// The text an index artifact should hold after regeneration: `existing` with
+/// the generated region replaced by `render_index_entries`' output
+/// (`MILE-152`). With markers, only the lines between them change and the
+/// rest of the file is kept byte for byte; without, the whole file is the
+/// entries. A missing artifact is created (with its markers, when declared). A
+/// file that is not text, or a declared marker that is absent, is an error:
+/// regenerating around a region it cannot find would write somewhere the
+/// author did not choose. Deterministic, so running it on its own output
+/// changes nothing.
+pub fn regenerate_index(
+    spec: &IndexSpec,
+    records: &[Record],
+    full_text: &HashMap<PathBuf, String>,
+    existing: &IndexContent,
+) -> Result<String, String> {
+    let entries = render_index_entries(spec, records, full_text)?;
+    let generated: Vec<&str> = entries.iter().flat_map(|e| e.split('\n')).collect();
+    let text = match existing {
+        IndexContent::NotText => {
+            return Err(format!(
+                "index '{}' is not text, so it was not regenerated",
+                spec.path
+            ))
+        }
+        IndexContent::Missing => None,
+        IndexContent::Text(text) => Some(text.as_str()),
+    };
+    let eol = if text.is_some_and(|t| t.contains("\r\n")) {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    match (&spec.begin, &spec.end) {
+        (Some(begin), Some(end)) => {
+            let Some(text) = text else {
+                let mut lines = vec![begin.trim()];
+                lines.extend(&generated);
+                lines.push(end.trim());
+                return Ok(lines.join(eol) + eol);
+            };
+            let lines: Vec<&str> = text.split('\n').collect();
+            let trimmed = |l: &str| l.trim().to_string();
+            let find = |marker: &str, from: usize| {
+                (from..lines.len()).find(|&i| trimmed(lines[i]) == marker.trim())
+            };
+            let Some(b) = find(begin, 0) else {
+                return Err(format!(
+                    "the marker '{}' is missing from '{}', so there is no region to regenerate",
+                    begin.trim(),
+                    spec.path
+                ));
+            };
+            let Some(e) = find(end, b + 1) else {
+                return Err(format!(
+                    "the marker '{}' is missing from '{}' after '{}', so there is no region to regenerate",
+                    end.trim(),
+                    spec.path,
+                    begin.trim()
+                ));
+            };
+            let mut out: Vec<String> = lines[..=b].iter().map(|l| l.to_string()).collect();
+            out.extend(generated.iter().map(|l| {
+                if eol == "\r\n" {
+                    format!("{l}\r")
+                } else {
+                    l.to_string()
+                }
+            }));
+            out.extend(lines[e..].iter().map(|l| l.to_string()));
+            Ok(out.join("\n"))
+        }
+        _ => {
+            if generated.is_empty() {
+                return Ok(String::new());
+            }
+            Ok(generated.join(eol) + eol)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -573,5 +829,203 @@ mod tests {
             "unknown placeholder"
         );
         assert!(parse_index_format("{id} {").is_err(), "unclosed brace");
+    }
+
+    fn run_format(
+        items: &[(u32, &str)],
+        format: &str,
+        body: &str,
+    ) -> (RuleExecution, Vec<Finding>) {
+        let mut sp = spec(false);
+        sp.format = format.to_string();
+        run(items, sp, IndexContent::Text(body.to_string()))
+    }
+
+    const YAML: &str = "- id: {id}\n  file: {file}\n  title: {title}";
+
+    #[test]
+    fn a_multi_line_entry_is_checked_as_one_entry_observed_failing() {
+        let good = "- id: ADR-1\n  file: ADR-1-x.md\n  title: One\n\n- id: ADR-2\n  file: ADR-2-x.md\n  title: Two\n";
+        let (_, findings) = run_format(&[(1, "One"), (2, "Two")], YAML, good);
+        assert!(findings.is_empty(), "{findings:?}");
+
+        let stale = "- id: ADR-1\n  file: ADR-1-x.md\n  title: Old\n- id: ADR-2\n  file: ADR-2-x.md\n  title: Two\n";
+        let (_, findings) = run_format(&[(1, "One"), (2, "Two")], YAML, stale);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Old") && findings[0].message.contains("One"));
+        assert_eq!(findings[0].line, Some(1));
+    }
+
+    #[test]
+    fn a_broken_multi_line_entry_is_reported_at_the_failing_line_and_later_entries_still_read() {
+        let body = "- id: ADR-1\n  filename: ADR-1-x.md\n  title: One\n- id: ADR-2\n  file: ADR-2-x.md\n  title: Two\n";
+        let (_, findings) = run_format(&[(1, "One"), (2, "Two")], YAML, body);
+        let named = msgs(&findings);
+        assert!(
+            named
+                .iter()
+                .any(|m| m.contains("line 2 of the entry starting at line 1")),
+            "{named:?}"
+        );
+        // Line 3 then fails to start an entry; entry 2 is read normally.
+        assert!(
+            named.iter().any(|m| m.contains("ADR-1 has no entry")),
+            "{named:?}"
+        );
+        assert!(!named.iter().any(|m| m.contains("ADR-2")), "{named:?}");
+    }
+
+    #[test]
+    fn a_truncated_multi_line_entry_is_incomplete_not_ignored() {
+        let (_, findings) = run_format(&[(1, "One")], YAML, "- id: ADR-1\n  file: ADR-1-x.md\n");
+        assert!(
+            msgs(&findings).iter().any(|m| m.contains("incomplete")),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_link_list_needs_no_id_token_and_identifies_by_file() {
+        let fmt = "- [{title}]({file})";
+        let (_, findings) = run_format(
+            &[(1, "One"), (2, "Two")],
+            fmt,
+            "- [One](ADR-1-x.md)\n- [Two](ADR-2-x.md)\n",
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+        let (_, findings) = run_format(
+            &[(1, "One"), (2, "Two")],
+            fmt,
+            "- [One](ADR-1-x.md)\n- [Ghost](ADR-9-x.md)\n",
+        );
+        let named = msgs(&findings);
+        assert!(
+            named
+                .iter()
+                .any(|m| m.contains("ADR-9-x.md") && m.contains("names no")),
+            "{named:?}"
+        );
+        assert!(
+            named.iter().any(|m| m.contains("ADR-2 has no entry")),
+            "{named:?}"
+        );
+    }
+
+    #[test]
+    fn a_title_excludes_the_records_own_id_whatever_its_form() {
+        for h1 in [
+            "# 1 \u{2014} One",
+            "# ADR-1: One",
+            "# ADR-0001 \u{2014} One",
+            "# One",
+        ] {
+            let text = format!("---\nStatus: Accepted\n---\n{h1}\n");
+            let r = Record::parse_with_shape(
+                PathBuf::from("docs/adr/ADR-1-x.md"),
+                "adr".to_string(),
+                &text,
+                crate::header::HeaderShape::YamlFrontmatter,
+            );
+            let mut t = HashMap::new();
+            t.insert(r.path.clone(), text);
+            assert_eq!(record_title(&r, &t).as_deref(), Some("One"), "{h1}");
+        }
+    }
+
+    #[test]
+    fn the_format_parser_accepts_multi_line_and_file_only_and_refuses_ambiguity() {
+        assert_eq!(parse_index_format(YAML).unwrap().len(), 3);
+        assert_eq!(
+            parse_index_format("- id: {id}\n").unwrap().len(),
+            1,
+            "block scalar newline"
+        );
+        assert!(parse_index_format("[{title}]({file})").is_ok());
+        assert!(parse_index_format("{title}").is_err());
+        assert!(parse_index_format("{id}\n\n{title}").is_err(), "blank line");
+        assert!(
+            parse_index_format("{id}\n{id}").is_err(),
+            "repeated across lines"
+        );
+        assert!(parse_index_format("").is_err());
+    }
+
+    fn regen(
+        items: &[(u32, &str)],
+        format: &str,
+        markers: bool,
+        existing: IndexContent,
+    ) -> Result<String, String> {
+        let (records, text) = corpus(items);
+        let mut sp = spec(markers);
+        sp.format = format.to_string();
+        regenerate_index(&sp, &records, &text, &existing)
+    }
+
+    #[test]
+    fn regeneration_fills_the_marked_region_keeps_the_rest_and_a_second_run_changes_nothing_observed_failing(
+    ) {
+        let existing = "# Index\n\n<!-- adr:begin -->\n- stale\n<!-- adr:end -->\n\ntrailer\n";
+        let items = [(10, "Ten"), (2, "Two")];
+        let once = regen(
+            &items,
+            FORMAT,
+            true,
+            IndexContent::Text(existing.to_string()),
+        )
+        .unwrap();
+        assert_eq!(
+            once,
+            "# Index\n\n<!-- adr:begin -->\n- [ADR-2](ADR-2-x.md): Two\n- [ADR-10](ADR-10-x.md): Ten\n<!-- adr:end -->\n\ntrailer\n"
+        );
+        let twice = regen(&items, FORMAT, true, IndexContent::Text(once.clone())).unwrap();
+        assert_eq!(once, twice);
+        // And what it writes is what the rule calls fresh.
+        let (_, findings) = run(&items, spec(true), IndexContent::Text(once));
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn regeneration_of_a_whole_file_multi_line_and_missing_artifact() {
+        let items = [(1, "One"), (2, "Two")];
+        let made = regen(&items, YAML, false, IndexContent::Missing).unwrap();
+        assert_eq!(
+            made,
+            "- id: ADR-1\n  file: ADR-1-x.md\n  title: One\n- id: ADR-2\n  file: ADR-2-x.md\n  title: Two\n"
+        );
+        let (_, findings) = run_format(&items, YAML, &made);
+        assert!(findings.is_empty(), "{findings:?}");
+        let with_markers = regen(&items, FORMAT, true, IndexContent::Missing).unwrap();
+        assert!(
+            with_markers.starts_with("<!-- adr:begin -->\n")
+                && with_markers.ends_with("<!-- adr:end -->\n")
+        );
+    }
+
+    #[test]
+    fn regeneration_refuses_rather_than_guess() {
+        let items = [(1, "One")];
+        assert!(regen(
+            &items,
+            FORMAT,
+            true,
+            IndexContent::Text("no markers\n".into())
+        )
+        .is_err());
+        assert!(regen(&items, FORMAT, true, IndexContent::NotText).is_err());
+        // A record with no H1 cannot fill {title}.
+        let r = Record::parse_with_shape(
+            PathBuf::from("docs/adr/ADR-1-x.md"),
+            "adr".to_string(),
+            "---\nStatus: Accepted\n---\nno heading\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+        );
+        let mut t = HashMap::new();
+        t.insert(
+            r.path.clone(),
+            "---\nStatus: Accepted\n---\nno heading\n".to_string(),
+        );
+        let err = regenerate_index(&spec(false), &[r], &t, &IndexContent::Missing).unwrap_err();
+        assert!(err.contains("no H1"), "{err}");
     }
 }

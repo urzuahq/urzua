@@ -2,6 +2,7 @@
 Stable-Id: 01M6J0TMERA6FQ26EE3Q8HWACH
 Status: Accepted
 Date: 2026-11-04
+Accepted-on: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-47
@@ -62,3 +63,4 @@ later is additive, while removing `relation_pairs` would break any config that a
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed. **Why:** `RFC-47` is being built by `MILE-122`, and building part of an RFC needs its own decision record; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04 | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit d9f3bb449. | **structural** |

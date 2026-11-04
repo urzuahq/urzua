@@ -2,6 +2,7 @@
 Status: Accepted
 Embodiment: Implemented
 Date: 2026-09-04
+Accepted-on: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -71,3 +72,4 @@ change that doesn't touch `urzua-core` or `urzua-cli` at all.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Embodiment` recomputed: `Not started` to `Implemented`, by hand with the row `urzua fix` would write. **Why:** the `urzua-io` crate cites this record with an `Implements:` back-pointer, and `embodiment.consistency` now judges a record with no `Realized-by` field that a back-pointer cites (`MILE-149`); the Decision is unchanged. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 8946a0b1d. | **structural** |

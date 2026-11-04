@@ -191,7 +191,7 @@ fn exempt(record: &Record, decl: &SectionsDecl, config: &Config) -> Result<bool,
 
 /// The record's `##` sections with file-relative line numbers, read from
 /// after the header region.
-fn record_sections(record: &Record, text: &str) -> Vec<Section> {
+pub(super) fn record_sections(record: &Record, text: &str) -> Vec<Section> {
     let skip = record.header.region.map_or(0, |(_, end)| end);
     let body: String = text
         .split_inclusive('\n')
@@ -222,7 +222,7 @@ const Y_PHRASES: [&str; 5] = [
 ];
 
 /// The section body's lines with file-relative numbers, outside fenced code.
-fn prose_lines(section: &Section) -> Vec<(usize, &str)> {
+pub(super) fn prose_lines(section: &Section) -> Vec<(usize, &str)> {
     let mut out = Vec::new();
     let mut fence: Option<char> = None;
     for (i, line) in section.body.lines().enumerate() {
@@ -252,8 +252,21 @@ fn starts_list_item(line: &str) -> bool {
         })
 }
 
+fn strip_quote(line: &str) -> &str {
+    let t = line.trim_start();
+    match t.strip_prefix('>') {
+        Some(rest) => rest.strip_prefix(' ').unwrap_or(rest),
+        None => line,
+    }
+}
+
 fn y_statement(section: &Section, marker: Option<&str>) -> Result<(), (usize, String)> {
-    let lines = prose_lines(section);
+    // A blockquoted block keeps its `>` on every line; the marker is not part
+    // of the prose, and left in it splits a phrase that wraps (BUG-181).
+    let lines: Vec<(usize, &str)> = prose_lines(section)
+        .into_iter()
+        .map(|(n, l)| (n, strip_quote(l)))
+        .collect();
     // Where the block's first text sits: after the marker on its own line, or
     // at the first non-blank line when no marker is declared.
     let (start, first_text, marker_line) = match marker {
@@ -550,6 +563,14 @@ mod tests {
     fn a_wrapped_y_statement_is_one_block() {
         let body =
             "TL;DR: In the context of a, facing b,\nwe decided c, to achieve d,\naccepting e.\n";
+        let (_, f) = run(section_shape, Y_DECL, &decision(body));
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn a_phrase_wrapped_across_blockquote_lines_is_found() {
+        let body =
+            "> TL;DR: In the context of a, facing b, we decided c, to\n> achieve d, accepting e.\n";
         let (_, f) = run(section_shape, Y_DECL, &decision(body));
         assert!(f.is_empty(), "{f:?}");
     }

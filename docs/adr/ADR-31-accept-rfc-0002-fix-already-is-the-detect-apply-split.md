@@ -3,6 +3,7 @@ Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-io/src/lib.rs
 Date: 2026-09-06
+Accepted-on: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -126,3 +127,4 @@ surface.
 > |---|---|---|
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-io/src/lib.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 2c15422da. | **structural** |

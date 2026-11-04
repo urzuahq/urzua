@@ -2,6 +2,7 @@
 Status: Accepted
 Embodiment: Verified
 Date: 2026-09-04
+Accepted-on: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -72,3 +73,4 @@ code between crates later is a mechanical but real refactor, not a config change
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Embodiment` recomputed: `Not started` to `Verified`, by hand with the row `urzua fix` would write. **Why:** the `urzua-io` crate cites this record with an `Implements:` back-pointer and `rust/crates/urzua-core/tests/purity.rs` with a `Verifies:` back-pointer, and `embodiment.consistency` now judges a record with no `Realized-by` field that a back-pointer cites (`MILE-149`) and reads a test-tier pointer (`MILE-146`); the Decision is unchanged. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 8946a0b1d. | **structural** |

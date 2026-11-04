@@ -4,6 +4,7 @@ Stable-Id: 01M1Z6WV7FRDW9DP8D07GBQMFF
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/rules/pointer.rs, test:rust/crates/urzua-core/src/rules/pointer.rs
 Date: 2026-09-07
+Accepted-on: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -56,3 +57,4 @@ require any other change.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 0219adc7c. | **structural** |

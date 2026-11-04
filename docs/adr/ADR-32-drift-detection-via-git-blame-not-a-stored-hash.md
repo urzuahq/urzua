@@ -3,6 +3,7 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:d738b6b7c5c7e5e02e4e124786dcf6c07ded2ce065375f2f1218ec5dfae2dea2, code:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df, code:rust/crates/urzua-cli/src/discovery.rs@sha256:4cb230d9ff43d0a7a6b57577ef7a7d4c29c0789c17320603f70436e9dbc4f707, test:rust/crates/urzua-io/src/lib.rs@sha256:d738b6b7c5c7e5e02e4e124786dcf6c07ded2ce065375f2f1218ec5dfae2dea2, test:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df
 Date: 2026-09-07
+Accepted-on: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -103,3 +104,4 @@ exchange for correct history — cheap at this repo's size, revisit only if that
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit bf8a93c5a. | **structural** |

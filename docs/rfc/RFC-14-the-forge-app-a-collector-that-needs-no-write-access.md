@@ -1,6 +1,7 @@
 ---
 Status: Accepted
 Date: 2026-08-18
+Accepted-on: 2026-09-06
 Author: beauwilliams
 Supersedes / Superseded-by: —
 ---

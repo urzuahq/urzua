@@ -25,3 +25,4 @@ A configured pair of date fields is compared; an out-of-order pair is reported; 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented as the opt-in `date.field-order` rule reading `date_order: ["Date <= Accepted-on"]`, reusing `date.field-valid`'s date check and field states so the two never duplicate. This repository declares `Accepted-on` as an optional field of `adr` and `rfc`, validates it and orders it after `Date`; no existing record carries an acceptance date, so the corpus run is disclosed as eligible-and-unexamined and `date_order_integration.rs` supplies the planted violations. `Status` stays `Planned`. **Why:** the Done-when contract; backfilling acceptance dates onto Accepted records is a maintainer decision. | **substantive** |

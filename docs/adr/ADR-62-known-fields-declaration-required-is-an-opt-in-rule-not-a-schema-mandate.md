@@ -2,6 +2,7 @@
 Stable-Id: 01M363T8C5DS4NNVS66QB6CSFJ
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-09-23
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-43
@@ -52,3 +53,4 @@ verified by a real-corpus `check` diff before and after, not assumed safe.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Decided. **Why:** `RFC-43` left two open questions blocking implementation; both resolved toward dogfooding the rule immediately rather than shipping it inert. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 50cd47dea. | **structural** |

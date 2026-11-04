@@ -8,6 +8,7 @@ pub mod explain;
 pub mod export;
 pub mod fix;
 pub mod graph;
+pub mod index;
 pub mod init;
 pub mod migrate;
 pub mod new;

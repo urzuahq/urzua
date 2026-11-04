@@ -4,6 +4,7 @@ Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-10
+Accepted-on: 2026-09-10
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: ADR-29
@@ -177,3 +178,4 @@ nobody reads.
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml` -- stated `Drift detected` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | `Embodiment` restored to `Drift detected`. **Why:** the previous row recomputed `Implemented` in a shallow checkout, where git history is missing and drift cannot be seen. In a full clone `knope.toml` (2026-09-16) and `.github/workflows/prepare-release.yml` (2026-09-19) are newer than this record's `Realized-by` line, so the evidence did change after it was last verified, and `embodiment.consistency` reports the mismatch. Found when `MILE-145` made warnings fail the build. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 3b0fe6682. | **structural** |
