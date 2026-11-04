@@ -1,0 +1,21 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted, Superseded]
+      success: [Accepted]
+      failure: [Superseded]
+      initial: [Proposed]
+      transitions:
+        Proposed: [Accepted]
+        Accepted: [Superseded]
+rules:
+  header.required-fields: error
+  status.undeclared-value: error
+  status.transition-allowed: error
+  status.unreachable-state: warn

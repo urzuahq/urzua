@@ -1,0 +1,8 @@
+id: a-declared-status-no-edge-reaches-is-reported
+corpus: corpus-j
+invocation: [--config, .urzua/unreachable.yaml, check]
+expect_exit: 1
+expect_findings:
+  - rule: status.unreachable-state
+    severity: warning
+    message_contains: "'Lost'"

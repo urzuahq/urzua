@@ -126,17 +126,11 @@ fn without_a_declaration_the_built_in_vocabulary_applies() {
 fn stating_the_default_vocabulary_explicitly_changes_nothing() {
     let default_decl = "embodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\n";
     let (a, b) = (repo("implicit", ""), repo("explicit", default_decl));
-    let ra = run_urzua(&a, &["check"]);
-    let rb = run_urzua(&b, &["check"]);
-    let strip = |out: &std::process::Output, dir: &Path| {
-        String::from_utf8_lossy(&out.stdout).replace(dir.to_str().unwrap(), "<dir>")
+    let text = |dir: &Path| {
+        String::from_utf8_lossy(&run_urzua(dir, &["check"]).stdout)
+            .replace(dir.to_str().unwrap(), "<dir>")
     };
-    let (ta, tb) = (strip(&ra, &a), strip(&rb, &b));
-    let norm = |s: String| {
-        s.replace("urzua-vocab-implicit", "x")
-            .replace("urzua-vocab-explicit", "x")
-    };
-    assert_eq!(norm(ta), norm(tb));
+    assert_eq!(text(&a), text(&b));
     std::fs::remove_dir_all(&a).ok();
     std::fs::remove_dir_all(&b).ok();
 }
@@ -191,9 +185,14 @@ fn a_built_claiming_declared_state_needs_an_accepted_status() {
 #[test]
 fn a_bad_declaration_is_refused_at_load() {
     for (name, decl, needle) in [
-        ("dup", "embodiment:\n  drift: A\n  tiers: [{state: A, evidence: test}]\n  none: B\n", "twice"),
-        ("ev", "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test}, {state: C, evidence: test}]\n  none: D\n", "evidence"),
+        ("dup", "embodiment:\n  drift: A\n  tiers: [{state: A, evidence: test, claims_built: true}]\n  none: B\n", "twice"),
+        ("ev", "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test, claims_built: true}, {state: C, evidence: test}]\n  none: D\n", "evidence"),
         ("empty", "embodiment:\n  drift: A\n  tiers: []\n  none: D\n", "tiers"),
+        (
+            "claims",
+            "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test}]\n  none: D\n",
+            "claims_built",
+        ),
     ] {
         let dir = repo(name, decl);
         let out = run_urzua(&dir, &["check"]);
@@ -219,5 +218,165 @@ fn a_sticky_state_naming_a_declared_state_is_refused() {
     .unwrap();
     let out = run_urzua(&dir, &["check"]);
     assert!(!out.status.success());
+    let text =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
+    assert!(
+        text.contains("sticky_states") && text.contains("'Proven'"),
+        "{text}"
+    );
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A repository of `adr` records `(number, stated state, Realized-by)` under
+/// `vocabulary`, with `rules` appended to the rule table.
+fn custom_repo(
+    name: &str,
+    vocabulary: &str,
+    rules: &str,
+    records: &[(u32, &str, &str)],
+) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("urzua-vocab-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["docs/adr", "docs/spec", "src", "tests", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\n{vocabulary}rules:\n  embodiment.consistency: error\n{rules}\
+             record_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    \
+             required_fields: [\"Status\", \"Embodiment\"]\n    known_fields: [\"Realized-by\"]\n    \
+             header_shape: \"yaml-frontmatter\"\n    \
+             statuses:\n      values: [Planned, Done]\n      success: [Done]\n{DELIVERY_DECL}"
+        ),
+    )
+    .unwrap();
+    for (n, state, locator) in records {
+        let locator = if locator.is_empty() {
+            String::new()
+        } else {
+            format!("Realized-by: {locator}\n")
+        };
+        std::fs::write(
+            dir.join(format!("docs/adr/ADR-{n}-x.md")),
+            format!("---\nStatus: Planned\nEmbodiment: {state}\n{locator}---\n# {n} — X\n"),
+        )
+        .unwrap();
+    }
+    std::fs::write(dir.join("docs/spec/s.md"), "spec\n").unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    std::fs::write(dir.join("tests/a.rs"), "fn t() {}\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+/// A delivery declaration written in the renamed vocabulary.
+const DELIVERY_DECL: &str = "      delivery:\n        delivered_tiers: [Built, Proven]\n        unevidenced_tiers: [Untouched]\n        not_done: [Planned]\n        set_status: Done\n";
+
+fn findings_of<'a>(report: &'a serde_json::Value, rule: &str) -> Vec<&'a serde_json::Value> {
+    report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == rule)
+        .collect()
+}
+
+#[test]
+fn delivery_agreement_reads_the_renamed_tiers_end_to_end() {
+    // Planned with code evidence computes to `Built`, a delivered tier.
+    let dir = custom_repo(
+        "delivery",
+        VOCABULARY,
+        "  status.delivery-agreement: error\n",
+        &[(1, "Built", "code:src/a.rs")],
+    );
+    let report = parsed(&run_urzua(&dir, &["check"]));
+    let found = findings_of(&report, "status.delivery-agreement");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(
+        found[0]["message"].as_str().unwrap().contains("Built"),
+        "{report}"
+    );
+    // `fix` writes the declared `set_status`.
+    let fixed = parsed(&run_urzua(&dir, &["fix"]));
+    let repairs = fixed["repairs"].as_array().unwrap();
+    assert!(
+        repairs.iter().any(|r| r["computed_value"] == "Done"),
+        "{fixed}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_delivery_tier_in_the_built_in_vocabulary_is_refused_under_a_renamed_one() {
+    let dir = custom_repo(
+        "delivery-bad",
+        VOCABULARY,
+        "",
+        &[(1, "Built", "code:src/a.rs")],
+    );
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace(
+            "delivered_tiers: [Built, Proven]",
+            "delivered_tiers: [Implemented]",
+        ),
+    )
+    .unwrap();
+    let out = run_urzua(&dir, &["check"]);
+    assert!(!out.status.success());
+    let text =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
+    assert!(
+        text.contains("Implemented") && text.contains("delivered_tiers"),
+        "{text}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_declared_tier_order_decides_which_evidence_wins() {
+    // Code outranks test here, the reverse of the built-in order.
+    let reordered = "embodiment:\n  drift: Stale\n  tiers:\n    - {state: Built, evidence: code, claims_built: true}\n    - {state: Proven, evidence: test, claims_built: true}\n    - {state: Described, evidence: spec}\n  none: Untouched\n";
+    let both = "code:src/a.rs, test:tests/a.rs";
+    let dir = custom_repo(
+        "order",
+        reordered,
+        "",
+        &[(1, "Built", both), (2, "Proven", both)],
+    );
+    let found = consistency(&parsed(&run_urzua(&dir, &["check"])));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].0.contains("ADR-2") && found[0].1.contains("'Built'"),
+        "{found:?}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_declaration_missing_a_key_is_refused_not_defaulted() {
+    for (name, decl, needle) in [
+        ("nonekey", "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test, claims_built: true}]\n", "none"),
+        ("driftkey", "embodiment:\n  tiers: [{state: B, evidence: test, claims_built: true}]\n  none: D\n", "drift"),
+        ("tierskey", "embodiment:\n  drift: A\n  none: D\n", "tiers"),
+        ("stateless", "embodiment:\n  drift: A\n  tiers: [{evidence: test, claims_built: true}]\n  none: D\n", "state"),
+        ("evidencekey", "embodiment:\n  drift: A\n  tiers: [{state: B, claims_built: true}]\n  none: D\n", "evidence"),
+        ("novalue", "embodiment:\n", "embodiment"),
+        ("unknown", "embodiment:\n  drift: A\n  colour: red\n  tiers: [{state: B, evidence: test, claims_built: true}]\n  none: D\n", "colour"),
+    ] {
+        let dir = repo(name, decl);
+        let out = run_urzua(&dir, &["check"]);
+        assert!(!out.status.success(), "{name}: loaded");
+        let text = String::from_utf8_lossy(&out.stdout).to_string()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(text.contains(needle), "{name}: {text}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
