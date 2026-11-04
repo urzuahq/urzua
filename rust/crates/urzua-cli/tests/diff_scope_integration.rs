@@ -627,3 +627,184 @@ fn a_path_argument_that_excludes_the_changed_records_says_so() {
     assert_eq!(code, Some(0), "{report}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+const BARE_CONFIG: &str = "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n\x20   known_fields: [\"Status\"]\n    pointer_fields: []\n    narrative_fields: []\n";
+
+#[test]
+fn an_empty_diff_with_no_rule_enabled_is_not_run_like_a_full_run() {
+    let dir = empty_repo("no-rules", BARE_CONFIG);
+    adr(&dir, "ADR-1-a.md", "Accepted", &[]);
+    tag_base(&dir);
+
+    let (full_code, full) = check(&dir, &[]);
+    assert_eq!(full["status"], "not-run", "{full}");
+    assert_eq!(full_code, Some(2), "{full}");
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(report["status"], "not-run", "{report}");
+    assert_eq!(code, Some(2), "{report}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+const WAIVER_CONFIG: &str = "schema_version: 2
+rules: {pointer.resolution: error}
+
+record_types:
+  adr:
+    dir: \"docs/adr\"
+    required_fields: []
+\x20   known_fields: [\"Status\", \"Implements\"]
+    pointer_fields: [\"Implements\"]
+    narrative_fields: []
+  waiver:
+    dir: \"docs/waiver\"
+    required_fields: []
+    pointer_fields: []
+    narrative_fields: []
+";
+
+fn waiver_repo(name: &str) -> PathBuf {
+    let dir = empty_repo(name, WAIVER_CONFIG);
+    std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
+    adr(
+        &dir,
+        "ADR-1-dangling.md",
+        "Accepted",
+        &[("Implements", "RFC-9999")],
+    );
+    write_waiver(&dir, "docs/adr/ADR-1-dangling.md");
+    tag_base(&dir);
+    dir
+}
+
+fn write_waiver(dir: &Path, scope: &str) {
+    std::fs::write(
+        dir.join("docs/waiver/0001-w.md"),
+        format!(
+            "# 0001 — Waive it\n\n> Rule: pointer.resolution\n> Scope: {scope}\n> Reason: tracked elsewhere\n"
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_deleted_waiver_reports_the_finding_it_stopped_waiving() {
+    let dir = waiver_repo("waiver-deleted");
+    git(&dir, &["rm", "-q", "docs/waiver/0001-w.md"]);
+    let (_, full) = check(&dir, &[]);
+    assert_eq!(full["blocking"], true, "precondition: {full}");
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(code, Some(1), "{report}");
+    assert!(
+        finding_files(&report).iter().any(|f| f.contains("ADR-1")),
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_waiver_whose_scope_changed_reports_the_finding_it_stopped_waiving() {
+    let dir = waiver_repo("waiver-rescoped");
+    write_waiver(&dir, "docs/adr/ADR-9-elsewhere.md");
+    let (_, full) = check(&dir, &[]);
+    assert_eq!(full["blocking"], true, "precondition: {full}");
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(code, Some(1), "{report}");
+    assert!(
+        finding_files(&report).iter().any(|f| f.contains("ADR-1")),
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_comma_joined_pointer_value_traces_each_reference() {
+    let dir = empty_repo("comma-list", RICH_CONFIG);
+    adr(&dir, "ADR-1-a.md", "Accepted", &[]);
+    adr(&dir, "ADR-3-b.md", "Accepted", &[]);
+    adr(
+        &dir,
+        "ADR-5-ref.md",
+        "Accepted",
+        &[("Implements", "ADR-1,ADR-3")],
+    );
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/ADR-3-b.md"]);
+
+    assert_full_and_diff_agree(&dir, "pointer.resolution", "ADR-5-ref.md");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_changed_file_outside_its_declared_dir_keeps_its_finding() {
+    let config = RICH_CONFIG.replace(
+        "rules:\n",
+        "rules:\n  type.record-outside-declared-dir: warn\n",
+    );
+    let dir = empty_repo("outside-dir", &config);
+    adr(&dir, "ADR-1-a.md", "Accepted", &[]);
+    tag_base(&dir);
+    std::fs::create_dir_all(dir.join("docs/adr/sub")).unwrap();
+    std::fs::write(
+        dir.join("docs/adr/sub/ADR-2-nested.md"),
+        "# nested\n\n> Status: Accepted\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+
+    let (_, full) = check(&dir, &[]);
+    assert!(
+        rule_files(&full, "type.record-outside-declared-dir")
+            .iter()
+            .any(|f| f.ends_with("ADR-2-nested.md")),
+        "precondition: {full}"
+    );
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert!(
+        rule_files(&report, "type.record-outside-declared-dir")
+            .iter()
+            .any(|f| f.ends_with("ADR-2-nested.md")),
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn retargeting_a_symlinked_config_puts_the_whole_corpus_in_scope() {
+    let dir = empty_repo("symlink-config", CONFIG);
+    std::fs::remove_file(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::create_dir_all(dir.join("cfg")).unwrap();
+    std::fs::write(dir.join("cfg/a.yaml"), CONFIG).unwrap();
+    std::fs::write(dir.join("cfg/b.yaml"), format!("{CONFIG}\n# b\n")).unwrap();
+    std::os::unix::fs::symlink("../cfg/a.yaml", dir.join(".urzua/config.yaml")).unwrap();
+    write_adr(&dir, "0001-target", "Accepted", None);
+    write_adr(&dir, "0003-dangling", "Accepted", Some("RFC-9999"));
+    tag_base(&dir);
+    std::fs::remove_file(dir.join(".urzua/config.yaml")).unwrap();
+    std::os::unix::fs::symlink("../cfg/b.yaml", dir.join(".urzua/config.yaml")).unwrap();
+
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert!(
+        report["scope"]["whole_corpus_reason"].is_string(),
+        "{report}"
+    );
+    assert_eq!(code, Some(1), "{report}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_unstaged_deletion_cannot_be_loaded_so_the_run_could_not_run() {
+    // Existing behaviour (BUG-82): a tracked record missing from disk and not
+    // staged for deletion is rejected by load_records, diff-scoped or not.
+    let dir = empty_repo("unstaged-delete", RICH_CONFIG);
+    adr(&dir, "ADR-1-target.md", "Accepted", &[]);
+    adr(&dir, "ADR-2-ref.md", "Accepted", &[("Implements", "ADR-1")]);
+    tag_base(&dir);
+    std::fs::remove_file(dir.join("docs/adr/ADR-1-target.md")).unwrap();
+
+    let (full_code, _) = check(&dir, &[]);
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(full_code, Some(2));
+    assert_eq!(code, Some(2), "{report}");
+    std::fs::remove_dir_all(&dir).ok();
+}

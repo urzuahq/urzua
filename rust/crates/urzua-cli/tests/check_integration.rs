@@ -428,6 +428,63 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `BUG-42`: `audit` called the cross-record rules directly, so a repository
+/// declaring one `off` or `warn` was still blocked by it at the hardcoded
+/// level. The gate belongs to the rule registry, so `audit` must honour the
+/// declared level exactly as `check` does.
+#[test]
+fn audit_honours_the_declared_level_of_a_rule_instead_of_running_it_unconditionally() {
+    let violation = "# 0001 — X\n\n> Status: Accepted\n> Supersedes / Superseded-by: ADR-0002\n";
+    let target = "# 0002 — Y\n\n> Status: Superseded\n";
+    let run = |name: &str, level: &str| {
+        let dir = fixture_repo(name);
+        std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            format!("schema_version: 2\nrules: {{pointer.resolution: warn, relation.supersession-reciprocity: {level}}}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n"),
+        )
+        .unwrap();
+        std::fs::write(dir.join("docs/adr/ADR-1-x.md"), violation).unwrap();
+        std::fs::write(dir.join("docs/adr/ADR-2-y.md"), target).unwrap();
+        commit_all(&dir);
+        let output = run_urzua(&dir, &["audit"]);
+        std::fs::remove_dir_all(&dir).ok();
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        )
+    };
+
+    let (code, stdout) = run("audit-gate-off", "off");
+    assert_eq!(
+        code,
+        Some(0),
+        "a rule declared off must not block: {stdout}"
+    );
+    let has_finding = |stdout: &str| {
+        assert_valid_json_object(stdout)["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"] == "relation.supersession-reciprocity")
+    };
+    assert!(
+        !has_finding(&stdout),
+        "a rule declared off reports nothing: {stdout}"
+    );
+
+    let (code, stdout) = run("audit-gate-warn", "warn");
+    assert_eq!(
+        code,
+        Some(0),
+        "a rule declared warn must not block: {stdout}"
+    );
+    assert!(
+        has_finding(&stdout),
+        "a rule declared warn still reports: {stdout}"
+    );
+}
+
 /// A found-in-review bug: `audit` used to build its record index with the
 /// lossy `build_normalized_index` and never ran `identity.collision`, so two
 /// records sharing an identifier were silently resolved against whichever
@@ -2997,6 +3054,10 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
         ("identity.collision", "reads the filename identifier only"),
         ("filename.title-consistency", "reads filename and H1 only"),
         ("revision-log.change-class-required", "reads body text only"),
+        (
+            "citation.resolution",
+            "reads body text only; a header-less record is read whole",
+        ),
         // Claim-level: judges claim files, not records.
         (
             "claim.status-agreement",

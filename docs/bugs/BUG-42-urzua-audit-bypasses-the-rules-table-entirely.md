@@ -2,7 +2,7 @@
 Stable-Id: 01M2VGDW7MRRMPV29GYHQDPX2M
 Status: Fixed
 Found-in: 'A code review of the unreleased diff since v0.3.0, run before cutting 0.4.0 -- no test covers it and `cargo test` passes on `main`'
-Regression-test: 'rust/crates/urzua-cli/tests/check_integration.rs -- pending; verified live instead: with `pointer.resolution: off`, `audit` reports `status: not-enabled, records_examined: 0`'
+Regression-test: 'rust/crates/urzua-cli/tests/check_integration.rs::audit_honours_the_declared_level_of_a_rule_instead_of_running_it_unconditionally -- a rule declared off or warn must not block audit; observed failing with the gate removed from audit'
 ---
 # 42 — `urzua audit` bypasses the rules table entirely
 
@@ -40,3 +40,4 @@ not a second copy of the check.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** found by a review of the unreleased diff before cutting 0.4.0. `MILE-80` made every rule opt-in in `check` and left `audit` running two rules unconditionally at their hardcoded severity, so a repository cannot decline them by any configuration. | **substantive** |
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** `gated()` moved out of `check.rs` into `gate.rs`, and `audit` now routes both its rules through it. Shared rather than copied, because a third command reading rules directly would reintroduce this. Verified live: with `pointer.resolution: off`, `audit` reports `status: not-enabled, records_examined: 0` where it previously ran the rule at its hardcoded severity. | **substantive** |
+> | 2026-11-04 | `Regression-test` names the test that now exists. **Why:** the field said the test was missing; it was written and observed failing with `audit`'s gating removed, then passing once restored. | **substantive** |

@@ -649,6 +649,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
             || rules::config_known_fields_declaration_missing(&config, &config_path),
         ),
+        crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
+            rules::citation_resolution(&records, &config, &full_text, &record_index)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
@@ -700,6 +703,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         findings.retain(|f| {
             f.file == config_path.as_path()
                 || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
+                // A file below a declared dir that no type owns is not a loaded
+                // record, so it is never in the examined set; the rule judges
+                // it by path, so a changed one keeps its finding.
+                || (f.rule == rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR
+                    && changed.as_ref().is_some_and(|c| c.changed.contains(&f.file)))
                 || in_scope.contains(f.file.as_path())
         });
     }
@@ -753,7 +761,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     }
     let status = if blocking {
         ReportStatus::FindingsPresent
-    } else if empty_diff {
+    } else if empty_diff && crate::gate::any_rule_looked(&rules_executed) {
         if active_findings().count() == 0 {
             ReportStatus::Ok
         } else {

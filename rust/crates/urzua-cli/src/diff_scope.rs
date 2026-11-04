@@ -83,6 +83,53 @@ fn deleted_record_facts(
     Ok((ids, locators))
 }
 
+/// The `Scope` of every waiver a change touched, as it was and as it is: a
+/// changed or deleted waiver can un-waive a finding on a record that did not
+/// change, so those records are dependents. `"*"` stands for every record.
+fn touched_waiver_scopes(
+    repo_root: &Path,
+    config: &Config,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+) -> Result<Vec<String>, String> {
+    let mut waivers = urzua_core::waiver::load_waivers(
+        &records
+            .iter()
+            .filter(|r| changes.changed.contains(&r.path))
+            .cloned()
+            .collect::<Vec<_>>(),
+    );
+    if let Some(type_config) = config.record_types.get("waiver") {
+        for path in &changes.changed {
+            let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !urzua_core::record::is_governed_record_filename(file_name)
+                || path.parent() != Some(Path::new(&type_config.dir))
+            {
+                continue;
+            }
+            // An added waiver has no old version: the read fails and there is
+            // nothing to un-waive.
+            let Ok(content) = urzua_io::read_at_commit(repo_root, &changes.merge_base, path) else {
+                continue;
+            };
+            let record = Record::parse_with_shape_and_prefix(
+                path.clone(),
+                "waiver".to_string(),
+                &content,
+                type_config.header_shape,
+                type_config
+                    .prefix
+                    .clone()
+                    .unwrap_or_else(|| "WAIVER".to_string()),
+            );
+            waivers.extend(urzua_core::waiver::load_waivers(&[record]));
+        }
+    }
+    Ok(waivers.into_iter().map(|w| w.scope).collect())
+}
+
 pub(crate) fn examine(
     repo_root: &Path,
     config: &Config,
@@ -92,29 +139,29 @@ pub(crate) fn examine(
 ) -> Result<DiffExamination, String> {
     let changed_paths = display(&changes.changed);
 
-    let config_rel = config_path
-        .canonicalize()
-        .ok()
-        .and_then(|c| {
-            repo_root
-                .canonicalize()
-                .ok()
-                .and_then(|r| c.strip_prefix(r).ok().map(Path::to_path_buf))
-        })
-        .or_else(|| {
-            config_path
-                .strip_prefix(repo_root)
-                .ok()
-                .map(Path::to_path_buf)
-        });
-    if let Some(rel) = config_rel.filter(|rel| changes.changed.contains(rel)) {
+    // Both spellings: a config that is a tracked symlink changes at the link's
+    // own path when retargeted, while its canonical path is the unchanged
+    // target; editing the target changes the canonical path instead.
+    let mut config_rels: Vec<PathBuf> = Vec::new();
+    if let Ok(rel) = config_path.strip_prefix(repo_root) {
+        config_rels.push(rel.to_path_buf());
+    }
+    if let (Ok(c), Ok(r)) = (config_path.canonicalize(), repo_root.canonicalize()) {
+        if let Ok(rel) = c.strip_prefix(r) {
+            config_rels.push(rel.to_path_buf());
+        }
+    }
+    if let Some(rel) = config_rels
+        .into_iter()
+        .find(|rel| changes.changed.contains(rel))
+    {
         return Ok(DiffExamination {
             examined: records.iter().map(|r| r.path.clone()).collect(),
             scope: DiffScope {
                 changed_paths,
                 dependents: Vec::new(),
                 whole_corpus_reason: Some(format!(
-                    "the configuration file {} changed, so every record is examined",
+                    "the configuration file {} changed, so every record is in scope before path arguments narrow it",
                     rel.display()
                 )),
             },
@@ -144,11 +191,18 @@ pub(crate) fn examine(
         changed_locators.extend(cited_locators(config, record));
     }
 
+    let waiver_scopes: HashSet<String> =
+        touched_waiver_scopes(repo_root, config, records, changes)?
+            .into_iter()
+            .collect();
+
     let mut dependents: HashSet<PathBuf> = HashSet::new();
     for record in records {
         if changed_records.contains(record.path.as_path()) {
             continue;
         }
+        let waiver_touched = waiver_scopes.contains("*")
+            || waiver_scopes.contains(record.path.to_string_lossy().as_ref());
         let names_a_change = rules::header_references(record)
             .iter()
             .any(|r| ids.contains(r.as_str()));
@@ -168,7 +222,8 @@ pub(crate) fn examine(
         let shares_a_locator = locators
             .iter()
             .any(|l| !l.is_empty() && changed_locators.contains(l));
-        if names_a_change || shares_an_id || evidence_changed || shares_a_locator {
+        if waiver_touched || names_a_change || shares_an_id || evidence_changed || shares_a_locator
+        {
             dependents.insert(record.path.clone());
         }
     }

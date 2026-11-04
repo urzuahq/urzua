@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -96,19 +96,37 @@ Two details carry weight:
     adr:
       dir: doc/adr
       identity: {from: filename, pattern: '^(?P<number>\d+)-(?P<slug>.+)$'}
-      fields:   {from: prefix-lines}      # or yaml-frontmatter
+      fields:   {from: prefix-lines}      # or yaml-frontmatter, blockquote, bold-list, none
       sections: {from: headings, depth: 2, items: true}
   ```
 
-  `identity.pattern` is a non-blank string. `sections.depth` counts heading levels from `##`
+  `identity.pattern` is a regular expression over the file name without `.md`; it must compile and
+  must capture the record number as `(?P<number>\d+)`. `sections.depth` counts heading levels from `##`
   (1 is `##` only, 2 adds `###`, up to 5) and defaults to 1; `items` defaults to `false`. An unknown
-  `from`, an unknown key, an out-of-range `depth`, a non-boolean `items`, a blank `pattern` or a key
-  present with no value is a load-time error naming the record type and key. The declaration is
-  parsed and validated and available through `config::parse_with_document_models`, but **no rule
-  reads it yet**, so declaring it changes no finding. `identity.pattern` is not yet compiled, so a
-  pattern that is not a valid regular expression is not yet rejected. `section::parse_sections`
-  (`section.rs`) splits a record body into its `##` sections with line numbers; it is not yet driven
-  by `sections.depth`.
+  `from`, an unknown key, an out-of-range `depth`, a non-boolean `items`, a blank or non-compiling
+  `pattern` or a key present with no value is a load-time error naming the record type and key.
+
+  **`identity` and `fields` drive record loading; `sections` is still read by no rule.** A type that
+  declares neither loads exactly as it did before the declaration existed.
+
+  - **`identity`.** The pattern, not the `TYPE-N-slug.md` convention, decides a record's identifier:
+    `{prefix}-{number}`, with the type's `prefix` and the `number` capture as written, so
+    `ADR-0001-slug.md` is `ADR-0001` and compares equal to `ADR-1`. The pattern must capture both
+    `(?P<prefix>...)` and `(?P<number>...)`: a pattern without a `prefix` group is a load-time error
+    naming the record type, because a bare `0001-slug.md` gets no identity (`RFC-46` was rejected; such
+    a corpus is renamed to `TYPE-NNNN-slug.md`, and `MILE-120` reports the mismatch). A file name the
+    pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
+    The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
+    `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
+    finding.
+  - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`,
+    `blockquote`, `bold-list` and `none` are the existing shapes, and `prefix-lines` reads bare
+    `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
+    letters, digits, `-` or `_`; the colon is followed by a space or ends the line). `none` gates as
+    `header_shape: none` does (`RecordTypeConfig::has_no_header`).
+
+  `section::parse_sections` (`section.rs`) splits a record body into its `##` sections with line
+  numbers; it is not yet driven by `sections.depth`.
 
 ## Scope declaration
 
@@ -242,6 +260,7 @@ indistinguishable in the report from one that ran clean:
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command reads `.urzua/config.yaml` on every invocation, and this spec was revised again today to document the `rules` table `MILE-80` shipped. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 > | 2026-09-18 | Criterion 3 corrected. **Why:** it still read *"not yet true today, since no per-rule enable/disable or severity config exists yet"* on the day after `MILE-80` shipped exactly that — and this record was marked `Accepted`/`Verified` in the same change, which is `BUG-26`'s own defect committed while fixing `BUG-26`. Caught by review. The `doctor` half is genuinely still unbuilt and now says so rather than being swept up with the half that shipped. | **substantive** |
 > | 2026-11-03 | Bumped to `0.5`. Documented the per-type document model declaration (`identity`, `fields`, `sections`) as parsed and validated but read by no rule yet. **Why:** first slice of `MILE-98` (`RFC-33` layer 1): a record type can now declare how its parts are found, and a malformed declaration fails the load instead of being ignored. | **substantive** |
-> | 2026-11-04 | Bumped to `0.6`. Documented the top-level `relation_pairs` declaration and the narrowest reading of each question `RFC-47` leaves open (global field names, no combined key, no `advisory`, fixed role set unchanged). **Why:** `MILE-122` -- reciprocity was hardcoded to one combined key, so a pair a repository declares itself, including across record types, could not be checked. | **substantive** |
+> | 2026-11-04 | Bumped to `0.7`. Documented the top-level `relation_pairs` declaration and the narrowest reading of each question `RFC-47` leaves open (global field names, no combined key, no `advisory`, fixed role set unchanged). **Why:** `MILE-122` -- reciprocity was hardcoded to one combined key, so a pair a repository declares itself, including across record types, could not be checked. | **substantive** |
+> | 2026-11-04 | Bumped to `0.6`. The per-type `identity` and `fields` declarations now drive record loading: the identity pattern is compiled at load and decides a record's identifier and H1 title form (it must capture the type prefix), and `fields.from` decides how the header is read, with `prefix-lines`, `blockquote`, `bold-list` and `none` added beside `yaml-frontmatter`. **Why:** second slice of `MILE-98` (`RFC-33` layer 1, `RFC-44`): a declaration that no code reads is not the founding claim. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

@@ -17,6 +17,7 @@ use std::path::PathBuf;
 
 mod boundary;
 mod catalog;
+mod citation;
 mod claim;
 mod declaration;
 mod embodiment;
@@ -33,6 +34,7 @@ mod type_scope;
 
 pub use boundary::*;
 pub use catalog::*;
+pub use citation::*;
 pub use claim::*;
 pub use declaration::*;
 pub use embodiment::*;

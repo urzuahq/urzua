@@ -240,7 +240,18 @@ pub(super) fn fields_with_capability(
 /// `NNNN-slug.md` shape (BUG-9): it was never a real shape any adopter's own
 /// corpus would independently use, only this repo's own pre-ADR-36 history,
 /// and that history no longer exists in the corpus either.
+///
+/// A type that declares an `identity` pattern (RFC-33, MILE-98) decides the
+/// number instead: `{type_prefix}-{number}` from the pattern's `number`
+/// capture, so a bare `0001-slug.md` is `ADR-0001` and a name the pattern
+/// does not match has no identifier.
 pub fn record_id(record: &Record) -> Option<String> {
+    if let Some(declared) = &record.identity {
+        return declared
+            .number
+            .as_ref()
+            .map(|n| format!("{}-{n}", record.type_prefix));
+    }
     let stem = record.path.file_stem()?.to_str()?;
     let type_prefix = record.type_prefix.clone();
 
@@ -319,7 +330,9 @@ pub fn header_references(record: &Record) -> Vec<crate::values::RecordId> {
         .header
         .fields
         .iter()
-        .flat_map(|f| scan_references(&f.value))
+        // Split on commas first: `ADR-1,ADR-3` is two references, and as one
+        // token neither is recognised.
+        .flat_map(|f| f.value.split(',').flat_map(scan_references))
         .map(|r| crate::values::RecordId::new(&r))
         .collect()
 }
@@ -450,4 +463,77 @@ pub(super) fn declared_cross_record_value<'a>(
         return Err(Outcome::Absent);
     }
     declared_value(record, key)
+}
+
+/// Shared by `boundary.published-path-reference` and `citation.resolution` so
+/// the two rules agree on what counts as a cited identifier.
+/// The record-identifier prefixes this repository's configuration declares,
+/// longest first so `DOC-ADR` is matched before `ADR`. The type's effective
+/// prefix, the same one `urzua new` mints and `check` resolves with.
+pub(super) fn declared_prefixes(config: &Config) -> Vec<String> {
+    let mut prefixes: Vec<String> = config
+        .record_types
+        .iter()
+        .map(|(name, rt)| {
+            rt.prefix
+                .clone()
+                .unwrap_or_else(|| name.to_ascii_uppercase())
+        })
+        .collect();
+    prefixes.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    prefixes.dedup();
+    prefixes
+}
+
+/// Every identifier on `line` that is a declared prefix, a hyphen and a
+/// number, standing on its own: not the tail of a longer word (`XADR-26`), a
+/// URL or path segment (`x.org/ADR-1`) or a snake_case or dotted name, and not
+/// run into letters after the number (`ADR-26x`). A trailing `.` is allowed, so
+/// `(ADR-1.2)` reports `ADR-1`. An identifier split across lines is not
+/// detected: each line is scanned alone.
+///
+/// Deliberately wider than the evidence collector's structured-marker matcher
+/// (`RFC-11` section 3): this answers "was a record cited here at all", prose
+/// included, and must never be the matcher that decides a record was realized.
+pub(super) fn cited_identifiers(line: &str, prefixes: &[String]) -> Vec<String> {
+    let bytes = line.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    'scan: while i < bytes.len() {
+        // Not the tail of a word, a hyphenated name, a URL or path segment, a
+        // snake_case name or a dotted one: `/`, `_` and `.` join an identifier
+        // to what precedes it the way a letter, digit or `-` does.
+        let standing_alone = line.is_char_boundary(i)
+            && !line[..i]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '/' | '_' | '.'));
+        if standing_alone {
+            for prefix in prefixes {
+                let p = prefix.as_bytes();
+                if !bytes[i..].starts_with(p) || bytes.get(i + p.len()) != Some(&b'-') {
+                    continue;
+                }
+                let digits_at = i + p.len() + 1;
+                let digits = bytes[digits_at..]
+                    .iter()
+                    .take_while(|b| b.is_ascii_digit())
+                    .count();
+                let end = digits_at + digits;
+                if digits == 0
+                    || line[end..]
+                        .chars()
+                        .next()
+                        .is_some_and(char::is_alphanumeric)
+                {
+                    continue;
+                }
+                out.push(line[i..end].to_string());
+                i = end;
+                continue 'scan;
+            }
+        }
+        i += 1;
+    }
+    out
 }
