@@ -95,6 +95,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         blocking,
         findings,
         notices,
+        fail_on: config.fail_on,
     };
 
     emit(&report)

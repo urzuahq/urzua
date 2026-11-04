@@ -1,5 +1,5 @@
 ---
-Version: '0.14'
+Version: '0.15'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -221,6 +221,23 @@ supplies only the **default** scope for a record type and the resolver's globbin
 
 The distinction matters: a default written into a new record by `urzua new` is a value an author can
 see and correct; a default applied silently at read time is a fact nobody reviewed.
+
+## Exit threshold: `fail_on`
+
+A top-level `fail_on` sets the lowest unwaived finding severity that makes `urzua check` and
+`urzua audit` exit 1 (`MILE-145`):
+
+```yaml
+fail_on: warning   # error (default) | warning
+```
+
+- **`error`** (the default, and the behaviour when the key is absent): only an error finding exits 1.
+- **`warning`**: an unwaived warning also exits 1. A waived finding never does.
+- Any other value, including a different case, is refused at load, and the command exits 2.
+- `urzua check --fail-on error|warning` overrides the key for one run, in either direction.
+- Only the exit code changes. The report is byte-identical under either value: `blocking` and
+  `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
+  Read the exit code, not `blocking`, to know whether the threshold was crossed.
 
 ## Relation pairs
 
@@ -449,3 +466,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.12`. Removed the `acceptance_field` option and the `date.acceptance-by-status` rule from the date section; the acceptance date is now documented as a `statuses.require` / `statuses.forbid` declaration plus `date.field-valid`. `accepted_statuses` stays, owned by `embodiment.back-pointer-decision-accepted`. **Why:** maintainer decision of 2026-11-04 (`MILE-137`): one mechanism for status-dependent fields, not two that could disagree. | **substantive** |
 > | 2026-11-04 | Bumped to `0.13`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
+> | 2026-11-04 | Bumped to `0.15`. Documented the top-level `fail_on` key (`error` or `warning`, default `error`) and `urzua check --fail-on`. **Why:** `MILE-145` -- warnings could never fail a build, so a repository at zero warnings had nothing to keep it there. | **substantive** |

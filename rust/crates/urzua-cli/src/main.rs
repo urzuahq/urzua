@@ -43,6 +43,22 @@ pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
     report.exit_code()
 }
 
+/// `--fail-on`'s values; mapped onto core's `FailOn`, which stays free of clap.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum FailOnArg {
+    Error,
+    Warning,
+}
+
+impl From<FailOnArg> for urzua_core::config::FailOn {
+    fn from(arg: FailOnArg) -> Self {
+        match arg {
+            FailOnArg::Error => Self::Error,
+            FailOnArg::Warning => Self::Warning,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(
     name = "urzua",
@@ -87,6 +103,10 @@ enum Command {
         /// Report on records changed against this ref, plus unchanged records that refer to them.
         #[arg(long)]
         base: Option<String>,
+        /// The lowest finding severity that makes the command exit 1,
+        /// overriding the configuration's `fail_on`. The JSON is unchanged.
+        #[arg(long, value_enum)]
+        fail_on: Option<FailOnArg>,
         paths: Vec<PathBuf>,
     },
 
@@ -226,7 +246,11 @@ fn main() -> ExitCode {
     };
 
     match cli.command {
-        Command::Check { base, paths } => commands::check::run(cli.config, paths, base),
+        Command::Check {
+            base,
+            fail_on,
+            paths,
+        } => commands::check::run(cli.config, paths, base, fail_on.map(Into::into)),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
         Command::New {
