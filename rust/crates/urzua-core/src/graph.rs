@@ -188,6 +188,7 @@ mod tests {
                     narrative_fields: None,
                     spec: None,
                     relation_fields: Some(relation_fields),
+                    revision_log: None,
                 },
             )]
             .into_iter()

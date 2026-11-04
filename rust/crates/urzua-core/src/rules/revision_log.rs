@@ -11,12 +11,13 @@ use super::*;
 /// entries in a section that is already there.
 pub fn revision_log_change_class(
     records: &[Record],
+    config: &Config,
     full_text: &HashMap<std::path::PathBuf, String>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED;
     let mut findings = Vec::new();
 
-    // Every record is eligible. A record with no `**Revision log**` marker is
+    // Every record is eligible. A record with no revision-log section (its type's declared identity) is
     // *absent* from this rule's judgement, not outside its population -- and
     // absence is exactly what BUG-50 reports as indistinguishable from
     // compliance: SPEC-1 lost 18 revision rows by losing one line and the rule
@@ -32,7 +33,9 @@ pub fn revision_log_change_class(
             let Some(content) = full_text.get(&record.path) else {
                 return Outcome::Absent;
             };
-            let Some(entries) = find_revision_log_entries(content) else {
+            let Some(entries) =
+                find_revision_log_entries(content, &config.revision_log_id(&record.record_type))
+            else {
                 return Outcome::Absent;
             };
 
@@ -74,13 +77,38 @@ pub(crate) struct RevisionLogEntry {
     pub(crate) line: usize,
 }
 
-/// Finds a `**Revision log**` marker and parses the pipe-delimited table
-/// that follows it. `None` means no such section exists in this record at
-/// all -- distinct from `Some(vec![])`, an existing but empty table, though
-/// both currently produce no findings from this rule.
-pub(crate) fn find_revision_log_entries(content: &str) -> Option<Vec<RevisionLogEntry>> {
+/// Finds the line that opens the revision log (`id`, the type's declared
+/// identity: a line that is the marker or heading, never one that merely
+/// mentions it, and never one inside a fenced code block) and parses the
+/// pipe-delimited table that follows it. `None` means no such section exists
+/// in this record at all -- distinct from `Some(vec![])`, an existing but empty
+/// table, though both currently produce no findings from this rule.
+pub(crate) fn find_revision_log_entries(
+    content: &str,
+    id: &crate::config::RevisionLogId,
+) -> Option<Vec<RevisionLogEntry>> {
     let lines: Vec<&str> = content.lines().collect();
-    let marker_idx = lines.iter().position(|l| l.contains("**Revision log**"))?;
+    let mut fence: Option<char> = None;
+    let mut marker_idx = None;
+    for (idx, line) in lines.iter().enumerate() {
+        let stripped = line.trim_start_matches(|c: char| c == '>' || c.is_whitespace());
+        let fence_char = ["```", "~~~"]
+            .iter()
+            .find(|f| stripped.starts_with(**f))
+            .and_then(|f| f.chars().next());
+        match (fence, fence_char) {
+            (None, Some(c)) => fence = Some(c),
+            (Some(open), Some(c)) if open == c => fence = None,
+            (Some(_), _) => {}
+            (None, None) => {
+                if id.opens_at(line) {
+                    marker_idx = Some(idx);
+                    break;
+                }
+            }
+        }
+    }
+    let marker_idx = marker_idx?;
 
     let mut entries = Vec::new();
     let mut row_index = 0; // 0 before the header row, 1 = header seen, 2+ = data rows
@@ -137,7 +165,8 @@ mod tests {
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());
 
-        let (exec, findings) = revision_log_change_class(&[r], &full_text);
+        let (exec, findings) =
+            revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("2026-08-20"));
@@ -150,7 +179,7 @@ mod tests {
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());
 
-        let (_, findings) = revision_log_change_class(&[r], &full_text);
+        let (_, findings) = revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -161,8 +190,56 @@ mod tests {
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());
 
-        let (exec, findings) = revision_log_change_class(&[r], &full_text);
+        let (exec, findings) =
+            revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
         assert_eq!(examined(&exec), 0);
         assert!(findings.is_empty());
+    }
+
+    fn check(config: &Config, content: &str) -> (RuleExecution, Vec<Finding>) {
+        let r = record("docs/specs/0001-x.md", "spec", content);
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
+        revision_log_change_class(&[r], config, &full_text)
+    }
+
+    const LOG: &str =
+        "> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Split out. | — |\n";
+
+    #[test]
+    fn prose_mentioning_the_marker_does_not_hide_the_real_log_observed_failing() {
+        let content = format!(
+            "# 0001 — X\n\nThe **Revision log** below is append-only.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n> **Revision log**\n>\n{LOG}"
+        );
+        let (exec, findings) = check(&config_with_types(vec![]), &content);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("2026-08-20"));
+    }
+
+    #[test]
+    fn a_marker_inside_a_fenced_block_is_not_the_log() {
+        let content = format!("# 1\n\n```\n**Revision log**\n{LOG}```\n");
+        let (exec, findings) = check(&config_with_types(vec![]), &content);
+        assert_eq!(examined(&exec), 0);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_declared_heading_identity_finds_a_renamed_section() {
+        let mut t = type_config(None);
+        t.revision_log = Some(crate::config::RevisionLogDecl {
+            marker: None,
+            heading: Some("History".into()),
+        });
+        let config = config_with_types(vec![("spec", t)]);
+        let content = format!("# 1\n\n## History\n\n{LOG}");
+        let (exec, findings) = check(&config, &content);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        // The default marker is no longer this type's log.
+        let old = format!("# 1\n\n**Revision log**\n\n{LOG}");
+        let (exec, _) = check(&config, &old);
+        assert_eq!(examined(&exec), 0);
     }
 }

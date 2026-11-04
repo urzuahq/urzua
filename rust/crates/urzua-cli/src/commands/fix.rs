@@ -154,7 +154,18 @@ pub fn run(
                 continue;
             }
         };
-        match urzua_core::fix::apply_repair(&fresh_content, &repair, &today, &identity.name) {
+        let log_id = records
+            .iter()
+            .find(|r| r.path == repair.record)
+            .map(|r| config.revision_log_id(&r.record_type))
+            .unwrap_or_default();
+        match urzua_core::fix::apply_repair(
+            &fresh_content,
+            &repair,
+            &today,
+            &identity.name,
+            &log_id,
+        ) {
             Ok(new_content) => match std::fs::write(&full_path, new_content) {
                 Ok(()) => applied.push(repair),
                 Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),

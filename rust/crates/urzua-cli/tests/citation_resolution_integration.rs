@@ -148,11 +148,11 @@ fn a_declared_external_id_is_not_a_misconfiguration_end_to_end_observed_failing(
 }
 
 #[test]
-fn a_declared_skip_table_hides_revision_log_paths_end_to_end_observed_failing() {
+fn a_skipped_revision_log_hides_revision_log_paths_end_to_end_observed_failing() {
     let body = "---\nStatus: Accepted\n---\n# 1 — X\n\n## References\n\n- `src/gone.rs`\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Named `src/old.rs`. | **substantive** |\n";
     let dir = fixture(
         "skip-table",
-        "{ citation.path-exists: { level: warn, reference_sections: [\"References\"], skip_tables: [\"**Revision log**\"] } }",
+        "{ citation.path-exists: { level: warn, reference_sections: [\"References\"], skip_revision_log: true } }",
         &[("ADR-1-x.md", body)],
     );
     let (_, report) = check(&dir);
@@ -236,4 +236,24 @@ fn an_untracked_but_present_file_is_still_missing() {
         1,
         "{report}"
     );
+}
+
+#[test]
+fn a_declared_revision_log_heading_is_the_log_and_prose_mentions_are_not_observed_failing() {
+    let body = "---\nStatus: Accepted\n---\n# 1 — X\n\nSee the **Revision log** below.\n\n## History\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-01-01 | Filed. | — |\n";
+    let dir = fixture(
+        "revlog-heading",
+        "{ revision-log.change-class-required: error }",
+        &[("ADR-1-x.md", body)],
+    );
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: { revision-log.change-class-required: error }\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    revision_log: { heading: \"History\" }\n",
+    )
+    .unwrap();
+    let (code, report) = check(&dir);
+    assert_eq!(code, 1, "{report}");
+    let found = findings_of(&report, "revision-log.change-class-required");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"].as_str().unwrap().contains("2026-01-01"));
 }

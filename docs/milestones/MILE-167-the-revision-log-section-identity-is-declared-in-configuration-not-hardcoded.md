@@ -25,3 +25,4 @@ The identity is declared per type in `.urzua/config.yaml`; a record whose prose 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Built: per-type `revision_log` (`marker` or `heading`, default `**Revision log**`) matched as the opening line, outside fences; read by `revision-log.change-class-required`, `urzua fix` and `citation.path-exists`. `skip_tables` (unreleased) became the boolean `skip_revision_log`. Declared on `adr` in this repository's config. Documented in `SPEC-2` and `SPEC-3`. | **substantive** |

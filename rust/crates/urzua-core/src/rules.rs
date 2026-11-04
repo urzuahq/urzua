@@ -136,6 +136,7 @@ mod tests {
             narrative_fields: None,
             spec: spec.map(|s| s.to_string()),
             relation_fields: None,
+            revision_log: None,
         }
     }
 
@@ -198,6 +199,7 @@ mod tests {
             narrative_fields: None,
             spec: None,
             relation_fields: None,
+            revision_log: None,
         }
     }
 
@@ -245,6 +247,7 @@ mod tests {
             narrative_fields: narrative_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             spec: None,
             relation_fields: None,
+            revision_log: None,
         }
     }
 

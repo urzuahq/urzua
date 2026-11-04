@@ -34,6 +34,10 @@ record_types:
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"
+    # How this type's revision log is found (MILE-167): the line itself, not
+    # any line that mentions the text. This is the default, declared here so
+    # the repository's own records exercise the declaration.
+    revision_log: {marker: "**Revision log**"}
     pointer_fields:
       - "Derives-from"
     narrative_fields: []
@@ -280,7 +284,7 @@ rules:
     reference_sections: ["References"]
     # Revision-log rows are append-only history and name a path as it was
     # when the row was written; they are not read (MILE-143).
-    skip_tables: ["**Revision log**"]
+    skip_revision_log: true
   # The two generated directory indexes (MILE-152): `urzua index --apply`
   # rewrites them from the records. The ADR list names no id (the file name
   # identifies the record); the spec list writes each entry over two lines.

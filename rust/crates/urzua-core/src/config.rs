@@ -180,12 +180,12 @@ pub struct RuleSetting {
     /// that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_sections: Option<Vec<String>>,
-    /// Markers naming tables `citation.path-exists` does not read: a line
-    /// containing a marker (`**Revision log**`) and the pipe table that follows
-    /// it. For append-only history that names a path as it was. Only
-    /// meaningful to that rule; optional, and empty by default.
+    /// When `true`, `citation.path-exists` does not read each record's
+    /// revision log, the table under the type's declared `revision_log`
+    /// identity (`MILE-167`): append-only history names a path as it was. Only
+    /// meaningful to that rule; optional, and `false` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub skip_tables: Option<Vec<String>>,
+    pub skip_revision_log: Option<bool>,
 }
 
 /// One `date_order` entry (`MILE-157`, `ADR-64`): two header field names, the
@@ -314,7 +314,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             reference_sections: Option<Vec<String>>,
             #[serde(default)]
-            skip_tables: Option<Vec<String>>,
+            skip_revision_log: Option<bool>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -360,7 +360,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 accepted_statuses: table.accepted_statuses,
                 external_ids: table.external_ids,
                 reference_sections: table.reference_sections,
-                skip_tables: table.skip_tables,
+                skip_revision_log: table.skip_revision_log,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -388,7 +388,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 accepted_statuses: None,
                 external_ids: None,
                 reference_sections: None,
-                skip_tables: None,
+                skip_revision_log: None,
             })
         }
     }
@@ -514,6 +514,91 @@ pub struct RecordTypeConfig {
     /// `config.pointer-field-not-known`.
     #[serde(default)]
     pub relation_fields: Option<RelationFields>,
+    /// How this type's revision-log section is found (`MILE-167`): the
+    /// `marker` line (default `**Revision log**`) or a `heading`. Omitted means
+    /// the default marker, so an existing config needs no change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision_log: Option<RevisionLogDecl>,
+}
+
+/// The declared identity of a type's revision-log section (`MILE-167`):
+/// exactly one of `marker` (a whole line, blockquote marks aside, such as
+/// `**Revision log**`) or `heading` (the text of a markdown heading of any
+/// level, such as `Revision log`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RevisionLogDecl {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heading: Option<String>,
+}
+
+/// The default marker line: what every repository used before the identity
+/// was declared.
+pub const DEFAULT_REVISION_LOG_MARKER: &str = "**Revision log**";
+
+/// A resolved revision-log identity: how to recognise the line that opens the
+/// section. A line matches only when it is that line, not when it mentions the
+/// text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RevisionLogId {
+    Marker(String),
+    Heading(String),
+}
+
+impl Default for RevisionLogId {
+    fn default() -> Self {
+        RevisionLogId::Marker(DEFAULT_REVISION_LOG_MARKER.to_string())
+    }
+}
+
+impl RevisionLogId {
+    /// Whether `line` opens the section: a marker line equals the marker, a
+    /// heading line is `#`..`######`, a space, then the heading text. Leading
+    /// blockquote marks and surrounding whitespace are ignored.
+    pub fn opens_at(&self, line: &str) -> bool {
+        let s = line
+            .trim_start_matches(|c: char| c == '>' || c.is_whitespace())
+            .trim_end();
+        match self {
+            RevisionLogId::Marker(m) => s == m.trim(),
+            RevisionLogId::Heading(h) => {
+                let hashes = s.chars().take_while(|c| *c == '#').count();
+                if !(1..=6).contains(&hashes) {
+                    return false;
+                }
+                let rest = &s[hashes..];
+                rest.starts_with(char::is_whitespace) && rest.trim() == h.trim()
+            }
+        }
+    }
+}
+
+impl RecordTypeConfig {
+    /// The revision-log identity this type declares, or the default marker.
+    pub fn revision_log_id(&self) -> RevisionLogId {
+        match &self.revision_log {
+            Some(RevisionLogDecl {
+                heading: Some(h), ..
+            }) => RevisionLogId::Heading(h.clone()),
+            Some(RevisionLogDecl {
+                marker: Some(m), ..
+            }) => RevisionLogId::Marker(m.clone()),
+            _ => RevisionLogId::default(),
+        }
+    }
+}
+
+impl Config {
+    /// The revision-log identity for a record of `record_type` (the default
+    /// marker for a type the config does not declare).
+    pub fn revision_log_id(&self, record_type: &str) -> RevisionLogId {
+        self.record_types
+            .get(record_type)
+            .map(RecordTypeConfig::revision_log_id)
+            .unwrap_or_default()
+    }
 }
 
 /// Keeps a present key's value as written, null included, so a half-written
@@ -714,6 +799,11 @@ pub enum ConfigError {
     InvalidDir { record_type: String, dir: String },
     #[error("record type '{record_type}' declares exclude_files entry '{entry}', which is not a bare file name -- it would exclude nothing")]
     InvalidExcludedFile { record_type: String, entry: String },
+    #[error("record type '{record_type}' declares revision_log {reason}")]
+    InvalidRevisionLog {
+        record_type: String,
+        reason: &'static str,
+    },
     #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
@@ -917,12 +1007,6 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
-        name: "skip_tables",
-        owners: &[crate::rules::RULE_CITATION_PATH_EXISTS],
-        consequence_if_missing: "reads every table in a reference section, including append-only history",
-        optional: true,
-    },
-    RuleOption {
         name: "external_ids",
         owners: &[crate::rules::RULE_CITATION_RESOLUTION],
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
@@ -1011,10 +1095,6 @@ fn option_field<'a>(
             .map(std::borrow::Cow::Borrowed),
         "reference_sections" => setting
             .reference_sections
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "skip_tables" => setting
-            .skip_tables
             .as_deref()
             .map(std::borrow::Cow::Borrowed),
         "test_paths" => setting
@@ -1145,6 +1225,25 @@ pub fn parse_with_document_models(
                 });
             }
         }
+        if let Some(decl) = &rt.revision_log {
+            let reason = match (&decl.marker, &decl.heading) {
+                (None, None) => Some("neither `marker` nor `heading` -- name one"),
+                (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
+                (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
+                    Some("a blank identity -- it would match no line")
+                }
+                (Some(t), None) | (None, Some(t)) if t.contains('\n') => {
+                    Some("an identity spanning lines -- it would match no line")
+                }
+                _ => None,
+            };
+            if let Some(reason) = reason {
+                return Err(ConfigError::InvalidRevisionLog {
+                    record_type: name.clone(),
+                    reason,
+                });
+            }
+        }
         // The effective prefix, not only a declared one: a type named
         // `my_type` with no `prefix` defaults to `MY_TYPE`, which no filename
         // can carry, so `new` would mint records the numbering scan ignores.
@@ -1226,6 +1325,12 @@ pub fn parse_with_document_models(
                     option: opt.name.to_string(),
                 });
             }
+        }
+        if setting.skip_revision_log.is_some() && name != crate::rules::RULE_CITATION_PATH_EXISTS {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "skip_revision_log".to_string(),
+            });
         }
         if setting.allow_extension_prefix.is_some()
             && name != crate::rules::RULE_HEADER_FIELD_SET_CONSISTENCY
@@ -1839,6 +1944,7 @@ mod tests {
             narrative_fields: None,
             spec: None,
             relation_fields: None,
+            revision_log: None,
         };
         let declared = t.declared_fields();
         assert!(declared.contains("Status"));
@@ -2035,26 +2141,81 @@ rules:
     }
 
     #[test]
-    fn skip_tables_belongs_to_citation_path_exists_and_is_optional() {
+    fn skip_revision_log_belongs_to_citation_path_exists_and_is_optional() {
         let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
         let ok = parse(&format!(
-            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_tables: [\"**Revision log**\"]\n"
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_revision_log: true\n"
         ))
         .unwrap();
         assert_eq!(
-            ok.rules["citation.path-exists"].skip_tables,
-            Some(vec!["**Revision log**".to_string()])
+            ok.rules["citation.path-exists"].skip_revision_log,
+            Some(true)
         );
         assert!(parse(&format!(
-            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_tables: []\n"
-        ))
-        .is_err());
-        assert!(parse(&format!(
-            "{base}  field.quality:\n    level: error\n    skip_tables: [\"x\"]\n"
+            "{base}  field.quality:\n    level: error\n    skip_revision_log: true\n"
         ))
         .unwrap_err()
         .to_string()
-        .contains("does not take the option 'skip_tables'"));
+        .contains("does not take the option 'skip_revision_log'"));
+    }
+
+    #[test]
+    fn revision_log_identity_defaults_and_is_declared_per_type() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n";
+        let c = parse(base).unwrap();
+        assert_eq!(c.revision_log_id("adr"), RevisionLogId::default());
+        assert_eq!(c.revision_log_id("unknown"), RevisionLogId::default());
+        let c = parse(&format!("{base}    revision_log: {{heading: History}}\n")).unwrap();
+        assert_eq!(
+            c.revision_log_id("adr"),
+            RevisionLogId::Heading("History".into())
+        );
+        let c = parse(&format!(
+            "{base}    revision_log: {{marker: \"**Log**\"}}\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            c.revision_log_id("adr"),
+            RevisionLogId::Marker("**Log**".into())
+        );
+    }
+
+    #[test]
+    fn a_malformed_revision_log_declaration_is_refused() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n";
+        for bad in [
+            "{}",
+            "{marker: \"a\", heading: \"b\"}",
+            "{marker: \"  \"}",
+            "{heading: \"\"}",
+            "{marker: \"a\\nb\"}",
+        ] {
+            let result = parse(&format!("{base}    revision_log: {bad}\n"));
+            assert!(
+                matches!(result, Err(ConfigError::InvalidRevisionLog { .. })),
+                "{bad} must be refused: {result:?}"
+            );
+        }
+        assert!(parse(&format!(
+            "{base}    revision_log: {{marker: \"a\", other: 1}}\n"
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn a_revision_log_identity_matches_its_line_and_not_a_mention() {
+        let marker = RevisionLogId::default();
+        assert!(marker.opens_at("**Revision log**"));
+        assert!(marker.opens_at("> **Revision log**  "));
+        assert!(!marker.opens_at("The **Revision log** below lists changes."));
+        assert!(!marker.opens_at("**Revision log** (append-only)"));
+        let heading = RevisionLogId::Heading("Revision log".into());
+        assert!(heading.opens_at("## Revision log"));
+        assert!(heading.opens_at("### Revision log "));
+        assert!(!heading.opens_at("Revision log"));
+        assert!(!heading.opens_at("## Revision log of the world"));
+        assert!(!heading.opens_at("#Revision log"));
+        assert!(!heading.opens_at("####### Revision log"));
     }
 
     #[test]
