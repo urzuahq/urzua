@@ -14,6 +14,7 @@
 //!       success: [Fixed]          # terminal success
 //!       failure: [WontFix]        # terminal failure
 //!       implementable: [Open]     # code may cite it (optional)
+//!       claim_retained: []        # may keep an Implemented claim (optional)
 //!       pending: [pending, "not yet written"]
 //!       require: [{when: [Fixed], fields: [Regression-test]}]
 //!       forbid:  [{when: [Open], fields: [Fixed-in]}]
@@ -41,6 +42,11 @@ pub struct StatusDecl {
     /// milestone is implementable and not terminal.
     #[serde(default)]
     pub implementable: Vec<String>,
+    /// Statuses reached only after acceptance that may still carry an
+    /// Implemented/Verified claim (e.g. Superseded), `embodiment.requires-accepted-status`.
+    /// Could later be derived from transitions (MILE-144).
+    #[serde(default)]
+    pub claim_retained: Vec<String>,
     /// Whole field values that mean "not done yet", replacing the compiled-in
     /// substring match for this type (BUG-65). Omitted keeps that match.
     #[serde(default)]
@@ -141,6 +147,7 @@ fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
     check_list("success", &d.success, true)?;
     check_list("failure", &d.failure, true)?;
     check_list("implementable", &d.implementable, true)?;
+    check_list("claim_retained", &d.claim_retained, true)?;
     if let Some(p) = &d.pending {
         check_list("pending", p, false)?;
     }
@@ -148,6 +155,7 @@ fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
         ("success", &d.success),
         ("failure", &d.failure),
         ("implementable", &d.implementable),
+        ("claim_retained", &d.claim_retained),
     ] {
         if let Some(v) = list.iter().find(|v| !d.declares(v)) {
             return Err(format!("`{what}` names '{v}', which is not in `values`"));
@@ -256,6 +264,19 @@ mod tests {
         let d = c.record_types["bug"].status_decl().unwrap();
         assert_eq!(d.implementable, vec!["Planned", "InProgress"]);
         assert!(!d.is_terminal("InProgress"));
+    }
+
+    #[test]
+    fn claim_retained_loads_and_is_validated_observed_failing() {
+        let c = parse(&cfg("      values: [Proposed, Accepted, Superseded]\n      success: [Accepted]\n      claim_retained: [Superseded]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert_eq!(d.claim_retained, vec!["Superseded"]);
+        assert!(
+            err("      values: [Open]\n      claim_retained: [Gone]\n").contains("claim_retained")
+        );
+        assert!(
+            err("      values: [Open]\n      claim_retained: [Open, Open]\n").contains("twice")
+        );
     }
 
     #[test]

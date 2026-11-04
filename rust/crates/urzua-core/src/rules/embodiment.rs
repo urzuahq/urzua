@@ -464,7 +464,11 @@ pub fn embodiment_requires_accepted_status(
     // declaring none.
     let accepted_for = |record_type: &str| -> Vec<String> {
         match declared.get(record_type) {
-            Some(d) if !d.success.is_empty() => d.success.clone(),
+            Some(d) if !d.success.is_empty() => {
+                let mut v = d.success.clone();
+                v.extend(d.claim_retained.iter().cloned());
+                v
+            }
             _ => fallback.clone(),
         }
     };
@@ -986,6 +990,30 @@ mod tests {
             assert!(findings[0].message.contains("Proposed"));
             assert!(findings[0].message.contains(stated));
         }
+    }
+
+    #[test]
+    fn a_claim_retained_status_keeps_its_claim_observed_failing() {
+        let retained = "{values: [Proposed, Accepted, Superseded], success: [Accepted], claim_retained: [Superseded]}";
+        let (exec, findings) = embodiment_requires_accepted_status(
+            &[
+                adr("Superseded", "Implemented"),
+                adr("Proposed", "Implemented"),
+            ],
+            &accepted_config(Some(retained), None),
+        );
+        assert_eq!(examined(&exec), 2);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Proposed"));
+        // Without the list the Superseded record is a finding.
+        let (_, findings) = embodiment_requires_accepted_status(
+            &[adr("Superseded", "Implemented")],
+            &accepted_config(
+                Some("{values: [Proposed, Accepted, Superseded], success: [Accepted]}"),
+                None,
+            ),
+        );
+        assert_eq!(findings.len(), 1);
     }
 
     #[test]

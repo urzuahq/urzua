@@ -1,5 +1,5 @@
 ---
-Version: '0.25'
+Version: '0.26'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -473,3 +473,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.22`. `field.quality`, `field.pending` and `status.required-field-missing` gain the optional `field_levels` option: a finding for a listed field has that field's `warn` or `error` level, any other finding has the rule's `level`, and `check` keeps applying the rule level to every rule that declares no per-field level. **Why:** `MILE-140` -- one rule needs two severities for two fields. Off unless declared; `SPEC-3` states the option. | **substantive** |
 > | 2026-11-04 | Bumped to `0.24`. `date.acceptance-by-status` removed from the generated rule table. **Why:** maintainer decision of 2026-11-04 (`MILE-137`): the acceptance date by status is expressed with `statuses.require` / `statuses.forbid` and `date.field-valid`, so one mechanism owns status-dependent fields. | **substantive** |
 > | 2026-11-04 | Bumped to `0.25`. `embodiment.back-pointer-decision-accepted` now judges a back-pointer against the cited type's declared `statuses.implementable` rather than its terminal `success`; a type declaring none uses the rule's `accepted_statuses`, and with neither the status is reported as unjudgeable. Rule id unchanged. **Why:** the engine holds no type knowledge, so a terminal success status cannot stand for "implementation allowed" (`MILE-133`, `SPEC-3` 0.13). | **substantive** |
+> | 2026-11-04 | Bumped to `0.26`. `embodiment.requires-accepted-status` also allows the claim at the type's declared `statuses.claim_retained`, not only `success`. Rule id unchanged. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a record may keep an Implemented or Verified claim in a status reached only after acceptance. | **substantive** |

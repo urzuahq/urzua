@@ -1,5 +1,5 @@
 ---
-Version: '0.13'
+Version: '0.14'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -178,6 +178,7 @@ Two details carry weight:
         success: [Fixed]                  # terminal, the work was done
         failure: [WontFix]                # terminal, it ended without being done
         implementable: [Open]             # statuses at which code may implement the record
+        claim_retained: []                # statuses that may keep an Implemented/Verified claim
         pending: [pending, "not yet written"]
         require: [{when: [Fixed], fields: [Regression-test]}]
         forbid:  [{when: [Open], fields: [Fixed-in]}]
@@ -187,7 +188,7 @@ Two details carry weight:
   must be subsets of `values`; `success` and `failure` must not overlap. `implementable` names the
   statuses at which implementation of the record is permitted. It is independent of the terminals
   (an in-progress milestone is implementable and not terminal; an accepted decision is both), and
-  the engine never infers it from `success`. `require` and `forbid` are lists of `{when: [status, ...], fields:
+  the engine never infers it from `success`. `claim_retained` (optional, a subset of `values`) names statuses reached only after acceptance that may still carry an `Implemented` or `Verified` embodiment claim, such as `Superseded`; `embodiment.requires-accepted-status` allows the claim at `success` and `claim_retained` statuses. `require` and `forbid` are lists of `{when: [status, ...], fields:
   [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
   `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
   required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
@@ -447,3 +448,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.10`. Documented the `field_levels` option of `field.quality`, `field.pending` and `status.required-field-missing`. **Why:** `MILE-140` -- severity set per field within one rule, so a missing `Deciders` on an accepted record can be an error while a missing `Reviewers` is a warning. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.12`. Removed the `acceptance_field` option and the `date.acceptance-by-status` rule from the date section; the acceptance date is now documented as a `statuses.require` / `statuses.forbid` declaration plus `date.field-valid`. `accepted_statuses` stays, owned by `embodiment.back-pointer-decision-accepted`. **Why:** maintainer decision of 2026-11-04 (`MILE-137`): one mechanism for status-dependent fields, not two that could disagree. | **substantive** |
 > | 2026-11-04 | Bumped to `0.13`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
