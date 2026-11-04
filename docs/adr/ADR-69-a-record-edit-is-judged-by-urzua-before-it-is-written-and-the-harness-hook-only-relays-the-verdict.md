@@ -1,7 +1,8 @@
 ---
 Stable-Id: 01M6K4FNPS6S867HWF3HN5Q5CC
-Status: Proposed
+Status: Accepted
 Date: 2026-11-04
+Accepted-on: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-7
@@ -55,3 +56,9 @@ Easy. The hook is configuration plus an adapter script; removing it returns to t
 - `MILE-159` -- path-scoped, prospective-content `fix` the hook calls.
 - `MILE-178` -- the milestone that builds this.
 - `ADR-71` -- the other layers this one is not a substitute for.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
