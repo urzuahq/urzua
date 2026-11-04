@@ -35,7 +35,7 @@ fn repo(name: &str, back_pointer_rule: bool, source: &str) -> std::path::PathBuf
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
     let rule = if back_pointer_rule {
-        "  embodiment.back-pointer-resolution:\n    level: error\n    source_paths: [\"src\"]\n"
+        "  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"src\"]\n"
     } else {
         ""
     };

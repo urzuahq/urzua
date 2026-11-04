@@ -3,8 +3,8 @@
 //!
 //! A declaration is validated at load. Slice 2 makes `identity` and `fields`
 //! drive record loading (`RecordModel`, `Record::parse_with_model`); a type
-//! that declares neither loads exactly as before. `sections` is still read by
-//! nothing.
+//! that declares neither loads exactly as before. `sections` locates sections for
+//! `section.required` and `section.shape` only.
 //!
 //! ```yaml
 //! record_types:
@@ -204,6 +204,140 @@ pub struct SectionsDecl {
     /// they are not.
     #[serde(default, deserialize_with = "deserialize_items")]
     pub items: bool,
+    /// The `##` sections a record of this type must carry, each with an
+    /// optional content shape (`MILE-4`, `MILE-5`, `MILE-121`). Read only by
+    /// `section.required` and `section.shape`; omitted means none required.
+    #[serde(default, deserialize_with = "deserialize_required")]
+    pub required: Vec<RequiredSection>,
+    /// Statuses of a record that made no decision (`MILE-7`): such a record is
+    /// not asked for `required` sections or their shapes. Matched exactly
+    /// against the record's status field. Only meaningful with `required`.
+    #[serde(default, deserialize_with = "deserialize_exempt_statuses")]
+    pub exempt_statuses: Vec<String>,
+}
+
+/// One required section: its heading text and the shape its content takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequiredSection {
+    /// The `##` heading text, matched exactly after trimming.
+    pub name: String,
+    pub shape: Option<SectionShape>,
+}
+
+/// A content shape a required section can declare. Shape is structure only:
+/// it never judges whether the content is true or sensible.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SectionShape {
+    /// The five Y-statement phrases in one block (`MILE-5`). With a `marker`
+    /// the block starts at the first line containing it; without, it is the
+    /// section's first paragraph.
+    YStatement { marker: Option<String> },
+    /// A table with at least `min_rows` non-empty data rows (`MILE-121`).
+    TableMinRows { min_rows: usize },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRequiredSection {
+    name: String,
+    #[serde(default)]
+    shape: Option<String>,
+    #[serde(default)]
+    marker: Option<String>,
+    #[serde(default)]
+    min_rows: Option<yaml_serde::Value>,
+}
+
+impl RawRequiredSection {
+    fn resolve(self) -> Result<RequiredSection, String> {
+        let name = self.name.trim().to_string();
+        if name.is_empty() {
+            return Err("a required section's `name` must not be blank".into());
+        }
+        let shape = match self.shape.as_deref() {
+            None => {
+                if self.marker.is_some() || self.min_rows.is_some() {
+                    return Err(format!(
+                        "section '{name}' sets `marker` or `min_rows` without a `shape`"
+                    ));
+                }
+                None
+            }
+            Some("y-statement") => {
+                if self.min_rows.is_some() {
+                    return Err(format!(
+                        "section '{name}': `min_rows` belongs to shape `table-min-rows`"
+                    ));
+                }
+                let marker = match self.marker {
+                    Some(m) if m.trim().is_empty() => {
+                        return Err(format!("section '{name}': `marker` must not be blank"))
+                    }
+                    Some(m) => Some(m.trim().to_string()),
+                    None => None,
+                };
+                Some(SectionShape::YStatement { marker })
+            }
+            Some("table-min-rows") => {
+                if self.marker.is_some() {
+                    return Err(format!(
+                        "section '{name}': `marker` belongs to shape `y-statement`"
+                    ));
+                }
+                let min_rows = self
+                    .min_rows
+                    .as_ref()
+                    .and_then(yaml_serde::Value::as_u64)
+                    .filter(|n| *n >= 1)
+                    .ok_or_else(|| {
+                        format!(
+                            "section '{name}': shape `table-min-rows` needs `min_rows`, an integer of at least 1"
+                        )
+                    })?;
+                Some(SectionShape::TableMinRows {
+                    min_rows: min_rows as usize,
+                })
+            }
+            Some(other) => {
+                return Err(format!(
+                    "section '{name}': unknown shape '{other}'; valid shapes are y-statement, table-min-rows"
+                ))
+            }
+        };
+        Ok(RequiredSection { name, shape })
+    }
+}
+
+fn deserialize_required<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Vec<RequiredSection>, D::Error> {
+    let raw = Vec::<RawRequiredSection>::deserialize(d)
+        .map_err(|e| serde::de::Error::custom(format!("`required` {e}")))?;
+    let mut out: Vec<RequiredSection> = Vec::with_capacity(raw.len());
+    for r in raw {
+        let section = r.resolve().map_err(serde::de::Error::custom)?;
+        if out.iter().any(|o| o.name == section.name) {
+            return Err(serde::de::Error::custom(format!(
+                "`required` names section '{}' twice",
+                section.name
+            )));
+        }
+        out.push(section);
+    }
+    Ok(out)
+}
+
+fn deserialize_exempt_statuses<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Vec<String>, D::Error> {
+    let list = Vec::<String>::deserialize(d)
+        .map_err(|e| serde::de::Error::custom(format!("`exempt_statuses` {e}")))?;
+    if list.iter().any(|s| s.trim().is_empty()) {
+        return Err(serde::de::Error::custom(
+            "`exempt_statuses` must not hold a blank status",
+        ));
+    }
+    Ok(list.into_iter().map(|s| s.trim().to_string()).collect())
 }
 
 /// Hand-written so the error names `depth` and the valid range: serde's own
@@ -249,6 +383,16 @@ pub(crate) fn validate_declarations(
                 ));
             }
             CompiledIdentity::compile(i).map_err(|reason| invalid(name, "identity", reason))?;
+        }
+        if let Some(sd) = &sections {
+            if sd.required.is_empty() && !sd.exempt_statuses.is_empty() {
+                return Err(invalid(
+                    name,
+                    "sections",
+                    "`exempt_statuses` has no effect without `required`; declare `required` or remove it"
+                        .into(),
+                ));
+            }
         }
         if identity.is_some() || fields.is_some() || sections.is_some() {
             models.insert(
@@ -525,5 +669,64 @@ mod tests {
                 Some(shape)
             );
         }
+    }
+
+    #[test]
+    fn required_sections_and_their_shapes_parse() {
+        let m = split(&cfg(
+            "    sections: {from: headings, required: [{name: Context}, {name: Decision, shape: y-statement, marker: 'TL;DR'}, {name: Options, shape: table-min-rows, min_rows: 2}], exempt_statuses: [Withdrawn]}\n",
+        ))
+        .unwrap();
+        let s = m["adr"].sections.as_ref().unwrap();
+        assert_eq!(s.exempt_statuses, vec!["Withdrawn".to_string()]);
+        assert_eq!(s.required[0].shape, None);
+        assert_eq!(
+            s.required[1].shape,
+            Some(SectionShape::YStatement {
+                marker: Some("TL;DR".into())
+            })
+        );
+        assert_eq!(
+            s.required[2].shape,
+            Some(SectionShape::TableMinRows { min_rows: 2 })
+        );
+    }
+
+    #[test]
+    fn a_malformed_required_declaration_fails_the_load_naming_the_problem() {
+        for (decl, needle) in [
+            ("{name: ' '}", "blank"),
+            ("{name: A, shape: prose}", "unknown shape"),
+            ("{name: A, shape: table-min-rows}", "min_rows"),
+            ("{name: A, shape: table-min-rows, min_rows: 0}", "min_rows"),
+            (
+                "{name: A, shape: table-min-rows, min_rows: 2, marker: x}",
+                "marker",
+            ),
+            ("{name: A, shape: y-statement, min_rows: 2}", "min_rows"),
+            ("{name: A, marker: x}", "without a `shape`"),
+            ("{name: A, shape: y-statement, marker: ' '}", "marker"),
+            ("{name: A, bogus: 1}", "bogus"),
+        ] {
+            let e = invalid(&format!(
+                "    sections: {{from: headings, required: [{decl}]}}\n"
+            ));
+            assert!(e.contains("adr") && e.contains(needle), "{decl}: {e}");
+        }
+        let e = invalid("    sections: {from: headings, required: [{name: A}, {name: A}]}\n");
+        assert!(e.contains("twice"), "{e}");
+    }
+
+    #[test]
+    fn exempt_statuses_without_required_is_refused_not_a_silent_no_op() {
+        let e = invalid("    sections: {from: headings, exempt_statuses: [Withdrawn]}\n");
+        assert!(
+            e.contains("exempt_statuses") && e.contains("required"),
+            "{e}"
+        );
+        let e = invalid(
+            "    sections: {from: headings, required: [{name: A}], exempt_statuses: [' ']}\n",
+        );
+        assert!(e.contains("blank"), "{e}");
     }
 }

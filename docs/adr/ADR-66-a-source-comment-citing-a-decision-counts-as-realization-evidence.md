@@ -34,7 +34,7 @@ a parallel mechanism and the replacement bar (`MILE-102`) is not met.
 
 In the context of an adopter whose source files carry `Implements: ADR-N` comments, facing the
 choice between ignoring them and crediting them, we decided that **a whole-line source comment
-`Implements: <record id>[, <record id>...]`, in a file under a declared `source_paths` entry, counts
+`Implements: <record id>[, <record id>...]`, in a file under a declared `back_pointer_paths` entry, counts
 as code-tier realization evidence for each record it cites**, and that **a comment citing a record
 that does not exist is reported** by the opt-in rule `embodiment.back-pointer-resolution`. We chose
 this to give an existing practice a place in the evidence model, accepting that a comment remains an
@@ -51,7 +51,7 @@ This narrows `RFC-5` section 2 and does not edit it. The pieces of that section 
 Narrowest reading, as built: only a comment line that starts with a comment leader and then the
 case-sensitive marker `Implements:` is read (a trailing comment after code is not); reading stops at
 the first token that is not a declared-prefix record id; ids compare numerically. Evidence is
-collected only while the rule is enabled, from the `source_paths` option, the same list that scopes
+collected only while the rule is enabled, from the `back_pointer_paths` option, the same list that scopes
 the dangling check; `urzua fix` reads the same evidence so the two never disagree.
 
 ## Reversibility
@@ -80,4 +80,4 @@ adopter who enabled it and stated `Implemented` on the strength of comments alon
 - `RFC-5` section 2 — the pointer lives on the record; narrowed here.
 - `RFC-28` — restates the section 2 decision; not reopened.
 - `MILE-128` — the decision this implements; `MILE-102` — the adopter replacement it serves.
-- `SPEC-2` — the rule table and the `source_paths` option.
+- `SPEC-2` — the rule table and the `back_pointer_paths` option.

@@ -121,12 +121,18 @@ pub enum PopulationUnit {
     Claim,
     /// One decision ID cited in a record's prose.
     Citation,
+    /// One `(record, section)` pair where the section is **declared by
+    /// config** (`sections.required`), so a section the record lacks is still
+    /// counted.
+    Section,
     /// One other rule's execution. The unit of a rule that judges the run
     /// rather than the corpus.
     Rule,
     /// One tracked file under a declared published path, read as text. The
     /// file is not a record: the rule judges what it cites.
     File,
+    /// One path in the changed set of a `--base` run.
+    ChangedPath,
 }
 
 /// What a rule decided about one candidate it was handed.
@@ -323,6 +329,10 @@ impl Population {
 pub enum RuleStatus {
     Ran,
     NotEnabled,
+    /// Enabled, but the run cannot supply what the rule judges: a diff rule on a
+    /// run with no `--base`. Distinct from `Ran` so a skipped gate is never read
+    /// as a passed one, and from `NotEnabled` so the declaration is still seen.
+    NotApplicable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

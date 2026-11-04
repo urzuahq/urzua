@@ -125,12 +125,12 @@ fn title_form_problem(
 /// Whether an H1 exists and whether it carries a number are independent
 /// questions, so they stay independent `Option`s rather than collapsing into
 /// one absent value.
-struct H1<'a> {
+pub(super) struct H1<'a> {
     /// 1-indexed, matching [`crate::header::Header::region`].
     line: usize,
-    text: &'a str,
+    pub(super) text: &'a str,
     /// The first whitespace-separated word of the title.
-    first_token: &'a str,
+    pub(super) first_token: &'a str,
     /// Compared by numeric value (BUG-0002), so padding never mismatches.
     number: Option<u64>,
 }
@@ -139,7 +139,7 @@ struct H1<'a> {
 /// `# ` and would otherwise read as the title. Only a region opening at line
 /// 1 is frontmatter -- blockquote and bold-list headers sit *after* the H1,
 /// where skipping past them would skip the title itself.
-fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'_>> {
+pub(super) fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'_>> {
     let skip_through = header_region
         .filter(|&(start, _)| start == 1)
         .map(|(_, end)| end);
@@ -211,6 +211,173 @@ fn elided(text: &str) -> String {
         return text.to_string();
     }
     text.chars().take(MAX).chain(['…']).collect()
+}
+
+/// `MILE-120`: a file directly in a type's `dir` whose name yields no
+/// identity. Such a file is a loaded record that every identity-reading rule
+/// silently skips, so nothing else says it is there.
+///
+/// "On pattern" is exactly "`record_id` finds an identifier": the type's
+/// declared `identity.pattern` when it has one, else the `TYPE-NNNN-slug.md`
+/// convention (`ADR-36`). Reusing the loader's own answer keeps the rule from
+/// disagreeing with the rules it explains.
+///
+/// When *every* file of a type is off-pattern (a bare-number corpus, `RFC-46`
+/// rejected), one finding per type on the directory lists each file with its
+/// expected name, rather than one finding per file: the fix is one rename pass.
+pub fn filename_identity_pattern(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_FILENAME_IDENTITY_PATTERN;
+    let mut findings = Vec::new();
+
+    let mut off_pattern: HashMap<&str, Vec<&Record>> = HashMap::new();
+    let mut totals: HashMap<&str, usize> = HashMap::new();
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        records.iter().collect(),
+        |record| record.path.clone(),
+        |record| {
+            *totals.entry(record.record_type.as_str()).or_default() += 1;
+            if record_id(record).is_none() {
+                off_pattern
+                    .entry(record.record_type.as_str())
+                    .or_default()
+                    .push(record);
+            }
+            Outcome::Examined
+        },
+    );
+
+    let mut type_names: Vec<&str> = off_pattern.keys().copied().collect();
+    type_names.sort();
+    for type_name in type_names {
+        let mut off = off_pattern.remove(type_name).unwrap_or_default();
+        off.sort_by(|a, b| a.path.cmp(&b.path));
+        let type_config = config.record_types.get(type_name);
+        let identity = type_config
+            .and_then(|t| {
+                crate::document_model::declared_model(type_name, t)
+                    .ok()
+                    .flatten()
+            })
+            .and_then(|m| m.resolve().ok())
+            .and_then(|m| m.identity);
+        let pattern = type_config
+            .and_then(|t| t.identity.as_ref())
+            .and_then(|v| v.get("pattern"))
+            .and_then(|v| v.as_str());
+        let convention = match pattern {
+            Some(p) => format!("the declared identity pattern '{p}'"),
+            None => "the 'TYPE-NNNN-slug.md' convention".to_string(),
+        };
+        let guidance = |record: &Record| -> String {
+            let name = file_name_of(record);
+            let expected = expected_name(&record.type_prefix, &name, identity.as_ref());
+            format!("{name} -> {expected}")
+        };
+
+        if off.len() == totals.get(type_name).copied().unwrap_or(0) {
+            let dir = type_config.map_or_else(
+                || {
+                    off[0]
+                        .path
+                        .parent()
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_default()
+                },
+                |t| std::path::PathBuf::from(&t.dir),
+            );
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Warning,
+                file: dir,
+                line: None,
+                waived: None,
+                message: format!(
+                    "none of record type '{type_name}''s {} file(s) matches {convention}, so \
+                     no identity-reading rule can examine any of them; rename each: {}",
+                    off.len(),
+                    off.iter()
+                        .map(|r| guidance(r))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ),
+            });
+        } else {
+            for record in off {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    message: format!(
+                        "file name does not match {convention} for record type '{type_name}', \
+                         so it has no identity and identity-reading rules skip it; rename: {}",
+                        guidance(record)
+                    ),
+                });
+            }
+        }
+    }
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+fn file_name_of(record: &Record) -> String {
+    record
+        .path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// The name a file should have. A leading run of digits is the number the
+/// author already gave it (`0005-x.md` -> `ADR-0005-x.md`, padding kept, as
+/// `ADR-0173` and `ADR-173` compare equal); otherwise there is no number to
+/// carry and the name is a template. A candidate the type's declared pattern
+/// would itself reject is not offered: the guidance must not point at another
+/// off-pattern name.
+fn expected_name(
+    prefix: &str,
+    file_name: &str,
+    identity: Option<&crate::document_model::CompiledIdentity>,
+) -> String {
+    let stem = file_name.strip_suffix(".md").unwrap_or(file_name);
+    let digits = stem.chars().take_while(char::is_ascii_digit).count();
+    let (number, rest) = stem.split_at(digits);
+    let rest = rest.trim_start_matches(['-', '_', ' ']);
+    let (number, rest) = if number.is_empty() {
+        ("NNNN", stem)
+    } else {
+        (number, rest)
+    };
+    let candidate = if rest.is_empty() {
+        format!("{prefix}-{number}.md")
+    } else {
+        format!("{prefix}-{number}-{rest}.md")
+    };
+    match identity {
+        Some(declared)
+            if declared
+                .identify(&candidate.replacen("NNNN", "0001", 1))
+                .number
+                .is_none() =>
+        {
+            "(a name the declared pattern accepts)".to_string()
+        }
+        _ => candidate,
+    }
 }
 
 #[cfg(test)]
@@ -467,5 +634,133 @@ mod tests {
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), "# ADR-98 — X\n".to_string());
         assert!(filename_title_consistency(&[r], &full_text).1.is_empty());
+    }
+
+    fn adr_config(identity: Option<&str>) -> Config {
+        let mut t = type_config(None);
+        t.dir = "docs/adr".to_string();
+        t.prefix = Some("ADR".to_string());
+        t.identity = identity
+            .map(|p| yaml_serde::from_str(&format!("{{from: filename, pattern: '{p}'}}")).unwrap());
+        config_with_types(vec![("adr", t)])
+    }
+
+    fn adr_record(config: &Config, name: &str) -> Record {
+        let model = crate::document_model::declared_model("adr", &config.record_types["adr"])
+            .unwrap()
+            .map(|m| m.resolve().unwrap())
+            .unwrap_or_default();
+        Record::parse_with_model(
+            PathBuf::from(format!("docs/adr/{name}")),
+            "adr".to_string(),
+            "# 1 - X\n",
+            crate::header::HeaderShape::default(),
+            "ADR".to_string(),
+            &model,
+        )
+    }
+
+    #[test]
+    fn one_off_pattern_file_among_conforming_ones_is_one_finding_observed_failing() {
+        let config = adr_config(None);
+        let records: Vec<Record> = ["ADR-1-a.md", "ADR-0002-b.md", "draft.md"]
+            .iter()
+            .map(|n| adr_record(&config, n))
+            .collect();
+        let (exec, findings) = filename_identity_pattern(&records, &config);
+        assert_eq!(examined(&exec), 3, "the census counts every file");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].file, PathBuf::from("docs/adr/draft.md"));
+        assert!(
+            findings[0].message.contains("ADR-NNNN-draft.md"),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_whole_bare_number_corpus_is_one_finding_per_type_with_every_expected_name() {
+        let config = adr_config(None);
+        let records: Vec<Record> = ["0001-use-a-queue.md", "0002-use-a-stream.md"]
+            .iter()
+            .map(|n| adr_record(&config, n))
+            .collect();
+        let (exec, findings) = filename_identity_pattern(&records, &config);
+        assert_eq!(examined(&exec), 2);
+        assert_eq!(
+            findings.len(),
+            1,
+            "once per type, not per file: {findings:?}"
+        );
+        assert_eq!(findings[0].file, PathBuf::from("docs/adr"));
+        let m = &findings[0].message;
+        assert!(
+            m.contains("0001-use-a-queue.md -> ADR-0001-use-a-queue.md"),
+            "{m}"
+        );
+        assert!(
+            m.contains("0002-use-a-stream.md -> ADR-0002-use-a-stream.md"),
+            "{m}"
+        );
+    }
+
+    #[test]
+    fn a_declared_pattern_decides_what_is_off_pattern() {
+        let config = adr_config(Some(r"^(?P<prefix>ADR)_(?P<number>\d+)$"));
+        let records: Vec<Record> = ["ADR_1.md", "ADR-2-x.md"]
+            .iter()
+            .map(|n| adr_record(&config, n))
+            .collect();
+        let (_, findings) = filename_identity_pattern(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].file, PathBuf::from("docs/adr/ADR-2-x.md"));
+        assert!(
+            findings[0].message.contains("identity pattern"),
+            "names the pattern: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_bare_number_corpus_under_a_declared_pattern_gets_a_rename_that_matches_it() {
+        let config = adr_config(Some(r"^(?P<prefix>ADR)-(?P<number>\d+)-(?P<slug>.+)$"));
+        let records = vec![adr_record(&config, "0005-x.md")];
+        let (_, findings) = filename_identity_pattern(&records, &config);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("0005-x.md -> ADR-0005-x.md"));
+    }
+
+    #[test]
+    fn a_conforming_corpus_and_an_empty_dir_are_silent_but_still_counted() {
+        let config = adr_config(None);
+        let records = vec![adr_record(&config, "ADR-1-a.md")];
+        let (exec, findings) = filename_identity_pattern(&records, &config);
+        assert!(findings.is_empty());
+        assert_eq!(examined(&exec), 1);
+        let (exec, findings) = filename_identity_pattern(&[], &config);
+        assert!(findings.is_empty());
+        assert_eq!(examined(&exec), 0);
+        assert!(
+            exec.population.is_some(),
+            "ran on nothing is reported, not hidden"
+        );
+    }
+
+    #[test]
+    fn a_hyphenated_type_prefix_is_kept_whole() {
+        let mut t = type_config(None);
+        t.dir = "docs/adr".to_string();
+        t.prefix = Some("DOC-ADR".to_string());
+        let config = config_with_types(vec![("adr", t)]);
+        let r = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/adr/7-x.md"),
+            "adr".to_string(),
+            "",
+            crate::header::HeaderShape::default(),
+            "DOC-ADR".to_string(),
+        );
+        let (_, findings) = filename_identity_pattern(&[r], &config);
+        assert!(
+            findings[0].message.contains("DOC-ADR-7-x.md"),
+            "{findings:?}"
+        );
     }
 }

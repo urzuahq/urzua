@@ -76,11 +76,57 @@ pub struct RuleSetting {
     /// `level` is the boundary's severity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub published_paths: Option<Vec<String>>,
+    /// The generated index artifacts `index.freshness` compares against the
+    /// records (`MILE-139`). Only meaningful to that rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub indexes: Option<Vec<IndexSpec>>,
+    /// Path prefixes of source code that must change with a governed record.
+    /// Only meaningful to `diff.source-requires-record` (`MILE-124`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_paths: Option<Vec<String>>,
+    /// Path prefixes of application source. Only meaningful to
+    /// `diff.source-and-records-mixed` (`MILE-142`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application_paths: Option<Vec<String>>,
+    /// Path prefixes removed from `application_paths` (tests, fixtures). Only
+    /// meaningful to `diff.source-and-records-mixed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_paths: Option<Vec<String>>,
+    /// Admit header keys beginning `x-` (case-insensitive) as extension keys
+    /// (`MILE-141`). Only meaningful to `header.field-set-consistency`, where
+    /// omitted means `false`: every undeclared key is a finding. A declared
+    /// `true` exempts prefixed keys from that rule and nothing else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_extension_prefix: Option<bool>,
     /// Path prefixes of the source files scanned for `Implements:` comment
     /// back-pointers (`MILE-128`). Only meaningful to
     /// `embodiment.back-pointer-resolution`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_paths: Option<Vec<String>>,
+    pub back_pointer_paths: Option<Vec<String>>,
+}
+
+/// One generated index artifact a repository commits: a file listing the
+/// records of one type, one entry per line, in a declared line format. The
+/// engine regenerates nothing and writes nothing; it compares the committed
+/// entries with the records (`MILE-139`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IndexSpec {
+    /// The artifact, relative to the repository root.
+    pub path: String,
+    /// The declared record type whose records the artifact lists.
+    #[serde(rename = "type")]
+    pub record_type: String,
+    /// One entry's line, with `{id}` (required), `{file}` and `{title}`
+    /// placeholders, e.g. `- [{id}]({file}): {title}`.
+    pub format: String,
+    /// Marker lines delimiting the generated list inside a larger file (a
+    /// README). Both or neither: with neither, every non-blank line of the
+    /// file is an entry.
+    #[serde(default)]
+    pub begin: Option<String>,
+    #[serde(default)]
+    pub end: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,7 +191,17 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             published_paths: Option<Vec<String>>,
             #[serde(default)]
+            indexes: Option<Vec<IndexSpec>>,
+            #[serde(default)]
             source_paths: Option<Vec<String>>,
+            #[serde(default)]
+            application_paths: Option<Vec<String>>,
+            #[serde(default)]
+            exclude_paths: Option<Vec<String>>,
+            #[serde(default)]
+            allow_extension_prefix: Option<bool>,
+            #[serde(default)]
+            back_pointer_paths: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -175,7 +231,12 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 terminal_statuses: table.terminal_statuses,
                 fields: table.fields,
                 published_paths: table.published_paths,
+                indexes: table.indexes,
                 source_paths: table.source_paths,
+                application_paths: table.application_paths,
+                exclude_paths: table.exclude_paths,
+                allow_extension_prefix: table.allow_extension_prefix,
+                back_pointer_paths: table.back_pointer_paths,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -187,7 +248,12 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 terminal_statuses: None,
                 fields: None,
                 published_paths: None,
+                indexes: None,
                 source_paths: None,
+                application_paths: None,
+                exclude_paths: None,
+                allow_extension_prefix: None,
+                back_pointer_paths: None,
             })
         }
     }
@@ -513,6 +579,12 @@ pub enum ConfigError {
         entry: String,
         reason: &'static str,
     },
+    #[error("rule '{rule}' option 'indexes' entry '{path}' {reason}")]
+    InvalidIndex {
+        rule: String,
+        path: String,
+        reason: String,
+    },
     #[error("record type '{record_type}' declares an invalid `{key}`: {reason}")]
     InvalidDocumentModel {
         record_type: String,
@@ -623,6 +695,24 @@ const RULE_OPTIONS: &[RuleOption] = &[
     },
     RuleOption {
         name: "source_paths",
+        owner: crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
+        consequence_if_missing: "declares no source and can never report",
+        optional: false,
+    },
+    RuleOption {
+        name: "application_paths",
+        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        consequence_if_missing: "declares no application source and can never report",
+        optional: false,
+    },
+    RuleOption {
+        name: "exclude_paths",
+        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        consequence_if_missing: "excludes nothing from the application source",
+        optional: true,
+    },
+    RuleOption {
+        name: "back_pointer_paths",
         owner: crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
         consequence_if_missing: "scans no source file and can never report",
         optional: false,
@@ -647,6 +737,9 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "fields" => setting.fields.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
         "source_paths" => setting.source_paths.as_ref(),
+        "application_paths" => setting.application_paths.as_ref(),
+        "exclude_paths" => setting.exclude_paths.as_ref(),
+        "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         _ => None,
     }
 }
@@ -654,7 +747,41 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    RULE_OPTIONS.iter().any(|o| o.owner == rule)
+    rule == crate::rules::RULE_INDEX_FRESHNESS || RULE_OPTIONS.iter().any(|o| o.owner == rule)
+}
+
+/// Why an `indexes` entry cannot be compared, or `None` when it can. Every
+/// reason is a config error: an entry that cannot be matched would be a rule
+/// that never reports.
+fn index_problem(spec: &IndexSpec, config: &Config) -> Option<String> {
+    let path = spec.path.trim();
+    if path.is_empty() {
+        return Some("has an empty path".to_string());
+    }
+    if let Some(reason) = published_path_problem(path) {
+        return Some(format!("path {reason}"));
+    }
+    if !config.record_types.contains_key(&spec.record_type) {
+        return Some(format!(
+            "names the type '{}', which is not a declared record type",
+            spec.record_type
+        ));
+    }
+    if let Err(reason) = crate::rules::parse_index_format(&spec.format) {
+        return Some(format!("has an invalid format: {reason}"));
+    }
+    match (&spec.begin, &spec.end) {
+        (None, None) => None,
+        (Some(b), Some(e)) if !b.trim().is_empty() && !e.trim().is_empty() => {
+            if b.trim() == e.trim() {
+                Some("declares the same begin and end marker".to_string())
+            } else {
+                None
+            }
+        }
+        (Some(_), Some(_)) => Some("declares a blank marker".to_string()),
+        _ => Some("declares only one of begin and end; give both or neither".to_string()),
+    }
 }
 
 /// A `published_paths` entry in the one form the rule compares: whitespace
@@ -757,6 +884,36 @@ pub fn parse_with_document_models(
             });
         }
     }
+    // `indexes` is the one structured option, so it is validated apart from
+    // the list-of-strings table below.
+    for (name, setting) in &config.rules {
+        let owner = name == crate::rules::RULE_INDEX_FRESHNESS;
+        if setting.indexes.is_some() && !owner {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "indexes".to_string(),
+            });
+        }
+        if !owner || setting.level == RuleLevel::Off {
+            continue;
+        }
+        let Some(indexes) = setting.indexes.as_ref().filter(|v| !v.is_empty()) else {
+            return Err(ConfigError::OptionRequired {
+                rule: name.clone(),
+                option: "indexes".to_string(),
+                consequence: "compares no artifact and can never report",
+            });
+        };
+        for spec in indexes {
+            if let Some(reason) = index_problem(spec, &config) {
+                return Err(ConfigError::InvalidIndex {
+                    rule: name.clone(),
+                    path: spec.path.clone(),
+                    reason,
+                });
+            }
+        }
+    }
     // A list of blanks is an empty list wearing a value.
     let declared = |v: &Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
 
@@ -769,6 +926,14 @@ pub fn parse_with_document_models(
                     option: opt.name.to_string(),
                 });
             }
+        }
+        if setting.allow_extension_prefix.is_some()
+            && name != crate::rules::RULE_HEADER_FIELD_SET_CONSISTENCY
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "allow_extension_prefix".to_string(),
+            });
         }
 
         // An option-taking rule given no option does not fall back to a sane
@@ -800,17 +965,20 @@ pub fn parse_with_document_models(
             }
         }
     }
-    // Published and source paths: reject what cannot name a path inside the
-    // repository, then store the normalised form so the rule, its messages
-    // and its findings all use the same spelling.
+    // Published paths: reject what cannot name a path inside the repository,
+    // then store the normalised form so the rule, its messages and its
+    // findings all use the same spelling.
     for (name, setting) in config.rules.iter_mut() {
         let level = setting.level;
-        let options: [(&'static str, Option<&mut Vec<String>>); 2] = [
-            ("published_paths", setting.published_paths.as_mut()),
-            ("source_paths", setting.source_paths.as_mut()),
+        let path_options: [(&'static str, &mut Option<Vec<String>>); 5] = [
+            ("published_paths", &mut setting.published_paths),
+            ("source_paths", &mut setting.source_paths),
+            ("application_paths", &mut setting.application_paths),
+            ("exclude_paths", &mut setting.exclude_paths),
+            ("back_pointer_paths", &mut setting.back_pointer_paths),
         ];
-        for (option, paths) in options {
-            let Some(paths) = paths else {
+        for (option, paths) in path_options {
+            let Some(paths) = paths.as_mut() else {
                 continue;
             };
             for entry in paths.iter_mut() {
@@ -1230,32 +1398,33 @@ rules:
     }
 
     #[test]
-    fn source_paths_is_required_by_the_back_pointer_rule_and_by_no_other() {
+    fn back_pointer_paths_is_required_by_the_back_pointer_rule_and_by_no_other() {
         let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
         assert!(parse(&format!(
             "{base}  embodiment.back-pointer-resolution: error\n"
         ))
         .unwrap_err()
         .to_string()
-        .contains("source_paths"));
+        .contains("back_pointer_paths"));
         let ok = parse(&format!(
-            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    source_paths: [\"./src/\"]\n"
+            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"./src/\"]\n"
         ))
         .unwrap();
         assert_eq!(
-            ok.rules["embodiment.back-pointer-resolution"].source_paths,
+            ok.rules["embodiment.back-pointer-resolution"].back_pointer_paths,
             Some(vec!["src".to_string()])
         );
         let bad = parse(&format!(
-            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    source_paths: [\"../x\"]\n"
+            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"../x\"]\n"
         ));
-        assert!(bad.unwrap_err().to_string().contains("source_paths"));
-        let elsewhere =
-            format!("{base}  field.quality:\n    level: error\n    source_paths: [\"src\"]\n");
+        assert!(bad.unwrap_err().to_string().contains("back_pointer_paths"));
+        let elsewhere = format!(
+            "{base}  field.quality:\n    level: error\n    back_pointer_paths: [\"src\"]\n"
+        );
         assert!(parse(&elsewhere)
             .unwrap_err()
             .to_string()
-            .contains("does not take the option 'source_paths'"));
+            .contains("does not take the option 'back_pointer_paths'"));
     }
 
     #[test]
@@ -1271,6 +1440,27 @@ rules:
         let err = parse(yaml).unwrap_err().to_string();
         assert!(err.contains("field.qualty"), "{err}");
         assert!(err.contains("field.quality"), "{err}");
+    }
+
+    /// `MILE-141`: the extension-prefix option is a `header.field-set-consistency`
+    /// option only, and is read as a bool, never a list.
+    #[test]
+    fn allow_extension_prefix_loads_on_field_set_consistency_only() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [\"Status\"]\nrules:\n";
+        let config = parse(&format!(
+            "{base}  header.field-set-consistency:\n    level: warn\n    allow_extension_prefix: true\n"
+        ))
+        .expect("the option loads on the rule that takes it");
+        let setting = &config.rules["header.field-set-consistency"];
+        assert_eq!(setting.allow_extension_prefix, Some(true));
+
+        let err = parse(&format!(
+            "{base}  header.required-fields:\n    level: warn\n    allow_extension_prefix: true\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("header.required-fields"), "{err}");
+        assert!(err.contains("allow_extension_prefix"), "{err}");
     }
 
     #[test]
@@ -1671,5 +1861,34 @@ record_types:
             );
             assert!(err.to_string().contains("published_paths"), "{err}");
         }
+    }
+
+    fn index_config(indexes: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  index.freshness:\n    level: error\n    indexes: {indexes}\n"
+        )
+    }
+
+    #[test]
+    fn indexes_is_required_by_the_index_rule_and_by_no_other() {
+        let good = "[{path: docs/adr/README.md, type: adr, format: \"{id}: {title}\"}]";
+        assert!(parse(&index_config(good)).is_ok());
+        for bad in [
+            "[]",
+            "[{path: docs/adr/README.md, type: nope, format: \"{id}\"}]",
+            "[{path: docs/adr/README.md, type: adr, format: \"{title}\"}]",
+            "[{path: /abs/README.md, type: adr, format: \"{id}\"}]",
+            "[{path: docs/adr/README.md, type: adr, format: \"{id}\", end: \"<!-- e -->\"}]",
+        ] {
+            let err = parse(&index_config(bad)).unwrap_err().to_string();
+            assert!(err.contains("indexes"), "{bad}: {err}");
+        }
+        let other = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  field.quality:\n    level: error\n    indexes: []\n";
+        assert!(parse(other)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'indexes'"));
+        let off = index_config("[]").replace("level: error", "level: off");
+        assert!(parse(&off).is_ok());
     }
 }

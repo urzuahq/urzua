@@ -339,10 +339,10 @@ pub(crate) fn read_files_under(
 }
 
 /// The source files `embodiment.back-pointer-resolution` scans, with the
-/// declared `source_paths` (`MILE-128`).
+/// declared `back_pointer_paths` (`MILE-128`).
 pub(crate) struct BackPointerSources {
     pub(crate) files: Vec<rules::PublishedFile>,
-    pub(crate) source_paths: Vec<String>,
+    pub(crate) back_pointer_paths: Vec<String>,
 }
 
 /// Reads the back-pointer sources, or `None` when the rule is absent or off:
@@ -357,7 +357,7 @@ pub(crate) fn read_back_pointer_sources(
         .rules
         .get(rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
         .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
-        .and_then(|s| s.source_paths.clone())
+        .and_then(|s| s.back_pointer_paths.clone())
     else {
         return Ok(None);
     };
@@ -369,6 +369,6 @@ pub(crate) fn read_back_pointer_sources(
     )?;
     Ok(Some(BackPointerSources {
         files,
-        source_paths,
+        back_pointer_paths: source_paths,
     }))
 }

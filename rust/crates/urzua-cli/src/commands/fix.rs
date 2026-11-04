@@ -62,7 +62,7 @@ pub fn run(
                 let (index, _) = urzua_core::rules::build_index_reporting_collisions(&records);
                 urzua_core::rules::back_pointer_evidence(
                     &sources.files,
-                    &sources.source_paths,
+                    &sources.back_pointer_paths,
                     &config,
                     &index,
                 )
