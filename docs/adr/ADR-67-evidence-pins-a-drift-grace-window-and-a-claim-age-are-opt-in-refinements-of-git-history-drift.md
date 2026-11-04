@@ -62,8 +62,38 @@ parameter on a pure function. Removing the options or the suffix returns the `AD
   attribution beyond the commit that does it.
 - The grace window delays a true positive by design; it trades latency for fewer blocks.
 
+## Amendment (2026-11-04): re-baselining is built, and three behaviours shipped since
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+Statements in the Context-to-Consequences text are no longer true, and three behaviours that change
+when a record reports are not recorded. The three opt-ins as decided (pin syntax, grace window,
+claim age) are built as written.
+
+- **Attributed re-baselining is built.** "Not decided here" says an attributed re-baseline "is not
+  built; a pin is re-set by hand". `urzua fix --rebaseline` (`#238`, `MILE-181`) now lists each stale
+  pin with its recorded and current hash and, with `--apply`, rewrites a record's pins and appends an
+  attributed revision row. It is gated: it needs `--ids` (a record path) or `--force`, an identity,
+  and `--reason`. Option B's con "no attributed re-baseline command" and the Consequences bullet
+  "Without a re-baseline command, a changed pinned file is cleared by editing the hash" no longer
+  apply. A record with no pins to re-set (an unpinned record) is still pinned by hand, as `SPEC-8`
+  describes.
+- **A stated `Drift detected` is accepted inside the window (`#182`).** Within `drift_grace_days` a
+  record that states `Drift detected` agrees with what is computed, and `urzua fix` leaves it alone.
+- **A declared audit date moves the window's anchor (`MILE-166`).** `drift_audit_field` (here
+  `Last-audited`) makes the window count from the date a record declares its evidence was audited,
+  not from the cited file's last commit.
+- **Git failures and shallow clones are reported (`#214`).** A commit git cannot find is an error
+  the check reports, not a read of "no drift". `ADR-32`'s amendment records the same change.
+
 ## References
 
 - `ADR-32` -- the git-history drift this refines.
 - `RFC-2` -- the hash, grace window and attributed refresh proposal.
 - `MILE-129` -- the decision this builds.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Amendment added: attributed re-baselining is built (`#238`, `MILE-181`), and `#182`, `MILE-166` and `#214` are recorded. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. `Status` stays `Proposed` and the Decision text is unchanged. | **substantive** |

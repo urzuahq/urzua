@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1Z3HTHA9VHQX8WCXXX9TQBA
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:f8fe5e070ddb8ef7a7a080a4ca9cbfed4fe099cfa2180210f870c472e9891cf4, code:rust/crates/urzua-core/src/rules/header.rs@sha256:17e08ea792a9e943ebce30619e42d99a83effc01d0160e2efd943ee056164097, test:rust/crates/urzua-core/src/rules/header.rs@sha256:17e08ea792a9e943ebce30619e42d99a83effc01d0160e2efd943ee056164097
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:251b70ec14f1d01f8af3431c4b36757fc05754f81929fad6910912011a941b87, code:rust/crates/urzua-core/src/rules/header.rs@sha256:7c679be9601d5570f38f284c20baf4a50a17c18aeae3cdfa94ed0b2671f4b2b4, test:rust/crates/urzua-core/src/rules/header.rs@sha256:7c679be9601d5570f38f284c20baf4a50a17c18aeae3cdfa94ed0b2671f4b2b4
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -81,3 +81,4 @@ rule and the existing schema untouched.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 9f42b6db5. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/header.rs` 17e08ea792a9 -> 7c679be9601d. Reason: Re-verified: header.field-set-consistency exists and known_fields is still per-type and additive to required_fields. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
