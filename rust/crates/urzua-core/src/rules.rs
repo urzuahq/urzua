@@ -78,6 +78,7 @@ mod tests {
     ) -> Config {
         Config {
             schema_version: 2,
+            relation_pairs: Vec::new(),
             rules: std::collections::BTreeMap::new(),
             record_types: entries
                 .into_iter()

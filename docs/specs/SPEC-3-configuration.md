@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -118,6 +118,54 @@ supplies only the **default** scope for a record type and the resolver's globbin
 The distinction matters: a default written into a new record by `urzua new` is a value an author can
 see and correct; a default applied silently at read time is a fact nobody reviewed.
 
+## Relation pairs
+
+A top-level `relation_pairs` list declares pairs of inverse relation fields (`RFC-47`, `MILE-122`).
+Each entry:
+
+```yaml
+relation_pairs:
+  - name: resolution          # unique, non-blank
+    forward: "Resolves"       # this record -> the record it resolves
+    inverse: "Resolved-by"    # the resolved record -> this one
+    reciprocity: required     # required | none
+    cross_type: true          # optional, default true
+```
+
+A claim `A.forward = B` is echoed by `B.inverse = A`, and `A.inverse = B` by `B.forward = A`.
+Direction is the field name, so two records each claiming the `forward` side do not satisfy each
+other. `relation.pair-reciprocity` checks `reciprocity: required` pairs; `relation.cross-type-disallowed`
+reports a claim whose target is another record type in a `cross_type: false` pair, which the
+reciprocity rule excludes (counted out of scope) rather than skipping silently.
+
+The narrowest reading of what `RFC-47` leaves open, each a decision recorded here until an ADR
+revisits it:
+
+- **Per-type binding.** None. A pair's two names are global: every type that declares a name in
+  `required_fields` or `known_fields` carries that side. A type declaring neither is not that pair's
+  business. A claim to a type that does not declare the echoing field is an unechoed claim.
+  `relation_fields` is unchanged and still binds only the fixed roles.
+- **Config shape.** Top-level `relation_pairs`, not per type.
+- **Fixed `RelationRole` set.** Unchanged. `Supersession` keeps its combined
+  `Supersedes / Superseded-by` key and `relation.supersession-reciprocity` stays beside the general
+  rule: folding it in would change findings (it reads one combined key with no direction), so it is
+  not replaced. This repository declares no pair.
+- **Combined keys.** Not supported by `relation_pairs`; a `combined` key is rejected as an unknown
+  key. A pair names two distinct fields.
+- **`Amends` one-way.** Not decided. A corpus that wants `Amends` / `Amended-by` echoed declares that
+  pair; one that treats `Amends` as one-way declares none. This repository declares none, so `BUG-17`
+  stays `Open`.
+- **`advisory`.** Refused at load. The rule's declared level is the repository's severity
+  (`MILE-80`), so a per-pair severity has nothing to set.
+- **Direction-mismatch.** `relation.direction-mismatch` is not built; an unechoed claim already
+  reports a mismatched direction, because the echo is read from the opposite field.
+
+Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
+declared by no type (the pair could never examine a record), a field used by two pairs or twice by one
+pair, an unknown `reciprocity`, and enabling either pair rule while no pair is declared. A pair field
+declared as a `pointer_fields` entry is also resolved by `pointer.resolution`, so an unresolved
+reference reports twice; keep pair fields outside `pointer_fields`, as `Supersedes / Superseded-by` is.
+
 ## `urzua doctor`
 
 **Specified in full by SPEC-15.** Reports on the tool's own configuration and invocation health —
@@ -194,3 +242,4 @@ indistinguishable in the report from one that ran clean:
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command reads `.urzua/config.yaml` on every invocation, and this spec was revised again today to document the `rules` table `MILE-80` shipped. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 > | 2026-09-18 | Criterion 3 corrected. **Why:** it still read *"not yet true today, since no per-rule enable/disable or severity config exists yet"* on the day after `MILE-80` shipped exactly that — and this record was marked `Accepted`/`Verified` in the same change, which is `BUG-26`'s own defect committed while fixing `BUG-26`. Caught by review. The `doctor` half is genuinely still unbuilt and now says so rather than being swept up with the half that shipped. | **substantive** |
 > | 2026-11-03 | Bumped to `0.5`. Documented the per-type document model declaration (`identity`, `fields`, `sections`) as parsed and validated but read by no rule yet. **Why:** first slice of `MILE-98` (`RFC-33` layer 1): a record type can now declare how its parts are found, and a malformed declaration fails the load instead of being ignored. | **substantive** |
+> | 2026-11-04 | Bumped to `0.6`. Documented the top-level `relation_pairs` declaration and the narrowest reading of each question `RFC-47` leaves open (global field names, no combined key, no `advisory`, fixed role set unchanged). **Why:** `MILE-122` -- reciprocity was hardcoded to one combined key, so a pair a repository declares itself, including across record types, could not be checked. | **substantive** |

@@ -209,6 +209,7 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                relation_pairs: Vec::new(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -318,10 +319,19 @@ mod tests {
             "Supersedes / Superseded-by",
             "Derives-from",
             "Blocked-on",
+            "Follows",
+            "Followed-by",
         ]);
 
         let config = Config {
             schema_version: 2,
+            relation_pairs: vec![crate::config::RelationPair {
+                name: "follow".to_string(),
+                forward: "Follows".to_string(),
+                inverse: "Followed-by".to_string(),
+                reciprocity: crate::config::PairReciprocity::Required,
+                cross_type: false,
+            }],
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "note".to_string(),
@@ -410,6 +420,14 @@ mod tests {
                 rules::supersession_reciprocity(&records, &config, &record_index),
             ),
             (
+                "relation.pair-reciprocity",
+                rules::relation_pair_reciprocity(&records, &config, &record_index),
+            ),
+            (
+                "relation.cross-type-disallowed",
+                rules::relation_cross_type_disallowed(&records, &config, &record_index),
+            ),
+            (
                 "embodiment.consistency",
                 rules::embodiment_consistency(&records, &config, &Default::default()),
             ),
@@ -480,6 +498,7 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                relation_pairs: Vec::new(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

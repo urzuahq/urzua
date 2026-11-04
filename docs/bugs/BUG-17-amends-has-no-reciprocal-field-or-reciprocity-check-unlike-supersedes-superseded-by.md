@@ -47,3 +47,4 @@ real decision, which is exactly how this was found.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right fix is a reciprocal `Amended-by` field, a reciprocity check reusing the existing combined-field pattern, or a deliberate decision that one-directional is correct after all (and documenting that decision explicitly, closing this without a code change) is not yet decided. | **structural** |
+> | 2026-11-04 | `relation_pairs` (`MILE-122`) now lets a repository declare `Amends` / `Amended-by` and have it echoed; this repository declares no pair, so the finding set is unchanged. Whether `Amends` should be one-way here is still undecided, so `Status` and the fix scope stand. **Why:** the general mechanism the fix needed now exists. | **substantive** |
