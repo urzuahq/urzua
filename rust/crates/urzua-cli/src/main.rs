@@ -311,7 +311,18 @@ fn main() -> ExitCode {
             ids,
             by,
             force,
-        } => commands::fix::run(cli.config, paths, stdin_path, tier, apply, ids, by, force),
+        } => commands::fix::run(
+            cli.config,
+            commands::fix::FixArgs {
+                paths,
+                stdin_path,
+                tier,
+                apply,
+                ids,
+                by,
+                force,
+            },
+        ),
     }
 }
 

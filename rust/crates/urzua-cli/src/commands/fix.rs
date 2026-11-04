@@ -10,16 +10,27 @@ use urzua_core::report::{CouldNotRun, FixFailure, FixReport, FixStatus, Notice, 
 use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::{emit, NOTICE_IDENTITY};
 
-pub fn run(
-    config_path: Option<PathBuf>,
-    paths: Vec<PathBuf>,
-    stdin_path: Option<PathBuf>,
-    tier: u8,
-    apply: bool,
-    ids: Vec<String>,
-    by: Option<String>,
-    force: bool,
-) -> ExitCode {
+/// The `urzua fix` command line, gathered so `run` stays one argument wide.
+pub struct FixArgs {
+    pub paths: Vec<PathBuf>,
+    pub stdin_path: Option<PathBuf>,
+    pub tier: u8,
+    pub apply: bool,
+    pub ids: Vec<String>,
+    pub by: Option<String>,
+    pub force: bool,
+}
+
+pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
+    let FixArgs {
+        paths,
+        stdin_path,
+        tier,
+        apply,
+        ids,
+        by,
+        force,
+    } = args;
     if tier != 1 {
         return emit(&CouldNotRun::from(
             "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
