@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -126,6 +126,33 @@ supersession reciprocity and dangling cross-references. Never writes.
 ### `urzua fix`
 **Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
 computes from evidence already in the record; apply mode writes the computed value back, gated hard.
+
+### `urzua refs refresh`
+Rewrites the committed snapshot of the repository's issue and pull request numbers that
+`citation.issue-exists` (`SPEC-2`) checks citations against, from the GitHub REST API
+(`MILE-143`). The declaration is configuration (`issue_refs`, `SPEC-3`): the command takes no
+arguments and reads the snapshot path and repository from it. It is the one command that uses the
+network, so `check` stays offline and deterministic and a stale snapshot is a file to refresh and
+commit, never a flaky run.
+
+- Requests go through `curl`, which honours the environment's proxy and certificate settings. A
+  token is read from `GITHUB_TOKEN`, else `GH_TOKEN`, and sent in an `Authorization` header over
+  `curl`'s stdin, never on a command line; with none the request is unauthenticated (a public
+  repository answers, with the lower rate limit) and an info notice says so. `URZUA_GITHUB_API`
+  replaces the default API origin `https://api.github.com` (GitHub Enterprise, and tests).
+- Pages of 100 are requested by `page=N` until the listing's `Link` header has no `rel="next"`; the
+  `Link` URL itself is never followed, so the token only goes to the configured origin. An entry
+  with a `pull_request` key is a pull request, any other an issue.
+- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}`, both lists
+  ascending and de-duplicated, pretty-printed with a final newline, so the same answers give the
+  same bytes and a refresh that learns nothing new on the same day leaves the file untouched
+  (`outcome: current`; otherwise `created` or `written`). The file is replaced only after every
+  page was fetched.
+- Stdout is one JSON report (`status`, `snapshot`, `repository`, `generated_at`, `outcome`,
+  `issues`, `pulls`, `newest`) and exit `0`. No network, no `curl`, an exhausted rate limit (the
+  error names the reset time), a rejected token, an unknown repository, a malformed answer, or no
+  declared `issue_refs` is exit `2` with `status: not-run` and the reason in `error`, and the
+  existing snapshot is left as it was.
 
 ### `urzua migrate ids` / `urzua migrate schema`
 **Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, and previews
@@ -275,3 +302,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 > | 2026-11-04 | Moved two revision rows (2026-09-17, 2026-09-18) that sat above the revision log marker, outside its table, into the table. No wording changed. **Why:** the rows were orphaned from the log, so the revision-log table was not what `citation.path-exists` set aside. | **structural** |
+> | 2026-11-04 | Bumped to `0.9`. Added `urzua refs refresh`, which rewrites the committed snapshot of issue and pull request numbers from the GitHub REST API (token from `GITHUB_TOKEN` or `GH_TOKEN`, `curl` transport, deterministic sorted output, exit `2` and no write on any failure); it is the only command that touches the network. **Why:** `MILE-143` -- the issue and pull request half of the cited-reference check needs a snapshot that `check` can read offline. | **substantive** |

@@ -10,14 +10,27 @@ use urzua_core::report::{CouldNotRun, FixFailure, FixReport, FixStatus, Notice, 
 use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::{emit, NOTICE_IDENTITY};
 
-pub fn run(
-    config_path: Option<PathBuf>,
-    tier: u8,
-    apply: bool,
-    ids: Vec<String>,
-    by: Option<String>,
-    force: bool,
-) -> ExitCode {
+/// The `urzua fix` command line, gathered so `run` stays one argument wide.
+pub struct FixArgs {
+    pub paths: Vec<PathBuf>,
+    pub stdin_path: Option<PathBuf>,
+    pub tier: u8,
+    pub apply: bool,
+    pub ids: Vec<String>,
+    pub by: Option<String>,
+    pub force: bool,
+}
+
+pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
+    let FixArgs {
+        paths,
+        stdin_path,
+        tier,
+        apply,
+        ids,
+        by,
+        force,
+    } = args;
     if tier != 1 {
         return emit(&CouldNotRun::from(
             "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
@@ -29,6 +42,13 @@ pub fn run(
         ));
     }
 
+    if stdin_path.is_some()
+        && (apply || force || !ids.is_empty() || by.is_some() || !paths.is_empty())
+    {
+        return emit(&CouldNotRun::from(
+            "urzua fix --stdin-path judges proposed content and writes nothing: it cannot be combined with PATHS, --apply, --ids, --by or --force",
+        ));
+    }
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
         Err(e) => return emit(&CouldNotRun::from(e)),
@@ -46,7 +66,7 @@ pub fn run(
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let (records, _full_text) = match load_records(
+    let (mut records, _full_text) = match load_records(
         &repo_root,
         &discovered.paths,
         &discovered.staged_deletions,
@@ -54,6 +74,34 @@ pub fn run(
     ) {
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
+    };
+    // `PATHS` narrow what is examined, drifted and repaired (`MILE-159`); the
+    // corpus a back-pointer resolves against stays whole. A path that matches
+    // no record is a failure naming it, never a silent skip.
+    let mut proposed: Option<String> = None;
+    let (scoped, unmatched) = if let Some(stdin_path) = &stdin_path {
+        // The proposed content replaces the on-disk record (or adds a new one)
+        // for this one path; nothing else is examined or drifted.
+        let rel = match relative_to_root(&repo_root, stdin_path) {
+            Ok(rel) => rel,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+        let mut content = String::new();
+        if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut content) {
+            return emit(&CouldNotRun::from(format!(
+                "could not read the proposed content from stdin: {e}"
+            )));
+        }
+        let record = match crate::discovery::parse_prospective_record(&config, &rel, &content) {
+            Ok(r) => r,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+        records.retain(|r| r.path != rel);
+        records.push(record.clone());
+        proposed = Some(content);
+        (vec![record], Vec::new())
+    } else {
+        scope_records(&repo_root, &paths, &records)
     };
     // Drift is the expensive part (several `git` subprocesses per record) and
     // its only consumer is `embodiment.consistency`; with that rule off `fix`
@@ -68,7 +116,12 @@ pub fn run(
             "urzua fix repairs the Embodiment field that embodiment.consistency judges, and that rule is off or undeclared in the configuration: nothing to repair",
         ));
     }
-    let drift = crate::discovery::compute_drifted_records(&repo_root, &records, &config);
+    let drift = match &proposed {
+        Some(content) => crate::discovery::compute_drifted_records_for_content(
+            &repo_root, &scoped, &config, content,
+        ),
+        None => crate::discovery::compute_drifted_records(&repo_root, &scoped, &config),
+    };
     let drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
     let back_pointed =
         match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
@@ -86,7 +139,7 @@ pub fn run(
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
     let (population, repairs) = urzua_core::fix::detect_repairs(
-        &records,
+        &scoped,
         &config,
         &drift.drifted,
         &drift.fresh,
@@ -97,7 +150,7 @@ pub fn run(
         return emit(&build_fix_report(
             population,
             repairs,
-            Vec::new(),
+            unmatched,
             None,
             false,
             drift_notices,
@@ -120,7 +173,7 @@ pub fn run(
         .collect();
 
     let mut applied = Vec::new();
-    let mut failed = Vec::new();
+    let mut failed = unmatched;
     // An `--ids` entry that selected nothing is a failure naming it, not a
     // clean `ok`: the selector is matched against a record's repo-relative
     // path, and a typo or a record id (`ADR-1`) would otherwise read as
@@ -154,17 +207,21 @@ pub fn run(
                 continue;
             }
         };
-        let log_id = records
+        let record_type = records
             .iter()
             .find(|r| r.path == repair.record)
-            .map(|r| config.revision_log_id(&r.record_type))
+            .map(|r| r.record_type.as_str());
+        let log_id = record_type
+            .map(|t| config.revision_log_id(t))
             .unwrap_or_default();
+        let log_required = record_type.is_none_or(|t| config.revision_log_required(t));
         match urzua_core::fix::apply_repair(
             &fresh_content,
             &repair,
             &today,
             &identity.name,
             &log_id,
+            log_required,
         ) {
             Ok(new_content) => match std::fs::write(&full_path, new_content) {
                 Ok(()) => applied.push(repair),
@@ -184,6 +241,71 @@ pub fn run(
     ))
 }
 
+/// `p` (absolute, or relative to the working directory) as a repo-relative
+/// path, without requiring that it exist.
+fn relative_to_root(repo_root: &std::path::Path, p: &std::path::Path) -> Result<PathBuf, String> {
+    let cwd = std::env::current_dir()
+        .and_then(|c| c.canonicalize())
+        .unwrap_or_default();
+    let joined = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    };
+    let mut normal = PathBuf::new();
+    for c in joined.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                normal.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normal.push(other),
+        }
+    }
+    normal
+        .strip_prefix(repo_root)
+        .map(PathBuf::from)
+        .map_err(|_| format!("{} is outside the repository", p.display()))
+}
+
+/// The records `PATHS` select: a record whose repo-relative path equals a
+/// path or sits under it (a directory). No paths selects every record. Each
+/// path that selects nothing comes back as a failure naming it.
+fn scope_records(
+    repo_root: &std::path::Path,
+    paths: &[PathBuf],
+    records: &[urzua_core::record::Record],
+) -> (Vec<urzua_core::record::Record>, Vec<(PathBuf, String)>) {
+    if paths.is_empty() {
+        return (records.to_vec(), Vec::new());
+    }
+    let mut unmatched = Vec::new();
+    let mut scopes = Vec::new();
+    for p in paths {
+        match relative_to_root(repo_root, p) {
+            Ok(rel) => scopes.push((p.clone(), rel)),
+            Err(e) => unmatched.push((p.clone(), e)),
+        }
+    }
+    for (given, rel) in &scopes {
+        if !records.iter().any(|r| r.path.starts_with(rel)) {
+            unmatched.push((
+                given.clone(),
+                format!(
+                    "path '{}' matched no record (a path is a record file or a directory holding records)",
+                    given.display()
+                ),
+            ));
+        }
+    }
+    let selected = records
+        .iter()
+        .filter(|r| scopes.iter().any(|(_, rel)| r.path.starts_with(rel)))
+        .cloned()
+        .collect();
+    (selected, unmatched)
+}
+
 /// `ran_apply` matters because the two modes disagree on what
 /// `population.examined() == 0` should mean for the exit code: detect mode
 /// treats it as `NotRun` (exit 2, nothing to report on); apply mode's exit
@@ -199,7 +321,7 @@ fn build_fix_report(
     ran_apply: bool,
     extra_notices: Vec<Notice>,
 ) -> FixReport {
-    let status = if population.examined() == 0 && !ran_apply {
+    let status = if population.examined() == 0 && !ran_apply && failed.is_empty() {
         FixStatus::NotRun
     } else if !failed.is_empty() {
         FixStatus::PartialFailure

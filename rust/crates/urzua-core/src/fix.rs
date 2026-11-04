@@ -23,6 +23,10 @@ use crate::rules::{
 pub struct Repair {
     pub record: std::path::PathBuf,
     pub field: String,
+    /// The 1-based line of the stated field in the content examined (the file,
+    /// or the proposed content under `--stdin-path`), so an editor hook can
+    /// place the repair without parsing the record (`MILE-159`).
+    pub line: usize,
     pub current_value: String,
     pub computed_value: String,
     /// RFC-0008 §2's repair tiers. Only Tier 1 (recompute in place) exists
@@ -96,6 +100,12 @@ pub fn detect_repairs(
             repairs.push(Repair {
                 record: record.path.clone(),
                 field: state_field.to_string(),
+                line: record
+                    .header
+                    .fields
+                    .iter()
+                    .find(|f| f.key.as_str() == state_field)
+                    .map_or(0, |f| f.line),
                 current_value: stated.to_string(),
                 computed_value: computed.to_string(),
                 tier: 1,
@@ -118,16 +128,18 @@ pub fn detect_repairs(
 /// returns the new text; the caller performs the actual write, the identity
 /// resolution, and the re-verification-before-write RFC-0008 §4 requires.
 ///
-/// Refuses (rather than silently skipping the requirement) when the record
-/// has no revision-log section (its type's declared identity) to append to: ADR-0015's reversibility
-/// clause depends on that entry existing, so a write with nowhere to record
-/// itself is not a case this function will produce, not even once.
+/// When the type requires a revision log (the default), refuses rather than
+/// silently skipping the requirement if the record has no revision-log section
+/// (its type's declared identity) to append to: ADR-0015's reversibility clause
+/// depends on that entry existing. A type declared `revision_log: {required:
+/// false}` (`MILE-159`) takes the field edit alone, with no row.
 pub fn apply_repair(
     content: &str,
     repair: &Repair,
     today: &str,
     by: &str,
     log_id: &crate::config::RevisionLogId,
+    log_required: bool,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
 
@@ -146,9 +158,15 @@ pub fn apply_repair(
     );
     doc.replace_line(field_line, edited_line);
 
+    if !log_required {
+        return Ok(doc.to_string());
+    }
     let edited_content = doc.to_string();
     let entries = find_revision_log_entries(&edited_content, log_id).ok_or_else(|| {
-        "record has no Revision log section -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement)".to_string()
+        format!(
+            "record has no Revision log section (looked for {}) -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement); declare revision_log: {{required: false}} on the type to apply without a log",
+            log_id.describe()
+        )
     })?;
     let Some(last_entry) = entries.last() else {
         return Err(
@@ -368,6 +386,7 @@ mod tests {
         Repair {
             record: PathBuf::from("docs/adr/0001-x.md"),
             field: "Embodiment".to_string(),
+            line: 2,
             current_value: "Not started".to_string(),
             computed_value: "Verified".to_string(),
             tier: 1,
@@ -384,6 +403,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         assert!(result.contains("Embodiment: Verified"));
@@ -403,9 +423,25 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap_err();
         assert!(err.contains("Revision log"));
+    }
+
+    #[test]
+    fn apply_repair_without_a_required_log_edits_only_the_field() {
+        let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n";
+        let result = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(result, "---\nEmbodiment: Verified\n---\n# 0001 — X\n");
     }
 
     #[test]
@@ -421,6 +457,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap_err();
         assert!(err.contains("could not find"));
@@ -435,6 +472,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         let last = result.lines().last().unwrap();
@@ -451,6 +489,7 @@ mod tests {
             "2026-09-05",
             "beau",
             &Default::default(),
+            true,
         )
         .unwrap();
         assert!(result.starts_with(

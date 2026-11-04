@@ -42,8 +42,11 @@ record_types:
     spec: "SPEC-16"
     # How this type's revision log is found (MILE-167): the line itself, not
     # any line that mentions the text. This is the default, declared here so
-    # the repository's own records exercise the declaration.
-    revision_log: {marker: "**Revision log**"}
+    # the repository's own records exercise the declaration. `required: true`
+    # (also the default) makes `urzua fix --apply` refuse a record with no log
+    # to record the write in; `required: false` would apply without a row
+    # (MILE-159).
+    revision_log: {marker: "**Revision log**", required: true}
     pointer_fields:
       - "Derives-from"
     narrative_fields: []
@@ -329,6 +332,17 @@ rules:
     # Revision-log rows are append-only history and name a path as it was
     # when the row was written; they are not read (MILE-143).
     skip_revision_log: true
+  # Issue and pull request numbers cited under a References heading are in the
+  # committed snapshot (MILE-143). `check` reads the file and never the
+  # network; `urzua refs refresh` rewrites it from the GitHub API.
+  citation.issue-exists:
+    level: warn
+    reference_sections: ["References"]
+    skip_revision_log: true
+    issue_refs:
+      snapshot: ".urzua/known-refs.json"
+      repository: "urzuahq/urzua"
+      forms: [number, url]
   # The two generated directory indexes (MILE-152): `urzua index --apply`
   # rewrites them from the records. The ADR list names no id (the file name
   # identifies the record); the spec list writes each entry over two lines and

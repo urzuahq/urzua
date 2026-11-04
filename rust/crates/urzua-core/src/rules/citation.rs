@@ -212,6 +212,179 @@ pub fn citation_path_exists(
     )
 }
 
+/// `citation.issue-exists` (`MILE-143`): an issue or pull request cited in a
+/// declared reference section is in the committed snapshot.
+///
+/// Offline and deterministic: the judgement is against `snapshot`, a file the
+/// caller loaded, never against the network (`urzua refs refresh` is the one
+/// command that writes it). Reads the `reference_sections` sections as
+/// `citation.path-exists` does and honours `skip_revision_log`. The forms read
+/// are the declared `issue_refs.forms`: `number` (`#123`, not inside a code
+/// span, not `owner/repo#123`, not an anchor link) and `url` (a link to an
+/// issue or pull request of the declared repository). An unreadable snapshot
+/// is one finding on the snapshot path, and every citation is counted as
+/// eligible and unexamined: the rule never passes for want of an input.
+pub fn citation_issue_exists(
+    records: &[Record],
+    config: &Config,
+    full_text: &HashMap<PathBuf, String>,
+    snapshot: &Result<crate::refs_snapshot::RefsSnapshot, String>,
+) -> (RuleExecution, Vec<Finding>) {
+    use crate::config::RefForm;
+    const RULE_ID: &str = RULE_CITATION_ISSUE_EXISTS;
+    let setting = config.rules.get(RULE_ID);
+    let sections: Vec<String> = setting
+        .and_then(|s| s.reference_sections.clone())
+        .unwrap_or_default();
+    let skip_revision_log = setting.and_then(|s| s.skip_revision_log).unwrap_or(false);
+    let Some(refs) = setting.and_then(|s| s.issue_refs.as_ref()) else {
+        return (
+            RuleExecution {
+                rule: RULE_ID.to_string(),
+                population: None,
+                status: RuleStatus::NotApplicable,
+                examined_records: Vec::new(),
+            },
+            Vec::new(),
+        );
+    };
+    let (number_form, url_form) = (
+        refs.forms.contains(&RefForm::Number),
+        refs.forms.contains(&RefForm::Url),
+    );
+    let number_re = regex::Regex::new(r"(?:^|[^\w/&#.\-])(#)(\d+)\b").expect("static pattern");
+    let url_re = regex::Regex::new(&format!(
+        r"(?i)https?://(?:www\.)?github\.com/{}/(?:issues|pull)/(\d+)\b",
+        regex::escape(&refs.repository)
+    ))
+    .expect("escaped pattern");
+
+    struct Cited<'a> {
+        record: &'a Record,
+        line: usize,
+        raw: String,
+        number: u64,
+    }
+    let mut candidates: Vec<Cited> = Vec::new();
+    for record in records {
+        let Some(text) = full_text.get(&record.path) else {
+            continue;
+        };
+        for section in super::section::record_sections(record, text)
+            .iter()
+            .filter(|s| sections.iter().any(|name| name == &s.heading))
+        {
+            let lines = super::section::prose_lines(section);
+            let skipped = if skip_revision_log {
+                skipped_table_lines(&lines, &config.revision_log_id(&record.record_type))
+            } else {
+                HashSet::new()
+            };
+            for (line, content) in lines {
+                if skipped.contains(&line) {
+                    continue;
+                }
+                let masked = mask_code_spans(content);
+                let mut found: Vec<(usize, String, u64)> = Vec::new();
+                if number_form {
+                    for caps in number_re.captures_iter(&masked) {
+                        let hash = caps.get(1).expect("group 1");
+                        // `[text](#123)` is an anchor link, not a citation.
+                        if masked[..hash.start()].ends_with("](") {
+                            continue;
+                        }
+                        let digits = caps.get(2).expect("group 2");
+                        if let Ok(n) = digits.as_str().parse::<u64>() {
+                            found.push((hash.start(), format!("#{}", digits.as_str()), n));
+                        }
+                    }
+                }
+                if url_form {
+                    for caps in url_re.captures_iter(&masked) {
+                        let whole = caps.get(0).expect("group 0");
+                        if let Ok(n) = caps[1].parse::<u64>() {
+                            found.push((whole.start(), whole.as_str().to_string(), n));
+                        }
+                    }
+                }
+                found.sort_by_key(|(at, _, _)| *at);
+                for (_, raw, number) in found {
+                    candidates.push(Cited {
+                        record,
+                        line,
+                        raw,
+                        number,
+                    });
+                }
+            }
+        }
+    }
+
+    let mut findings = Vec::new();
+    if let Err(reason) = snapshot {
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Error,
+            file: PathBuf::from(&refs.snapshot),
+            line: None,
+            waived: None,
+            declared_severity: None,
+            message: format!(
+                "the snapshot of issue and pull request numbers could not be used, so no citation was checked: {reason}; run `urzua refs refresh`"
+            ),
+        });
+    }
+    let (population, examined_records) = census_records(
+        PopulationUnit::Citation,
+        candidates,
+        |c| c.record.path.clone(),
+        |c| {
+            let Ok(snapshot) = snapshot else {
+                return Outcome::Absent;
+            };
+            if !snapshot.contains(c.number) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: c.record.path.clone(),
+                    line: Some(c.line),
+                    waived: None,
+                    declared_severity: None,
+                    message: format!(
+                        "cites {}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
+                        c.raw, snapshot.repository, snapshot.generated_at
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// `line` with each inline code span, delimiters included, replaced by spaces
+/// of the same byte length, so offsets into it are offsets into `line`.
+fn mask_code_spans(line: &str) -> String {
+    let mut out = line.as_bytes().to_vec();
+    for (start, end) in code_span_ranges(line) {
+        for b in &mut out[start..end] {
+            *b = b' ';
+        }
+    }
+    // Only ASCII backticks and the bytes between them were replaced, and a span
+    // starts and ends on an ASCII byte, so every multi-byte character is either
+    // wholly inside a span (all of its bytes replaced) or wholly outside.
+    String::from_utf8(out).unwrap_or_default()
+}
+
 /// The line numbers set aside by `skip_revision_log`: the line opening the
 /// type's declared revision log (matched as that line, not by containing the
 /// text), and the pipe table after it (blank or `>`-only lines may sit between, as in
@@ -247,6 +420,22 @@ fn skipped_table_lines(
 /// The contents of every inline code span on `line`: a run of N backticks
 /// closed by the next run of exactly N.
 fn code_spans(line: &str) -> Vec<String> {
+    code_span_ranges_inner(line)
+        .into_iter()
+        .map(|(_, _, s, e)| line[s..e].trim().to_string())
+        .collect()
+}
+
+/// The byte range of every inline code span on `line`, delimiters included.
+fn code_span_ranges(line: &str) -> Vec<(usize, usize)> {
+    code_span_ranges_inner(line)
+        .into_iter()
+        .map(|(a, b, _, _)| (a, b))
+        .collect()
+}
+
+/// `(outer_start, outer_end, content_start, content_end)` per span.
+fn code_span_ranges_inner(line: &str) -> Vec<(usize, usize, usize, usize)> {
     let bytes = line.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -273,7 +462,7 @@ fn code_spans(line: &str) -> Vec<String> {
         }
         match closed {
             Some(end) => {
-                out.push(line[start..end].trim().to_string());
+                out.push((i, end + open, start, end));
                 i = end + open;
             }
             None => i = start,
@@ -858,6 +1047,159 @@ mod tests {
             "skip_revision_log: false\n",
         );
         assert_eq!(findings.len(), 4);
+    }
+
+    use crate::refs_snapshot::RefsSnapshot;
+
+    fn snap(issues: &[u64], pulls: &[u64]) -> Result<RefsSnapshot, String> {
+        Ok(RefsSnapshot::new(
+            "urzuahq/urzua",
+            "2026-11-04",
+            issues.to_vec(),
+            pulls.to_vec(),
+        ))
+    }
+
+    fn issues_with(
+        docs: &[(&str, &str)],
+        snapshot: &Result<RefsSnapshot, String>,
+        extra: &str,
+    ) -> (RuleExecution, Vec<Finding>) {
+        issues_forms(docs, snapshot, "number, url", extra)
+    }
+
+    fn issues_forms(
+        docs: &[(&str, &str)],
+        snapshot: &Result<RefsSnapshot, String>,
+        forms: &str,
+        extra: &str,
+    ) -> (RuleExecution, Vec<Finding>) {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        let mut config = config_with_types(vec![("adr", type_config(None))]);
+        let setting: crate::config::RuleSetting = yaml_serde::from_str(&format!(
+            "level: warn\nreference_sections: [References]\nissue_refs: {{snapshot: .urzua/known-refs.json, repository: urzuahq/urzua, forms: [{forms}]}}\n{extra}"
+        ))
+        .unwrap();
+        config
+            .rules
+            .insert(RULE_CITATION_ISSUE_EXISTS.to_string(), setting);
+        citation_issue_exists(&records, &config, &full_text, snapshot)
+    }
+
+    fn issues(
+        docs: &[(&str, &str)],
+        snapshot: &Result<RefsSnapshot, String>,
+    ) -> (RuleExecution, Vec<Finding>) {
+        issues_with(docs, snapshot, "")
+    }
+
+    #[test]
+    fn a_cited_number_missing_from_the_snapshot_is_reported_with_the_snapshot_date() {
+        let body = "# 1\n\n## References\n\n- #12 and #99, PR #7\n";
+        let (exec, findings) = issues(&[(ADR, body)], &snap(&[12], &[7]));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("#99"), "{findings:?}");
+        assert!(findings[0].message.contains("2026-11-04"), "{findings:?}");
+        assert_eq!(findings[0].line, Some(5));
+        assert_eq!(findings[0].rule, RULE_CITATION_ISSUE_EXISTS);
+        assert_eq!(examined(&exec), 3);
+    }
+
+    #[test]
+    fn a_pull_request_url_of_the_declared_repository_is_read_and_another_repository_is_not() {
+        let body = "# 1\n\n## References\n\n[a](https://github.com/urzuahq/urzua/pull/5) [b](https://github.com/UrzuaHQ/Urzua/issues/6) [c](https://github.com/other/thing/pull/77) [d](https://github.com/urzuahq/urzua/pull/8#issuecomment-1)\n";
+        let (exec, findings) = issues(&[(ADR, body)], &snap(&[], &[5]));
+        let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(named[0].contains("/issues/6"));
+        assert!(named[1].contains("/pull/8"));
+        assert_eq!(examined(&exec), 3);
+    }
+
+    #[test]
+    fn only_the_declared_forms_are_read() {
+        let body = "# 1\n\n## References\n\n#40 https://github.com/urzuahq/urzua/pull/41\n";
+        let (_, only_numbers) = issues_forms(&[(ADR, body)], &snap(&[], &[]), "number", "");
+        assert_eq!(only_numbers.len(), 1, "{only_numbers:?}");
+        assert!(only_numbers[0].message.contains("#40"));
+    }
+
+    #[test]
+    fn things_that_are_not_citations_are_not_read() {
+        let body = "# 1\n\n## References\n\n`#12` owner/repo#13 [x](#14) C# F#15 a-#16 &#39; #17x color #fff and a heading\n\n```\n#18\n```\n";
+        let (exec, findings) = issues(&[(ADR, body)], &snap(&[], &[]));
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn a_number_after_punctuation_or_at_the_line_start_is_read() {
+        let body = "# 1\n\n## References\n\n(#21), [#22], #23. \"#24\"\n#25\n";
+        let (_, findings) = issues(&[(ADR, body)], &snap(&[], &[]));
+        assert_eq!(findings.len(), 5, "{findings:?}");
+    }
+
+    #[test]
+    fn only_declared_sections_are_read() {
+        let body = "# 1\n\nSee #12.\n\n## Context\n\n#13\n";
+        let (exec, findings) = issues(&[(ADR, body)], &snap(&[], &[]));
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn skip_revision_log_sets_aside_the_log_rows() {
+        let body = "# 1\n\n## References\n\n- #1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Closed #2. | **substantive** |\n\nAfter #3\n";
+        let (_, all) = issues(&[(ADR, body)], &snap(&[], &[]));
+        assert_eq!(all.len(), 3, "{all:?}");
+        let (_, kept) = issues_with(&[(ADR, body)], &snap(&[], &[]), "skip_revision_log: true\n");
+        assert_eq!(kept.len(), 2, "{kept:?}");
+    }
+
+    #[test]
+    fn an_unusable_snapshot_is_a_finding_on_its_path_and_no_citation_is_examined() {
+        let body = "# 1\n\n## References\n\n#12\n";
+        let (exec, findings) = issues(&[(ADR, body)], &Err("is absent (No such file)".to_string()));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].file, PathBuf::from(".urzua/known-refs.json"));
+        assert!(findings[0].message.contains("is absent"));
+        assert!(findings[0].message.contains("urzua refs refresh"));
+        let p = exec.population.unwrap();
+        assert_eq!((p.eligible(), p.examined()), (1, 0));
+        // Even a corpus that cites nothing is told the input is missing.
+        let (_, none) = issues(&[(ADR, "# 1\n")], &Err("x".to_string()));
+        assert_eq!(none.len(), 1);
+    }
+
+    #[test]
+    fn a_snapshot_of_another_repository_or_schema_is_refused() {
+        let ok = RefsSnapshot::new("UrzuaHQ/Urzua", "2026-11-04", vec![1], vec![]);
+        assert!(crate::refs_snapshot::validate_snapshot(ok, "urzuahq/urzua").is_ok());
+        let other = RefsSnapshot::new("a/b", "2026-11-04", vec![], vec![]);
+        let err = crate::refs_snapshot::validate_snapshot(other, "urzuahq/urzua").unwrap_err();
+        assert!(err.contains("a/b"), "{err}");
+        let mut old = RefsSnapshot::new("urzuahq/urzua", "2026-11-04", vec![], vec![]);
+        old.schema_version = 9;
+        assert!(
+            crate::refs_snapshot::validate_snapshot(old, "urzuahq/urzua")
+                .unwrap_err()
+                .contains("schema_version 9")
+        );
+    }
+
+    #[test]
+    fn a_snapshot_is_sorted_and_deduplicated() {
+        let s = RefsSnapshot::new("o/r", "2026-01-01", vec![3, 1, 3], vec![9, 2]);
+        assert_eq!(
+            (s.issues.clone(), s.pulls.clone()),
+            (vec![1, 3], vec![2, 9])
+        );
+        assert!(s.contains(2) && s.contains(3) && !s.contains(4));
+        assert_eq!(s.newest(), Some(9));
     }
 
     #[test]
