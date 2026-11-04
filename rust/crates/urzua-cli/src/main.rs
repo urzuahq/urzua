@@ -22,6 +22,7 @@ mod commands;
 mod diff_scope;
 mod discovery;
 mod gate;
+mod session;
 
 /// `Notice.subject` constants, one per emitter, matching `Finding.rule`'s
 /// existing `const RULE_ID` convention (ADR-0046).

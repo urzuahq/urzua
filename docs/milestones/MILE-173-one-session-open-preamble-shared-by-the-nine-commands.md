@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K40RCPZCY5R863JS9SQ766
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/session.rs, code:rust/crates/urzua-cli/src/commands/audit.rs, code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-cli/src/commands/explain.rs, code:rust/crates/urzua-cli/src/commands/export.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-cli/src/commands/graph.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-cli/src/commands/new.rs, test:rust/crates/urzua-cli/tests/could_not_run_integration.rs
 ---
 # 173 — One Session open preamble shared by the nine commands
 
@@ -27,3 +28,4 @@ All nine commands open through `Session::open` and report a could-not-run error 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
+> | 2026-11-04 | Delivered in full; `Status: Done` with `Realized-by`. `audit`, `explain`, `export`, `graph` and both `migrate` subcommands open through `Session::open` and return `Result<ExitCode, String>` from an inner function wrapped by `emit_or_not_run`. `check` (`Session::open_with`, its argv-override and `--base` steps as the adjust closure), `fix` (`Session::open`) and `new` (`Workspace::open`) take the same preamble but keep their many other could-not-run arms in place, so their bodies stay `ExitCode`-returning; `index` and `refs refresh`, which repeated the same preamble, use `Workspace`/`Session::load` too. `doctor` keeps its own root lookup because a missing or broken config is a report of its own, not a could-not-run. `could_not_run_integration.rs` pins the exit code and exact JSON of a missing repository, a missing config and an unreadable tracked record for every command, and was written and passing before the refactor. **Why:** the Done-when. | **substantive** |

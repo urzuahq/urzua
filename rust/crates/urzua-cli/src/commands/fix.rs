@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use urzua_core::report::{CouldNotRun, FixFailure, FixReport, FixStatus, Notice, NoticeSeverity};
 
-use crate::discovery::{find_repo_root, load_config, load_records};
+use crate::session::Session;
 use crate::{emit, NOTICE_IDENTITY};
 
 /// The `urzua fix` command line, gathered so `run` stays one argument wide.
@@ -77,30 +77,14 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             "urzua fix --stdin-path judges proposed content and writes nothing: it cannot be combined with PATHS, --apply, --ids, --by or --force",
         ));
     }
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
-    let (mut records, _full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
+    let Session {
+        repo_root,
+        config,
+        discovered,
+        mut records,
+        ..
+    } = match Session::open(config_path) {
+        Ok(session) => session,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
     // `PATHS` narrow what is examined, drifted and repaired (`MILE-159`); the

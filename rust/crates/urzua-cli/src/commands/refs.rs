@@ -20,8 +20,8 @@ use urzua_core::report::{
 };
 use urzua_core::rules::RULE_CITATION_ISSUE_EXISTS;
 
-use crate::discovery::{find_repo_root, load_config};
 use crate::emit;
+use crate::session::Workspace;
 
 /// The API origin, overridable for GitHub Enterprise and for tests.
 const API_ENV: &str = "URZUA_GITHUB_API";
@@ -32,14 +32,10 @@ const PER_PAGE: usize = 100;
 const MAX_PAGES: usize = 10_000;
 
 pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
+    let Workspace {
+        repo_root, config, ..
+    } = match Workspace::open(&[], config_path) {
+        Ok(session) => session,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
     let Some(refs) = config

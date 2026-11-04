@@ -1,0 +1,128 @@
+//! The could-not-run output of every command that opens a corpus (MILE-173):
+//! no repository, no config, and an unreadable tracked record each produce the
+//! same `not-run` JSON on stdout and exit code 2, whichever command was asked.
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n";
+
+/// Every command that loads the corpus, as its argv.
+const CORPUS_COMMANDS: &[&[&str]] = &[
+    &["check"],
+    &["audit"],
+    &["explain", "docs/adr/ADR-1-x.md"],
+    &["graph"],
+    &["export", "--format", "json"],
+    &["fix"],
+    &["migrate", "ids"],
+    &["migrate", "schema", "--report", "--field", "Status"],
+];
+
+fn git(dir: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .expect("git should run");
+    assert!(status.success(), "git {args:?} failed");
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("urzua-cnr-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir.canonicalize().unwrap()
+}
+
+fn repo(name: &str) -> PathBuf {
+    let dir = scratch(name);
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    dir
+}
+
+fn run(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("urzua binary should run")
+}
+
+fn assert_not_run(out: &Output, error: &str, what: &str) {
+    assert_eq!(out.status.code(), Some(2), "{what}: {out:?}");
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("{what}: stdout is not JSON ({e}): {out:?}"));
+    assert_eq!(
+        json,
+        serde_json::json!({ "status": "not-run", "error": error }),
+        "{what}"
+    );
+}
+
+#[test]
+fn every_corpus_command_reports_a_missing_repository() {
+    let dir = scratch("no-repo");
+    for args in CORPUS_COMMANDS
+        .iter()
+        .copied()
+        .chain([&["doctor"][..], &["new", "adr", "T"][..]])
+    {
+        let out = run(&dir, args);
+        assert_not_run(
+            &out,
+            "no .git directory found above the given path",
+            &args.join(" "),
+        );
+    }
+}
+
+#[test]
+fn every_corpus_command_reports_a_missing_config() {
+    let dir = repo("no-config");
+    let error = format!(
+        "could not read config at {}/.urzua/config.yaml: No such file or directory (os error 2)",
+        dir.display()
+    );
+    for args in CORPUS_COMMANDS
+        .iter()
+        .copied()
+        .chain([&["new", "adr", "T"][..]])
+    {
+        assert_not_run(&run(&dir, args), &error, &args.join(" "));
+    }
+}
+
+#[test]
+fn doctor_reports_a_missing_config_as_its_own_report() {
+    let dir = repo("doctor-no-config");
+    let out = run(&dir, &["doctor"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(json["status"], "error");
+    assert_eq!(json["checks"][0]["check"], "config-exists");
+}
+
+#[test]
+fn every_corpus_command_reports_an_unreadable_tracked_record() {
+    let dir = repo("unreadable");
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# x\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    // Tracked, then removed without staging the deletion: the one absence
+    // the loader must not read as "no such record".
+    std::fs::remove_file(dir.join("docs/adr/ADR-1-x.md")).unwrap();
+    let error = "could not read 1 tracked record(s): docs/adr/ADR-1-x.md: No such file or directory (os error 2)";
+    for args in CORPUS_COMMANDS {
+        assert_not_run(&run(&dir, args), error, &args.join(" "));
+    }
+}
