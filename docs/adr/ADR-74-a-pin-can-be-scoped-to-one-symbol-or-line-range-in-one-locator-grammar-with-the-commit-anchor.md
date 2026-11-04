@@ -135,7 +135,7 @@ Config declares resolvers as structured data (`ADR-64`), each naming the files i
 symbol's first line is recognised, and how its last line is found from a closed set of **end kinds** the
 engine implements generically: `brace_balanced` (balanced `{}` from the first line), `indent` (until a line
 indented no deeper than the first), `heading` (until the next heading of equal or higher level),
-`blank_line` (until the next blank line). The start recogniser is a declared pattern in which the symbol is
+`blank_line` (until the next blank line), `semicolon` (the first line ending in `;` at the item's own depth; for members). The start recogniser is a declared pattern in which the symbol is
 substituted after regular-expression escaping (the symbol arrives from record text). Optional parts: a
 `leading` pattern extends the span upward over contiguous matching lines (attributes, doc comments), and
 without it leading lines are not pinned.
