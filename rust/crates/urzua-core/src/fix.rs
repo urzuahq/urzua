@@ -119,7 +119,7 @@ pub fn detect_repairs(
 /// resolution, and the re-verification-before-write RFC-0008 §4 requires.
 ///
 /// Refuses (rather than silently skipping the requirement) when the record
-/// has no `Revision log` section to append to: ADR-0015's reversibility
+/// has no revision-log section (its type's declared identity) to append to: ADR-0015's reversibility
 /// clause depends on that entry existing, so a write with nowhere to record
 /// itself is not a case this function will produce, not even once.
 pub fn apply_repair(
@@ -127,6 +127,7 @@ pub fn apply_repair(
     repair: &Repair,
     today: &str,
     by: &str,
+    log_id: &crate::config::RevisionLogId,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
 
@@ -146,7 +147,7 @@ pub fn apply_repair(
     doc.replace_line(field_line, edited_line);
 
     let edited_content = doc.to_string();
-    let entries = find_revision_log_entries(&edited_content).ok_or_else(|| {
+    let entries = find_revision_log_entries(&edited_content, log_id).ok_or_else(|| {
         "record has no Revision log section -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement)".to_string()
     })?;
     let Some(last_entry) = entries.last() else {
@@ -327,6 +328,7 @@ mod tests {
                         embodiment_locator: Some("Evidence".to_string()),
                         ..Default::default()
                     }),
+                    revision_log: None,
                 },
             )]
             .into_iter()
@@ -376,7 +378,14 @@ mod tests {
     #[test]
     fn apply_repair_edits_the_field_and_appends_a_revision_log_row_observed_failing() {
         let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
-        let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
+        let result = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+        )
+        .unwrap();
         assert!(result.contains("Embodiment: Verified"));
         assert!(!result.contains("Embodiment: Not started"));
         assert!(result.contains("Tool-authored (by beau)"));
@@ -388,7 +397,14 @@ mod tests {
     #[test]
     fn apply_repair_refuses_without_a_revision_log_section() {
         let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n";
-        let err = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap_err();
+        let err = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+        )
+        .unwrap_err();
         assert!(err.contains("Revision log"));
     }
 
@@ -399,14 +415,28 @@ mod tests {
         // level this pure function can enforce: it can't find what it was
         // told to replace.
         let content = "---\nEmbodiment: Implemented\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
-        let err = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap_err();
+        let err = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+        )
+        .unwrap_err();
         assert!(err.contains("could not find"));
     }
 
     #[test]
     fn apply_repair_appends_a_plain_table_row_inside_the_plain_table_observed_failing() {
         let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-08-20 | Initial. | **structural** |\n";
-        let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
+        let result = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+        )
+        .unwrap();
         let last = result.lines().last().unwrap();
         assert!(last.starts_with("| 2026-09-05 |"), "{last}");
         assert!(!result.contains("> | 2026-09-05"));
@@ -415,7 +445,14 @@ mod tests {
     #[test]
     fn apply_repair_on_a_crlf_file_changes_only_the_intended_lines_observed_failing() {
         let content = "# 0001 — X\r\n\r\n> Embodiment: Not started\r\n\r\n> **Revision log**\r\n>\r\n> | Date | Change | Class |\r\n> |---|---|---|\r\n> | 2026-08-20 | Initial. | **structural** |";
-        let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
+        let result = apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+        )
+        .unwrap();
         assert!(result.starts_with(
             "# 0001 — X\r\n\r\n> Embodiment: Verified\r\n\r\n> **Revision log**\r\n>\r\n"
         ));
