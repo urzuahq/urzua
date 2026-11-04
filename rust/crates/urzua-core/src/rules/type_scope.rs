@@ -60,6 +60,7 @@ pub fn type_record_outside_declared_dir(
                       owns it and no rule examines it"
                 .to_string(),
             waived: None,
+            declared_severity: None,
         });
     }
 
@@ -120,6 +121,7 @@ pub fn type_dir_matches_nothing(
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "record type '{name}' declares dir '{dir}', which does not exist -- \
                          every rule for this type examines nothing"
@@ -185,6 +187,7 @@ pub fn type_no_declared_spec(
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
                     ),
@@ -235,6 +238,7 @@ pub fn config_scope_matches_nothing(
             file: config_path.to_path_buf(),
             line: None,
             waived: None,
+            declared_severity: None,
             message: format!(
                 "'{}' was handed {} candidate(s) the configuration does not reach -- \
                  {} of {} are outside what this repository declared, so the rule cannot \

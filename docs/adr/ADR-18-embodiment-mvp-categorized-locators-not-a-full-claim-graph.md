@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-core/src/rules/embodiment.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df, test:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df
 Date: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -77,3 +77,4 @@ growing into composites later is additive to the schema, not a breaking change t
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |

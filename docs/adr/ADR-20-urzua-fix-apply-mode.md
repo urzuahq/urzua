@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-core/src/fix.rs
 Date: 2026-09-05
 Author: beauwilliams
@@ -76,3 +76,4 @@ and why" is answerable without git at all.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Embodiment` set to `Drift detected`. **Why:** Re-verified against current code; maintainer decision 2026-11-04. The Decision says `--by` wins outright, but `resolve_identity` in `urzua-io/src/lib.rs` now lets `gh api user` outrank `--by` (`ADR-31` amendment). | **substantive** |

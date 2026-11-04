@@ -467,6 +467,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
 
+    let decision_gate_sources =
+        match crate::discovery::read_decision_gate_sources(&repo_root, &discovered, &config) {
+            Ok(sources) => sources,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+
     // `compute_drifted_records` spawns several `git` subprocesses per
     // `Realized-by`-carrying record; skip that work entirely when its only
     // consumer, `embodiment.consistency`, won't read the result (`BUG-115`),
@@ -587,6 +593,29 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
                     None => (&[], &[]),
                 };
                 rules::embodiment_back_pointer_resolution(files, paths, &config, &record_index)
+            },
+        ),
+        crate::gate::gated(
+            &config,
+            rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+            || {
+                let (files, paths): (&[_], &[String]) = match &decision_gate_sources {
+                    Some(s) => (&s.files, &s.back_pointer_paths),
+                    None => (&[], &[]),
+                };
+                let fallback = config
+                    .rules
+                    .get(rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED)
+                    .and_then(|s| s.accepted_statuses.clone())
+                    .unwrap_or_default();
+                rules::embodiment_back_pointer_decision_accepted(
+                    files,
+                    paths,
+                    &fallback,
+                    changed_paths.as_deref(),
+                    &config,
+                    &record_index,
+                )
             },
         ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
@@ -717,6 +746,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         }),
         crate::gate::gated(&config, rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT, || {
             rules::status_forbidden_field_present(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_DATE_FIELD_VALID, || {
+            rules::date_field_valid(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_DATE_ACCEPTANCE_BY_STATUS, || {
+            rules::date_acceptance_by_status(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)

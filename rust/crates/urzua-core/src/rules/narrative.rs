@@ -71,6 +71,7 @@ pub fn narrative_field_stale(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's {source_status_field}/{field_name} should update"
                         ),

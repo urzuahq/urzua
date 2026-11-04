@@ -7,7 +7,7 @@ Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-23
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/narrative.rs, code:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-core/src/rules/pointer.rs, test:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-core/src/config.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:f8fe5e070ddb8ef7a7a080a4ca9cbfed4fe099cfa2180210f870c472e9891cf4, code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:4248952dc30f8028f9467160e9cbe6063f47ff87b78eac4fbd0add85e4c4547a, code:rust/crates/urzua-core/src/rules/narrative.rs@sha256:ab166230984431ac320964547d2970280823dfed5cc0dd70e313ebc6d3aa86b7, code:rust/crates/urzua-core/src/graph.rs@sha256:1638485fe98c800c7494d800ea27219c2df5afe525df75d7a0688a66947b702b, test:rust/crates/urzua-core/src/rules/pointer.rs@sha256:4248952dc30f8028f9467160e9cbe6063f47ff87b78eac4fbd0add85e4c4547a, test:rust/crates/urzua-core/src/graph.rs@sha256:1638485fe98c800c7494d800ea27219c2df5afe525df75d7a0688a66947b702b, test:rust/crates/urzua-core/src/config.rs@sha256:f8fe5e070ddb8ef7a7a080a4ca9cbfed4fe099cfa2180210f870c472e9891cf4
 ---
 # 44 — Pointer and narrative fields are config-declared per type, not hardcoded
 
@@ -136,3 +136,4 @@ as originally decided rather than silently edited — shipped as `narrative_fiel
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |

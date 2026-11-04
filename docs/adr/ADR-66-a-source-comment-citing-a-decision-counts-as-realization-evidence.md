@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6J25TBPS0M0ESR5MW9MBV71
-Status: Proposed
+Status: Accepted
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -81,3 +81,9 @@ adopter who enabled it and stated `Implemented` on the strength of comments alon
 - `RFC-28` — restates the section 2 decision; not reopened.
 - `MILE-128` — the decision this implements; `MILE-102` — the adopter replacement it serves.
 - `SPEC-2` — the rule table and the `back_pointer_paths` option.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04 | **substantive** |

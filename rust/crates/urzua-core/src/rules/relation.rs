@@ -59,6 +59,7 @@ pub fn supersession_reciprocity(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "{field}: {reference} does not resolve to any discovered record"
                         ),
@@ -90,6 +91,7 @@ pub fn supersession_reciprocity(
                     file: record.path.clone(),
                     line: None,
  waived: None,
+ declared_severity: None,
                     message: format!(
                         "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
                     ),
@@ -158,6 +160,7 @@ pub fn relation_target_status_undeclared(
                             file: record.path.clone(),
                             line: None,
                             waived: None,
+                            declared_severity: None,
                             message: format!(
                                 "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
                                 target.record_type
@@ -305,6 +308,7 @@ pub fn relation_pair_reciprocity(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "{field}: {reference} does not resolve to any discovered record"
                         ),
@@ -330,6 +334,7 @@ pub fn relation_pair_reciprocity(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}",
                             slot.pair.name
@@ -391,6 +396,7 @@ pub fn relation_cross_type_disallowed(
                         file: slot.record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "{}: {reference} is a '{}' record, but pair '{}' declares cross_type: false and this record is '{}'",
                             slot.own_field(),
