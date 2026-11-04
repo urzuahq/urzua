@@ -442,6 +442,88 @@ pub fn embodiment_locator_promotion_candidate(
     )
 }
 
+/// Rule (`MILE-138`): a record whose `Status` is not an accepted status cannot
+/// state an `Embodiment` of `Implemented` or `Verified`. Accepted means the
+/// type's declared `statuses.success`; a type declaring none falls back to the
+/// rule's `accepted_statuses` option, and with neither it is not examined
+/// (the narrowest reading: no guess at which status means accepted).
+pub fn embodiment_requires_accepted_status(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS;
+    use crate::config::RelationRole::{EmbodimentState, Status};
+    let mut findings = Vec::new();
+    let declared = statuses_by_type(config);
+    let fallback: Vec<String> = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.accepted_statuses.clone())
+        .unwrap_or_default();
+    // A type's own success terminals win; the option only stands in for a type
+    // declaring none.
+    let accepted_for = |record_type: &str| -> Vec<String> {
+        match declared.get(record_type) {
+            Some(d) if !d.success.is_empty() => d.success.clone(),
+            _ => fallback.clone(),
+        }
+    };
+    let candidates = declared_slots_for_roles(records, config, &[Status, EmbodimentState]);
+
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Record,
+        candidates,
+        |record| *record,
+        |record| {
+            let status_field = relation_field_name(config, &record.record_type, Status);
+            let state_field = relation_field_name(config, &record.record_type, EmbodimentState);
+            let status = match declared_value(record, status_field) {
+                Ok(v) if !v.trim().is_empty() => v.trim(),
+                Ok(_) => return Outcome::Absent,
+                Err(outcome) => return outcome,
+            };
+            let stated = match declared_value(record, state_field) {
+                Ok(v) if !v.trim().is_empty() => v.trim(),
+                Ok(_) => return Outcome::Absent,
+                Err(outcome) => return outcome,
+            };
+            let accepted = accepted_for(&record.record_type);
+            if accepted.is_empty() {
+                // No declared accepted status: eligible, but nothing to judge by.
+                return Outcome::Absent;
+            }
+            if matches!(stated, "Implemented" | "Verified")
+                && !accepted.iter().any(|a| a.trim() == status)
+            {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    message: format!(
+                        "{state_field} '{stated}' cannot be stated while {status_field} is '{status}' (accepted: {})",
+                        accepted.join(", ")
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -861,5 +943,98 @@ mod tests {
         };
         assert_eq!(compute_embodiment(&verified, false, true), "Verified");
         assert_eq!(compute_embodiment(&none, true, true), "Drift detected");
+    }
+
+    // ---- embodiment.requires-accepted-status (MILE-138)
+
+    fn accepted_config(statuses: Option<&str>, option: Option<&str>) -> Config {
+        let mut t = type_config_pointer(&[], Some(&["Status", "Embodiment"]), None, None);
+        t.statuses = statuses.map(|y| yaml_serde::from_str(y).unwrap());
+        let mut config = config_with_types(vec![("adr", t)]);
+        let opt = option
+            .map(|o| format!(", accepted_statuses: {o}"))
+            .unwrap_or_default();
+        let setting: crate::config::RuleSetting =
+            yaml_serde::from_str(&format!("{{level: warn{opt}}}")).unwrap();
+        config.rules.insert(
+            RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS.to_string(),
+            setting,
+        );
+        config
+    }
+
+    const DECLARED: &str =
+        "{values: [Proposed, Accepted, Rejected], success: [Accepted], failure: [Rejected]}";
+
+    fn adr(status: &str, embodiment: &str) -> Record {
+        record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            &format!("> Status: {status}\n> Embodiment: {embodiment}\n"),
+        )
+    }
+
+    #[test]
+    fn a_proposed_record_stating_implemented_or_verified_is_a_finding_observed_failing() {
+        for stated in ["Implemented", "Verified"] {
+            let (exec, findings) = embodiment_requires_accepted_status(
+                &[adr("Proposed", stated)],
+                &accepted_config(Some(DECLARED), None),
+            );
+            assert_eq!(examined(&exec), 1);
+            assert_eq!(findings.len(), 1, "{stated}: {findings:?}");
+            assert!(findings[0].message.contains("Proposed"));
+            assert!(findings[0].message.contains(stated));
+        }
+    }
+
+    #[test]
+    fn the_same_record_accepted_is_not_a_finding() {
+        let (exec, findings) = embodiment_requires_accepted_status(
+            &[adr("Accepted", "Verified")],
+            &accepted_config(Some(DECLARED), None),
+        );
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn specified_and_inactive_on_a_proposed_record_are_not_flagged() {
+        for stated in ["Specified", "Inactive", "Not started"] {
+            let (exec, findings) = embodiment_requires_accepted_status(
+                &[adr("Proposed", stated)],
+                &accepted_config(Some(DECLARED), None),
+            );
+            assert_eq!(examined(&exec), 1);
+            assert!(findings.is_empty(), "{stated}: {findings:?}");
+        }
+    }
+
+    #[test]
+    fn a_type_declaring_no_success_uses_the_option_and_without_it_is_not_examined() {
+        let r = adr("Proposed", "Implemented");
+        let with = accepted_config(None, Some("[Accepted]"));
+        let (exec, findings) = embodiment_requires_accepted_status(&[r.clone()], &with);
+        assert_eq!((examined(&exec), findings.len()), (1, 1));
+        let ok = adr("Accepted", "Implemented");
+        assert!(embodiment_requires_accepted_status(&[ok], &with)
+            .1
+            .is_empty());
+
+        let (exec, findings) =
+            embodiment_requires_accepted_status(&[r], &accepted_config(None, None));
+        assert_eq!(examined(&exec), 0, "no accepted status is known");
+        assert_eq!(exec.population.as_ref().unwrap().eligible(), 1);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_declared_success_overrides_the_option() {
+        let r = adr("Accepted", "Verified");
+        let (_, findings) = embodiment_requires_accepted_status(
+            &[r],
+            &accepted_config(Some(DECLARED), Some("[Done]")),
+        );
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }

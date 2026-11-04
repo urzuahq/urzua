@@ -128,8 +128,8 @@ pub struct RuleSetting {
     pub field_levels: Option<BTreeMap<String, RuleLevel>>,
     /// Statuses that count as accepted for a record whose type declares no
     /// `statuses.success` (`MILE-133`, `MILE-137`). Only meaningful to
-    /// `embodiment.back-pointer-decision-accepted` and
-    /// `date.acceptance-by-status`; optional, because a type that declares its
+    /// `embodiment.back-pointer-decision-accepted`,
+    /// `date.acceptance-by-status` and `embodiment.requires-accepted-status`; optional, because a type that declares its
     /// success statuses needs no fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
@@ -796,6 +796,7 @@ const RULE_OPTIONS: &[RuleOption] = &[
         owners: &[
             crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
             crate::rules::RULE_DATE_ACCEPTANCE_BY_STATUS,
+            crate::rules::RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
         ],
         consequence_if_missing: "leaves a type with no declared success statuses unjudged",
         optional: true,
