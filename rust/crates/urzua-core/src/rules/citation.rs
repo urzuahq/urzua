@@ -40,6 +40,12 @@ pub fn citation_resolution(
         .filter_map(|e| parse_external_id(e, &prefixes).ok())
         .collect();
 
+    let skip_revision_log = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.skip_revision_log)
+        .unwrap_or(false);
+
     struct Citation<'a> {
         record: &'a Record,
         line: usize,
@@ -50,7 +56,17 @@ pub fn citation_resolution(
         let Some(text) = full_text.get(&record.path) else {
             continue;
         };
+        let skipped = if skip_revision_log {
+            let lines: Vec<(usize, &str)> =
+                text.lines().enumerate().map(|(i, l)| (i + 1, l)).collect();
+            skipped_table_lines(&lines, &config.revision_log_id(&record.record_type))
+        } else {
+            HashSet::new()
+        };
         for (line, token) in cited_prose_identifiers(text, record.header.region, &prefixes) {
+            if skipped.contains(&line) {
+                continue;
+            }
             candidates.push(Citation {
                 record,
                 line,
@@ -580,6 +596,42 @@ mod tests {
         ]);
         let p = exec.population.unwrap();
         assert_eq!((p.eligible(), p.examined()), (3, 3));
+    }
+
+    fn run_skipping_log(docs: &[(&str, &str)], extra: &str) -> (RuleExecution, Vec<Finding>) {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        let mut config = config_with_types(vec![("adr", type_config(None))]);
+        let setting: crate::config::RuleSetting =
+            yaml_serde::from_str(&format!("level: warn\n{extra}")).unwrap();
+        config
+            .rules
+            .insert(RULE_CITATION_RESOLUTION.to_string(), setting);
+        let (index, _) = build_index_reporting_collisions(&records);
+        citation_resolution(&records, &config, &full_text, &index)
+    }
+
+    const LOG_CITES: &str = "# 1\n\nProse cites ADR-98.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Cited ADR-97. | **substantive** |\n\nAfter: ADR-96.\n";
+
+    #[test]
+    fn without_skip_revision_log_a_revision_log_citation_is_read_observed_failing() {
+        let (_, findings) = run_skipping_log(&[("docs/adr/ADR-1-y.md", LOG_CITES)], "");
+        assert_eq!(findings.len(), 3, "{findings:?}");
+    }
+
+    #[test]
+    fn a_skipped_revision_log_citation_is_set_aside_and_prose_is_still_read() {
+        let (exec, findings) = run_skipping_log(
+            &[("docs/adr/ADR-1-y.md", LOG_CITES)],
+            "skip_revision_log: true\n",
+        );
+        let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(named[0].contains("ADR-98") && named[1].contains("ADR-96"));
+        assert_eq!(exec.population.unwrap().eligible(), 2);
     }
 
     fn run_external(docs: &[(&str, &str)], external: &[&str]) -> (RuleExecution, Vec<Finding>) {

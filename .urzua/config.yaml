@@ -309,6 +309,9 @@ rules:
   citation.resolution:
     level: warn
     external_ids: ["RFC-822", "RFC-4122"]
+    # Revision-log rows are append-only history (RFC-6): an id they cite
+    # as it was when the row was written is not read (MILE-156).
+    skip_revision_log: true
   # Paths cited under a References heading exist (MILE-143).
   citation.path-exists:
     level: warn

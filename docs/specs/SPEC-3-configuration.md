@@ -1,5 +1,5 @@
 ---
-Version: '0.43'
+Version: '0.44'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -106,7 +106,7 @@ Two details carry weight:
   cannot make a record read the wrong table. Omitted, the type uses the marker `**Revision log**`,
   so an existing repository is unchanged. A declaration naming both or neither, a blank identity,
   or one spanning lines is a load-time error naming the type. `revision-log.change-class-required`,
-  `urzua fix`'s revision row and `citation.path-exists`'s `skip_revision_log` all read it.
+  `urzua fix`'s revision row and the `skip_revision_log` option of `citation.path-exists` and `citation.resolution` all read it.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -297,6 +297,10 @@ rules:
     external_ids: ["RFC-4122", "RFC-4000..4999"]
 ```
 
+- `citation.resolution` also takes the optional boolean `skip_revision_log` (`false` by default),
+  with the meaning it has for `citation.path-exists`: an id cited in a record's revision log, the
+  table under the type's declared `revision_log` identity, is not read and is not in the population.
+  The rest of the record is still read (`MILE-156`).
 - An entry is an exact id (`PREFIX-N`) or an inclusive numeric range (`PREFIX-LOW..HIGH`); numbers
   compare by value, so `RFC-04122` matches `RFC-4122`.
 - The prefix must be one a record type declares. An entry under no declared prefix, a malformed
@@ -329,7 +333,7 @@ rules:
   `revision_log` identity, below, and the pipe table that follows, blockquoted or not) is not read,
   and the paths in it are not in the population. It exists for append-only history, whose rows name
   a path as it was when the row was written; the rest of the section is still read. It belongs to
-  this rule alone (`MILE-143`, `MILE-167`).
+  this rule and `citation.resolution` alone (`MILE-143`, `MILE-167`, `MILE-156`).
 - A span is read as a path only when it is plainly one: no whitespace, a `/` present, ending in a
   file name with an extension or in `/`, not a URL or host-led path, not absolute, and no glob or
   placeholder character. A bare file name without a directory (`Makefile`) is not read. A trailing
@@ -808,3 +812,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.41`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |
 > | 2026-11-04 | Bumped to `0.42`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |
 > | 2026-11-04 | Bumped to `0.43`. `sections.required` entries take `aliases` (other headings satisfying the requirement, disclosed as an info notice per alias) and `preamble: true` (a `y-statement` with a `marker` read from the text before the first `##` when its section is absent). **Why:** `MILE-165` -- adopter records name a section differently or carry the Y-statement in the preamble. | **substantive** |
+> | 2026-11-04 | Bumped to `0.44`. `citation.resolution` takes the optional `skip_revision_log` option, with the meaning it has for `citation.path-exists`. **Why:** `MILE-156` -- revision logs are append-only history, so an id they cite as it was must not be reported or rewritten. | **substantive** |

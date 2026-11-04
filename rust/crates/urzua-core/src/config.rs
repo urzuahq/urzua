@@ -186,10 +186,10 @@ pub struct RuleSetting {
     /// that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_sections: Option<Vec<String>>,
-    /// When `true`, `citation.path-exists` does not read each record's
-    /// revision log, the table under the type's declared `revision_log`
-    /// identity (`MILE-167`): append-only history names a path as it was. Only
-    /// meaningful to that rule; optional, and `false` by default.
+    /// When `true`, `citation.path-exists` and `citation.resolution` do not
+    /// read each record's revision log, the table under the type's declared
+    /// `revision_log` identity (`MILE-167`, `MILE-156`): append-only history
+    /// names a path or an id as it was. Only meaningful to those rules; optional, and `false` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_revision_log: Option<bool>,
 }
@@ -1353,7 +1353,10 @@ pub fn parse_with_document_models(
                 });
             }
         }
-        if setting.skip_revision_log.is_some() && name != crate::rules::RULE_CITATION_PATH_EXISTS {
+        if setting.skip_revision_log.is_some()
+            && name != crate::rules::RULE_CITATION_PATH_EXISTS
+            && name != crate::rules::RULE_CITATION_RESOLUTION
+        {
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
                 option: "skip_revision_log".to_string(),
@@ -2301,6 +2304,14 @@ rules:
         .unwrap_err()
         .to_string()
         .contains("does not take the option 'skip_revision_log'"));
+        let both = parse(&format!(
+            "{base}  citation.resolution:\n    level: warn\n    skip_revision_log: true\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            both.rules["citation.resolution"].skip_revision_log,
+            Some(true)
+        );
     }
 
     #[test]
