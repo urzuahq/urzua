@@ -34,9 +34,14 @@ error. This is a real gap in bootstrapping the tool with itself: `milestone` and
 built specifically to be dogfooded this way, but `spec` -- one of the three original record types
 this project is built around -- can't be created through `urzua new` at all.
 
+## Done means
+
+`.urzua/templates/spec.md` exists and `urzua new spec` writes a record that passes `check` (it exits 0 rather than failing for want of a template); the canonical spec field set the template carries is decided, with `Author` required, and `new_integration.rs` covers it.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | `Status: Done`. The mechanical failure was already resolved as a side effect of ADR-33's yaml-frontmatter migration (`spec`'s `header_shape` got declared, so `urzua new spec` stopped erroring). The real remaining scope -- the canonical field set -- decided: `Author` required (MILE-78's accountability argument, backfilled onto all 16 pre-existing specs lacking it); `Embodiment`/`Derives-from` a project-wide optional convention, not `SPEC-1`-specific baggage; `Implements`/`Parent` declared in `known_fields` since every spec already carries them. `.urzua/templates/spec.md` built so `urzua new spec` produces real section scaffolding, not a bare skeleton. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

@@ -17,6 +17,10 @@ A non-blocking check-rule warning when a record type's configured shape isn't ya
 
 ADR-33 decided the deprecation; this is the mechanism that actually makes it visible and steers new adoptions, without breaking anyone still on blockquote/bold-list.
 
+## Done means
+
+`urzua init` in adopt mode proposes `header_shape: yaml-frontmatter` for every type it proposes, whatever shape the corpus's records were detected in, and warns that records not in that shape will be unreadable until rewritten; the non-blocking `header.deprecated-shape` rule this milestone also built was retired with the shapes it warned about by `MILE-85`, so what remains true is the `init` default.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -25,3 +29,4 @@ ADR-33 decided the deprecation; this is the mechanism that actually makes it vis
 > | 2026-09-08 | `Status: Done`. Built `header.deprecated-shape` (config-level, one warning per non-yaml-frontmatter type) and `init`'s adopt-mode default (`header_shape = "yaml-frontmatter"` on every proposed type, regardless of the corpus's detected shape). Verified: the planted-violation tests in `rules.rs`, and `init_then_check_flags_a_pre_existing_blockquote_record` observing the real, ADR-33-accepted consequence of that default against a still-blockquote corpus. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Partly superseded by `MILE-85`; `Status` stays Done. **Why:** the closure audit of #234 swept the Done milestones for later removals. `header.deprecated-shape` was deleted by `MILE-85` because it can no longer fire once the deprecated shapes are unsupported; `init` still defaults to `yaml-frontmatter`. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

@@ -27,9 +27,14 @@ are the same shape of decision (a configured record type) and got no matching sp
 are real, multi-part command surfaces documented only in ADRs. Backfilling without first naming the
 rule would just add more inconsistent precedent on top of the inconsistent precedent already there.
 
+## Done means
+
+`ADR-41` records the criterion for a spec versus an ADR being sufficient (a spec groups a coherent feature area, decided editorially, not by a count), and the areas it named have complete replayable specs: `SPEC-8` (`fix`), `SPEC-9` (`bug`), `SPEC-10` (`waiver`), `SPEC-11` (`audit`), `SPEC-12` (`new`), `SPEC-13` (`explain` and `graph`), `SPEC-14` (`migrate`) and `SPEC-15` (`doctor`).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Resolved by editorial judgment, not a mechanical formula. A first attempt at a mechanical trigger ("a second ADR amendment promotes the subject to a spec") was drafted and explicitly rejected -- a spec groups a coherent *feature area* together (the same call that produced SPEC-6 for `milestone`, and SPEC-3 already bundling `doctor` before this session), not a count of anything. Applied directly: wrote SPEC-8 (`fix`), SPEC-9 (`bug`), SPEC-10 (`waiver`), SPEC-11 (`audit`), SPEC-12 (`new`), SPEC-13 (`explain`/`graph`, bundled as one feature area), SPEC-14 (`migrate ids`/`migrate schema`, bundled), and split `doctor` out of SPEC-3 into its own SPEC-15 (a real, standalone feature area that had been folded into configuration's spec by default, not by a deliberate call). **Why:** these areas were genuinely coherent, buildable functional units documented only as ADRs, the same gap `milestone`'s SPEC-6 had already closed for itself; `doctor` needed the opposite move, since it had been bundled into the wrong spec rather than left with none. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

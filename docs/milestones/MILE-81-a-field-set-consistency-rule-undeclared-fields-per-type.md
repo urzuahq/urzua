@@ -33,9 +33,14 @@ treatment rather than inferring a type's "normal" fields from whatever's already
 SPEC-1's `Embodiment`/`Derives-from` project-wide or SPEC-1-specific?) -- the rule simply doesn't
 check `spec` yet, the same additive-skip shape as every undeclared type.
 
+## Done means
+
+A type declares `known_fields` additively to `required_fields`, and the opt-in rule `header.field-set-consistency` reports a header field present on some records of the type that the declaration does not name, without flagging fields legitimately common but not required (`Stable-Id`, `Realized-by`, `Derives-from`); a fixture covers an undeclared field and a declared one, and urzua's own types declare `known_fields`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped (ADR-39): a `known_fields` config field, additive to `required_fields`, checked by a new `header.field-set-consistency` rule. **Why:** majority-vote inference was rejected for the same reason ADR-38 rejected it for the layout axis -- it would ratify existing drift instead of catching it. Declared `known_fields` for `adr`/`rfc`/`milestone`/`bug`/`waiver`; `spec` deliberately left undeclared pending MILE-74. Verified against a planted violation in an isolated scratch corpus, not only unit tests. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

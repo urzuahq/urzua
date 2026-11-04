@@ -1,10 +1,9 @@
 ---
-Status: Done
+Status: InProgress
 Stable-Id: 01M1YN87AP04NCFMXY4WBJK4EK
 Phase: '0'
 Track: corpus-corrections
 Blocked-on: —
-Realized-by: test:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 51 — Validate one config against a second real corpus with zero escape hatch
 
@@ -112,6 +111,10 @@ because three rules shipped today (`pointer.target-status`, `field.pending`,
 unreadable: every one of the fourteen reports `status: "ran"`, indistinguishable from a rule that
 examined records and found them clean.
 
+## Done means
+
+`urzua init` and `urzua check` have been run against a second, independently-authored corpus that this project did not write, and the same config mechanism (record types, required fields, header shapes, sections, filename and numbering convention) expresses that corpus's real rules with no escape hatch and no code change: `check` over it reports zero unwaived findings and no rule that examined zero records is reported as having run. The two verdicts recorded in this record (2026-09-16 and 2026-09-17, five schema gaps measured, the claim failing) are the evidence so far, not the outcome.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -120,3 +123,5 @@ examined records and found them clean.
 > | 2026-09-17 | `Status: Planned` → `Done`. **Why:** this milestone's deliverable is a verdict, not a fix, and the verdict exists: run against `npryce/adr-tools`, the founding claim **failed** -- `init` could not run, a hand-written config produced 9 blocking errors, and 10 of 17 rules examined zero records. That result produced `RFC-33` and `ADR-53`. Leaving it `Planned` claimed the validation had not happened when it is the single most consequential thing this project has run. | **substantive** |
 > | 2026-09-17 | Re-run against the real corpus after `BUG-36`/`BUG-37` landed, result recorded above. **Why:** the original verdict failed at step one -- `init` could not run -- so it could not say whether anything *past* step one worked. It now does: adoption is end to end and non-blocking, and the founding claim still fails, on the same two gaps, for the same reason. Status stays `Done`: this milestone's deliverable is a verdict, and a second verdict does not reopen it. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Reopened: `Status` Done -> InProgress; `Realized-by` removed, evidence moved here. **Why:** the What sets as its success criterion that one config expresses a second corpus's real rules with no escape hatch or code change. The record's own Result sections say that criterion is not met (the claim failed on 2026-09-16 and again on 2026-09-17, five schema gaps measured) and that "re-running this validation is how it eventually closes"; closing on the strength of a verdict claimed an outcome the work did not reach. Evidence kept from the Done state, which was a partial delivery and not the milestone's outcome: `test:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/check_integration.rs`. A `Realized-by` under a not-done `Status` is a disagreement `status.delivery-agreement` (`MILE-183`) reports, so it is recorded in this row. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those this record's What asks for, and they are not met (see the previous row); `Status` is InProgress. | **structural** |

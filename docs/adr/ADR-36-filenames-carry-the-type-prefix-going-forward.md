@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:d1dfa0bf32674ae81f112c1f434bab41e938f3bd501aa6dbd7f952c668d5e70a, code:rust/crates/urzua-core/src/new_record.rs@sha256:5473850e4d7d100599f1014472fa3a3594459d0ef753bad9d7df245e6cda6342, test:rust/crates/urzua-core/src/rules/filename.rs@sha256:d1dfa0bf32674ae81f112c1f434bab41e938f3bd501aa6dbd7f952c668d5e70a, test:rust/crates/urzua-core/src/new_record.rs@sha256:5473850e4d7d100599f1014472fa3a3594459d0ef753bad9d7df245e6cda6342
+Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:6e014472fce7e5a200420078b76ab22fe04bbda93bc7f085f06f7d217be2cef5, code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, test:rust/crates/urzua-core/src/rules/filename.rs@sha256:6e014472fce7e5a200420078b76ab22fe04bbda93bc7f085f06f7d217be2cef5, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -123,3 +123,4 @@ the unedited Decision/Consequences sections and this amendment's own text.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 302571381. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` d1dfa0bf3267 -> 6e014472fce7, `rust/crates/urzua-core/src/new_record.rs` 5473850e4d7d -> 15511d30876e. Reason: Re-verified: new_record.rs now matches the record's two amendments (width-padded names from the identity pattern, unpadded when open-ended). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/migrate.rs@sha256:1702fc44b4ce3dbb4bef99ddfdb474130aec3339f274f073b19ba5891d8604ab, code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:7442ba6c06b2f9f50d42d4098067372589b3e2183b82d296f9a868025213034d, test:rust/crates/urzua-core/src/migrate.rs@sha256:1702fc44b4ce3dbb4bef99ddfdb474130aec3339f274f073b19ba5891d8604ab
+Realized-by: code:rust/crates/urzua-core/src/migrate.rs@sha256:e39131bfea8d07b33ffbece724c29f9a48f45d59a816f74a40955d93b68af89d, code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:0d031cec31058a8e148fc646d12dde0c0e9323a2068db9e41dba6a2c3431d448, test:rust/crates/urzua-core/src/migrate.rs@sha256:e39131bfea8d07b33ffbece724c29f9a48f45d59a816f74a40955d93b68af89d
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -58,3 +58,4 @@ implementation doesn't exist yet.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 99ef892a2. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/migrate.rs` 1702fc44b4ce -> e39131bfea8d, `rust/crates/urzua-cli/src/commands/migrate.rs` 7442ba6c06b2 -> 0d031cec3105. Reason: Re-verified: migrate schema --report stays read-only with no apply path; core/cli changes are struct defaults, fixtures and header-error wording. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

@@ -17,9 +17,14 @@ Wire the drift-detection HashSet already computed for check into fix::detect_rep
 
 ADR-32 explicitly named this as separate follow-up work, not implied by drift detection landing in check alone.
 
+## Done means
+
+`urzua fix` detects `Drift detected` from the drifted-record set `check` computes and `--apply` writes it with a revision-log row; applying twice is a no-op and `check` agrees afterwards; tests cover detection, application and idempotence (`fix_drift_integration.rs`).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-03 | Built: `fix` detects and `--apply` writes `Drift detected`, using the drifted-record set `check` computes (`SPEC-8` `0.6`). **Why:** the work this milestone planned; `Status` is left for a human to move. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #151: `urzua fix` detects and `--apply` writes `Drift detected` from the drifted set `check` computes. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

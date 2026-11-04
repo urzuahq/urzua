@@ -17,9 +17,14 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crate
 
 ADR-3's stable/display split only matters if every record actually has a stable ID -- this is what makes the split real for a corpus that predates it, without forcing a disruptive renumbering to get there.
 
+## Done means
+
+`urzua migrate ids` adds a collision-free ULID `Stable-Id` to every record lacking one without touching a filename or cross-reference, is a dry run unless applied, and a second applied run changes nothing; covered in `check_integration.rs` (`SPEC-14`).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

@@ -24,8 +24,13 @@ A free-text name silently rots when the person leaves. RFC-2/ADR-31 already clos
 on tool-authored writes; `Reviewers`/`Deciders` never got the same treatment, and a resolved value
 has no protection against a later hand-edit clobbering it back to free text.
 
+## Done means
+
+`Reviewers` and `Deciders` resolve to a real account through `resolve_identity()` (`gh api user`, then `git config user.name`, then explicit `--by`) wherever the tool writes them, a free-text value written by hand is reported by `check`, and a resolved `Author` hand-edited back to free text is reported rather than silently kept; each is covered by a fixture and exercised in urzua's own config and corpus.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Rescoped: `Author` resolution was already shipped (`resolve_identity()`, wired into `new`/`fix --apply`) and this milestone's original text didn't reflect it. **Why:** found live during backlog triage -- the milestone described a problem partially already solved, which would have led to redundant work if picked up as originally written. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

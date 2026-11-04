@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df, test:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df
+Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:6b61cdfe6465941db592cce5290aaa097ca1480754502c1d4056c7d63596ac53, test:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:6b61cdfe6465941db592cce5290aaa097ca1480754502c1d4056c7d63596ac53
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -80,3 +80,4 @@ growing into composites later is additive to the schema, not a breaking change t
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 809e4004d. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/embodiment.rs` a49eedaabcd0 -> 6b61cdfe6465. Reason: Re-verified: compute_embodiment still takes the highest non-empty tier over the same five states; the changes since the pin (per-field severity, grace window, sticky states, test back-pointers as a test tier) are additive. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

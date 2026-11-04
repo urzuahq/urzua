@@ -27,6 +27,10 @@ just claimed to be. So the discipline has held so far -- entirely on trust, unli
 change-class-required`, which already gives specs' equivalent convention (a Why-bearing, classified
 revision-log entry) real mechanical backing.
 
+## Done means
+
+An ADR-amendment rule reports an Accepted ADR whose `## Amendment (...)` section is not dated in a consistent parseable format, and a guard reads git history to report a commit that adds an Amendment while altering the original `## Decision` text; a fixture covers an undated amendment and an altered Decision, a compliant ADR passes, the rule is declared in urzua's own `.urzua/config.yaml` and urzua's own ADRs pass it.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -35,3 +39,4 @@ revision-log entry) real mechanical backing.
 > | 2026-09-17 | Reshaped by `ADR-53`. **Why:** filed as "a new `check` rule". It is a configured rule now. The engine-side question is narrower and worth separating: guarantee (2) -- that a commit adding an Amendment never alters the original Decision text -- reads git history, which no function in `RFC-33`'s proposed vocabulary does. That gap is the actual finding here. | **substantive** |
 > | 2026-11-02 | Unblocked: `RFC-33` was Accepted; maintainer decision 2026-11-02. `Blocked-on` cleared; `Status` stays `Planned`. **Why:** `narrative-field.stale` flagged the reference once `RFC-33` reached a terminal status, and the maintainer decided the dependency no longer holds. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

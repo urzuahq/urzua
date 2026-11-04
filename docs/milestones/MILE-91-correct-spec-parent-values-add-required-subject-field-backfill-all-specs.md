@@ -42,9 +42,14 @@ No preceding RFC: this is the same kind of direct, `spec`-type-own schema decisi
 made through live discussion without one -- a config/schema-only change to an already-config-driven
 type, no new mechanism or rule.
 
+## Done means
+
+`spec` requires a one-line `Subject` field in `.urzua/config.yaml`, every spec carries it, the corrected `Parent` values from `BUG-10` are in place on all specs, `SPEC-18` documents both, and `urzua check` reports no missing `Subject`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-09 | Initial milestone, `Status: Done`. **Why:** `BUG-10`'s audit plus a live decision to add `Subject` as a required field -- both executed together since they touch the same 18 files' headers. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

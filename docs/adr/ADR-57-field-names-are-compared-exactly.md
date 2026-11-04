@@ -8,7 +8,7 @@ Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: ADR-53
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/header.rs@sha256:17e08ea792a9e943ebce30619e42d99a83effc01d0160e2efd943ee056164097, code:rust/crates/urzua-core/src/header.rs@sha256:7eeae176eeebad15cda048c33cf017daa9f77e00301ab284474359981109fd11, test:rust/crates/urzua-core/src/property.rs@sha256:78acfe16ded958824398a9129d7c5de6b5dd308ef6f808693a3773ea00501539
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs@sha256:7c679be9601d5570f38f284c20baf4a50a17c18aeae3cdfa94ed0b2671f4b2b4, code:rust/crates/urzua-core/src/header.rs@sha256:5c7df87d90f4d0532632ba6f2098fb1812743264043815689cc417a0e9e555e2, test:rust/crates/urzua-core/src/property.rs@sha256:dd31b4f429bc9982bd5756a1ba83716f5745d8d5d649119749713c8d659d9611
 ---
 # 57 — field names are compared exactly
 
@@ -108,6 +108,19 @@ a reversal cannot be silent.
 - `SPEC-2`'s rule description does not mention case sensitivity either way and needs no change; this
   ADR is the first statement of the rule.
 
+## Amendment (2026-11-04): reserved keys are read case-insensitively
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+The Decision says the rule "applies to every comparison of a field *name*". `Header::get_reserved`
+(`rust/crates/urzua-core/src/header.rs`, `#102`) is a deliberate exception: for the keys the engine
+itself invents (`Stable-Id`, `Rule`, `Scope`, `Expires`) it folds ASCII case, so a record spelling
+`stable-id` is read as `Stable-Id` and `migrate ids` does not assign it a second id, and a waiver
+spelling `rule` still applies. The reasoning is the decision's own: exact comparison protects the
+adopter's vocabulary from the engine's guesses, and a reserved key is not adopter vocabulary, because
+there is exactly one field of that name. `get_reserved` is used by `migrate ids`, `export` and the
+waiver loader. `Header::get`, and every comparison of an adopter-declared field name, remain exact.
+
 ## References
 
 - `ADR-53` — every rule is the adopter's declared policy, which is why the vocabulary is theirs to
@@ -125,3 +138,5 @@ a reversal cannot be silent.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit ce6048953. | **structural** |
+> | 2026-11-04 | Amendment added: `Header::get_reserved` reads the engine's reserved keys case-insensitively (`#102`), an exception to "every comparison of a field name". **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/header.rs` 17e08ea792a9 -> 7c679be9601d, `rust/crates/urzua-core/src/header.rs` 7eeae176eeeb -> 5c7df87d90f4, `rust/crates/urzua-core/src/property.rs` 78acfe16ded9 -> dd31b4f429bc. Reason: Re-pinned with the amendment above: Header::get and declared-field comparison remain exact; the reserved-key exception is recorded. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

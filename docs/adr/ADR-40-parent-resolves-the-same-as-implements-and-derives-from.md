@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1Z6WV7FRDW9DP8D07GBQMFF
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/pointer.rs, test:rust/crates/urzua-core/src/rules/pointer.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:f25158f2e1d01bf0e7a1d32aeeeda4285844c4cb87832da1704f8c8a16e43bad, test:rust/crates/urzua-core/src/rules/pointer.rs@sha256:f25158f2e1d01bf0e7a1d32aeeeda4285844c4cb87832da1704f8c8a16e43bad
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -58,3 +58,4 @@ require any other change.
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 0219adc7c. | **structural** |
+> | 2026-11-04 | Pinned `rust/crates/urzua-core/src/rules/pointer.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: parent resolves like Implements; the changes to pointer.rs are severity, exclude_files and fixtures only. | **structural** |
