@@ -1,5 +1,5 @@
 ---
-Version: '0.25'
+Version: '0.26'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -584,6 +584,26 @@ rules:
   pending value is not a date value and is not examined. A missing option is a load-time error, as
   is the option on any other rule.
 
+`date.field-order` (`MILE-157`) compares two date fields of one record:
+
+```yaml
+rules:
+  date.field-order:
+    level: error
+    date_order: ["Date <= Accepted-on"]   # the first may not be later than the second
+```
+
+- `date_order` (required, non-empty): each entry is `Earlier <= Later`, two distinct field names.
+  Both must be declared (`required_fields` or `known_fields`) by one record type, which is the only
+  kind of record the entry applies to; anything else is a load-time error, as is the option on any
+  other rule.
+- Equal dates pass. A value that is absent, blank, placeholder, pending or not a real `YYYY-MM-DD` date
+  is not compared: `date.field-valid`, `field.quality` and `status.required-field-missing` own those
+  states, so one defect is not reported twice. Such a slot is eligible and unexamined in the
+  population.
+- It adds no second notion of "a date": it reads the same field states and the same date validity as
+  `date.field-valid`.
+
 There is deliberately no dedicated acceptance-date rule. The acceptance date is required on an
 accepted-type status and forbidden on every other through the one mechanism for status-dependent
 fields, `statuses.require` / `statuses.forbid` (`MILE-132`), with `date.field-valid` owning the
@@ -647,3 +667,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
 > | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
 > | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |

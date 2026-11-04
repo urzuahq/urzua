@@ -58,6 +58,7 @@ pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
 pub const RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS: &str = "embodiment.requires-accepted-status";
 pub const RULE_DATE_FIELD_VALID: &str = "date.field-valid";
+pub const RULE_DATE_FIELD_ORDER: &str = "date.field-order";
 pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
@@ -112,6 +113,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
     RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
     RULE_DATE_FIELD_VALID,
+    RULE_DATE_FIELD_ORDER,
     RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
@@ -323,6 +325,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_DATE_FIELD_VALID,
         description: "A value in a declared date field (`date_fields`) that is not a well-formed `YYYY-MM-DD` date, or is well-formed but not a real calendar date such as `2026-02-30`, is an error (`MILE-137`). A blank, placeholder or pending value is not a date value and is left to `field.quality` and `status.required-field-missing`. Needs `date_fields`. The population counts the date values examined.",
+    },
+    RuleMeta {
+        id: RULE_DATE_FIELD_ORDER,
+        description: "Within one record, a date field that is later than the field `date_order` says must not be later is an error: `Date <= Accepted-on` reports a record accepted before it was written (`MILE-157`). Equal dates pass. A value that is blank, a placeholder, pending or not a real `YYYY-MM-DD` date is not compared and is left to `date.field-valid`, `field.quality` and `status.required-field-missing`, which own those states. Applies to every record type that declares both fields of an entry. Needs `date_order`. The population counts one slot per record and entry; a record missing either date is eligible and unexamined.",
     },
     RuleMeta {
         id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,

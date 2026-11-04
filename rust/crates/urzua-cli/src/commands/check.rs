@@ -775,6 +775,9 @@ pub fn run(
         crate::gate::gated(&config, rules::RULE_DATE_FIELD_VALID, || {
             rules::date_field_valid(&records, &config)
         }),
+        crate::gate::gated(&config, rules::RULE_DATE_FIELD_ORDER, || {
+            rules::date_field_order(&records, &config)
+        }),
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
         }),

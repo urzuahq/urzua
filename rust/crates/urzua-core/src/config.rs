@@ -151,6 +151,11 @@ pub struct RuleSetting {
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_fields: Option<Vec<String>>,
+    /// Date orderings `"Earlier <= Later"` (`MILE-157`): the first field's date
+    /// may not be later than the second's. Only meaningful to
+    /// `date.field-order`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_order: Option<Vec<String>>,
     /// Severity per field, within one rule (`MILE-140`): a field named here
     /// reports at its own level (`warn` or `error`), every other field at the
     /// rule's `level`. Only meaningful to the rules that report per field.
@@ -285,6 +290,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             date_fields: Option<Vec<String>>,
             #[serde(default)]
+            date_order: Option<Vec<String>>,
+            #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
             #[serde(default)]
@@ -331,6 +338,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_max_age_days: table.claim_max_age_days,
                 sticky_states: table.sticky_states,
                 date_fields: table.date_fields,
+                date_order: table.date_order,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
                 external_ids: table.external_ids,
@@ -357,6 +365,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_max_age_days: None,
                 sticky_states: None,
                 date_fields: None,
+                date_order: None,
                 field_levels: None,
                 accepted_statuses: None,
                 external_ids: None,
@@ -726,6 +735,12 @@ pub enum ConfigError {
         path: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'date_order' entry '{entry}' {reason}")]
+    InvalidDateOrder {
+        rule: String,
+        entry: String,
+        reason: String,
+    },
     #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
     InvalidExternalId {
         rule: String,
@@ -889,6 +904,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "date_order",
+        owners: &[crate::rules::RULE_DATE_FIELD_ORDER],
+        consequence_if_missing: "names no date ordering and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "accepted_statuses",
         owners: &[
             crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
@@ -937,6 +958,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
         "date_fields" => setting.date_fields.as_ref(),
+        "date_order" => setting.date_order.as_ref(),
         "accepted_statuses" => setting.accepted_statuses.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
         "source_paths" => setting.source_paths.as_ref(),
@@ -956,6 +978,14 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 pub fn rule_requires_options(rule: &str) -> bool {
     rule == crate::rules::RULE_INDEX_FRESHNESS
         || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
+}
+
+/// A `date_order` entry as `(earlier, later)` field names, or `None` when it
+/// is not `Earlier <= Later` with two non-blank names (`MILE-157`).
+pub fn parse_date_order(entry: &str) -> Option<(&str, &str)> {
+    let (earlier, later) = entry.split_once("<=")?;
+    let (earlier, later) = (earlier.trim(), later.trim());
+    (!earlier.is_empty() && !later.is_empty() && !later.contains("<=")).then_some((earlier, later))
 }
 
 /// Why an `indexes` entry cannot be compared, or `None` when it can. Every
@@ -1157,6 +1187,41 @@ pub fn parse_with_document_models(
             });
         }
 
+        if let (Some(orders), true) = (&setting.date_order, setting.level != RuleLevel::Off) {
+            for entry in orders {
+                let bad = |reason: String| ConfigError::InvalidDateOrder {
+                    rule: name.clone(),
+                    entry: entry.clone(),
+                    reason,
+                };
+                let Some((earlier, later)) = parse_date_order(entry) else {
+                    return Err(bad("is not `Earlier <= Later` with two field names".into()));
+                };
+                if earlier == later {
+                    return Err(bad("orders a field against itself".into()));
+                }
+                for field in [earlier, later] {
+                    let declared = config
+                        .record_types
+                        .values()
+                        .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+                    if !declared {
+                        return Err(bad(format!(
+                            "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                        )));
+                    }
+                }
+                let both = config.record_types.values().any(|t| {
+                    let d = t.declared_fields();
+                    d.iter().any(|f| f.as_str() == earlier) && d.iter().any(|f| f.as_str() == later)
+                });
+                if !both {
+                    return Err(bad(format!(
+                        "names '{earlier}' and '{later}', but no one record type declares both, so it could never compare"
+                    )));
+                }
+            }
+        }
         if let Some(levels) = &setting.field_levels {
             if !FIELD_LEVEL_RULES.contains(&name.as_str()) {
                 return Err(ConfigError::OptionNotApplicable {
