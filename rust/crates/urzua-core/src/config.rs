@@ -80,6 +80,18 @@ pub struct RuleSetting {
     /// records (`MILE-139`). Only meaningful to that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexes: Option<Vec<IndexSpec>>,
+    /// Path prefixes of source code that must change with a governed record.
+    /// Only meaningful to `diff.source-requires-record` (`MILE-124`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_paths: Option<Vec<String>>,
+    /// Path prefixes of application source. Only meaningful to
+    /// `diff.source-and-records-mixed` (`MILE-142`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application_paths: Option<Vec<String>>,
+    /// Path prefixes removed from `application_paths` (tests, fixtures). Only
+    /// meaningful to `diff.source-and-records-mixed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_paths: Option<Vec<String>>,
     /// Admit header keys beginning `x-` (case-insensitive) as extension keys
     /// (`MILE-141`). Only meaningful to `header.field-set-consistency`, where
     /// omitted means `false`: every undeclared key is a finding. A declared
@@ -175,6 +187,13 @@ impl<'de> Deserialize<'de> for RuleSetting {
             published_paths: Option<Vec<String>>,
             #[serde(default)]
             indexes: Option<Vec<IndexSpec>>,
+            #[serde(default)]
+            source_paths: Option<Vec<String>>,
+            #[serde(default)]
+            application_paths: Option<Vec<String>>,
+            #[serde(default)]
+            exclude_paths: Option<Vec<String>>,
+            #[serde(default)]
             allow_extension_prefix: Option<bool>,
         }
 
@@ -206,6 +225,9 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 fields: table.fields,
                 published_paths: table.published_paths,
                 indexes: table.indexes,
+                source_paths: table.source_paths,
+                application_paths: table.application_paths,
+                exclude_paths: table.exclude_paths,
                 allow_extension_prefix: table.allow_extension_prefix,
             })
         } else {
@@ -219,6 +241,9 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 fields: None,
                 published_paths: None,
                 indexes: None,
+                source_paths: None,
+                application_paths: None,
+                exclude_paths: None,
                 allow_extension_prefix: None,
             })
         }
@@ -538,9 +563,10 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
-    #[error("rule '{rule}' option 'published_paths' entry '{entry}' {reason}")]
+    #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
+        option: &'static str,
         entry: String,
         reason: &'static str,
     },
@@ -659,6 +685,24 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "source_paths",
+        owner: crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
+        consequence_if_missing: "declares no source and can never report",
+        optional: false,
+    },
+    RuleOption {
+        name: "application_paths",
+        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        consequence_if_missing: "declares no application source and can never report",
+        optional: false,
+    },
+    RuleOption {
+        name: "exclude_paths",
+        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        consequence_if_missing: "excludes nothing from the application source",
+        optional: true,
+    },
+    RuleOption {
         name: "fields",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "checks every declared field",
@@ -677,6 +721,9 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
+        "source_paths" => setting.source_paths.as_ref(),
+        "application_paths" => setting.application_paths.as_ref(),
+        "exclude_paths" => setting.exclude_paths.as_ref(),
         _ => None,
     }
 }
@@ -906,21 +953,31 @@ pub fn parse_with_document_models(
     // then store the normalised form so the rule, its messages and its
     // findings all use the same spelling.
     for (name, setting) in config.rules.iter_mut() {
-        let Some(paths) = setting.published_paths.as_mut() else {
-            continue;
-        };
-        for entry in paths.iter_mut() {
-            let normalised = normalize_published_path(entry);
-            if setting.level != RuleLevel::Off {
-                if let Some(reason) = published_path_problem(&normalised) {
-                    return Err(ConfigError::InvalidPublishedPath {
-                        rule: name.clone(),
-                        entry: entry.clone(),
-                        reason,
-                    });
+        let level = setting.level;
+        let path_options: [(&'static str, &mut Option<Vec<String>>); 4] = [
+            ("published_paths", &mut setting.published_paths),
+            ("source_paths", &mut setting.source_paths),
+            ("application_paths", &mut setting.application_paths),
+            ("exclude_paths", &mut setting.exclude_paths),
+        ];
+        for (option, paths) in path_options {
+            let Some(paths) = paths.as_mut() else {
+                continue;
+            };
+            for entry in paths.iter_mut() {
+                let normalised = normalize_published_path(entry);
+                if level != RuleLevel::Off {
+                    if let Some(reason) = published_path_problem(&normalised) {
+                        return Err(ConfigError::InvalidPublishedPath {
+                            rule: name.clone(),
+                            option,
+                            entry: entry.clone(),
+                            reason,
+                        });
+                    }
                 }
+                *entry = normalised;
             }
-            *entry = normalised;
         }
     }
     // `fields` must name something the repository declared: a name matching no
