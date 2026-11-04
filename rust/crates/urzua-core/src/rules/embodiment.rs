@@ -436,7 +436,7 @@ pub fn sticky_states(config: &Config) -> HashSet<&str> {
 
 /// What a consistency finding says its computation read: the `Realized-by`
 /// field, the back-pointers that cited the record, or both (`MILE-149`).
-fn evidence_description(
+pub(crate) fn evidence_description(
     locator_field: &str,
     has_locators: bool,
     cited_by_code: bool,

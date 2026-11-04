@@ -421,6 +421,10 @@ mod tests {
                 rules::status_forbidden_field_present(&records, &config),
             ),
             (
+                "status.delivery-agreement",
+                rules::status_delivery_agreement(&records, &config, &Default::default()),
+            ),
+            (
                 "identity.collision",
                 rules::identity_collision(
                     &records,

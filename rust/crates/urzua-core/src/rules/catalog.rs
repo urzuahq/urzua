@@ -51,6 +51,7 @@ pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 pub const RULE_STATUS_UNDECLARED_VALUE: &str = "status.undeclared-value";
 pub const RULE_STATUS_REQUIRED_FIELD_MISSING: &str = "status.required-field-missing";
 pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-present";
+pub const RULE_STATUS_DELIVERY_AGREEMENT: &str = "status.delivery-agreement";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
@@ -107,6 +108,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_STATUS_UNDECLARED_VALUE,
     RULE_STATUS_REQUIRED_FIELD_MISSING,
     RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+    RULE_STATUS_DELIVERY_AGREEMENT,
     RULE_INDEX_FRESHNESS,
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
     RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
@@ -300,6 +302,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
         description: "A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined.",
+    },
+    RuleMeta {
+        id: RULE_STATUS_DELIVERY_AGREEMENT,
+        description: "A record's `Status` agrees with its delivery evidence, in both directions (`MILE-177`): the tier computed from its `Realized-by` locators and source back-pointers (drift ignored) is one of the type's `statuses.delivery.delivered_tiers` while the `Status` is one of its `not_done` statuses, so a built record still reads as unbuilt; and a `success` status whose evidence computes to one of its `unevidenced_tiers`, so a record claims to be done with nothing behind it. The mapping is the type's own declaration (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`); the rule knows no status or type by name. `urzua fix --apply` writes `set_status` for the first direction; the second has no single correct value and is repaired by adding evidence. A type declaring no `delivery` is not examined. The population counts the records of types that declare it.",
     },
     RuleMeta {
         id: RULE_INDEX_FRESHNESS,

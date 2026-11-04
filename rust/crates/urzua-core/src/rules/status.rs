@@ -4,7 +4,7 @@ use crate::status_model::StatusDecl;
 /// A type's validated `statuses` declaration, by type name, only for a type
 /// that declares one (`MILE-132`): an undeclared type must stay absent from
 /// the map so every rule reading it keeps its prior behaviour.
-pub(super) fn statuses_by_type(config: &Config) -> HashMap<String, StatusDecl> {
+pub fn statuses_by_type(config: &Config) -> HashMap<String, StatusDecl> {
     config
         .record_types
         .iter()
@@ -93,6 +93,158 @@ fn run_status_rule(
     (
         RuleExecution {
             rule: rule_id.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// How one record's `Status` stands against its delivery evidence
+/// (`MILE-177`), shared by `status.delivery-agreement` and `urzua fix`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeliveryJudgement {
+    pub status_field: String,
+    pub status: String,
+    /// The tier computed from the record's evidence (drift is not read: it says
+    /// the evidence is stale, not that nothing was delivered).
+    pub tier: &'static str,
+    /// What the evidence was, in words a repair row can cite.
+    pub evidence: String,
+    pub disagreement: Option<DeliveryDisagreement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeliveryDisagreement {
+    /// The evidence says delivered while the status is declared not done. The
+    /// one correct value is the type's `set_status`.
+    DeliveredButNotDone { set_status: String },
+    /// A success status with evidence that says nothing was delivered. No
+    /// single correct value exists: the repair is adding evidence.
+    SuccessWithoutEvidence,
+}
+
+/// Judges one record of a type that declares `statuses.delivery`. `Err` is the
+/// census outcome for a record that cannot be judged (no status, an unreadable
+/// header).
+pub fn judge_delivery(
+    record: &Record,
+    config: &Config,
+    decl: &StatusDecl,
+    back_pointed: &BackPointerEvidence,
+) -> Result<DeliveryJudgement, Outcome> {
+    use crate::config::RelationRole::{EmbodimentLocator, Status};
+    let delivery = decl.delivery.as_ref().ok_or(Outcome::Absent)?;
+    let status_field = relation_field_name(config, &record.record_type, Status);
+    let locator_field = relation_field_name(config, &record.record_type, EmbodimentLocator);
+    let status = match declared_value(record, status_field) {
+        Ok(v) if !v.trim().is_empty() => v.trim(),
+        Ok(_) => return Err(Outcome::Absent),
+        Err(outcome) => return Err(outcome),
+    };
+    // A record with no evidence field is the common case, not an absence.
+    let realized_by = match declared_value(record, locator_field) {
+        Ok(v) => Some(v),
+        Err(Outcome::Absent) => None,
+        Err(outcome) => return Err(outcome),
+    };
+    let cited_by_code = back_pointed.code.contains(&record.path);
+    let cited_by_test = back_pointed.test.contains(&record.path);
+    let tier = compute_embodiment(
+        &realized_by.map(parse_realized_by).unwrap_or_default(),
+        false,
+        cited_by_code,
+        cited_by_test,
+    );
+    let evidence = evidence_description(
+        locator_field,
+        realized_by.is_some(),
+        cited_by_code,
+        cited_by_test,
+    );
+    let in_list = |list: &[String], v: &str| list.iter().any(|e| e == v);
+    let disagreement =
+        if in_list(&delivery.not_done, status) && in_list(&delivery.delivered_tiers, tier) {
+            Some(DeliveryDisagreement::DeliveredButNotDone {
+                set_status: delivery.set_status.clone(),
+            })
+        } else if in_list(&decl.success, status) && in_list(&delivery.unevidenced_tiers, tier) {
+            Some(DeliveryDisagreement::SuccessWithoutEvidence)
+        } else {
+            None
+        };
+    Ok(DeliveryJudgement {
+        status_field: status_field.to_string(),
+        status: status.to_string(),
+        tier,
+        evidence,
+        disagreement,
+    })
+}
+
+/// A record's `Status` against its delivery evidence, both ways (`MILE-177`):
+/// the evidence computes to a declared delivered tier while the status is
+/// declared not done, and a success status whose evidence computes to a
+/// declared unevidenced tier. The mapping is the type's `statuses.delivery`;
+/// the rule hardcodes no status or type. A type declaring none is not examined.
+pub fn status_delivery_agreement(
+    records: &[Record],
+    config: &Config,
+    back_pointed: &BackPointerEvidence,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_STATUS_DELIVERY_AGREEMENT;
+    let declared = statuses_by_type(config);
+    let candidates: Vec<&Record> = records
+        .iter()
+        .filter(|r| {
+            declared
+                .get(&r.record_type)
+                .is_some_and(|d| d.delivery.is_some())
+        })
+        .collect();
+    let mut findings = Vec::new();
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Record,
+        candidates,
+        |record| *record,
+        |record| {
+            let judged = match judge_delivery(
+                record,
+                config,
+                &declared[&record.record_type],
+                back_pointed,
+            ) {
+                Ok(j) => j,
+                Err(outcome) => return outcome,
+            };
+            let message = match &judged.disagreement {
+                None => return Outcome::Examined,
+                Some(DeliveryDisagreement::DeliveredButNotDone { set_status }) => format!(
+                    "{} is '{}', but the evidence computes to '{}', from {}: the work reads as delivered; set {} to '{set_status}' (`urzua fix --apply` does)",
+                    judged.status_field, judged.status, judged.tier, judged.evidence, judged.status_field
+                ),
+                Some(DeliveryDisagreement::SuccessWithoutEvidence) => format!(
+                    "{} is '{}', but the evidence computes to '{}', from {}: add the evidence that delivered it",
+                    judged.status_field, judged.status, judged.tier, judged.evidence
+                ),
+            };
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity: None,
+                message,
+            });
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,

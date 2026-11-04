@@ -55,6 +55,29 @@ pub struct StatusDecl {
     pub require: Vec<StatusFieldRule>,
     #[serde(default)]
     pub forbid: Vec<StatusFieldRule>,
+    /// How the type's `Status` is held to its delivery evidence (`MILE-177`).
+    #[serde(default)]
+    pub delivery: Option<DeliveryDecl>,
+}
+
+/// `statuses.delivery` (`MILE-177`): which computed evidence tiers mean the work
+/// was delivered, which statuses mean it was not, and what a delivered record's
+/// `Status` is repaired to. All of it is the type's declaration; the engine
+/// knows no status or tier by name beyond the tiers `Embodiment` can compute.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryDecl {
+    /// Computed tiers (from `Realized-by` locators and source back-pointers,
+    /// drift ignored) that say the work exists.
+    pub delivered_tiers: Vec<String>,
+    /// Computed tiers that say nothing was delivered. A success status with one
+    /// of these is a status with no evidence.
+    pub unevidenced_tiers: Vec<String>,
+    /// Statuses that say the work is not done. Delivered evidence under one of
+    /// them is a disagreement.
+    pub not_done: Vec<String>,
+    /// The `success` status `urzua fix` writes when the evidence says delivered.
+    pub set_status: String,
 }
 
 /// One entry of `statuses.pending` (`MILE-162`): a whole value, or a pattern
@@ -254,6 +277,9 @@ fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
     if let Some(v) = d.success.iter().find(|v| d.failure.contains(v)) {
         return Err(format!("'{v}' is in both `success` and `failure`"));
     }
+    if let Some(delivery) = &d.delivery {
+        validate_delivery(rt, d, delivery)?;
+    }
     let declared = rt.known_fields.as_ref().map(|_| rt.declared_fields());
     for (what, rules) in [("require", &d.require), ("forbid", &d.forbid)] {
         for rule in rules {
@@ -286,6 +312,74 @@ fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
         {
             return Err(format!(
                 "'{f}' is both required and forbidden at '{status}'"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// `delivery` names only tiers `Embodiment` can compute without drift, statuses
+/// the type declares, and an evidence field the type carries; a half-reading
+/// would otherwise be a rule that silently never fires (`ADR-7`).
+fn validate_delivery(
+    rt: &RecordTypeConfig,
+    d: &StatusDecl,
+    delivery: &DeliveryDecl,
+) -> Result<(), String> {
+    const TIERS: [&str; 4] = ["Verified", "Implemented", "Specified", "Not started"];
+    check_list("delivery.delivered_tiers", &delivery.delivered_tiers, false)?;
+    check_list(
+        "delivery.unevidenced_tiers",
+        &delivery.unevidenced_tiers,
+        false,
+    )?;
+    check_list("delivery.not_done", &delivery.not_done, false)?;
+    for (what, list) in [
+        ("delivery.delivered_tiers", &delivery.delivered_tiers),
+        ("delivery.unevidenced_tiers", &delivery.unevidenced_tiers),
+    ] {
+        if let Some(t) = list.iter().find(|t| !TIERS.contains(&t.as_str())) {
+            return Err(format!(
+                "`{what}` names '{t}', which is not a tier computed from evidence (one of: {})",
+                TIERS.join(", ")
+            ));
+        }
+    }
+    if let Some(t) = delivery
+        .delivered_tiers
+        .iter()
+        .find(|t| delivery.unevidenced_tiers.contains(t))
+    {
+        return Err(format!(
+            "'{t}' is in both `delivery.delivered_tiers` and `delivery.unevidenced_tiers`"
+        ));
+    }
+    if let Some(s) = delivery.not_done.iter().find(|s| !d.declares(s)) {
+        return Err(format!(
+            "`delivery.not_done` names '{s}', which is not in `values`"
+        ));
+    }
+    if let Some(s) = delivery
+        .not_done
+        .iter()
+        .find(|s| d.success.contains(s) || d.failure.contains(s))
+    {
+        return Err(format!(
+            "`delivery.not_done` names '{s}', which is a terminal `success` or `failure` status"
+        ));
+    }
+    if !d.success.contains(&delivery.set_status) {
+        return Err(format!(
+            "`delivery.set_status` names '{}', which is not one of `success` ({})",
+            delivery.set_status,
+            d.success.join(", ")
+        ));
+    }
+    let locator = rt.relation_field(crate::config::RelationRole::EmbodimentLocator);
+    if let Some(known) = rt.known_fields.as_ref().map(|_| rt.declared_fields()) {
+        if !known.contains(&crate::values::FieldName::new(locator)) {
+            return Err(format!(
+                "`delivery` reads the evidence field '{locator}', which is in neither `required_fields` nor `known_fields`"
             ));
         }
     }

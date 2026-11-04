@@ -121,11 +121,23 @@ record_types:
       - "Stable-Id"
       - "Implements"
       - "Blocked-on"
+      - "Realized-by"
     statuses:
       values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
       implementable: ["Planned", "InProgress"]
+      # Status is held to the evidence (MILE-177): the PR that delivers a
+      # milestone sets Realized-by and Done together. Implemented or Verified
+      # evidence under a not-done status is a disagreement `urzua fix --apply`
+      # repairs; Done with nothing behind it is one only evidence repairs. A
+      # decision milestone's evidence is the record that records the decision
+      # (a spec: locator), which computes to Specified and is neither.
+      delivery:
+        delivered_tiers: ["Implemented", "Verified"]
+        unevidenced_tiers: ["Not started"]
+        not_done: ["Planned", "InProgress", "Blocked"]
+        set_status: "Done"
     spec: "SPEC-6"
     pointer_fields:
       - "Implements"
@@ -215,6 +227,7 @@ relation_pairs:
 rules:
   embodiment.requires-accepted-status:
     level: warn
+  status.delivery-agreement: warn
   header.required-fields: error
   header.field-set-consistency: warn
   header.pointer-field-clean: warn
