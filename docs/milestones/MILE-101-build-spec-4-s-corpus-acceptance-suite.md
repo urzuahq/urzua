@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M2VN4DCGV5PNZ3FWSZG4WQEJ
-Phase: '0'
+Phase: '1'
 Track: schema-governance
 Implements: SPEC-4
 Blocked-on: —
@@ -53,3 +53,4 @@ so the format has never met a real case. Expect the spec to change on contact --
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s second success criterion depends on an acceptance suite that does not exist, and no milestone tracked building it. The case for it is no longer the spec's: a review of one unreleased diff found eight defects, none covered by a test, and every one was corpus-shaped. | **substantive** |
+> | 2026-11-04 | `Phase` 0 -> 1; `Status` unchanged. **Why:** Maintainer decision, 2026-11-04: the full acceptance suite is a Phase 1 exit criterion, not part of the Phase 0 exit; `SPEC-1` already lists it under Phase 1. | **substantive** |

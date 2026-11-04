@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -13,7 +13,7 @@ Derives-from: RFC-1
 
 ## Purpose
 
-Ship the smallest thing that is **genuinely used in real codebases** (its own repository and one adopter's in Phase 0, two adopters' by the Phase 1 exit) and proves the founding
+Ship the smallest thing that is **genuinely used in real codebases** (its own repository in Phase 0, a first adopter's and then two adopters' by the Phase 1 exit) and proves the founding
 claim — one implementation instead of three — with documented bug histories from independently
 built tooling as its acceptance test.
 
@@ -62,16 +62,17 @@ The exit bars below are **the standard**, which is current truth and belongs her
 backlog, which does not -- a spec has no `Status` and no `Blocked-on`, so a completion condition
 stored here surfaces nothing, which is how two of them sat unmet and untracked.
 
-Phase 0 has a single exit. Phase 0 is done when, and only when:
-
-1. urzua governs its own repository in CI with zero standing warnings.
-2. It replaces one adopter's hand-written linter, which is then deleted. -- `MILE-102`.
-
-**Criterion 2 is the real bar.** A tool that runs *alongside* the thing it was meant to replace has
-not replaced it.
+Phase 0 has a single exit. Phase 0 is done when, and only when urzua governs its own repository in
+CI with zero standing warnings, and reproduces within that repository, configured in its own
+`.urzua/config.yaml`, the governance functionality a real adopter environment has, on a solid
+codebase. Phase 0 is bootstrapping and capability parity in urzua's own repository; adopting it
+elsewhere follows in Phase 1.
 
 Phase 1 is done when, and only when:
 
+0. It replaces one adopter's hand-written linter, which is then deleted. -- `MILE-102`. **This is
+   the real bar.** A tool that runs *alongside* the thing it was meant to replace has not replaced
+   it.
 1. It runs green in **at least two** real target codebases, with different primary languages, via
    pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the hook),
    `MILE-100` (the second codebase).
@@ -271,3 +272,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-02 | Export refuses a record symlinked outside the repository; `header_shape: none` records are `header_readable: true`. **Why:** review found `raw_text` could disclose an outside file, and headerless records were indistinguishable from malformed ones. | **substantive** |
 > | 2026-11-04 | Exit bar restated: Phase 0 has a single exit (urzua governs its own repository in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the second codebase, the full acceptance suite and the `new`-is-faster measurement move to the Phase 1 exit; `Version` `0.5` -> `0.6`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
+> | 2026-11-04 | Exit bar restated again: Phase 0 is urzua reproducing, in its own repository and its own `.urzua/config.yaml`, the governance functionality a real adopter environment has, with zero standing warnings; replacing one adopter's hand-written linter (`MILE-102`) moves to the Phase 1 exit; `Version` `0.6` -> `0.7`. **Why:** Maintainer decision, 2026-11-04: Phase 0 is bootstrapping and parity on a solid codebase, and the adopter switchover follows it. | **substantive** |
