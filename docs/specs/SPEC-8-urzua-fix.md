@@ -1,5 +1,5 @@
 ---
-Version: '0.12'
+Version: '0.13'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -85,8 +85,8 @@ as above.
 
 `urzua fix --stdin-path <path>` reads the proposed content of one record from stdin and judges it
 exactly as it would the file at `<path>`, without writing anything (`MILE-159`). It is the entry
-point for an editor hook that wants a verdict before the file is saved; an example script is
-`.git-hooks/examples/editor-fix-hook.sh`, which nothing installs.
+point for an editor hook that wants a verdict before the file is saved; the hook that
+uses it is described under "The record-edit hook" below.
 
 - **The path need not exist on disk.** A new record is judged from the proposal alone. The record
   type is the one whose `dir` directly holds the path, under the same filename rules discovery
@@ -105,6 +105,33 @@ point for an editor hook that wants a verdict before the file is saved; an examp
 - **It cannot be combined** with `PATHS`, `--apply`, `--ids`, `--by` or `--force`: judging proposed
   content never writes, and the combination is `not-run` (exit 2) rather than a silently ignored
   flag.
+
+### The record-edit hook
+
+`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`) is the harness-neutral core that
+relays this verdict to a coding-agent harness before a record edit is written. Its contract: stdin is
+the proposed full content, argv the record path (absolute or repo-relative); stdout is one JSON object
+`{verdict, path, message, repairs, override?}`; exit 0 lets the edit proceed and 1 blocks it. It
+derives nothing: it reads `repairs` from `fix --stdin-path`.
+
+- `block`: a repair whose stated value the edit introduced (the on-disk file does not already say it).
+  The message names the file, line, stated and computed values, and the `Realized-by` evidence.
+  Every other edit to the record passes; a disagreement already on disk is listed, not blocked.
+- `allow-unjudged`: urzua is missing, answers `not-run` (including a record that states no
+  `Embodiment`), exits otherwise than 0, prints non-JSON, or reports an `embodiment-drift-git`
+  notice. The edit proceeds and the message says plainly that it was not judged.
+- `not-governed`: urzua reports that no record type governs the path (silent, the file is not a record).
+- `allow-override` / `block`: `--override NAME` or `URZUA_HOOK_OVERRIDE=NAME` lets a block through and
+  puts the name in the output; an override without a name keeps the block. Where an override is
+  persisted, and whom an unacknowledged block routes to, are undecided (`RFC-7`, `MILE-12`): the
+  `persist_override` function in the script is the extension point, a no-op today.
+
+Only computed fields in `repairs` (today `Embodiment` and the delivered `Status` repair) are judged; `check`'s header, field and status
+rules have no prospective-content mode and run at commit and CI. The Claude Code adapter
+`scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
+`Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
+Code's hook output; a second harness is a second adapter over the same core. Measured on this
+corpus: about 0.19s per single-record judgement through the core and about 0.39s through the Claude Code adapter (10-run means).
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
@@ -198,3 +225,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.10`. `fix --stdin-path <path>` judges proposed content for one record without writing, for a path that need not exist yet, with drift computed for that record alone; each repair carries the 1-based `line` of the stated field; the detect-mode example now shows the real snake_case shape. **Why:** `MILE-159` -- an editor hook judges a file before it is saved and must find its own repair without parsing the whole list. | **substantive** |
 > | 2026-11-04 | Bumped to `0.11`. Apply mode writes without a revision-log row for a type declaring `revision_log: {required: false}`; a required log (the default) still refuses a record with no section, now naming the identity looked for. **Why:** `MILE-159` -- an adopter's records have no revision log section, so `--apply` could never run on them. | **substantive** |
 > | 2026-11-04 | Bumped to `0.12`. `fix` proposes, and `--apply` writes, the declared success `Status` for a record whose evidence computes to a declared delivered tier while its `Status` is declared not done (`statuses.delivery`); a success `Status` with no evidence is reported as a notice and never downgraded; the revision row now names the computed value; `fix` runs when only `status.delivery-agreement` is enabled. **Why:** `MILE-183`. | **structural** |
+> | 2026-11-04 | Bumped to `0.13`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |
