@@ -67,7 +67,7 @@ rule and the existing schema untouched.
 
 ## Amendment (2026-11-04): `spec` now declares `known_fields`
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 The Decision and its Consequences leave `known_fields` undeclared for `spec` until `MILE-74` settles
 the spec field set. `.urzua/config.yaml` now declares `known_fields` for `spec`, so
@@ -92,3 +92,4 @@ the spec field set. `.urzua/config.yaml` now declares `known_fields` for `spec`,
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 9f42b6db5. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/header.rs` 17e08ea792a9 -> 7c679be9601d. Reason: Re-verified: header.field-set-consistency exists and known_fields is still per-type and additive to required_fields. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Amendment added: `spec` declares `known_fields` in `.urzua/config.yaml`, where the Decision leaves it undeclared pending `MILE-74`. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

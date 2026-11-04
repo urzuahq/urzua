@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6J44PX8CWX5PG5JZK0Z1D70
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -64,7 +65,7 @@ parameter on a pure function. Removing the options or the suffix returns the `AD
 
 ## Amendment (2026-11-04): re-baselining is built, and three behaviours shipped since
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
 
 Statements in the Context-to-Consequences text are no longer true, and three behaviours that change
 when a record reports are not recorded. The three opt-ins as decided (pin syntax, grace window,
@@ -97,3 +98,5 @@ claim age) are built as written.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Amendment added: attributed re-baselining is built (`#238`, `MILE-181`), and `#182`, `MILE-166` and `#214` are recorded. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. `Status` stays `Proposed` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted, including the amendment of 2026-11-04. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `Implements: ADR-67` back-pointers added in `rust/crates/urzua-cli/src/discovery.rs` (the pin branch, the grace window, the audit anchor), `rust/crates/urzua-core/src/fix.rs` (`detect_rebaselines`, `apply_rebaseline`) and `rust/crates/urzua-cli/src/commands/fix.rs` (`run_rebaseline`). Comments only; no behaviour changes. **Why:** the drift review of 2026-11-04 found no back-pointer from the code to this record. | **structural** |

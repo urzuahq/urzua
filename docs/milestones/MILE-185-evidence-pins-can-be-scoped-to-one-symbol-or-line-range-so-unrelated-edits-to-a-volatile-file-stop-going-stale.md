@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: embodiment-model
 Implements: ADR-67
-Blocked-on: ADR-67 (Proposed; the pin syntax this extends)
+Blocked-on: —
 ---
 # 185 — Evidence pins can be scoped to one symbol or line range so unrelated edits to a volatile file stop going stale
 
@@ -64,3 +64,4 @@ Accepted.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** 14 pins set in #180 were stale within a working day and eleven of them needed only a re-pin, because file-level `@sha256:` pins on volatile files go stale on edits unrelated to the decision; a pin scoped to the cited symbol or line range would have stayed current. Proposed from the drift review of 2026-11-04; the locator syntax is not decided here. | **structural** |
+> | 2026-11-04 | `Blocked-on` cleared. **Why:** it named `ADR-67` as Proposed, and the maintainer accepted it on 2026-11-04. The scoped-pin syntax still needs its own deciding ADR, as the What says. | **structural** |

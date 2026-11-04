@@ -433,6 +433,7 @@ pub(crate) fn compute_drifted_records_at(
         .and_then(|s| s.drift_audit_field.as_deref())
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
+    // Implements: ADR-67 (the grace window)
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
     let mut within_grace = |commit: &str| -> bool {
@@ -483,6 +484,7 @@ pub(crate) fn compute_drifted_records_at(
         let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
+        // Implements: ADR-67 (the audit anchor)
         // A declared, well-formed last-audit date replaces the cited file's
         // last change as where the window counts from; a malformed one is
         // reported by the rule and falls back to the file (`MILE-166`).
@@ -513,6 +515,7 @@ pub(crate) fn compute_drifted_records_at(
         for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
             let locator_path = PathBuf::from(&locator);
             if let Some(pinned) = pin {
+                // Implements: ADR-67 (a pin drifts on its content hash)
                 // A pin replaces the git-history heuristic for this locator.
                 let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
                 let changed = current.is_some_and(|c| c != pinned);
