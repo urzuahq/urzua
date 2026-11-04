@@ -123,6 +123,12 @@ pub struct RuleSetting {
     /// `embodiment.back-pointer-resolution`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back_pointer_paths: Option<Vec<String>>,
+    /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
+    /// the test class: a `Verifies:` comment there is test-tier evidence for
+    /// the record it cites (`MILE-146`). Only meaningful to
+    /// `embodiment.back-pointer-resolution`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_paths: Option<Vec<String>>,
     /// Days a locator change must have aged before it counts as drift
     /// (`MILE-129`). Only meaningful to `embodiment.consistency`; omitted
     /// means no grace window.
@@ -256,6 +262,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             back_pointer_paths: Option<Vec<String>>,
             #[serde(default)]
+            test_paths: Option<Vec<String>>,
+            #[serde(default)]
             drift_grace_days: Option<u32>,
             #[serde(default)]
             claim_max_age_days: Option<u32>,
@@ -301,6 +309,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 exclude_paths: table.exclude_paths,
                 allow_extension_prefix: table.allow_extension_prefix,
                 back_pointer_paths: table.back_pointer_paths,
+                test_paths: table.test_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
                 date_fields: table.date_fields,
@@ -324,6 +333,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 exclude_paths: None,
                 allow_extension_prefix: None,
                 back_pointer_paths: None,
+                test_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
                 date_fields: None,
@@ -660,6 +670,8 @@ pub enum ConfigError {
         option: String,
         consequence: &'static str,
     },
+    #[error("rule '{rule}' option 'test_paths' entry '{entry}' is not inside any 'back_pointer_paths' entry, so no file under it is scanned and a `Verifies:` comment there would count for nothing")]
+    TestPathOutsideBackPointerPaths { rule: String, entry: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -833,6 +845,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "test_paths",
+        owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION],
+        consequence_if_missing: "reads no `Verifies:` comment as test evidence",
+        optional: true,
+    },
+    RuleOption {
         name: "date_fields",
         owners: &[crate::rules::RULE_DATE_FIELD_VALID],
         consequence_if_missing: "names no date field and can never report",
@@ -888,6 +906,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         "external_ids" => setting.external_ids.as_ref(),
+        "test_paths" => setting.test_paths.as_ref(),
         _ => None,
     }
 }
@@ -1184,12 +1203,13 @@ pub fn parse_with_document_models(
     // findings all use the same spelling.
     for (name, setting) in config.rules.iter_mut() {
         let level = setting.level;
-        let path_options: [(&'static str, &mut Option<Vec<String>>); 5] = [
+        let path_options: [(&'static str, &mut Option<Vec<String>>); 6] = [
             ("published_paths", &mut setting.published_paths),
             ("source_paths", &mut setting.source_paths),
             ("application_paths", &mut setting.application_paths),
             ("exclude_paths", &mut setting.exclude_paths),
             ("back_pointer_paths", &mut setting.back_pointer_paths),
+            ("test_paths", &mut setting.test_paths),
         ];
         for (option, paths) in path_options {
             let Some(paths) = paths.as_mut() else {
@@ -1228,6 +1248,25 @@ pub fn parse_with_document_models(
                         reason,
                     });
                 }
+            }
+        }
+    }
+    // A test path outside every back-pointer path is never scanned, so a
+    // `Verifies:` there would be a silent no-op.
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let scanned = setting.back_pointer_paths.as_deref().unwrap_or_default();
+        for entry in setting.test_paths.iter().flatten() {
+            let covered = scanned
+                .iter()
+                .any(|b| crate::rules::path_is_published(std::path::Path::new(entry), b));
+            if !covered {
+                return Err(ConfigError::TestPathOutsideBackPointerPaths {
+                    rule: name.clone(),
+                    entry: entry.clone(),
+                });
             }
         }
     }

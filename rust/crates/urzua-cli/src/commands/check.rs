@@ -521,7 +521,13 @@ pub fn run(
     let back_pointed = back_pointer_sources
         .as_ref()
         .map(|s| {
-            rules::back_pointer_evidence(&s.files, &s.back_pointer_paths, &config, &record_index)
+            rules::back_pointer_evidence(
+                &s.files,
+                &s.back_pointer_paths,
+                &s.test_paths,
+                &config,
+                &record_index,
+            )
         })
         .unwrap_or_default();
 
@@ -600,11 +606,18 @@ pub fn run(
             &config,
             rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
             || {
-                let (files, paths): (&[_], &[String]) = match &back_pointer_sources {
-                    Some(s) => (&s.files, &s.back_pointer_paths),
-                    None => (&[], &[]),
-                };
-                rules::embodiment_back_pointer_resolution(files, paths, &config, &record_index)
+                let (files, paths, tests): (&[_], &[String], &[String]) =
+                    match &back_pointer_sources {
+                        Some(s) => (&s.files, &s.back_pointer_paths, &s.test_paths),
+                        None => (&[], &[], &[]),
+                    };
+                rules::embodiment_back_pointer_resolution(
+                    files,
+                    paths,
+                    tests,
+                    &config,
+                    &record_index,
+                )
             },
         ),
         crate::gate::gated(
