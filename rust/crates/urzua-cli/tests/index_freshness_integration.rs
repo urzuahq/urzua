@@ -169,3 +169,110 @@ fn the_rule_does_not_load_without_indexes_or_with_a_bad_format() {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+fn index_cmd(dir: &Path, apply: bool) -> (i32, serde_json::Value) {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    cmd.arg("index").current_dir(dir);
+    if apply {
+        cmd.arg("--apply");
+    }
+    let out = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    (out.status.code().unwrap_or(-1), parsed)
+}
+
+#[test]
+fn index_regenerates_a_declared_index_and_a_second_run_is_a_no_op_end_to_end() {
+    let dir = repo("regen", INDEXES);
+    std::fs::write(
+        dir.join("docs/adr/README.md"),
+        "# ADRs\n\n<!-- begin -->\n- stale\n<!-- end -->\n\nkept\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    // Detect mode writes nothing.
+    let before = std::fs::read_to_string(dir.join("docs/adr/README.md")).unwrap();
+    let (code, report) = index_cmd(&dir, false);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(report["status"], "regeneration-available");
+    assert_eq!(report["indexes"][0]["outcome"], "stale");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("docs/adr/README.md")).unwrap(),
+        before
+    );
+    let (_, stale) = check(&dir);
+    assert!(
+        !findings(&stale).is_empty(),
+        "the stale index is a check finding"
+    );
+
+    let (code, report) = index_cmd(&dir, true);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(report["status"], "applied");
+    assert_eq!(report["indexes"][0]["outcome"], "written");
+    assert_eq!(report["indexes"][0]["entries"], 2);
+    let after = std::fs::read_to_string(dir.join("docs/adr/README.md")).unwrap();
+    assert_eq!(
+        after,
+        format!("# ADRs\n\n<!-- begin -->\n{E1}\n{E2}\n<!-- end -->\n\nkept\n")
+    );
+    let (_, fresh) = check(&dir);
+    assert!(findings(&fresh).is_empty(), "{fresh}");
+
+    let (_, again) = index_cmd(&dir, true);
+    assert_eq!(again["status"], "ok", "{again}");
+    assert_eq!(again["indexes"][0]["outcome"], "current");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("docs/adr/README.md")).unwrap(),
+        after
+    );
+}
+
+#[test]
+fn index_with_no_declared_index_is_not_run_and_a_missing_marker_is_a_failure() {
+    let dir = repo("regen-none", INDEXES);
+    std::fs::write(dir.join("docs/adr/README.md"), "# ADRs\n\nno markers\n").unwrap();
+    commit_all(&dir);
+    let (code, report) = index_cmd(&dir, true);
+    assert_eq!(code, 1, "{report}");
+    assert_eq!(report["status"], "partial-failure");
+    assert_eq!(report["indexes"][0]["outcome"], "failed");
+    assert!(report["indexes"][0]["error"]
+        .as_str()
+        .unwrap()
+        .contains("<!-- begin -->"));
+
+    let none = repo("regen-undeclared", INDEXES);
+    std::fs::write(
+        none.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    commit_all(&none);
+    let (code, report) = index_cmd(&none, false);
+    assert_eq!(code, 2, "{report}");
+}
+
+#[test]
+fn a_multi_line_link_list_index_with_no_id_token_checks_and_regenerates() {
+    let indexes = "[{path: \"docs/adr/README.md\", type: adr, format: \"- [{title}]({file})\\n  {id}\", begin: \"<!-- begin -->\", end: \"<!-- end -->\"}]";
+    let dir = repo("regen-multi", indexes);
+    std::fs::write(
+        dir.join("docs/adr/README.md"),
+        "# ADRs\n\n<!-- begin -->\n<!-- end -->\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let (_, empty) = check(&dir);
+    assert_eq!(findings(&empty).len(), 2, "{empty}");
+    index_cmd(&dir, true);
+    let text = std::fs::read_to_string(dir.join("docs/adr/README.md")).unwrap();
+    assert!(
+        text.contains("- [One](ADR-1-x.md)\n  ADR-1\n- [Two](ADR-2-x.md)\n  ADR-2\n"),
+        "{text}"
+    );
+    let (_, fresh) = check(&dir);
+    assert!(findings(&fresh).is_empty(), "{fresh}");
+}

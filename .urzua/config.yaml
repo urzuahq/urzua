@@ -63,6 +63,8 @@ record_types:
     narrative_fields: []
   spec:
     dir: "docs/specs"
+    # The directory index is not a spec (MILE-152).
+    exclude_files: ["README.md"]
     required_fields:
       - "Status"
       - "Date"
@@ -267,3 +269,19 @@ rules:
     level: error
     source_paths: ["rust/crates"]
     exclude_paths: ["rust/crates/*/tests"]
+  # The two generated directory indexes (MILE-152): `urzua index --apply`
+  # rewrites them from the records. The ADR list names no id (the file name
+  # identifies the record); the spec list writes each entry over two lines.
+  index.freshness:
+    level: error
+    indexes:
+      - path: "docs/adr/README.md"
+        type: adr
+        format: "- [{title}]({file})"
+        begin: "<!-- urzua:index:begin -->"
+        end: "<!-- urzua:index:end -->"
+      - path: "docs/specs/README.md"
+        type: spec
+        format: "- [{id}]({file})\n  {title}"
+        begin: "<!-- urzua:index:begin -->"
+        end: "<!-- urzua:index:end -->"
