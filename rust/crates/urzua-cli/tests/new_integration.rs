@@ -213,3 +213,130 @@ fn new_refuses_a_title_with_no_slug_and_writes_nothing() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+const PADDED_RULES: &str = "{header.required-fields: error, field.quality: error, filename.identity-pattern: error, filename.title-consistency: error, header.field-set-consistency: error}";
+
+/// A type with a four-digit padded identity pattern, a declared status
+/// vocabulary and a closed field set (`known_fields`).
+fn padded_repo(name: &str, known_fields: &str, pattern: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules: {PADDED_RULES}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\", \"Date\", \"Author\"]\n    known_fields: {known_fields}\n    header_shape: \"yaml-frontmatter\"\n    identity: {{from: filename, pattern: '{pattern}'}}\n    statuses:\n      values: [Proposed, Accepted]\n      success: [Accepted]\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-0003-first.md"),
+        "---\nStatus: Accepted\nDate: 2026-01-01\nAuthor: x\nStable-Id: 01ARZ3NDEKTSV4RRFFQ69G5FAV\n---\n# ADR-3 - First\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    dir
+}
+
+const PADDED_PATTERN: &str = r"^(?P<prefix>ADR)-(?P<number>\d{4})-(?P<slug>.+)$";
+
+fn new_report(dir: &Path, title: &str) -> serde_json::Value {
+    let out = run_urzua(dir, &["new", "adr", title, "--by", "tester"]);
+    assert!(
+        out.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    serde_json::from_slice(&out.stdout).expect("JSON on stdout")
+}
+
+fn check_is_clean(dir: &Path) {
+    commit_all(dir);
+    let out = run_urzua(dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(parsed["findings"].as_array().unwrap().len(), 0, "{parsed}");
+}
+
+/// `MILE-151`/`BUG-182`: the padded filename, the prefixed H1 and a real status,
+/// with no manual edit; `check` over the result is clean.
+#[test]
+fn new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing() {
+    let dir = padded_repo("padded", "[\"Stable-Id\"]", PADDED_PATTERN);
+    let report = new_report(&dir, "Second thing");
+    assert_eq!(report["path"], "docs/adr/ADR-0004-second-thing.md");
+    assert_eq!(report["display_number"], 4);
+    let content = std::fs::read_to_string(dir.join("docs/adr/ADR-0004-second-thing.md")).unwrap();
+    assert!(content.contains("\nStatus: Proposed\n"), "{content}");
+    assert!(!content.contains("null"), "{content}");
+    assert!(content.contains("\nStable-Id: "), "{content}");
+    assert!(content.contains("\n# ADR-4 — Second thing\n"), "{content}");
+    check_is_clean(&dir);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A closed field set that does not declare `Stable-Id` rejects it, so `new`
+/// leaves it out and says so rather than writing a record its own type rejects.
+#[test]
+fn new_leaves_out_a_stable_id_the_closed_field_set_does_not_declare_observed_failing() {
+    let dir = padded_repo("closed-set", "[]", PADDED_PATTERN);
+    let report = new_report(&dir, "Second thing");
+    assert!(report["stable_id"].is_null(), "{report}");
+    let content = std::fs::read_to_string(dir.join("docs/adr/ADR-0004-second-thing.md")).unwrap();
+    assert!(!content.contains("Stable-Id"), "{content}");
+    let notices = report["notices"]
+        .as_array()
+        .expect("a notice names the omission");
+    assert!(
+        notices
+            .iter()
+            .any(|n| n["message"].as_str().unwrap().contains("Stable-Id")),
+        "{report}"
+    );
+    // The seeded record carries a Stable-Id its closed set rejects, so only the
+    // new record is asserted clean.
+    commit_all(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|f| f["file"] != "docs/adr/ADR-0004-second-thing.md"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A pattern `new` cannot produce a conforming name for is refused before
+/// anything is written, never answered with a name `check` would flag.
+#[test]
+fn new_refuses_when_the_declared_pattern_cannot_name_the_file() {
+    let dir = padded_repo(
+        "unproducible",
+        "[\"Stable-Id\"]",
+        r"^(?P<prefix>ADR)_(?P<number>\d+)_(?P<slug>.+)$",
+    );
+    let out = run_urzua(&dir, &["new", "adr", "Second thing", "--by", "tester"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("identity"));
+    let names: Vec<_> = std::fs::read_dir(dir.join("docs/adr"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(names.len(), 1, "{names:?}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Numbering reads the declared pattern too, so a corpus the default grammar
+/// cannot read is still counted.
+#[test]
+fn new_numbers_from_the_declared_pattern() {
+    let dir = padded_repo("numbering", "[\"Stable-Id\"]", PADDED_PATTERN);
+    std::fs::write(
+        dir.join("docs/adr/ADR-0012-twelve.md"),
+        "---\nStatus: Accepted\nDate: 2026-01-01\nAuthor: x\n---\n# ADR-12 - Twelve\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let report = new_report(&dir, "Next");
+    assert_eq!(report["path"], "docs/adr/ADR-0013-next.md");
+    std::fs::remove_dir_all(&dir).ok();
+}

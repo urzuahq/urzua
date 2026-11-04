@@ -25,3 +25,4 @@ The adopter's authoring commands cannot adopt `urzua new` until it produces a re
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented in the `new` PR (not flipped to Done): `urzua new` numbers, names and titles by a declared `identity`, starts the status at the first declared value and honours a closed field set; `SPEC-12` 0.7 and `SPEC-3` 0.19; exercised by the `waiver` type's padded `identity` in `.urzua/config.yaml`. **Why:** the Done-when asks for a non-default pattern covered by a test and exercised in this repository. | **substantive** |

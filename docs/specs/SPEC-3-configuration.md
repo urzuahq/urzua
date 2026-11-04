@@ -1,5 +1,5 @@
 ---
-Version: '0.18'
+Version: '0.19'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -138,7 +138,8 @@ Two details carry weight:
     pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
     The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
-    finding.
+    finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
+    zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
   - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`,
     `blockquote`, `bold-list` and `none` are the existing shapes, and `prefix-lines` reads bare
     `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
@@ -516,3 +517,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.16`. Documented the optional `external_ids` option of `citation.resolution`: exact ids or inclusive numeric ranges under a declared record prefix that are skipped (counted out of scope) instead of resolved. **Why:** `MILE-156` -- a public standard number such as `RFC-4122` shares a record prefix and was reported as a dangling citation, with no way to say it is not ours. | **substantive** |
 > | 2026-11-04 | Bumped to `0.17`. `statuses.require` counts a value in the type's declared `pending` vocabulary as missing, the same list `field.pending` reads. **Why:** `MILE-153` -- an Accepted record whose required field read `Unknown` passed; the vocabulary is declared once, in configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.18`. Documented the per-type `exclude_files` declaration: bare file names directly in a type's `dir` that are not its records, excluded from every rule's population and from `filename.identity-pattern`'s census. **Why:** `MILE-150` and `BUG-183` -- a `README.md` in a record directory was read as a record and failed every rule, with no way to say it is not one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.19`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |

@@ -133,6 +133,10 @@ record_types:
       - "Blocked-on"
   waiver:
     dir: "docs/waiver"
+    # No waiver exists yet, so the padded form is free to choose (MILE-151):
+    # `urzua new waiver` fits its file name and H1 to this pattern, and the
+    # identity rules read the same grammar back.
+    identity: {from: filename, pattern: '^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$'}
     required_fields:
       - "Rule"
       - "Scope"
