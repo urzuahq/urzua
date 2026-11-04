@@ -1,6 +1,5 @@
 ---
-Version: '0.24'
-Date: 2026-08-20
+Version: '0.27'
 Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
@@ -262,6 +261,29 @@ rules:
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
 
+## Cited paths: `citation.path-exists`
+
+`citation.path-exists` (`MILE-143`) checks that a repository path cited in a record's references
+exists. Where to look is configuration, not engine knowledge, so the rule requires
+`reference_sections`:
+
+```yaml
+rules:
+  citation.path-exists:
+    level: warn
+    reference_sections: ["References"]
+```
+
+- `reference_sections` lists `##` heading texts, matched exactly after trimming. Only backtick-quoted
+  code spans inside those sections are read; a record with no such section is out of scope.
+- A span is read as a path only when it is plainly one: no whitespace, a `/` present, ending in a
+  file name with an extension or in `/`, not a URL or host-led path, not absolute, and no glob or
+  placeholder character. A bare file name without a directory (`Makefile`) is not read. A trailing
+  `:line` or `#anchor` is dropped; `./` and `../` resolve from the record's directory.
+- A file exists when git tracks it and it is on disk; a directory exists when a tracked file is below
+  it. The check is offline and deterministic. Cited issue and pull request numbers are not covered by
+  this rule.
+
 ## Scope declaration
 
 Per RFC-11 §6, a record's scope is a declared field on the record, not a config key — config
@@ -286,6 +308,34 @@ fail_on: warning   # error (default) | warning
 - Only the exit code changes. The report is byte-identical under either value: `blocking` and
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
+
+## Diff rule path options
+
+`diff.source-requires-record` (`source_paths`, `exclude_paths`) and `diff.source-and-records-mixed`
+(`application_paths`, `exclude_paths`) take path entries that are either a **prefix** or a **glob**
+(`MILE-158`). An entry with none of `*`, `?` or `[` is a prefix, compared by whole path component
+exactly as before, so a prefix-only configuration is unchanged. A glob is anchored to the whole
+repository-relative path with forward slashes:
+
+- `*` matches within one path component, `**` across components (`**/` also matches no directory),
+  `?` one character other than `/`, `[abc]` and `[!abc]` a character class.
+- A glob matches the path itself and anything below it, so `rust/crates/*/tests` covers every file
+  in each crate's `tests` directory, as a prefix would.
+- `exclude_paths` removes matching paths from the rule's source set. A changed path under a source
+  entry that an exclusion also matches is not a trigger. It stays in the rule's population as
+  eligible and unexamined, so a test-only diff shows what was set aside, without
+  `config.scope-matches-nothing` reading a deliberate exclusion as an unreachable configuration.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
+```
+
+A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
+`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
 
 ## Relation pairs
 
@@ -534,6 +584,26 @@ rules:
   pending value is not a date value and is not examined. A missing option is a load-time error, as
   is the option on any other rule.
 
+`date.field-order` (`MILE-157`) compares two date fields of one record:
+
+```yaml
+rules:
+  date.field-order:
+    level: error
+    date_order: ["Date <= Accepted-on"]   # the first may not be later than the second
+```
+
+- `date_order` (required, non-empty): each entry is `Earlier <= Later`, two distinct field names.
+  Both must be declared (`required_fields` or `known_fields`) by one record type, which is the only
+  kind of record the entry applies to; anything else is a load-time error, as is the option on any
+  other rule.
+- Equal dates pass. A value that is absent, blank, placeholder, pending or not a real `YYYY-MM-DD` date
+  is not compared: `date.field-valid`, `field.quality` and `status.required-field-missing` own those
+  states, so one defect is not reported twice. Such a slot is eligible and unexamined in the
+  population.
+- It adds no second notion of "a date": it reads the same field states and the same date validity as
+  `date.field-valid`.
+
 There is deliberately no dedicated acceptance-date rule. The acceptance date is required on an
 accepted-type status and forbidden on every other through the one mechanism for status-dependent
 fields, `statuses.require` / `statuses.forbid` (`MILE-132`), with `date.field-valid` owning the
@@ -595,4 +665,7 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |
 > | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
-> | 2026-11-04 | Bumped to `0.24`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
+> | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |
+> | 2026-11-04 | Bumped to `0.27`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |

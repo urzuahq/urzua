@@ -100,16 +100,18 @@ pub struct RuleSetting {
     /// records (`MILE-139`). Only meaningful to that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexes: Option<Vec<IndexSpec>>,
-    /// Path prefixes of source code that must change with a governed record.
-    /// Only meaningful to `diff.source-requires-record` (`MILE-124`).
+    /// Path prefixes or globs of source code that must change with a governed
+    /// record. Only meaningful to `diff.source-requires-record` (`MILE-124`,
+    /// `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_paths: Option<Vec<String>>,
     /// Path prefixes of application source. Only meaningful to
     /// `diff.source-and-records-mixed` (`MILE-142`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub application_paths: Option<Vec<String>>,
-    /// Path prefixes removed from `application_paths` (tests, fixtures). Only
-    /// meaningful to `diff.source-and-records-mixed`.
+    /// Path prefixes or globs removed from `application_paths` or
+    /// `source_paths` (tests, fixtures). Only meaningful to the two diff rules
+    /// (`MILE-142`, `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_paths: Option<Vec<String>>,
     /// Admit header keys beginning `x-` (case-insensitive) as extension keys
@@ -149,6 +151,11 @@ pub struct RuleSetting {
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_fields: Option<Vec<String>>,
+    /// Date orderings `"Earlier <= Later"` (`MILE-157`): the first field's date
+    /// may not be later than the second's. Only meaningful to
+    /// `date.field-order`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_order: Option<Vec<String>>,
     /// Severity per field, within one rule (`MILE-140`): a field named here
     /// reports at its own level (`warn` or `error`), every other field at the
     /// rule's `level`. Only meaningful to the rules that report per field.
@@ -168,6 +175,11 @@ pub struct RuleSetting {
     /// record prefix. Only meaningful to `citation.resolution`; optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_ids: Option<Vec<String>>,
+    /// The `##` headings whose backtick-quoted paths `citation.path-exists`
+    /// reads (`MILE-143`), matched exactly after trimming. Only meaningful to
+    /// that rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_sections: Option<Vec<String>>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -278,10 +290,14 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             date_fields: Option<Vec<String>>,
             #[serde(default)]
+            date_order: Option<Vec<String>>,
+            #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
             #[serde(default)]
             external_ids: Option<Vec<String>>,
+            #[serde(default)]
+            reference_sections: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -322,9 +338,11 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_max_age_days: table.claim_max_age_days,
                 sticky_states: table.sticky_states,
                 date_fields: table.date_fields,
+                date_order: table.date_order,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
                 external_ids: table.external_ids,
+                reference_sections: table.reference_sections,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -347,9 +365,11 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_max_age_days: None,
                 sticky_states: None,
                 date_fields: None,
+                date_order: None,
                 field_levels: None,
                 accepted_statuses: None,
                 external_ids: None,
+                reference_sections: None,
             })
         }
     }
@@ -715,6 +735,12 @@ pub enum ConfigError {
         path: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'date_order' entry '{entry}' {reason}")]
+    InvalidDateOrder {
+        rule: String,
+        entry: String,
+        reason: String,
+    },
     #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
     InvalidExternalId {
         rule: String,
@@ -843,8 +869,11 @@ const RULE_OPTIONS: &[RuleOption] = &[
     },
     RuleOption {
         name: "exclude_paths",
-        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
-        consequence_if_missing: "excludes nothing from the application source",
+        owners: &[
+            crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
+            crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        ],
+        consequence_if_missing: "excludes nothing from the source",
         optional: true,
     },
     RuleOption {
@@ -875,6 +904,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "date_order",
+        owners: &[crate::rules::RULE_DATE_FIELD_ORDER],
+        consequence_if_missing: "names no date ordering and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "accepted_statuses",
         owners: &[
             crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
@@ -882,6 +917,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         ],
         consequence_if_missing: "leaves a type with no declared success statuses (implementable statuses for the back-pointer gate) unjudged",
         optional: true,
+    },
+    RuleOption {
+        name: "reference_sections",
+        owners: &[crate::rules::RULE_CITATION_PATH_EXISTS],
+        consequence_if_missing: "reads no section and can never report",
+        optional: false,
     },
     RuleOption {
         name: "external_ids",
@@ -917,6 +958,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
         "date_fields" => setting.date_fields.as_ref(),
+        "date_order" => setting.date_order.as_ref(),
         "accepted_statuses" => setting.accepted_statuses.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
         "source_paths" => setting.source_paths.as_ref(),
@@ -924,6 +966,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         "external_ids" => setting.external_ids.as_ref(),
+        "reference_sections" => setting.reference_sections.as_ref(),
         "test_paths" => setting.test_paths.as_ref(),
         "sticky_states" => setting.sticky_states.as_ref(),
         _ => None,
@@ -935,6 +978,14 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 pub fn rule_requires_options(rule: &str) -> bool {
     rule == crate::rules::RULE_INDEX_FRESHNESS
         || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
+}
+
+/// A `date_order` entry as `(earlier, later)` field names, or `None` when it
+/// is not `Earlier <= Later` with two non-blank names (`MILE-157`).
+pub fn parse_date_order(entry: &str) -> Option<(&str, &str)> {
+    let (earlier, later) = entry.split_once("<=")?;
+    let (earlier, later) = (earlier.trim(), later.trim());
+    (!earlier.is_empty() && !later.is_empty() && !later.contains("<=")).then_some((earlier, later))
 }
 
 /// Why an `indexes` entry cannot be compared, or `None` when it can. Every
@@ -1136,6 +1187,41 @@ pub fn parse_with_document_models(
             });
         }
 
+        if let (Some(orders), true) = (&setting.date_order, setting.level != RuleLevel::Off) {
+            for entry in orders {
+                let bad = |reason: String| ConfigError::InvalidDateOrder {
+                    rule: name.clone(),
+                    entry: entry.clone(),
+                    reason,
+                };
+                let Some((earlier, later)) = parse_date_order(entry) else {
+                    return Err(bad("is not `Earlier <= Later` with two field names".into()));
+                };
+                if earlier == later {
+                    return Err(bad("orders a field against itself".into()));
+                }
+                for field in [earlier, later] {
+                    let declared = config
+                        .record_types
+                        .values()
+                        .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+                    if !declared {
+                        return Err(bad(format!(
+                            "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                        )));
+                    }
+                }
+                let both = config.record_types.values().any(|t| {
+                    let d = t.declared_fields();
+                    d.iter().any(|f| f.as_str() == earlier) && d.iter().any(|f| f.as_str() == later)
+                });
+                if !both {
+                    return Err(bad(format!(
+                        "names '{earlier}' and '{later}', but no one record type declares both, so it could never compare"
+                    )));
+                }
+            }
+        }
         if let Some(levels) = &setting.field_levels {
             if !FIELD_LEVEL_RULES.contains(&name.as_str()) {
                 return Err(ConfigError::OptionNotApplicable {
@@ -1250,6 +1336,23 @@ pub fn parse_with_document_models(
             for entry in paths.iter_mut() {
                 let normalised = normalize_published_path(entry);
                 if level != RuleLevel::Off {
+                    // The diff rules' options take globs (`MILE-158`): one that
+                    // cannot compile would match nothing, which reads as clean.
+                    let diff_option = matches!(
+                        option,
+                        "source_paths" | "application_paths" | "exclude_paths"
+                    );
+                    if diff_option
+                        && crate::rules::is_path_glob(&normalised)
+                        && crate::rules::path_glob_regex(&normalised).is_err()
+                    {
+                        return Err(ConfigError::InvalidPublishedPath {
+                            rule: name.clone(),
+                            option,
+                            entry: entry.clone(),
+                            reason: "is not a valid glob (an unclosed or empty `[` class)",
+                        });
+                    }
                     if let Some(reason) = published_path_problem(&normalised) {
                         return Err(ConfigError::InvalidPublishedPath {
                             rule: name.clone(),
@@ -1872,6 +1975,25 @@ rules:
     }
 
     #[test]
+    fn reference_sections_is_required_by_citation_path_exists_and_by_no_other() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        assert!(parse(&format!("{base}  citation.path-exists: warn\n"))
+            .unwrap_err()
+            .to_string()
+            .contains("reference_sections"));
+        assert!(parse(&format!(
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n"
+        ))
+        .is_ok());
+        assert!(parse(&format!(
+            "{base}  field.quality:\n    level: error\n    reference_sections: [\"References\"]\n"
+        ))
+        .unwrap_err()
+        .to_string()
+        .contains("does not take the option 'reference_sections'"));
+    }
+
+    #[test]
     fn external_ids_belongs_to_citation_resolution_and_must_be_well_formed() {
         let base = "schema_version: 2\nrecord_types:\n  rfc:\n    dir: \"docs/rfc\"\nrules:\n";
         let ok = parse(&format!(
@@ -2304,6 +2426,23 @@ record_types:
                 "{bad} must be refused"
             );
         }
+    }
+
+    #[test]
+    fn a_diff_path_option_takes_globs_and_refuses_a_broken_one() {
+        let cfg = |entry: &str| {
+            format!("schema_version: 2\nrules:\n  diff.source-requires-record:\n    level: error\n    source_paths: [\"src\"]\n    exclude_paths: [\"{entry}\"]\nrecord_types: {{}}\n")
+        };
+        let c = parse(&cfg("**/*.test.*")).unwrap();
+        let setting = &c.rules["diff.source-requires-record"];
+        assert_eq!(
+            setting.exclude_paths.as_deref(),
+            Some(&["**/*.test.*".to_string()][..])
+        );
+        assert!(parse(&cfg("src/[ab")).is_err());
+        // exclude_paths belongs to the diff rules only.
+        let other = "schema_version: 2\nrules:\n  header.required-fields:\n    level: error\n    exclude_paths: [\"x\"]\nrecord_types: {}\n";
+        assert!(parse(other).is_err());
     }
 
     #[test]

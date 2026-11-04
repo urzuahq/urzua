@@ -88,6 +88,85 @@ pub fn date_field_valid(records: &[Record], config: &Config) -> (RuleExecution, 
     )
 }
 
+/// `date.field-order` (`MILE-157`): for each `date_order` entry
+/// `Earlier <= Later`, a record's `Earlier` date may not be later than its
+/// `Later`. Well-formedness stays `date.field-valid`'s: a value that is not a
+/// present, real date is not compared.
+pub fn date_field_order(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_DATE_FIELD_ORDER;
+    let orders: Vec<(String, String)> = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.date_order.as_ref())
+        .into_iter()
+        .flatten()
+        .filter_map(|e| crate::config::parse_date_order(e))
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
+    let declared = declared_fields_by_type(config);
+    let statuses = statuses_by_type(config);
+    let mut slots: Vec<(&Record, &(String, String))> = Vec::new();
+    for record in records {
+        let Some(fields) = declared.get(&record.record_type) else {
+            continue;
+        };
+        for order in &orders {
+            let has = |f: &str| fields.contains(&crate::values::FieldName::from(f));
+            if has(&order.0) && has(&order.1) {
+                slots.push((record, order));
+            }
+        }
+    }
+    let mut findings = Vec::new();
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| *record,
+        |(record, (earlier, later))| {
+            let decl = statuses.get(&record.record_type);
+            let mut dates = Vec::new();
+            for field in [earlier, later] {
+                let value = match declared_value(record, field) {
+                    Ok(v) => v,
+                    Err(outcome) => return outcome,
+                };
+                if classify_with(Some(value), decl) != FieldState::Present
+                    || date_problem(value.trim()).is_some()
+                {
+                    return Outcome::Absent;
+                }
+                dates.push(value.trim());
+            }
+            // `YYYY-MM-DD` orders lexically once both are real dates.
+            if dates[0] > dates[1] {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    message: format!(
+                        "{earlier} '{}' is later than {later} '{}', but {earlier} must not be later than {later}",
+                        dates[0], dates[1]
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,6 +243,90 @@ mod tests {
         let (exec, f) = date_field_valid(&[adr("Proposed", "Date: YYYY-MM-DD\n")], &c);
         assert!(f.is_empty(), "{f:?}");
         assert_eq!(exec.population.unwrap().examined(), 0);
+    }
+
+    const ORDER: &str =
+        "  date.field-order:\n    level: error\n    date_order: [\"Date <= Accepted-on\"]\n";
+
+    #[test]
+    fn an_acceptance_date_before_the_record_date_is_reported_observed_failing() {
+        let c = config("", ORDER);
+        let (exec, f) = date_field_order(
+            &[adr(
+                "Accepted",
+                "Date: 2026-03-02\nAccepted-on: 2026-03-01\n",
+            )],
+            &c,
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("2026-03-02") && f[0].message.contains("Accepted-on"));
+        assert_eq!(examined(&exec), 1);
+    }
+
+    #[test]
+    fn equal_and_later_acceptance_dates_pass() {
+        let c = config("", ORDER);
+        for later in ["2026-03-02", "2026-03-03", "2027-01-01"] {
+            let rec = adr(
+                "Accepted",
+                &format!("Date: 2026-03-02\nAccepted-on: {later}\n"),
+            );
+            let (_, f) = date_field_order(&[rec], &c);
+            assert!(f.is_empty(), "{later}: {f:?}");
+        }
+    }
+
+    #[test]
+    fn an_absent_placeholder_or_unparseable_date_is_left_to_the_field_rules() {
+        let c = config("", ORDER);
+        for extra in [
+            "Date: 2026-03-02\n",
+            "Date: 2026-03-02\nAccepted-on: YYYY-MM-DD\n",
+            "Date: 2026-03-02\nAccepted-on: nope\n",
+            "Date: 2026-02-30\nAccepted-on: 2026-01-01\n",
+            "Accepted-on: 2026-01-01\n",
+        ] {
+            let (exec, f) = date_field_order(&[adr("Accepted", extra)], &c);
+            assert!(f.is_empty(), "{extra}: {f:?}");
+            let p = exec.population.unwrap();
+            assert_eq!((p.eligible(), p.examined()), (1, 0), "{extra}");
+        }
+    }
+
+    #[test]
+    fn a_type_declaring_only_one_of_the_fields_is_not_examined() {
+        let c = config("", ORDER);
+        let mut rec = adr("Accepted", "Date: 2026-03-02\nAccepted-on: 2026-03-01\n");
+        rec.record_type = "other".to_string();
+        let (exec, f) = date_field_order(&[rec], &c);
+        assert!(f.is_empty());
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn date_order_loads_only_on_its_rule_and_is_validated() {
+        let bad = |rules: &str| {
+            let yaml = format!("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n    known_fields: [Date, Accepted-on]\nrules:\n{rules}");
+            crate::config::parse(&yaml).err().map(|e| e.to_string())
+        };
+        assert!(bad("  date.field-order: error\n")
+            .unwrap()
+            .contains("date_order"));
+        assert!(bad("  date.field-valid:\n    level: error\n    date_fields: [Date]\n    date_order: [\"Date <= Accepted-on\"]\n").unwrap().contains("date_order"));
+        for entry in [
+            "Date",
+            "Date <= ",
+            "Date <= Date",
+            "Date <= Nope",
+            "Date < Accepted-on",
+            "A <= B <= C",
+        ] {
+            let rules =
+                format!("  date.field-order:\n    level: error\n    date_order: [\"{entry}\"]\n");
+            assert!(bad(&rules).is_some(), "{entry} must be refused");
+        }
+        assert!(bad(ORDER).is_none());
+        assert!(bad("  date.field-order: off\n").is_none());
     }
 
     #[test]

@@ -18,6 +18,7 @@ record_types:
       - "Embodiment"
       - "Realized-by"
       - "Stable-Id"
+      - "Accepted-on"
       - "Derives-from"
       - "Supersedes / Superseded-by"
     statuses:
@@ -45,6 +46,7 @@ record_types:
     header_shape: "yaml-frontmatter"
     known_fields:
       - "Stable-Id"
+      - "Accepted-on"
       - "Supersedes / Superseded-by"
       - "Amends"
       - "Amended-by"
@@ -196,7 +198,11 @@ rules:
   status.required-field-missing: error
   date.field-valid:
     level: error
-    date_fields: ["Date"]
+    date_fields: ["Date", "Accepted-on"]
+  # An acceptance date may not precede the record's own date (MILE-157).
+  date.field-order:
+    level: error
+    date_order: ["Date <= Accepted-on"]
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
@@ -255,6 +261,9 @@ rules:
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.
+  # Integration tests sit in each crate's tests/ directory, so a change to
+  # them alone is not a change to behaviour needing a record (MILE-158).
   diff.source-requires-record:
     level: error
     source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests"]

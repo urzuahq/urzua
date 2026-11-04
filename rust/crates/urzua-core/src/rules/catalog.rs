@@ -43,6 +43,7 @@ pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
 pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
+pub const RULE_CITATION_PATH_EXISTS: &str = "citation.path-exists";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 pub const RULE_SECTION_REQUIRED: &str = "section.required";
 pub const RULE_SECTION_SHAPE: &str = "section.shape";
@@ -57,6 +58,7 @@ pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
 pub const RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS: &str = "embodiment.requires-accepted-status";
 pub const RULE_DATE_FIELD_VALID: &str = "date.field-valid";
+pub const RULE_DATE_FIELD_ORDER: &str = "date.field-order";
 pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
@@ -97,6 +99,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_PAIR_RECIPROCITY,
     RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
+    RULE_CITATION_PATH_EXISTS,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     RULE_SECTION_REQUIRED,
     RULE_SECTION_SHAPE,
@@ -110,6 +113,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
     RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
     RULE_DATE_FIELD_VALID,
+    RULE_DATE_FIELD_ORDER,
     RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
@@ -267,6 +271,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in. The optional `external_ids` option (`MILE-156`) lists ids that share a record prefix but are not records, each an exact id (`RFC-4122`) or an inclusive numeric range (`RFC-4000..4999`) under a declared prefix; a matching citation is counted out of scope, never resolved or reported, and an entry under no declared prefix is a config error. Its population counts the citations, so a run over none is distinguishable from a clean one, and external citations are visible as out of scope.",
     },
     RuleMeta {
+        id: RULE_CITATION_PATH_EXISTS,
+        description: "A repository path cited in backticks inside a `reference_sections` section (a `##` heading, matched exactly) exists in the working tree, tracked and on disk (`MILE-143`). A cited path is a code span with no whitespace, containing a `/` and ending in a file name with an extension or in `/`; a URL, a host-led path (`example.com/x`), an absolute or `~` path, a glob or placeholder (`*?<>{}$|`) and anything else is not a path and is not read. A trailing `:line` or `#anchor` is dropped, and `./` or `../` resolves from the record's directory. Fenced code blocks are not read. Needs `reference_sections`; a record without such a section is out of scope, and the population counts the paths cited. Offline and deterministic. Cited issue and pull request numbers are not checked here.",
+    },
+    RuleMeta {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
         description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
     },
@@ -280,11 +288,11 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_DIFF_SOURCE_REQUIRES_RECORD,
-        description: "A `--base` diff changes a path under a declared `source_paths` prefix but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`). One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
+        description: "A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
     },
     RuleMeta {
         id: RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
-        description: "A `--base` diff changes both a governed record and a path under a declared `application_paths` prefix (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean.",
+        description: "A `--base` diff changes both a governed record and a path under a declared `application_paths` entry, a prefix or a glob (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean.",
     },
     RuleMeta {
         id: RULE_FILENAME_IDENTITY_PATTERN,
@@ -317,6 +325,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_DATE_FIELD_VALID,
         description: "A value in a declared date field (`date_fields`) that is not a well-formed `YYYY-MM-DD` date, or is well-formed but not a real calendar date such as `2026-02-30`, is an error (`MILE-137`). A blank, placeholder or pending value is not a date value and is left to `field.quality` and `status.required-field-missing`. Needs `date_fields`. The population counts the date values examined.",
+    },
+    RuleMeta {
+        id: RULE_DATE_FIELD_ORDER,
+        description: "Within one record, a date field that is later than the field `date_order` says must not be later is an error: `Date <= Accepted-on` reports a record accepted before it was written (`MILE-157`). Equal dates pass. A value that is blank, a placeholder, pending or not a real `YYYY-MM-DD` date is not compared and is left to `date.field-valid`, `field.quality` and `status.required-field-missing`, which own those states. Applies to every record type that declares both fields of an entry. Needs `date_order`. The population counts one slot per record and entry; a record missing either date is eligible and unexamined.",
     },
     RuleMeta {
         id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,

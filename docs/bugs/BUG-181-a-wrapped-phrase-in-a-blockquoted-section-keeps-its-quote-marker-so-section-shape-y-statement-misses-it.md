@@ -23,4 +23,4 @@ BUG-1 of the adopter switchover report. Fix in `rules/section.rs` `y_statement`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this defect. | **substantive** |
-> | 2026-11-04 | Fixed. `y_statement` strips a leading `>` from each line before matching (`SPEC-3` 0.24). **Why:** the quote marker no longer sits between two words of a phrase. | **substantive** |
+> | 2026-11-04 | Fixed. `y_statement` strips a leading `>` from each line before matching (`SPEC-3` 0.27). **Why:** the quote marker no longer sits between two words of a phrase. | **substantive** |
