@@ -25,3 +25,4 @@ When a last-audit field is declared and present, the window counts from it; othe
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented: `embodiment.consistency` takes `drift_audit_field` (needs `drift_grace_days`, names a declared field); a record with a well-formed date there has its grace window counted from it, otherwise from the cited file's last change, and a malformed date is a warning. This repository declares `Last-audited` on specs and SPEC-3 carries one; `evidence_pins_integration.rs` covers both sources and the malformed case. `Status` stays `Planned`. **Why:** the Done-when contract. | **substantive** |

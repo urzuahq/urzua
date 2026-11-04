@@ -264,7 +264,8 @@ pub fn embodiment_locator_exists(
 /// the records source comments cite at each tier (`MILE-128`, `MILE-146`),
 /// from [`back_pointer_evidence`]. A record with no `Realized-by` field that
 /// a back-pointer cites is judged on that evidence alone (`MILE-149`); one
-/// with neither is unexamined. `claim_age_days` (`MILE-129`) is each record's
+/// with neither is judged only when it states `Verified` or `Implemented`, a
+/// claim with no evidence (`MILE-161`), and otherwise unexamined. `claim_age_days` (`MILE-129`) is each record's
 /// days since its `Realized-by` line was last touched, computed by the caller
 /// and read only while `claim_max_age_days` is set: a claim older than that
 /// draws a warning in addition to any disagreement. `fresh_drift` (`MILE-129`)
@@ -282,6 +283,11 @@ pub fn embodiment_consistency(
     let mut findings = Vec::new();
     let max_age = config.rules.get(RULE_ID).and_then(|s| s.claim_max_age_days);
     let sticky = sticky_states(config);
+    let audit_field = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.drift_audit_field.as_deref())
+        .map(str::trim);
 
     // The candidate is the *pair*: the rule needs both fields, so a record
     // carrying only one of them is handed to the rule and reaches no verdict.
@@ -320,13 +326,37 @@ pub fn embodiment_consistency(
             if sticky.contains(stated.trim()) {
                 return Outcome::Examined;
             }
+            // A malformed last-audit date is reported, never ignored: the grace
+            // window falls back to the file's last change for this record
+            // (`MILE-166`).
+            if let Some(field) = audit_field {
+                if let Ok(value) = declared_value(record, field) {
+                    if let Err(problem) = date_unix(value) {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Warning,
+                            file: record.path.clone(),
+                            line: None,
+                            waived: None,
+                            declared_severity: None,
+                            message: format!(
+                                "last-audit field {field} value '{}' {problem}, so drift_grace_days counts from the cited file's last change for this record",
+                                value.trim()
+                            ),
+                        });
+                    }
+                }
+            }
             let cited_by_code = back_pointed.code.contains(&record.path);
             let cited_by_test = back_pointed.test.contains(&record.path);
-            // A missing `Realized-by` is judged only when a back-pointer cites
-            // the record; an unreadable header is never judged (`MILE-149`).
+            // A missing `Realized-by` is judged when a back-pointer cites the
+            // record (`MILE-149`), or when the record states a tier that no
+            // evidence of either kind supports (`MILE-161`); one stating no
+            // tier stays unexamined, and an unreadable header is never judged.
+            let claims_a_tier = matches!(stated.trim(), "Verified" | "Implemented");
             let realized_by_value = match declared_value(record, locator_field) {
                 Ok(v) => Some(v),
-                Err(Outcome::Absent) if cited_by_code || cited_by_test => None,
+                Err(Outcome::Absent) if cited_by_code || cited_by_test || claims_a_tier => None,
                 Err(outcome) => return outcome,
             };
 
@@ -421,6 +451,11 @@ fn evidence_description(
     }
     if cited_by_test {
         parts.push("test back-pointers".to_string());
+    }
+    if parts.is_empty() {
+        return format!(
+            "no evidence (the record has no {locator_field} field and no back-pointer cites it)"
+        );
     }
     let mut text = parts.join(" and ");
     if !has_locators {
@@ -1169,13 +1204,37 @@ mod tests {
     }
 
     #[test]
-    fn a_record_with_no_realized_by_and_no_citation_is_still_not_judged() {
-        let findings = consistency(no_locators("Verified"), false, false);
-        assert!(findings.is_empty(), "{findings:?}");
+    fn a_tier_claim_with_no_evidence_of_either_kind_is_reported() {
+        for tier in ["Verified", "Implemented"] {
+            let findings = consistency(no_locators(tier), false, false);
+            assert_eq!(findings.len(), 1, "{tier}: {findings:?}");
+            let m = &findings[0].message;
+            assert!(m.contains(&format!("stated Embodiment '{tier}'")), "{m}");
+            assert!(m.contains("'Not started'"), "{m}");
+            assert!(m.contains("no Realized-by field"), "{m}");
+            assert!(m.contains("no back-pointer cites it"), "{m}");
+        }
     }
 
     #[test]
-    fn a_record_with_no_realized_by_and_no_citation_is_unexamined_in_the_census() {
+    fn a_record_stating_no_tier_with_no_evidence_stays_unjudged_and_unexamined() {
+        for stated in ["Not started", "Specified", "Deprecated"] {
+            let r = no_locators(stated);
+            assert!(consistency(r.clone(), false, false).is_empty(), "{stated}");
+            let (exec, _) = embodiment_consistency(
+                &[r],
+                &embodiment_config(),
+                &HashSet::new(),
+                &HashSet::new(),
+                &Default::default(),
+                &HashMap::new(),
+            );
+            assert_eq!(exec.population.unwrap().examined(), 0, "{stated}");
+        }
+    }
+
+    #[test]
+    fn a_tier_claim_with_no_evidence_is_examined_in_the_census() {
         let r = no_locators("Verified");
         let (exec, _) = embodiment_consistency(
             &[r],
@@ -1185,7 +1244,7 @@ mod tests {
             &Default::default(),
             &HashMap::new(),
         );
-        assert_eq!(exec.population.unwrap().examined(), 0);
+        assert_eq!(exec.population.unwrap().examined(), 1);
     }
 
     #[test]
@@ -1393,5 +1452,41 @@ mod tests {
             &accepted_config(Some(DECLARED), Some("[Done]")),
         );
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_malformed_last_audit_date_is_reported_and_a_good_or_absent_one_is_not() {
+        let mut config = embodiment_config();
+        let setting: crate::config::RuleSetting =
+            yaml_serde::from_str("{level: warn, drift_grace_days: 7, drift_audit_field: Audited}")
+                .unwrap();
+        config
+            .rules
+            .insert(RULE_EMBODIMENT_CONSISTENCY.to_string(), setting);
+        let with = |audited: &str| {
+            record(
+                "docs/adr/0001-x.md",
+                "adr",
+                &format!(
+                    "---\nEmbodiment: 'Specified'\nRealized-by: 'spec:docs/x.md'\n{audited}---\n"
+                ),
+            )
+        };
+        let run = |r: Record| {
+            embodiment_consistency(
+                &[r],
+                &config,
+                &HashSet::new(),
+                &HashSet::new(),
+                &Default::default(),
+                &HashMap::new(),
+            )
+            .1
+        };
+        let bad = run(with("Audited: '2026-13-40'\n"));
+        assert_eq!(bad.len(), 1, "{bad:?}");
+        assert!(bad[0].message.contains("Audited") && bad[0].message.contains("2026-13-40"));
+        assert!(run(with("Audited: '2026-11-04'\n")).is_empty());
+        assert!(run(with("")).is_empty());
     }
 }

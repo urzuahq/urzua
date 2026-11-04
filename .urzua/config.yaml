@@ -27,10 +27,16 @@ record_types:
       failure: ["Rejected", "Superseded"]
       implementable: ["Accepted"]
       claim_retained: ["Superseded"]
-      # The type's placeholder vocabulary (MILE-153): whole values only. It
+      # The type's placeholder vocabulary (MILE-153): whole values, and patterns. It
       # feeds field.pending and makes status.require count them as missing, so
       # an Accepted ADR whose Deciders reads "Unknown" is not decided.
-      pending: ["pending", "unknown", "none recorded"]
+      # A pattern entry (MILE-162) declares a placeholder family with a variable
+      # tail once: `TBD`, `TBD -- awaiting the board`, `to be decided by Q3`.
+      pending:
+        - "pending"
+        - "unknown"
+        - "none recorded"
+        - {pattern: '(?i)^(tbd|to be (decided|determined))\b'}
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"
@@ -92,6 +98,7 @@ record_types:
       - "Derives-from"
       - "Implements"
       - "Parent"
+      - "Last-audited"
     statuses:
       values: ["Draft", "Accepted"]
       success: ["Accepted"]
@@ -239,6 +246,10 @@ rules:
   embodiment.consistency:
     level: warn
     drift_grace_days: 14
+    # A spec's file changes for reasons unrelated to its evidence, so a spec
+    # can declare the day its evidence was last audited and the window counts
+    # from that instead of from the cited file's last change (MILE-166).
+    drift_audit_field: "Last-audited"
     # States a human sets that no evidence can compute (MILE-148): a record
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]
@@ -276,7 +287,7 @@ rules:
   embodiment.back-pointer-resolution:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
-    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/urzua-core/tests"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.

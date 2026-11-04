@@ -1,8 +1,9 @@
 ---
-Version: '0.36'
+Version: '0.40'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
+Last-audited: 2026-11-04
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -224,7 +225,7 @@ Two details carry weight:
         failure: [WontFix]                # terminal, it ended without being done
         implementable: [Open]             # statuses at which code may implement the record
         claim_retained: []                # statuses that may keep an Implemented/Verified claim
-        pending: [pending, "not yet written"]
+        pending: [pending, "not yet written", {pattern: "^\\(pending"}]
         require: [{when: [Fixed], fields: [Regression-test]}]
         forbid:  [{when: [Open], fields: [Fixed-in]}]
   ```
@@ -240,6 +241,14 @@ Two details carry weight:
   with no value is a load-time error naming the record type and `statuses`. Transitions between
   statuses are not declared here (`MILE-144`).
 
+  A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
+  stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
+  regular expression searched in the trimmed value, so the author anchors it (`^`, `$`) and writes
+  `(?i)` for case-insensitivity. A whole value is still compared case-insensitively. A value that
+  matches no entry and no pattern is a real value. A pattern that is not a valid expression, is blank
+  or repeated, or an entry with any other key (`{pattern, flags}`) is a load-time error naming the
+  type and `statuses`.
+
   A type that declares no `statuses` behaves exactly as before. A declaration is read by:
 
   - `status.undeclared-value`: a `Status` outside `values`.
@@ -251,7 +260,7 @@ Two details carry weight:
     or `none recorded` can be declared once and no longer satisfies a requirement. A type that omits
     `pending` keeps the old reading, where such a value is present.
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
-    case-insensitive) equals one of the entries. It **replaces** the compiled-in match, which treats
+    case-insensitive) equals one of the whole-value entries or matches one of the pattern entries. It **replaces** the compiled-in match, which treats
     any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
     real value. A type that omits `pending` keeps the compiled-in match.
   - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
@@ -582,6 +591,13 @@ rules:
 - `drift_grace_days` (whole days, `0` or more): drift is not reported while the cited file's last
   commit is newer than the window, so a code change can land before its record catches up. Once the
   window passes the drift reports.
+- `drift_audit_field` (a field name some record type declares; needs `drift_grace_days`): a record
+  that carries a `YYYY-MM-DD` date in that field is held back while that date is newer than the
+  window, in place of the cited file's last commit, so the window counts from the day the evidence
+  was last audited. A record without the field, or with a blank one, counts from the file's last
+  commit as before; a malformed date is a warning from `embodiment.consistency` naming the value
+  and falls back the same way. A blank name, an undeclared field, or the option without
+  `drift_grace_days` is a load error.
 - `claim_max_age_days` (whole days): a warning when the commit that last touched the record's
   `Realized-by` line is older than the limit, whether or not the evidence changed. It reports in
   addition to any disagreement, and a record whose line git cannot date is not warned.
@@ -615,11 +631,17 @@ rules:
 - Both markers are read the same way: at the start of a comment line or in a trailing comment after
   code, an id list in which a note may sit between ids (`ADR-1 (why), ADR-2`).
 - A `test_paths` entry that is not inside any `back_pointer_paths` entry is a load error (nothing
-  there would be scanned), and one covering no tracked file is a finding.
+  there would be scanned), and one covering no tracked file is a finding. An entry containing a glob
+  character (`**/*.test.*`, `crates/*/tests`) is matched as a glob, the same matcher the diff rules'
+  path options use; any other entry stays a prefix. A glob names files wherever they sit, so it is
+  read only among files under a `back_pointer_paths` entry, is exempt from the containment check,
+  must match at least one such file (else a finding), and a glob that cannot compile is a load error.
 - `embodiment.consistency` judges a record with `Embodiment` but no `Realized-by` field when a
   back-pointer cites it, computing from the back-pointers alone; the finding says so. A record
-  neither cited nor carrying `Realized-by` is still not judged. `urzua fix` repairs the same
-  records.
+  neither cited nor carrying `Realized-by` is judged only when it states `Verified` or
+  `Implemented`: that claim has no evidence of either kind, so it is reported against the computed
+  `Not started`. A record stating any other value there is not judged and stays unexamined in the
+  census. `urzua fix` repairs the cited records only.
 
 The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
 option-on-a-rule-that-does-not-take-it load error.
@@ -761,4 +783,8 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
 > | 2026-11-04 | Bumped to `0.35`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
-> | 2026-11-04 | Bumped to `0.36`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |
+> | 2026-11-04 | Bumped to `0.36`. `test_paths` accepts globs as well as prefixes, matched by the diff rules' glob matcher. **Why:** `MILE-160` -- test files named by suffix cannot be named by a prefix list. | **substantive** |
+> | 2026-11-04 | Bumped to `0.37`. Documented that `embodiment.consistency` reports a record stating `Verified` or `Implemented` with no `Realized-by` field and no citing back-pointer. **Why:** `MILE-161` -- a claim with no evidence passed silently. | **substantive** |
+> | 2026-11-04 | Bumped to `0.38`. Documented `drift_audit_field` of `embodiment.consistency`: the `drift_grace_days` window counts from a declared last-audit date on the record when present, else from the cited file's last change; a malformed date is reported. **Why:** `MILE-166` -- a file changes for reasons unrelated to its evidence, so its last change mis-dates the audit. | **substantive** |
+> | 2026-11-04 | Bumped to `0.39`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.40`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |

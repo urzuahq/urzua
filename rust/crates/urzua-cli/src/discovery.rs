@@ -363,6 +363,11 @@ pub(crate) fn compute_drifted_records_at(
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
         .and_then(|s| s.drift_grace_days)
         .map(|d| i64::from(d) * DAY_SECS);
+    let audit_field = config
+        .rules
+        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
+        .and_then(|s| s.drift_audit_field.as_deref())
+        .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
@@ -414,6 +419,16 @@ pub(crate) fn compute_drifted_records_at(
         let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
+        // A declared, well-formed last-audit date replaces the cited file's
+        // last change as where the window counts from; a malformed one is
+        // reported by the rule and falls back to the file (`MILE-166`).
+        let audit_time = audit_field
+            .and_then(|f| record.header.get(f))
+            .and_then(|v| rules::date_unix(v).ok());
+        let mut held_back = |commit: &str| match (audit_time, grace_secs) {
+            (Some(t), Some(grace)) => now_unix - t < grace,
+            _ => within_grace(commit),
+        };
         if locator_line(record).is_none() {
             continue;
         }
@@ -444,7 +459,7 @@ pub(crate) fn compute_drifted_records_at(
                             )
                         })
                         .as_deref()
-                        .is_some_and(&mut within_grace);
+                        .is_some_and(&mut held_back);
                 if changed && !fresh {
                     drifted.insert(record.path.clone());
                     break;
@@ -475,7 +490,7 @@ pub(crate) fn compute_drifted_records_at(
                         })
                 });
             if drifted_pair {
-                if within_grace(locator_commit) {
+                if held_back(locator_commit) {
                     fresh_records.insert(record.path.clone());
                 } else {
                     drifted.insert(record.path.clone());

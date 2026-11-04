@@ -352,3 +352,82 @@ fn fix_does_not_flip_a_stated_drift_detected_while_the_drift_is_inside_the_grace
         "{parsed}"
     );
 }
+
+/// `MILE-166`: a declared last-audit field replaces the locator's last change
+/// as where the grace window counts from.
+fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> PathBuf {
+    let dir = repo(
+        name,
+        "{level: error, drift_grace_days: 7, drift_audit_field: Audited}",
+    );
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace("\"Realized-by\"]", "\"Realized-by\", \"Audited\"]"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    let mut text = record("code:src/a.rs");
+    if let Some(a) = audited {
+        text = text.replacen("---\n#", &format!("Audited: '{a}'\n---\n#"), 1);
+    }
+    std::fs::write(dir.join(RECORD_PATH), text).unwrap();
+    commit_all(&dir, Some(OLD));
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, locator_date);
+    dir
+}
+
+fn today() -> String {
+    let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+fn drift_reported(parsed: &serde_json::Value) -> bool {
+    consistency_messages(parsed)
+        .iter()
+        .any(|m| m.contains("Drift detected"))
+}
+
+#[test]
+fn a_recent_last_audit_holds_back_drift_the_locator_dates_would_report() {
+    // The locator changed long ago, so the file's last change is past the
+    // window; the record was audited today, so the window is not.
+    let dir = audit_repo("audit-fresh", Some("2021-01-01T00:00:00"), Some(&today()));
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert!(!drift_reported(&parsed), "{parsed}");
+}
+
+#[test]
+fn an_old_last_audit_reports_drift_the_locator_dates_would_hold_back() {
+    // The locator changed just now (inside the window by file date), but the
+    // declared audit is old, and it wins.
+    let dir = audit_repo("audit-old", None, Some("2021-01-01"));
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert!(drift_reported(&parsed), "{parsed}");
+}
+
+#[test]
+fn a_record_without_the_audit_field_counts_from_the_files_last_change() {
+    let dir = audit_repo("audit-absent-fresh", None, None);
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert!(!drift_reported(&parsed), "{parsed}");
+    let dir = audit_repo("audit-absent-old", Some("2021-01-01T00:00:00"), None);
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert!(drift_reported(&parsed), "{parsed}");
+}
+
+#[test]
+fn a_malformed_last_audit_is_reported_and_falls_back_to_the_files_last_change() {
+    let dir = audit_repo("audit-bad", None, Some("2026-13-45"));
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    let messages = consistency_messages(&parsed);
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("last-audit field Audited")),
+        "{parsed}"
+    );
+    // The fresh locator change is still held back by the file's date.
+    assert!(!drift_reported(&parsed), "{parsed}");
+}
