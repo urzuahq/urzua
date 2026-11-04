@@ -1,5 +1,5 @@
 ---
-Version: '0.36'
+Version: '0.37'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -618,7 +618,11 @@ rules:
 - Both markers are read the same way: at the start of a comment line or in a trailing comment after
   code, an id list in which a note may sit between ids (`ADR-1 (why), ADR-2`).
 - A `test_paths` entry that is not inside any `back_pointer_paths` entry is a load error (nothing
-  there would be scanned), and one covering no tracked file is a finding.
+  there would be scanned), and one covering no tracked file is a finding. An entry containing a glob
+  character (`**/*.test.*`, `crates/*/tests`) is matched as a glob, the same matcher the diff rules'
+  path options use; any other entry stays a prefix. A glob names files wherever they sit, so it is
+  read only among files under a `back_pointer_paths` entry, is exempt from the containment check,
+  must match at least one such file (else a finding), and a glob that cannot compile is a load error.
 - `embodiment.consistency` judges a record with `Embodiment` but no `Realized-by` field when a
   back-pointer cites it, computing from the back-pointers alone; the finding says so. A record
   neither cited nor carrying `Realized-by` is still not judged. `urzua fix` repairs the same
@@ -764,4 +768,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
 > | 2026-11-04 | Bumped to `0.35`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
-> | 2026-11-04 | Bumped to `0.36`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.36`. `test_paths` accepts globs as well as prefixes, matched by the diff rules' glob matcher. **Why:** `MILE-160` -- test files named by suffix cannot be named by a prefix list. | **substantive** |
+> | 2026-11-04 | Bumped to `0.37`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |

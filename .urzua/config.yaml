@@ -278,7 +278,7 @@ rules:
   embodiment.back-pointer-resolution:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
-    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/urzua-core/tests"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.

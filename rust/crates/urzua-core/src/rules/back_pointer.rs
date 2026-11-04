@@ -228,7 +228,7 @@ pub fn back_pointer_evidence(
 }
 
 fn is_test_file(path: &std::path::Path, test_paths: &[String]) -> bool {
-    test_paths.iter().any(|e| path_is_published(path, e))
+    test_paths.iter().any(|e| path_matches_entry(path, e))
 }
 
 /// One finding per declared path covering no tracked file: nothing under it
@@ -238,7 +238,7 @@ fn uncovered_source_paths(
     files: &[SourceFile],
     source_paths: &[String],
 ) -> Vec<Finding> {
-    uncovered_paths(rule, files, source_paths, "source path")
+    uncovered_paths(rule, files, source_paths, "source path", None)
 }
 
 fn uncovered_paths(
@@ -246,10 +246,18 @@ fn uncovered_paths(
     files: &[SourceFile],
     paths: &[String],
     label: &str,
+    scanned: Option<&[String]>,
 ) -> Vec<Finding> {
+    // A test-path glob can match a file the scan never reads, so it must match
+    // a file under a scanned path to count as covering anything (`MILE-160`).
     paths
         .iter()
-        .filter(|entry| !files.iter().any(|f| path_is_published(&f.path, entry)))
+        .filter(|entry| {
+            !files.iter().any(|f| {
+                path_matches_entry(&f.path, entry)
+                    && scanned.is_none_or(|s| s.iter().any(|b| path_is_published(&f.path, b)))
+            })
+        })
         .map(|entry| Finding {
             rule: rule.to_string(),
             severity: FindingSeverity::Error,
@@ -316,7 +324,13 @@ pub fn embodiment_back_pointer_resolution(
     });
 
     findings.extend(uncovered_source_paths(RULE_ID, files, source_paths));
-    findings.extend(uncovered_paths(RULE_ID, files, test_paths, "test path"));
+    findings.extend(uncovered_paths(
+        RULE_ID,
+        files,
+        test_paths,
+        "test path",
+        Some(source_paths),
+    ));
 
     (
         RuleExecution {
