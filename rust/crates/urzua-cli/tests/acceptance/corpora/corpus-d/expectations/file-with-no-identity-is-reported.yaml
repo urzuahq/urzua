@@ -1,0 +1,9 @@
+id: file-with-no-identity-is-reported
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: filename.identity-pattern
+    file: records/notes.md
+    severity: error
+    message_contains: "no identity"

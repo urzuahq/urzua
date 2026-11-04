@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"recorded","cwd":"@ROOT@","tool_name":"Write","tool_input":{"file_path":"@ROOT@/docs/adr/ADR-2-b.md","content":"---\nStatus: Proposed\n---\n# ADR-2: U\n"}}

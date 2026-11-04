@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.14'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -59,8 +59,8 @@ that is no longer drifted (the `Realized-by` line was touched again) is repaired
 tier-computed value. `fix` computes drift only when `embodiment.consistency` is enabled, as `check`
 does (`MILE-159`): with the rule off or undeclared there is no embodiment verdict to repair, so `fix`
 reports it could not run instead of computing a verdict from an empty drift set. It applies the same opt-in `@sha256:` locator pins and
-`drift_grace_days` window `check` does (`MILE-129`), so the two still never disagree; `fix` does not
-rewrite a pin, which stays a hand edit.
+`drift_grace_days` window `check` does (`MILE-129`), so the two still never disagree; `fix` repairs `Embodiment` only; a pin is re-set
+by `--rebaseline` (below), never by a Tier 1 repair.
 
 Git trouble is never read as "no drift" (`MILE-159`). A shallow clone, detected once per run, and any
 git call that fails while computing drift (a commit the repository does not have, say) are reported as
@@ -85,8 +85,8 @@ as above.
 
 `urzua fix --stdin-path <path>` reads the proposed content of one record from stdin and judges it
 exactly as it would the file at `<path>`, without writing anything (`MILE-159`). It is the entry
-point for an editor hook that wants a verdict before the file is saved; an example script is
-`.git-hooks/examples/editor-fix-hook.sh`, which nothing installs.
+point for an editor hook that wants a verdict before the file is saved; the hook that
+uses it is described under "The record-edit hook" below.
 
 - **The path need not exist on disk.** A new record is judged from the proposal alone. The record
   type is the one whose `dir` directly holds the path, under the same filename rules discovery
@@ -106,9 +106,48 @@ point for an editor hook that wants a verdict before the file is saved; an examp
   content never writes, and the combination is `not-run` (exit 2) rather than a silently ignored
   flag.
 
+### The record-edit hook
+
+`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`) is the harness-neutral core that
+relays this verdict to a coding-agent harness before a record edit is written. Its contract: stdin is
+the proposed full content, argv the record path (absolute or repo-relative); stdout is one JSON object
+`{verdict, path, message, repairs, override?}`; exit 0 lets the edit proceed and 1 blocks it. It
+derives nothing: it reads `repairs` from `fix --stdin-path`.
+
+- `block`: a repair whose stated value the edit introduced (the on-disk file does not already say it).
+  The message names the file, line, stated and computed values, and the `Realized-by` evidence.
+  Every other edit to the record passes; a disagreement already on disk is listed, not blocked.
+- `allow-unjudged`: urzua is missing, answers `not-run` (including a record that states no
+  `Embodiment`), exits otherwise than 0, prints non-JSON, or reports an `embodiment-drift-git`
+  notice. The edit proceeds and the message says plainly that it was not judged.
+- `not-governed`: urzua reports that no record type governs the path (silent, the file is not a record).
+- `allow-override` / `block`: `--override NAME` or `URZUA_HOOK_OVERRIDE=NAME` lets a block through and
+  puts the name in the output; an override without a name keeps the block. Where an override is
+  persisted, and whom an unacknowledged block routes to, are undecided (`RFC-7`, `MILE-12`): the
+  `persist_override` function in the script is the extension point, a no-op today.
+
+Only computed fields in `repairs` (today `Embodiment` and the delivered `Status` repair) are judged; `check`'s header, field and status
+rules have no prospective-content mode and run at commit and CI. The Claude Code adapter
+`scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
+`Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
+Code's hook output; a second harness is a second adapter over the same core. Measured on this
+corpus: about 0.19s per single-record judgement through the core and about 0.39s through the Claude Code adapter (10-run means).
+
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
 non-blocking.
+
+### The `Status` repair (`MILE-183`)
+
+A second Tier 1 repair exists, for a type that declares `statuses.delivery` (`SPEC-3`) with
+`status.delivery-agreement` or `embodiment.consistency` enabled. When a record's evidence (`Realized-by`
+locators and source back-pointers, drift ignored) computes to a declared delivered tier while its
+`Status` is a declared not-done status, `fix` proposes the declared `set_status` as a repair with
+`field: Status`, and `--apply` writes it through the same path and structural revision row as the
+`Embodiment` repair. The one correct value is computable only in this direction. A success `Status`
+with no evidence is not downgraded: `fix` reports it as a notice naming the record, since the repair is
+adding evidence. `fix` computes no drift for this repair, so it runs when only
+`status.delivery-agreement` is enabled.
 
 ## Apply mode (`--apply`)
 
@@ -143,6 +182,34 @@ Every one of the following is a hard gate — none are optional, none are defaul
 
 Every applied write appends a `structural` revision-log entry naming the computation and the
 evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
+
+## Re-baselining pinned evidence (`--rebaseline`)
+
+`urzua fix --rebaseline` is the review-then-apply refresh `RFC-2` proposed, for the opt-in
+`@sha256:` pins of `MILE-129` (`MILE-181`). It replaces the Tier 1 repair for that run and takes
+the same `PATHS` scoping.
+
+- **Detect** (`--rebaseline`, read-only): `rebaselines` lists each record with a pinned locator whose
+  current content hash differs, as `record`, `field`, `line` and `pins`, each pin carrying `locator`,
+  `recorded_hash` and `current_hash`. Status is `repairs-available` while any is listed. A locator
+  whose file cannot be read is not a stale pin (`embodiment.locator-exists` reports it).
+- **Apply** (`--rebaseline --apply`): the gates of Tier 1 apply hold unchanged (`--ids` or `--force`,
+  never implied; an `--ids` entry matching nothing fails; identity as above; lock; re-read before
+  write; a missing revision log refuses that record). `--reason <text>` is required too: one line
+  without `|`, because an attestation with no reason is the rubber stamp `RFC-2` set out to prevent.
+- **What is written.** For each chosen record, every stale pin on the `Realized-by` line becomes the
+  current hash and nothing else on the line, in the file or in any other record, moves. One
+  `structural` revision row names who attested (`RFC-25`: attribution, not cryptographic
+  attestation), the old and new hash prefixes and the reason.
+- **The record is the selector.** All of a record's stale pins move together; per-locator selection
+  is not offered. A second run finds nothing to re-pin.
+- **Scope of the baseline.** Only pinned locators are re-baselined. Drift on an unpinned locator
+  compares against the commit that last touched the `Realized-by` line, which `fix` cannot move
+  without editing the line, so it is cleared by pinning the locator by hand (rewriting a pin touches
+  the line, which also resets the baseline of the record's unpinned locators once committed).
+  `--rebaseline` does not repair `Embodiment`: run a plain `urzua fix` afterwards for a stated
+  `Drift detected` that is no longer drifted.
+- It cannot be combined with `--stdin-path`, and `--reason` without `--rebaseline` is `not-run`.
 
 ## Purity boundary
 
@@ -185,3 +252,7 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.9`. `fix` takes `PATHS` that scope examination, drift and repair, and reports a path matching no record. **Why:** `MILE-159` -- an editor hook needs a quick single-file refresh, and the whole-corpus run is about 0.8s on this corpus against about 0.15s for one record. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. `fix --stdin-path <path>` judges proposed content for one record without writing, for a path that need not exist yet, with drift computed for that record alone; each repair carries the 1-based `line` of the stated field; the detect-mode example now shows the real snake_case shape. **Why:** `MILE-159` -- an editor hook judges a file before it is saved and must find its own repair without parsing the whole list. | **substantive** |
 > | 2026-11-04 | Bumped to `0.11`. Apply mode writes without a revision-log row for a type declaring `revision_log: {required: false}`; a required log (the default) still refuses a record with no section, now naming the identity looked for. **Why:** `MILE-159` -- an adopter's records have no revision log section, so `--apply` could never run on them. | **substantive** |
+> | 2026-11-04 | Bumped to `0.12`. `fix` proposes, and `--apply` writes, the declared success `Status` for a record whose evidence computes to a declared delivered tier while its `Status` is declared not done (`statuses.delivery`); a success `Status` with no evidence is reported as a notice and never downgraded; the revision row now names the computed value; `fix` runs when only `status.delivery-agreement` is enabled. **Why:** `MILE-183`. | **structural** |
+> | 2026-11-04 | Bumped to `0.13`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.14`. `fix --rebaseline` lists stale `@sha256:` pins and, on `--apply --ids`/`--force --by --reason`, re-pins the chosen records with an attributed revision row. **Why:** `MILE-181` -- a pin was a block with no sanctioned way to say "re-verified, still holds"; `RFC-2` proposed exactly this review-before-apply refresh. | **substantive** |
+

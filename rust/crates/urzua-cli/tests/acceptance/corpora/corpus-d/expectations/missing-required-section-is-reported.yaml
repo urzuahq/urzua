@@ -1,0 +1,9 @@
+id: missing-required-section-is-reported
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: section.required
+    file: records/ADR-0008-no-context.md
+    severity: error
+    message_contains: "Context"

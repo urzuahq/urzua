@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K4FD9GX9YA39H8S02ZRY1Z
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-70
 Blocked-on: —
+Realized-by: code:scripts/draft-record.sh, test:rust/crates/urzua-cli/tests/drafting_commands_integration.rs, spec:docs/specs/SPEC-19-repository-agent-guardrails.md
 ---
 # 177 — Agent commands in this repository draft records through urzua new and verify them with urzua check
 
@@ -29,4 +30,4 @@ Sibling to `MILE-103` (preference under choice) and `MILE-151` (`urzua new` foll
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's authoring commands have no counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
-> | 2026-11-04 | Built `/rfc`, `/adr` and `/milestone` in `.claude/commands/`, their shared `scripts/draft-record.sh`, the `AGENTS.md` suggestion rule, the pull request template's decision prompt and a test that extracts and runs each command's shell steps (`drafting_commands_integration.rs`). Stays `Planned`: `Done` needs `Realized-by` evidence, and the `milestone` type declares no `Realized-by` field yet. **Why:** a milestone is closed on evidence the engine can read, not on this note. | **substantive** |
+> | 2026-11-04 | Built `/rfc`, `/adr` and `/milestone` in `.claude/commands/`, their shared `scripts/draft-record.sh`, the `AGENTS.md` suggestion rule, the pull request template's decision prompt and a test that extracts and runs each command's shell steps (`drafting_commands_integration.rs`). `Realized-by` names the script, the test and `SPEC-19`; `Status` is `Done` in the same change (the maintainer reviewing the PR is the decision). **Why:** `MILE-183` holds `Status` to delivery evidence. | **substantive** |

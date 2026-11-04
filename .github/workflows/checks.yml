@@ -43,6 +43,24 @@ jobs:
         run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # Supply-chain and unused-dependency gates (MILE-176). Pinned prebuilt
+      # binaries with a checksum, so CI does not compile them on every run.
+      - name: install cargo-deny and cargo-machete (pinned, checksummed)
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools" && cd "$RUNNER_TEMP/tools"
+          curl -sSLfo deny.tgz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.19.4/cargo-deny-0.19.4-x86_64-unknown-linux-musl.tar.gz
+          curl -sSLfo machete.tgz https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          echo "3bd58b784e83715b86ddbc9deac591890372ec77fda5741bb0826970b958506f  deny.tgz" | sha256sum -c -
+          echo "640b0814480b401e4e72201e52a13e1311b8eb8d7c27faa08bbe9886f252f26d  machete.tgz" | sha256sum -c -
+          tar -xzf deny.tgz --strip-components=1 --wildcards '*/cargo-deny'
+          tar -xzf machete.tgz --strip-components=1 --wildcards '*/cargo-machete'
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: cargo machete (unused dependencies)
+        run: cargo machete
+      - name: cargo deny (advisories, bans, licenses, sources)
+        run: cargo deny check
       - name: cargo build --release
         run: cargo build --workspace --release --locked
       - name: cargo test

@@ -1,0 +1,9 @@
+id: forbidden-field-at-a-status-is-reported
+corpus: corpus-f
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: status.forbidden-field-present
+    file: records/docs/DOC-0002-forbidden.md
+    severity: error
+    message_contains: "Accepted-on"

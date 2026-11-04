@@ -1,0 +1,9 @@
+id: pending-field-is-not-blank
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: field.pending
+    file: records/ADR-0004-pending-author.md
+    severity: error
+    message_contains: "'Author' is marked pending"

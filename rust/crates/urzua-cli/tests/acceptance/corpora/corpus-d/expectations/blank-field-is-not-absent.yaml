@@ -1,0 +1,9 @@
+id: blank-field-is-not-absent
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: field.quality
+    file: records/ADR-0002-blank-author.md
+    severity: error
+    message_contains: "'Author' is Blank"

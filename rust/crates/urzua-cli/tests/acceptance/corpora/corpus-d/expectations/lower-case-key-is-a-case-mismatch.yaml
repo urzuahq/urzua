@@ -1,0 +1,9 @@
+id: lower-case-key-is-a-case-mismatch
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: header.field-case-mismatch
+    file: records/ADR-0011-case-variant.md
+    severity: error
+    message_contains: "'author'"

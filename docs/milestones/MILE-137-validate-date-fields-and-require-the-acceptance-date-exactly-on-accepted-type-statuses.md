@@ -1,9 +1,10 @@
 ---
 Stable-Id: 01M6HZ0MAXAFHSYZSBZ4D6KBAP
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: RFC-33
+Realized-by: code:rust/crates/urzua-core/src/rules/dates.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 137 — Validate date fields and require the acceptance date exactly on accepted-type statuses
 
@@ -26,3 +27,4 @@ A date field declared as a date type rejects a malformed value and an impossible
 > | 2026-11-04 | Filed. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter validates date shape, calendar validity and the acceptance date's presence and absence by status; urzua validates none of it. The check that the acceptance date is not earlier than the record date is consciously not carried over: the adopter itself treats it as usually legitimate. | **substantive** |
 > | 2026-11-04 | Built as two opt-in rules, `date.field-valid` (`date_fields`) and `date.acceptance-by-status` (`acceptance_field`; accepted-type statuses from the declared `statuses.success` or an `accepted_statuses` option). **Why:** the `fields` declaration names no field types, so the narrowest reading puts the date and acceptance-field names in rule options; the acceptance-date-not-earlier check stays out, as filed. | **substantive** |
 > | 2026-11-04 | Dropped `date.acceptance-by-status` and its `acceptance_field` option before release; the acceptance date by status is the `statuses.require` / `statuses.forbid` declaration of `MILE-132` plus `date.field-valid`, documented in `SPEC-3` and proven by an integration test. `accepted_statuses` stays with `embodiment.back-pointer-decision-accepted`. **Why:** maintainer decision of 2026-11-04: one mechanism, not two that could disagree. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #183, #179: `date.field-valid` plus the acceptance date by status through `statuses.require` and `statuses.forbid`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

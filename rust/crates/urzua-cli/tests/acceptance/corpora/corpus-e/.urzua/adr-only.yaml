@@ -1,0 +1,31 @@
+schema_version: 2
+record_types:
+  adr:
+    dir: records/adr
+    prefix: ADR
+    required_fields: [Status, Date, Owner]
+    known_fields: [Implements]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Open, Closed]
+      success: [Closed]
+      failure: []
+      implementable: [Open]
+    pointer_fields: [Implements]
+    narrative_fields: []
+    sections:
+      from: headings
+      required:
+        - {name: Context}
+rules:
+  header.required-fields: error
+  header.field-set-consistency: error
+  field.quality: error
+  status.undeclared-value: error
+  date.field-valid:
+    level: error
+    date_fields: [Date]
+  pointer.resolution: error
+  section.required: error
+  filename.identity-pattern: error
+  identity.collision: error

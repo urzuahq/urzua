@@ -1,0 +1,9 @@
+id: cross-type-claim-is-reported-not-skipped
+corpus: corpus-f
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: relation.cross-type-disallowed
+    file: records/docs/DOC-0006-cross-type.md
+    severity: error
+    message_contains: "NOT-0001"

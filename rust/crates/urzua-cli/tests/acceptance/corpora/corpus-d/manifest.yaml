@@ -1,0 +1,75 @@
+# Never reflow or normalize these fixtures: whitespace and wrapping are the material under test.
+fixtures:
+  - path: records/ADR-0001-queue.md
+    irregularity: >-
+      none -- the clean positive control; it is also the unreciprocated target of ADR-0006.
+  - path: records/ADR-0002-blank-author.md
+    irregularity: >-
+      `Author:` present with an empty value: blank, neither absent nor pending.
+  - path: records/ADR-0003-undeclared-status.md
+    irregularity: >-
+      a Status value with a typo and a free-text tail, outside the declared enum.
+  - path: records/ADR-0004-pending-author.md
+    irregularity: >-
+      `Author: pending`, a declared placeholder: unfinished, not forgotten.
+  - path: records/ADR-0005-title-mismatch.md
+    irregularity: >-
+      filename number 5, H1 number 6.
+  - path: records/ADR-0006-supersedes.md
+    irregularity: >-
+      `Supersedes / Superseded-by` names ADR-0001, which does not name it back.
+  - path: records/ADR-0007-dangling.md
+    irregularity: >-
+      an Implements entry whose first reference dangles and whose parenthetical annotation cites other ids that must not be read as claims.
+  - path: records/ADR-0008-no-context.md
+    irregularity: >-
+      the required `## Context` section is absent.
+  - path: records/ADR-0009-body-bullet.md
+    irregularity: >-
+      the required Date exists only as a body bullet, not in the header.
+  - path: records/ADR-0010-untrimmed.md
+    irregularity: >-
+      a quoted header value with trailing whitespace.
+  - path: records/ADR-0011-case-variant.md
+    irregularity: >-
+      header key written `author`, not `Author`.
+  - path: records/ADR-0012-bad-date.md
+    irregularity: >-
+      `Date: 2026-13-45`, well-formed but not a calendar date.
+  - path: records/ADR-0013-accepted-no-deciders.md
+    irregularity: >-
+      Accepted without the Deciders field the type requires at that status.
+  - path: records/ADR-0014-undeclared-field.md
+    irregularity: >-
+      a header field (`Mood`) no one declared.
+  - path: records/ADR-0015-citations.md
+    irregularity: >-
+      prose citing a record that does not exist and a References entry naming a missing path.
+  - path: records/ADR-0016-revision-log.md
+    irregularity: >-
+      a revision-log row whose Class cell is a dash.
+  - path: records/ADR-0017-twin-a.md
+    irregularity: >-
+      shares its identity ADR-0017 with its twin.
+  - path: records/ADR-0017-twin-b.md
+    irregularity: >-
+      shares its identity ADR-0017 with its twin.
+  - path: records/ADR-0019-wrapped-field.md
+    irregularity: >-
+      a required field (Deciders) whose value begins on the line after its key
+      and wraps onto a second line.
+  - path: records/ADR-0020-header-comment.md
+    irregularity: >-
+      a line beginning with a hash inside the header region, between fields.
+  - path: records/notes.md
+    irregularity: >-
+      a file in the type directory whose name carries no identity.
+  - path: records/archive/ADR-0018-stray.md
+    irregularity: >-
+      a record one directory below the declared dir, owned by no type.
+  - path: .urzua/config.yaml
+    irregularity: >-
+      the config the corpus is validated under, one rule per planted irregularity; not a record.
+  - path: .urzua/decoy-dir.yaml
+    irregularity: >-
+      the same config plus a second type whose `dir` is a near miss (`record`) matching nothing; not a record.

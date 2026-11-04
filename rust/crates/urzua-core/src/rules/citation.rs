@@ -264,9 +264,60 @@ pub fn citation_issue_exists(
         line: usize,
         raw: String,
         number: u64,
+        /// The header field it was read from; `None` for a reference section.
+        field: Option<String>,
     }
     let mut candidates: Vec<Cited> = Vec::new();
+    // Citations in one piece of text: (offset, raw, number), in text order.
+    let scan = |content: &str| -> Vec<(usize, String, u64)> {
+        let masked = mask_code_spans(content);
+        let mut found: Vec<(usize, String, u64)> = Vec::new();
+        if number_form {
+            for caps in number_re.captures_iter(&masked) {
+                let hash = caps.get(1).expect("group 1");
+                // `[text](#123)` is an anchor link, not a citation.
+                if masked[..hash.start()].ends_with("](") {
+                    continue;
+                }
+                let digits = caps.get(2).expect("group 2");
+                if let Ok(n) = digits.as_str().parse::<u64>() {
+                    found.push((hash.start(), format!("#{}", digits.as_str()), n));
+                }
+            }
+        }
+        if url_form {
+            for caps in url_re.captures_iter(&masked) {
+                let whole = caps.get(0).expect("group 0");
+                if let Ok(n) = caps[1].parse::<u64>() {
+                    found.push((whole.start(), whole.as_str().to_string(), n));
+                }
+            }
+        }
+        found.sort_by_key(|(at, _, _)| *at);
+        found
+    };
+    let header_fields: &[String] = refs.fields.as_deref().unwrap_or_default();
     for record in records {
+        // Declared header fields (`issue_refs.fields`), on the field's own line.
+        for name in header_fields {
+            let Some(field) = record
+                .header
+                .fields
+                .iter()
+                .find(|f| f.key.as_str() == name.as_str())
+            else {
+                continue;
+            };
+            for (_, raw, number) in scan(&field.value) {
+                candidates.push(Cited {
+                    record,
+                    line: field.line,
+                    raw,
+                    number,
+                    field: Some(name.clone()),
+                });
+            }
+        }
         let Some(text) = full_text.get(&record.path) else {
             continue;
         };
@@ -284,36 +335,13 @@ pub fn citation_issue_exists(
                 if skipped.contains(&line) {
                     continue;
                 }
-                let masked = mask_code_spans(content);
-                let mut found: Vec<(usize, String, u64)> = Vec::new();
-                if number_form {
-                    for caps in number_re.captures_iter(&masked) {
-                        let hash = caps.get(1).expect("group 1");
-                        // `[text](#123)` is an anchor link, not a citation.
-                        if masked[..hash.start()].ends_with("](") {
-                            continue;
-                        }
-                        let digits = caps.get(2).expect("group 2");
-                        if let Ok(n) = digits.as_str().parse::<u64>() {
-                            found.push((hash.start(), format!("#{}", digits.as_str()), n));
-                        }
-                    }
-                }
-                if url_form {
-                    for caps in url_re.captures_iter(&masked) {
-                        let whole = caps.get(0).expect("group 0");
-                        if let Ok(n) = caps[1].parse::<u64>() {
-                            found.push((whole.start(), whole.as_str().to_string(), n));
-                        }
-                    }
-                }
-                found.sort_by_key(|(at, _, _)| *at);
-                for (_, raw, number) in found {
+                for (_, raw, number) in scan(content) {
                     candidates.push(Cited {
                         record,
                         line,
                         raw,
                         number,
+                        field: None,
                     });
                 }
             }
@@ -351,8 +379,14 @@ pub fn citation_issue_exists(
                     waived: None,
                     declared_severity: None,
                     message: format!(
-                        "cites {}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
-                        c.raw, snapshot.repository, snapshot.generated_at
+                        "cites {}{}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
+                        c.raw,
+                        c.field
+                            .as_ref()
+                            .map(|f| format!(" in the {f} field"))
+                            .unwrap_or_default(),
+                        snapshot.repository,
+                        snapshot.generated_at
                     ),
                 });
             }
@@ -1126,6 +1160,68 @@ mod tests {
         let (_, only_numbers) = issues_forms(&[(ADR, body)], &snap(&[], &[]), "number", "");
         assert_eq!(only_numbers.len(), 1, "{only_numbers:?}");
         assert!(only_numbers[0].message.contains("#40"));
+    }
+
+    fn issues_fields(
+        docs: &[(&str, &str)],
+        snapshot: &Result<RefsSnapshot, String>,
+        refs_extra: &str,
+    ) -> (RuleExecution, Vec<Finding>) {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        let mut config = config_with_types(vec![("adr", type_config(None))]);
+        let setting: crate::config::RuleSetting = yaml_serde::from_str(&format!(
+            "level: warn\nreference_sections: [References]\nissue_refs: {{snapshot: s.json, repository: urzuahq/urzua, forms: [number, url]{refs_extra}}}\n"
+        ))
+        .unwrap();
+        config
+            .rules
+            .insert(RULE_CITATION_ISSUE_EXISTS.to_string(), setting);
+        citation_issue_exists(&records, &config, &full_text, snapshot)
+    }
+
+    const FIELD_DOC: &str = "---\nStatus: Open\nFound-in: 'review of PR #99 and https://github.com/urzuahq/urzua/pull/98, not `#97`'\nNote: see #96\n---\n# 1\n\n## References\n\n- #12\n";
+
+    #[test]
+    fn a_declared_header_field_is_read_and_an_undeclared_one_is_not() {
+        let (exec, findings) = issues_fields(
+            &[(ADR, FIELD_DOC)],
+            &snap(&[12], &[]),
+            ", fields: [Found-in]",
+        );
+        let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert!(
+            named[0].contains("#99") && named[0].contains("Found-in"),
+            "{named:?}"
+        );
+        assert!(named[1].contains("/pull/98"), "{named:?}");
+        // The line is the field's own line, not the section's.
+        assert_eq!(findings[0].line, Some(3));
+        // `Note` is not declared, `#97` is in a code span, `#12` is in the section.
+        assert!(named
+            .iter()
+            .all(|m| !m.contains("#96") && !m.contains("#97")));
+        assert_eq!(examined(&exec), 3);
+    }
+
+    #[test]
+    fn with_no_fields_declared_header_fields_are_not_read() {
+        let (exec, findings) = issues_fields(&[(ADR, FIELD_DOC)], &snap(&[12], &[]), "");
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(examined(&exec), 1);
+    }
+
+    #[test]
+    fn a_declared_field_a_record_lacks_is_absent_not_a_finding() {
+        let doc = "---\nStatus: Open\n---\n# 1\n\n## References\n\n- #12\n";
+        let (exec, findings) =
+            issues_fields(&[(ADR, doc)], &snap(&[12], &[]), ", fields: [Found-in]");
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(examined(&exec), 1);
     }
 
     #[test]
