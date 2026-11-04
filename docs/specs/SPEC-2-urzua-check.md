@@ -1,5 +1,5 @@
 ---
-Version: '0.14'
+Version: '0.15'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -261,6 +261,8 @@ which stays only for what genuinely isn't built yet.
 | `relation.cross-type-disallowed` | A claim in a declared pair's field whose target is a different record type, for a pair declaring `cross_type: false` (`RFC-47`, `MILE-122`). Such a claim is excluded from `relation.pair-reciprocity` and reported here, never skipped silently. |
 | `citation.resolution` | A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in and option-free; its population counts the citations examined, so a run over none is distinguishable from a clean one. |
 | `boundary.published-path-reference` | A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity. |
+| `diff.source-requires-record` | A `--base` diff changes a path under a declared `source_paths` prefix but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`). One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. |
+| `diff.source-and-records-mixed` | A `--base` diff changes both a governed record and a path under a declared `application_paths` prefix (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean. |
 <!-- rule-table:end -->
 
 ### Not yet built
@@ -334,9 +336,17 @@ finding.)
 `rules_executed` is the field that distinguishes this from every check in the source corpora --
 `files_examined` alone answers "did it read anything," not "did it *check* anything," and a rule set
 narrowed by a config error yields a confident zero over a swept corpus. Each entry's `status` is
-`"ran"` or `"not-enabled"` (`RuleStatus`); a `"ran"` entry carries `population` (`eligible`/`examined`,
+`"ran"`, `"not-enabled"` or `"not-applicable"` (`RuleStatus`); a `"ran"` entry carries `population` (`eligible`/`examined`,
 plus `out_of_scope`/`unreadable` -- `ADR-55`'s disclosure of what the rule was handed versus what it
-judged), a `"not-enabled"` entry carries none.
+judged), a `"not-enabled"` entry carries none. `"not-applicable"` is an enabled rule the run cannot supply
+what it judges: the diff rules (`diff.source-requires-record`, `diff.source-and-records-mixed`) judge the
+changed set, so on a run with no `--base` they report it, carry no population and count as not having
+looked, so a run whose only enabled rules are diff rules is `"not-run"`, never `"ok"`. On a `--base` run
+their findings are about changed source paths rather than records, so the diff scope does not filter them
+out, and a path argument does not either. Their path options (`source_paths`, `application_paths`,
+`exclude_paths`) are normalised like `published_paths`; "a governed record changed" means a changed `.md`
+file directly in a record type's `dir`, deleted ones included, and a governed record is never application
+source. Their population is counted in `changed-path`.
 
 `status` is the real `ReportStatus` enum: `"ok"`, `"findings-present"`, or `"not-run"` -- never `"ok"`
 when zero files were selected, keyed on the file count, not on a missing scope, nor when no rule
@@ -442,3 +452,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | `git-diff` scope also treats as dependents the records covered by a changed or deleted waiver's old and new `Scope`; splits header values on commas when finding references; keeps `type.record-outside-declared-dir` findings for changed files; treats a symlinked configuration as changed by either path; an empty diff with no rule enabled is `not-run`. §Output `status` states the empty git-diff exception. **Why:** late review of `MILE-123` reproduced each as a case where `check --base` hid or mis-stated what a full check reports. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Bumped to `0.15`. Adds `diff.source-requires-record` and `diff.source-and-records-mixed` to the generated rule table, a new `not-applicable` `RuleStatus` and `changed-path` population unit, and the `source_paths`, `application_paths` and `exclude_paths` rule options (`SPEC-3`'s path-option normalisation). **Why:** `MILE-124` and `MILE-142` -- two diff checks an adopter's hand-written linter makes, source change without a record change and a change mixing records with application source, need a declared home; they run only on `--base` and say so otherwise rather than passing. | **substantive** |

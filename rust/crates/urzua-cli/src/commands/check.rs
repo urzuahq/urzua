@@ -479,6 +479,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
     notices.extend(rules::identity_collision_notices(&identity_collisions));
 
+    // The diff rules judge the changed set itself, so they get it as data and
+    // `None` on a run with no `--base`.
+    let changed_paths: Option<Vec<PathBuf>> = changed
+        .as_ref()
+        .map(|c| c.changed.iter().cloned().collect());
+
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
             rules::header_required_fields(&records, &config)
@@ -657,6 +663,29 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
             || rules::published_path_reference(&published_files, &published_paths, &config),
         ),
+        crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_REQUIRES_RECORD, || {
+            let source = config
+                .rules
+                .get(rules::RULE_DIFF_SOURCE_REQUIRES_RECORD)
+                .and_then(|s| s.source_paths.clone())
+                .unwrap_or_default();
+            rules::source_requires_record(changed_paths.as_deref(), &source, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED, || {
+            let setting = config.rules.get(rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
+            let application = setting
+                .and_then(|s| s.application_paths.clone())
+                .unwrap_or_default();
+            let excluded = setting
+                .and_then(|s| s.exclude_paths.clone())
+                .unwrap_or_default();
+            rules::source_and_records_mixed(
+                changed_paths.as_deref(),
+                &application,
+                &excluded,
+                &config,
+            )
+        }),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());

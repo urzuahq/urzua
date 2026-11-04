@@ -33,3 +33,4 @@ remains the place to decide whether such a gate should exist by default.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Replacing a linter outright needs source-change-requires-record-change to have a declared home; filed for that. | **substantive** |
+> | 2026-11-04 | Built as `diff.source-requires-record` (`rules/diff_gate.rs`): with the declared `source_paths` option, one error per changed source path when no governed record changed in the same `--base` diff. "A governed record" is the narrowest reading: a changed `.md` file directly in a configured record type's `dir`, deleted ones included; whether it is the right record is not judged. On a run with no `--base` it reports `not-applicable`, never clean. `Status` unchanged. **Why:** filed work is the adopter-replacement rule `MILE-102` needs; the diff-scoped run it waited on (`MILE-123`) has merged. | **substantive** |
