@@ -39,3 +39,4 @@ the embodiment tier order is read from a declaration instead of a hard-coded cha
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 1, split from `MILE-132`. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter needs only the status vocabulary and status-dependent fields, which stay in `MILE-132` at Phase 0, so transitions, unreachable states and derived blocked move out of the exit. | **substantive** |
+> | 2026-11-04 | Noted that a type's `statuses.claim_retained` list (`MILE-138`) can later be derived from the declared transitions (the statuses reachable only from an accepted one) rather than declared by hand. **Why:** maintainer decision of 2026-11-04 introduced the hand-declared list first. | **substantive** |

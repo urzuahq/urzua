@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6J91RCGFRT55SHNQ2K8GQM8
-Status: Proposed
+Status: Accepted
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -49,3 +49,9 @@ its fallback option.
 ## References
 
 - `MILE-133`, `MILE-132`, `SPEC-3`, `SPEC-2`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

@@ -19,6 +19,7 @@ record_types:
       success: ["Accepted"]
       failure: ["Rejected", "Superseded"]
       implementable: ["Accepted"]
+      claim_retained: ["Superseded"]
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"
@@ -138,6 +139,8 @@ record_types:
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
 rules:
+  embodiment.requires-accepted-status:
+    level: warn
   header.required-fields: error
   header.layout-consistency: warn
   header.field-set-consistency: warn
