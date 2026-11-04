@@ -101,21 +101,18 @@ fn filename_number(record: &Record) -> Option<String> {
 }
 
 /// A type that declares an `identity` pattern also declares its title form
-/// (RFC-44): `PREFIX-N` when the pattern captures a `prefix`, a bare `N`
-/// otherwise. `None` when the title's first word has that form. A trailing
-/// `.` or `:` is punctuation (`# 1. Title`), not part of the number.
+/// (RFC-44): `PREFIX-N`, the prefix being the pattern's `prefix` capture.
+/// `None` when the title's first word has that form, or when the record has
+/// no identity (no capture). A trailing `.` or `:` is punctuation
+/// (`# ADR-1. Title`), not part of the number.
 fn title_form_problem(
     declared: &crate::document_model::DeclaredIdentity,
     first_token: &str,
 ) -> Option<String> {
+    let prefix = declared.title_prefix.as_ref()?;
     let token = first_token.trim_end_matches(['.', ':']);
-    let (expected, number_part) = match &declared.title_prefix {
-        Some(prefix) => (
-            format!("'{prefix}-N'"),
-            token.strip_prefix(&format!("{prefix}-")),
-        ),
-        None => ("a bare number".to_string(), Some(token)),
-    };
+    let expected = format!("'{prefix}-N'");
+    let number_part = token.strip_prefix(&format!("{prefix}-"));
     if number_part.is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
         return None;
     }
@@ -454,17 +451,7 @@ mod tests {
         filename_title_consistency(&[r], &full_text).1
     }
 
-    const BARE: &str = r"^(?P<number>\d+)-.+$";
     const PREFIXED: &str = r"^(?P<prefix>SPEC)-(?P<number>\d+)-.+$";
-
-    #[test]
-    fn a_declared_bare_number_title_form_is_accepted_and_a_prefixed_one_refused() {
-        assert!(declared_title("d/0098-x.md", BARE, "# 98 — X\n").is_empty());
-        assert!(declared_title("d/0098-x.md", BARE, "# 98. X\n").is_empty());
-        let f = declared_title("d/0098-x.md", BARE, "# ADR-98 — X\n");
-        assert_eq!(f.len(), 1, "{f:?}");
-        assert!(f[0].message.contains("bare number"), "{}", f[0].message);
-    }
 
     #[test]
     fn a_declared_prefix_title_form_is_required() {

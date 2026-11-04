@@ -43,7 +43,7 @@ fn run(dir: &Path, args: &[&str]) -> std::process::Output {
         .expect("urzua binary should run")
 }
 
-const NYGARD: &str = "schema_version: 2\nrules: {header.required-fields: error, filename.title-consistency: error}\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    prefix: ADR\n    required_fields: [\"Date\"]\n    identity: {from: filename, pattern: '^(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: prefix-lines}\n";
+const NYGARD: &str = "schema_version: 2\nrules: {header.required-fields: error, filename.title-consistency: error}\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    prefix: ADR\n    required_fields: [\"Date\"]\n    identity: {from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: prefix-lines}\n";
 
 fn export(dir: &Path) -> serde_json::Value {
     let out = run(dir, &["export", "--format", "json"]);
@@ -63,12 +63,12 @@ fn a_nygard_corpus_gets_ids_and_fields_from_its_declaration() {
         NYGARD,
         &[
             (
-                "doc/adr/0001-record-decisions.md",
-                "# 1. Record decisions\n\nDate: 2016-02-12\n\n## Status\n\nAccepted\n",
+                "doc/adr/ADR-0001-record-decisions.md",
+                "# ADR-1. Record decisions\n\nDate: 2016-02-12\n\n## Status\n\nAccepted\n",
             ),
             (
-                "doc/adr/0002-use-rust.md",
-                "# 2. Use Rust\n\nDate: 2016-02-13\n\n## Status\n\nAccepted\n",
+                "doc/adr/ADR-0002-use-rust.md",
+                "# ADR-2. Use Rust\n\nDate: 2016-02-13\n\n## Status\n\nAccepted\n",
             ),
         ],
     );
@@ -111,13 +111,13 @@ fn a_title_form_mismatch_is_reported_for_a_declaring_type() {
         "title",
         NYGARD,
         &[(
-            "doc/adr/0001-record-decisions.md",
-            "# ADR-1 Record decisions\n\nDate: 2016-02-12\n",
+            "doc/adr/ADR-0001-record-decisions.md",
+            "# 1 Record decisions\n\nDate: 2016-02-12\n",
         )],
     );
     let out = run(&dir, &["check", "doc/"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("bare number"), "{stdout}");
+    assert!(stdout.contains("'ADR-N'"), "{stdout}");
 }
 
 #[test]
@@ -132,4 +132,18 @@ fn an_identity_pattern_that_does_not_compile_stops_the_run_naming_the_type() {
     );
     assert!(!out.status.success());
     assert!(all.contains("adr") && all.contains("identity"), "{all}");
+}
+
+#[test]
+fn an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type() {
+    let config = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    identity: {from: filename, pattern: '^(?P<number>\\d+)-.+$'}\n";
+    let dir = fixture_repo("noprefix", config, &[("doc/adr/0001-x.md", "# 1\n")]);
+    let out = run(&dir, &["check", "doc/"]);
+    let all = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!out.status.success());
+    assert!(all.contains("adr") && all.contains("(?P<prefix>"), "{all}");
 }

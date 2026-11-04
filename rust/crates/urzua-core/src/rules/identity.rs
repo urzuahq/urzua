@@ -245,25 +245,34 @@ mod tests {
         )
     }
 
-    /// MILE-98 / MILE-126: a declared pattern gives a bare numeric filename an
-    /// identity, and it resolves like any padded reference.
+    const DECLARED: &str = r"^(?P<prefix>ADR)-(?P<number>\d+)-.+$";
+
+    /// MILE-98: a declared pattern keeps the file's padding in the id, and
+    /// the id resolves like any padded reference.
     #[test]
-    fn a_declared_pattern_gives_a_bare_numeric_filename_an_identity() {
-        let r = declared("docs/adr/0173-x.md", r"^(?P<number>\d+)-.+$");
+    fn a_declared_pattern_gives_a_padded_filename_an_identity() {
+        let r = declared("docs/adr/ADR-0173-x.md", DECLARED);
         assert_eq!(record_id(&r).as_deref(), Some("ADR-0173"));
         let index = build_normalized_index(std::slice::from_ref(&r));
         assert!(index.contains_key(&crate::values::RecordId::new("ADR-173")));
     }
 
+    /// MILE-126 / RFC-46 (rejected): a bare numeric filename has no identity,
+    /// declared pattern or not.
     #[test]
-    fn without_a_declaration_a_bare_numeric_filename_still_has_no_identity() {
+    fn a_bare_numeric_filename_has_no_identity_even_with_a_declaration() {
+        let r = declared("docs/adr/0173-x.md", DECLARED);
+        assert_eq!(record_id(&r), None);
         let r = record("docs/adr/0173-x.md", "adr", "# 173\n");
         assert_eq!(record_id(&r), None);
     }
 
     #[test]
     fn a_declared_pattern_replaces_the_type_prefix_convention() {
-        let r = declared("docs/adr/ADR-9-x.md", r"^(?P<number>\d+)-.+$");
+        let r = declared(
+            "docs/adr/ADR-9-x.md",
+            r"^(?P<prefix>ADR)-(?P<number>\d+)-zzz$",
+        );
         assert_eq!(
             record_id(&r),
             None,

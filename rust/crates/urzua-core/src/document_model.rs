@@ -10,7 +10,7 @@
 //! record_types:
 //!   adr:
 //!     dir: doc/adr
-//!     identity: {from: filename, pattern: '^(?P<number>\d+)-(?P<slug>.+)$'}
+//!     identity: {from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\d+)-(?P<slug>.+)$'}
 //!     fields:   {from: prefix-lines}
 //!     sections: {from: headings, depth: 2, items: true}
 //! ```
@@ -51,11 +51,12 @@ pub struct IdentityDecl {
     pub pattern: String,
 }
 
-/// An identity pattern, compiled. Its named groups: `number` (required, all
-/// ASCII digits), `slug` (optional, not read by the engine), and `prefix`
-/// (optional): a pattern that captures a `prefix` declares that the record's
-/// H1 title carries `PREFIX-N`, and one that does not declares a bare `N`
-/// (RFC-44, "declared per type").
+/// An identity pattern, compiled. Its named groups: `prefix` (required, the
+/// type prefix the file name carries, which is also the form the H1 title
+/// opens with, `PREFIX-N`), `number` (required, all ASCII digits that fit a
+/// `u64`) and `slug` (optional, not read by the engine). A pattern without a
+/// `prefix` group is refused at load: a bare `0001-a.md` gets no identity
+/// (RFC-46 was rejected; such a corpus is renamed, ADR-36).
 #[derive(Debug, Clone)]
 pub struct CompiledIdentity {
     regex: regex::Regex,
@@ -67,7 +68,7 @@ pub struct DeclaredIdentity {
     /// The `number` capture as written (padding kept), or `None` when the
     /// file name does not match the pattern: the record has no identity.
     pub number: Option<String>,
-    /// The `prefix` capture, when the pattern has one and matched.
+    /// The `prefix` capture. Always `Some` when `number` is.
     pub title_prefix: Option<String>,
 }
 
@@ -78,6 +79,13 @@ impl CompiledIdentity {
         if !regex.capture_names().flatten().any(|n| n == "number") {
             return Err(
                 "`pattern` must capture the record number as a `(?P<number>...)` group".into(),
+            );
+        }
+        if !regex.capture_names().flatten().any(|n| n == "prefix") {
+            return Err(
+                "`pattern` must capture the type prefix as a `(?P<prefix>...)` group: a file \
+                 name without the type prefix gets no identity (rename it to `TYPE-NNNN-slug.md`)"
+                    .into(),
             );
         }
         Ok(Self { regex })
@@ -93,14 +101,18 @@ impl CompiledIdentity {
         let number = caps
             .name("number")
             .map(|m| m.as_str())
-            .filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+            .filter(|n| n.chars().all(|c| c.is_ascii_digit()) && n.parse::<u64>().is_ok())
             .map(str::to_string);
-        if number.is_none() {
-            return DeclaredIdentity::default();
-        }
-        DeclaredIdentity {
-            number,
-            title_prefix: caps.name("prefix").map(|m| m.as_str().to_string()),
+        let prefix = caps
+            .name("prefix")
+            .map(|m| m.as_str())
+            .filter(|p| !p.is_empty());
+        match (number, prefix) {
+            (Some(number), Some(prefix)) => DeclaredIdentity {
+                number: Some(number),
+                title_prefix: Some(prefix.to_string()),
+            },
+            _ => DeclaredIdentity::default(),
         }
     }
 }
@@ -306,13 +318,16 @@ mod tests {
     #[test]
     fn the_rfc_example_parses_in_full() {
         let m = split(&cfg(
-            "    identity: {from: filename, pattern: '^(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: prefix-lines}\n    sections: {from: headings, depth: 2, items: true}\n",
+            "    identity: {from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: prefix-lines}\n    sections: {from: headings, depth: 2, items: true}\n",
         ))
         .unwrap();
         let adr = &m["adr"];
         let id = adr.identity.as_ref().unwrap();
         assert_eq!(id.from, IdentitySource::Filename);
-        assert_eq!(id.pattern, r"^(?P<number>\d+)-(?P<slug>.+)$");
+        assert_eq!(
+            id.pattern,
+            r"^(?P<prefix>ADR)-(?P<number>\d+)-(?P<slug>.+)$"
+        );
         assert_eq!(adr.fields.as_ref().unwrap().from, FieldsSource::PrefixLines);
         let s = adr.sections.as_ref().unwrap();
         assert_eq!(
@@ -430,18 +445,37 @@ mod tests {
         .unwrap()
     }
 
+    const PREFIXED: &str = r"^(?P<prefix>ADR)-(?P<number>\d+)-(?P<slug>.+)$";
+
     #[test]
-    fn a_bare_zero_padded_number_is_an_identity() {
-        let id =
-            identity(r"^(?P<number>\d+)-(?P<slug>.+)$").identify("0001-record-architecture.md");
+    fn a_zero_padded_prefixed_number_keeps_its_padding() {
+        let id = identity(PREFIXED).identify("ADR-0001-record-architecture.md");
         assert_eq!(id.number.as_deref(), Some("0001"));
-        assert_eq!(id.title_prefix, None);
+        assert_eq!(id.title_prefix.as_deref(), Some("ADR"));
+    }
+
+    #[test]
+    fn a_pattern_without_a_prefix_group_is_refused_naming_the_type() {
+        let e = invalid("    identity: {from: filename, pattern: '^(?P<number>\\d+)-.+$'}\n");
+        assert!(e.contains("adr") && e.contains("identity"), "{e}");
+        assert!(e.contains("(?P<prefix>"), "{e}");
+    }
+
+    #[test]
+    fn a_number_that_overflows_u64_or_an_empty_prefix_is_no_identity() {
+        let p = identity(PREFIXED);
+        assert_eq!(
+            p.identify("ADR-99999999999999999999999-x.md"),
+            DeclaredIdentity::default()
+        );
+        let q = identity(r"^(?P<prefix>[A-Z]*)-?(?P<number>\d+)-.+$");
+        assert_eq!(q.identify("0001-x.md"), DeclaredIdentity::default());
     }
 
     #[test]
     fn a_name_the_pattern_does_not_match_has_no_number() {
-        let p = identity(r"^(?P<number>\d+)-(?P<slug>.+)$");
-        for name in ["README.md", "ADR-1-x.md", "notes-0001.md"] {
+        let p = identity(PREFIXED);
+        for name in ["README.md", "0001-x.md", "notes-ADR-1-x.md"] {
             assert_eq!(p.identify(name), DeclaredIdentity::default(), "{name}");
         }
     }
@@ -452,20 +486,18 @@ mod tests {
             .identify("SPEC-3-configuration.md");
         assert_eq!(id.number.as_deref(), Some("3"));
         assert_eq!(id.title_prefix.as_deref(), Some("SPEC"));
-        let bare = identity(r"^ADR-(?P<number>\d+)-.+$").identify("ADR-3-x.md");
-        assert_eq!(bare.title_prefix, None);
     }
 
     #[test]
     fn a_number_capture_that_is_not_ascii_digits_is_no_number() {
-        let p = identity(r"^(?P<number>\w+)-x$");
-        assert_eq!(p.identify("abc-x.md").number, None);
-        assert_eq!(p.identify("\u{0663}-x.md").number, None);
+        let p = identity(r"^(?P<prefix>P)-(?P<number>\w+)-x$");
+        assert_eq!(p.identify("P-abc-x.md").number, None);
+        assert_eq!(p.identify("P-\u{0663}-x.md").number, None);
     }
 
     #[test]
     fn a_pattern_that_does_not_compile_or_has_no_number_group_fails_the_load() {
-        for bad in ["'('", "'^(?P<slug>.+)$'", "'^(\\d+)-.+$'"] {
+        for bad in ["'('", "'^(?P<prefix>A)-(?P<slug>.+)$'", "'^(\\d+)-.+$'"] {
             let e = invalid(&format!(
                 "    identity: {{from: filename, pattern: {bad}}}\n"
             ));

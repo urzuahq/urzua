@@ -192,9 +192,9 @@ mod tests {
     #[test]
     fn declared_identity_reads_the_file_name() {
         let r = load(
-            "docs/adr/0007-x.md",
-            "# 7\n",
-            &model(Some(r"^(?P<number>\d+)-.+$"), None),
+            "docs/adr/ADR-0007-x.md",
+            "# ADR-7\n",
+            &model(Some(r"^(?P<prefix>ADR)-(?P<number>\d+)-.+$"), None),
         );
         assert_eq!(r.identity.unwrap().number.as_deref(), Some("0007"));
     }

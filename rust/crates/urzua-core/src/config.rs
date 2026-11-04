@@ -855,7 +855,7 @@ mod tests {
 
     #[test]
     fn a_declared_document_model_loads_beside_the_ordinary_keys() {
-        let body = "    header_shape: yaml-frontmatter\n    identity: {from: filename, pattern: '^ADR-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: yaml-frontmatter}\n    sections: {from: headings, depth: 2, items: true}\n";
+        let body = "    header_shape: yaml-frontmatter\n    identity: {from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: yaml-frontmatter}\n    sections: {from: headings, depth: 2, items: true}\n";
         let (c, models) = parse_with_document_models(&model_cfg(body)).unwrap();
         assert_eq!(
             c.record_types["adr"].header_shape,
