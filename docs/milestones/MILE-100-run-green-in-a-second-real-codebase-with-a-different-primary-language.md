@@ -42,6 +42,10 @@ can read a shape this project did not invent -- `MILE-98`.
 - **The two-config diff**, which `SPEC-3`'s second success criterion asks for: the two configs read
   side by side as a statement of how the corpora genuinely differ, rather than as two unrelated files.
 
+## Done means
+
+`urzua check` runs green in a second real codebase whose primary language differs from this repository's Rust, through both its pre-push hook and its CI, with zero host-repo runtime added to it (the `SPEC-1` Phase 1 exit criterion); the codebase is named in this record, the run is recorded with the commit, and it is a codebase adoption, not a foreign corpus (`MILE-51`, `MILE-96`).
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -49,3 +53,4 @@ can read a shape this project did not invent -- `MILE-98`.
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s first success criterion requires two target codebases and only one exists, with nothing on the plan tracking the second. Distinguished from `MILE-51`/`MILE-96` deliberately: those read a foreign corpus, this one adopts a foreign codebase, and only the second is what the criterion claims. | **substantive** |
 > | 2026-11-04 | Reworded for the restated exit bar: the second codebase is a Phase 1 exit criterion, not part of the single Phase 0 exit. `Phase` is unchanged. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Phase` 0 -> 1. **Why:** Maintainer decision, 2026-11-04: the second codebase is a Phase 1 exit criterion, so it no longer gates Phase 0 or the switchover (`MILE-102`). | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

@@ -46,6 +46,10 @@ rewrite: the adopter corpus must read as `yaml-frontmatter` and pass `check` bef
 `Blockquote`/`BoldList` branches, `HeaderLayout` and `header.layout-consistency` are deleted. The
 phase moves from 2 back to Phase 0, since the switchover is the Phase 0 exit.
 
+## Done means
+
+`header::parse_with_shape` has no `Blockquote` or `BoldList` branch, the `HeaderLayout` enum, `header.layout-consistency`, `header.deprecated-shape` and the `header_layout` option are gone, `header_shape` defaults to `yaml-frontmatter`, and a config naming a removed shape or option fails loudly rather than being ignored (acceptance expectation `check-removed-bold-list-config-is-rejected`); this repository's records are all YAML frontmatter.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -56,3 +60,4 @@ phase moves from 2 back to Phase 0, since the switchover is the Phase 0 exit.
 > | 2026-11-04 | Removed the `Blockquote` and `BoldList` branches of `header::parse_with_shape`, the `HeaderLayout` enum and `header.layout-consistency`, plus `header.deprecated-shape` (which can no longer fire) and the `header_layout` option; `header_shape` now defaults to `yaml-frontmatter`. The unsupported forms fail loudly rather than silently: a config declaring `header_shape` or `fields.from` `blockquote`/`bold-list` fails to load naming the form, and a record still written in one is reported unreadable by `header.required-fields` with the form named. `Status` unchanged. **Why:** maintainer instruction of 2026-11-04 to carry out the full-cleanup decision above; this repository's own corpus and tests were already `yaml-frontmatter`, and the fixtures that exercised the removed forms were migrated or rewritten to assert the error. Specs `SPEC-2` 0.44, `SPEC-3` 0.32, `SPEC-5` 0.7, `SPEC-10` 0.6, `SPEC-12` 0.9. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #205: the blockquote and bold-list branches, `HeaderLayout` and `header.layout-consistency` are gone; a removed form fails loudly. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | `Blocked-on` corrected from the adopter-side header rewriter to none; `Status` stays Done. **Why:** the closure audit of #234 found a Done record still naming a blocker. This milestone's Done-when, removing the parser branches, `HeaderLayout` and `header.layout-consistency`, is met in this repository. The one-off header rewrite of the adopter's corpus is not this milestone's delivery: it moved to `MILE-102` (Phase 1), whose switchover list names it. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

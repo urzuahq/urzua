@@ -26,7 +26,13 @@ was deferred past the point anyone had the context fresh (MILE-40). Positioned r
 bootstrap specifically so it doesn't repeat that failure at a larger scale once more of the roadmap
 ships.
 
+## Done means
+
+The public documentation set exists beyond the README, contributing guide and changelog: a command reference for every shipped command, the config schema (record types, header shapes, required fields), the adoption walkthrough and the record-type model; a feature's documentation lands in the change that ships it, and a command with no reference page is reported by a check or listed here; the format and hosting are decided in an ADR first.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

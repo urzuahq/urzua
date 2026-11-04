@@ -17,9 +17,14 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs, test:rust/crates/ur
 
 Every other command validates or reports on records that already exist; nothing created one. A tool whose whole point is a well-formed record shouldn't leave record creation to a human copy-pasting the last one.
 
+## Done means
+
+`urzua new <type> [title]` fills the type's checked-in template, or synthesizes YAML frontmatter when the type declares that shape with no template, with a fresh stable id, a resolved author and today's date, and never asks for a number; `new_integration.rs` covers both paths and the written record passes `check` (`SPEC-12`).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-06 | Backfilled: shipped before milestone tracking existed. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

@@ -17,9 +17,14 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/ur
 
 `check` can tell you a field is wrong; nothing closed the loop by writing the mechanically-correct value back. Apply mode is gated hard (explicit ids or --force, a resolved identity, an auditable revision-log entry) because a bulk unreviewed write is exactly the failure mode a governance tool can't afford.
 
+## Done means
+
+`urzua fix` in detect mode lists fields whose stated value disagrees with the value computed from `Realized-by` evidence; `fix --apply --ids <records> --by <you>` writes the computed value to that one field's line only, with a resolved identity and an appended revision-log row, and refuses outright on a record with no revision log; without explicit ids it refuses unless forced; covered in `fix_drift_integration.rs` (`SPEC-8`).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

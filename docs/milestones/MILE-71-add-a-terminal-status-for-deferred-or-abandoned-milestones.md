@@ -25,9 +25,14 @@ misrepresents a reversed decision as still intended, and there's no `Superseded`
 replacement either. This is new capability for the state machine, not broken behavior -- nothing
 crashes or emits wrong output today, the enum is just incomplete for a real case.
 
+## Done means
+
+`WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`, documented in `SPEC-6` and listed in the milestone template, so a deliberately abandoned milestone has an honest terminal state distinct from `Blocked`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped: `WontDo` added via ADR-34 amendment + SPEC-6 v0.2, template updated. **Why:** every other record type in this corpus already has a terminal "decided against" state (`bug`'s `WontFix`, `adr`'s `Rejected`/`Superseded`); milestone didn't, so a deferred or abandoned milestone had no honest representation. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
