@@ -550,6 +550,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 ..type_config(None)
             },
@@ -760,6 +761,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 ..type_config(None)
             },
@@ -822,6 +824,7 @@ mod tests {
         let config = config_with_types(vec![(
             "code",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 required_fields: vec!["Reviewers".to_string()],
                 ..type_config_with_shape(crate::header::HeaderShape::None)
             },
@@ -853,6 +856,7 @@ mod tests {
         let config = config_with_types(vec![(
             "code",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 known_fields: Some(vec!["Reviewers".to_string()]),
                 ..type_config_with_shape(crate::header::HeaderShape::None)
             },
@@ -881,6 +885,7 @@ mod tests {
         let config = config_with_types(vec![(
             "code",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 required_fields: vec!["Reviewers".to_string()],
                 ..type_config_with_shape(crate::header::HeaderShape::None)
             },

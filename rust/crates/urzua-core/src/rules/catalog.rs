@@ -258,7 +258,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_RELATION_PAIR_RECIPROCITY,
-        description: "For each declared `relation_pairs` entry with `reciprocity: required` (`RFC-47`, `MILE-122`): a claim `A.forward = B` is echoed by `B.inverse = A`, and a claim `A.inverse = B` by `B.forward = A`, across record types where the pair allows it. Needs `relation_pairs`; enabling it with none declared is a load error. Beside, not replacing, `relation.supersession-reciprocity`, which keeps the combined `Supersedes / Superseded-by` key.",
+        description: "For each declared `relation_pairs` entry with `reciprocity: required` (`RFC-47`, `MILE-122`): a claim `A.forward = B` is echoed by `B.inverse = A`, and a claim `A.inverse = B` by `B.forward = A`, across record types where the pair allows it. A pair that declares `provisional: {statuses, level}` reports an unechoed claim from a claimant at one of those statuses at the provisional level (default `warn`), and any other claimant at the rule's level (`MILE-154`). Needs `relation_pairs`; enabling it with none declared is a load error. Beside, not replacing, `relation.supersession-reciprocity`, which keeps the combined `Supersedes / Superseded-by` key.",
     },
     RuleMeta {
         id: RULE_RELATION_CROSS_TYPE_DISALLOWED,
@@ -294,7 +294,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_FILENAME_IDENTITY_PATTERN,
-        description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined.",
+        description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined, and omits a file the type declares in `exclude_files` (`MILE-150`).",
     },
     RuleMeta {
         id: RULE_STATUS_UNDECLARED_VALUE,
@@ -302,7 +302,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_STATUS_REQUIRED_FIELD_MISSING,
-        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
+        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank, unedited template text, or (when the type declares `statuses.pending`) one of that declared placeholder vocabulary's whole values such as `Unknown` or `none recorded` (`MILE-132`, `MILE-153`), for example `Deciders` on an `Accepted` record. A type declaring no `pending` keeps the old reading, so a value that only contains the word is still a real value. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,

@@ -265,6 +265,37 @@ fn pair_slot_claims(slot: &PairSlot) -> Result<Vec<String>, Outcome> {
     Ok(extract_references(value))
 }
 
+fn status_field<'a>(record: &Record, config: &'a Config) -> &'a str {
+    relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::Status,
+    )
+}
+
+fn claimant_status<'a>(record: &'a Record, config: &Config) -> Option<&'a str> {
+    record.header.get(status_field(record, config))
+}
+
+/// The severity a claim from `record` is held to when the pair declares a
+/// provisional split and the claimant's status is one of its statuses.
+/// `None` means the rule's own level applies (`MILE-154`).
+fn provisional_severity(
+    pair: &crate::config::RelationPair,
+    record: &Record,
+    config: &Config,
+) -> Option<FindingSeverity> {
+    let prov = pair.provisional.as_ref()?;
+    let status = claimant_status(record, config)?;
+    prov.statuses
+        .iter()
+        .any(|s| s == status)
+        .then_some(match prov.level {
+            crate::config::ProvisionalLevel::Warn => FindingSeverity::Warning,
+            crate::config::ProvisionalLevel::Error => FindingSeverity::Error,
+        })
+}
+
 /// Rule (`RFC-47`, `MILE-122`): reciprocity over every declared relation pair.
 /// A claim `A.forward = B` needs `B.inverse` to name `A`, and `A.inverse = B`
 /// needs `B.forward` to name `A`; direction is the field name, so two records
@@ -328,15 +359,28 @@ pub fn relation_pair_reciprocity(
                     .iter()
                     .any(|r| crate::values::RecordId::new(r) == normalized_id);
                 if !names_back {
+                    // A claim from a record not yet at an accepted status is
+                    // provisional (`MILE-154`): the pair's own level applies
+                    // instead of the rule's. Anything else keeps the rule's.
+                    let declared_severity = provisional_severity(slot.pair, record, config);
+                    let note = if declared_severity.is_some() {
+                        format!(
+                            " (provisional: {} is '{}')",
+                            status_field(record, config),
+                            claimant_status(record, config).unwrap_or_default()
+                        )
+                    } else {
+                        String::new()
+                    };
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
+                        severity: declared_severity.unwrap_or(FindingSeverity::Error),
                         file: record.path.clone(),
                         line: None,
                         waived: None,
-                        declared_severity: None,
+                        declared_severity,
                         message: format!(
-                            "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}",
+                            "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
                             slot.pair.name
                         ),
                     });
@@ -575,6 +619,7 @@ mod tests {
         let config = config_with_types(vec![(
             "adr",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     supersession: Some("Replaces".to_string()),
                     ..Default::default()
@@ -671,6 +716,7 @@ mod tests {
             inverse: inv.to_string(),
             reciprocity: crate::config::PairReciprocity::Required,
             cross_type,
+            provisional: None,
         }
     }
 
@@ -912,6 +958,91 @@ mod tests {
         assert!(findings[0].message.contains("RFC-2's"), "{findings:?}");
         assert_eq!(findings[0].file, records[2].path);
         assert_eq!(examined(&exec), 3);
+    }
+
+    fn provisional_config() -> Config {
+        let mut p = pair("amendment", "Amends", "Amended-by", false);
+        p.provisional = Some(crate::config::ProvisionalClaim {
+            statuses: vec!["Draft".to_string()],
+            level: crate::config::ProvisionalLevel::Warn,
+        });
+        pair_config(
+            vec![(
+                "rfc",
+                &["Status", "Amends", "Amended-by", "Amended-by-pending"],
+            )],
+            vec![p],
+        )
+    }
+
+    #[test]
+    fn a_draft_claim_echoed_only_in_a_pending_field_is_provisional_observed_failing() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "> Status: Accepted\n> Amended-by: —\n> Amended-by-pending: RFC-2\n",
+        );
+        let draft = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Draft\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&provisional_config(), &[base, draft]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+        assert_eq!(
+            findings[0].declared_severity,
+            Some(FindingSeverity::Warning)
+        );
+        assert!(findings[0].message.contains("provisional"), "{findings:?}");
+    }
+
+    #[test]
+    fn an_accepted_claim_with_the_same_gap_keeps_the_full_severity_observed_failing() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "> Status: Accepted\n> Amended-by: —\n> Amended-by-pending: RFC-2\n",
+        );
+        let accepted = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Accepted\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&provisional_config(), &[base, accepted]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert_eq!(findings[0].declared_severity, None);
+        assert!(!findings[0].message.contains("provisional"), "{findings:?}");
+    }
+
+    #[test]
+    fn a_draft_claim_the_peer_settles_is_not_reported() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "> Status: Accepted\n> Amended-by: RFC-2\n",
+        );
+        let draft = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Draft\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&provisional_config(), &[base, draft]);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_pair_declaring_no_provisional_split_is_unchanged_by_status() {
+        let base = record("docs/rfc/RFC-1-a.md", "rfc", "> Status: Accepted\n");
+        let draft = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "> Status: Draft\n> Amends: RFC-1\n",
+        );
+        let (_, findings) = run_pairs(&amend_config(), &[base, draft]);
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
+        assert_eq!(findings[0].declared_severity, None);
     }
 
     #[test]

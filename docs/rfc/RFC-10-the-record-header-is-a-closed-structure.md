@@ -3,6 +3,7 @@ Status: Accepted
 Date: 2026-08-11
 Author: beauwilliams
 Supersedes / Superseded-by: —
+Amended-by: RFC-16
 ---
 # 10 — The record header is a closed structure, validated as a whole
 

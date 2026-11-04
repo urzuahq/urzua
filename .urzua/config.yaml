@@ -5,6 +5,9 @@ fail_on: warning
 record_types:
   adr:
     dir: "docs/adr"
+    # The directory index is not an ADR (MILE-150): no rule examines it, and
+    # filename.identity-pattern does not count it among the type's files.
+    exclude_files: ["README.md"]
     required_fields:
       - "Status"
       - "Date"
@@ -23,6 +26,10 @@ record_types:
       failure: ["Rejected", "Superseded"]
       implementable: ["Accepted"]
       claim_retained: ["Superseded"]
+      # The type's placeholder vocabulary (MILE-153): whole values only. It
+      # feeds field.pending and makes status.require count them as missing, so
+      # an Accepted ADR whose Deciders reads "Unknown" is not decided.
+      pending: ["pending", "unknown", "none recorded"]
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"
@@ -40,6 +47,7 @@ record_types:
       - "Stable-Id"
       - "Supersedes / Superseded-by"
       - "Amends"
+      - "Amended-by"
       - "Implements"
     statuses:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
@@ -138,6 +146,20 @@ record_types:
     pointer_fields: []
     narrative_fields: []
 
+# An RFC that amends another is echoed by the amended RFC's Amended-by. A claim
+# from an RFC that is not yet accepted is provisional (MILE-154, MILE-127): it
+# is a warning while the claimant is a Draft or in Discussion, and an error
+# once it is accepted without the amended RFC naming it back.
+relation_pairs:
+  - name: amendment
+    forward: "Amends"
+    inverse: "Amended-by"
+    reciprocity: required
+    cross_type: false
+    provisional:
+      statuses: ["Draft", "Discussion"]
+      level: warn
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
@@ -172,7 +194,9 @@ rules:
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
   filename.title-consistency: error
+  filename.identity-pattern: warn
   relation.supersession-reciprocity: error
+  relation.pair-reciprocity: error
   relation.target-status-undeclared: error
   revision-log.change-class-required: error
   narrative-field.stale:

@@ -19,7 +19,7 @@ fn is_governed_record(path: &Path, config: &Config) -> bool {
         && config
             .record_types
             .values()
-            .any(|t| path.parent() == Some(Path::new(&t.dir)))
+            .any(|t| path.parent() == Some(Path::new(&t.dir)) && !t.excludes(name))
 }
 
 fn under_any(path: &Path, prefixes: &[String]) -> bool {

@@ -344,6 +344,14 @@ impl<'de> Deserialize<'de> for RuleSetting {
     }
 }
 
+impl RecordTypeConfig {
+    /// Whether `file_name` is declared a non-record file of this type
+    /// (`exclude_files`): it is not loaded and no rule examines it.
+    pub fn excludes(&self, file_name: &str) -> bool {
+        self.exclude_files.iter().any(|f| f == file_name)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordTypeConfig {
@@ -398,6 +406,14 @@ pub struct RecordTypeConfig {
     /// `dir` already decouples the type name from its directory name.
     #[serde(default)]
     pub prefix: Option<String>,
+    /// File names directly in `dir` that are not this type's records (an index
+    /// `README.md`, a `_template.md`). A named file is never loaded as a
+    /// record, so it is in no rule's population and not in the type's file
+    /// census; an unnamed stray file is still reported by
+    /// `filename.identity-pattern`. Bare file names only, matched exactly
+    /// (MILE-150): a path or a glob would be a second selection language.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude_files: Vec<String>,
     /// The expected line layout (MILE-0075) within `Blockquote`'s own
     /// tolerance for how fields are laid out -- one field per line, or
     /// several pipe-delimited on one line. Declared, not voted, the same
@@ -669,6 +685,8 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("record type '{record_type}' declares exclude_files entry '{entry}', which is not a bare file name -- it would exclude nothing")]
+    InvalidExcludedFile { record_type: String, entry: String },
     #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
@@ -994,6 +1012,18 @@ pub fn parse_with_document_models(
                 dir: rt.dir.clone(),
             });
         }
+        for entry in &rt.exclude_files {
+            let bare = !entry.is_empty()
+                && entry != "."
+                && entry != ".."
+                && !entry.contains(['/', '\\', '*', '?', '[']);
+            if !bare {
+                return Err(ConfigError::InvalidExcludedFile {
+                    record_type: name.clone(),
+                    entry: entry.clone(),
+                });
+            }
+        }
         // The effective prefix, not only a declared one: a type named
         // `my_type` with no `prefix` defaults to `MY_TYPE`, which no filename
         // can carry, so `new` would mint records the numbering scan ignores.
@@ -1274,6 +1304,36 @@ pub struct RelationPair {
     /// May the two ends be different record types. Defaults to `true`.
     #[serde(default = "default_cross_type")]
     pub cross_type: bool,
+    /// Optional split by the claimant's status (`MILE-154`): a claim from a
+    /// record at one of these statuses that is not settled by an echo is held
+    /// to the provisional level instead of the rule's.
+    #[serde(default)]
+    pub provisional: Option<ProvisionalClaim>,
+}
+
+/// Which claimants make a pair's claim provisional, and how loudly an
+/// unsettled provisional claim is reported (`MILE-154`, `MILE-127`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProvisionalClaim {
+    /// Claimant statuses (its `Status` role field, exact match) at which the
+    /// claim is not yet an assertion, such as `Draft` or `Proposed`.
+    pub statuses: Vec<String>,
+    /// The level an unsettled provisional claim is reported at. Defaults to
+    /// `warn`; the rule's own level is the full severity.
+    #[serde(default = "default_provisional_level")]
+    pub level: ProvisionalLevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProvisionalLevel {
+    Warn,
+    Error,
+}
+
+fn default_provisional_level() -> ProvisionalLevel {
+    ProvisionalLevel::Warn
 }
 
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
@@ -1316,6 +1376,43 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             if let Some(other) = fields.insert(field.as_str(), label) {
                 return bad(format!(
                     "field '{field}' is used by pair '{other}' and pair '{label}' (or twice by one pair); each field belongs to exactly one side of one pair"
+                ));
+            }
+        }
+    }
+    // A provisional split naming a status no type declares never applies,
+    // which reads as a clean run (ADR-7).
+    for pair in &config.relation_pairs {
+        let Some(prov) = &pair.provisional else {
+            continue;
+        };
+        let label = pair.name.as_str();
+        if prov.statuses.is_empty() {
+            return bad(format!(
+                "pair '{label}' provisional.statuses must list at least one status"
+            ));
+        }
+        let declared: std::collections::BTreeSet<String> = config
+            .record_types
+            .values()
+            .filter_map(|t| t.status_decl())
+            .flat_map(|d| d.values)
+            .collect();
+        let mut seen = std::collections::BTreeSet::new();
+        for status in &prov.statuses {
+            if status.trim().is_empty() || *status != status.trim() {
+                return bad(format!(
+                    "pair '{label}' provisional status '{status}' is blank or has surrounding whitespace"
+                ));
+            }
+            if !seen.insert(status.as_str()) {
+                return bad(format!(
+                    "pair '{label}' provisional.statuses lists '{status}' twice"
+                ));
+            }
+            if !declared.contains(status) {
+                return bad(format!(
+                    "pair '{label}' provisional status '{status}' is not in the `statuses.values` of any record type, so it could never apply"
                 ));
             }
         }
@@ -1487,6 +1584,7 @@ mod tests {
     #[test]
     fn declared_fields_unions_required_and_known() {
         let t = RecordTypeConfig {
+            exclude_files: Vec::new(),
             dir: "docs/adr".to_string(),
             identity: None,
             fields: None,
@@ -2067,6 +2165,41 @@ record_types:
         assert_eq!(c.relation_pairs[0].reciprocity, PairReciprocity::None);
     }
 
+    fn prov_cfg(pairs: &str) -> String {
+        format!(
+            "schema_version: 2\n{pairs}record_types:\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Amends\", \"Amended-by\"]\n    statuses:\n      values: [Draft, Accepted]\n"
+        )
+    }
+
+    #[test]
+    fn a_provisional_split_loads_and_a_misdeclared_one_is_refused() {
+        let pair = |prov: &str| {
+            format!("relation_pairs:\n  - {{name: a, forward: Amends, inverse: Amended-by, reciprocity: required, provisional: {prov}}}\n")
+        };
+        let c = parse(&prov_cfg(&pair("{statuses: [Draft]}"))).unwrap();
+        let p = c.relation_pairs[0].provisional.as_ref().unwrap();
+        assert_eq!(p.statuses, vec!["Draft"]);
+        assert_eq!(p.level, ProvisionalLevel::Warn);
+        let c = parse(&prov_cfg(&pair("{statuses: [Draft], level: error}"))).unwrap();
+        assert_eq!(
+            c.relation_pairs[0].provisional.as_ref().unwrap().level,
+            ProvisionalLevel::Error
+        );
+        for bad in [
+            "{statuses: []}",
+            "{statuses: [Proposed]}",
+            "{statuses: [Draft, Draft]}",
+            "{statuses: [' Draft']}",
+            "{statuses: [Draft], level: off}",
+            "{statuses: [Draft], colour: red}",
+        ] {
+            assert!(
+                parse(&prov_cfg(&pair(bad))).is_err(),
+                "{bad} must be refused"
+            );
+        }
+    }
+
     #[test]
     fn a_config_without_relation_pairs_loads_unchanged() {
         assert!(parse(&pair_cfg("", "")).unwrap().relation_pairs.is_empty());
@@ -2212,6 +2345,43 @@ record_types:
         ] {
             let err = parse(&format!("{base}{bad}")).unwrap_err().to_string();
             assert!(err.contains(needle), "{bad}: {err}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod exclude_files_tests {
+    use super::*;
+
+    fn with(entry: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    exclude_files: {entry}\nrules:\n  identity.collision: error\n"
+        )
+    }
+
+    #[test]
+    fn plain_file_names_load() {
+        let config = parse(&with("[\"README.md\", \"_template.md\"]")).unwrap();
+        assert_eq!(
+            config.record_types["adr"].exclude_files,
+            vec!["README.md", "_template.md"]
+        );
+    }
+
+    #[test]
+    fn an_entry_that_is_not_a_bare_file_name_is_refused_at_load() {
+        for bad in [
+            "\"\"",
+            "\"docs/adr/README.md\"",
+            "\"../README.md\"",
+            "\"*.md\"",
+            "\".\"",
+        ] {
+            let result = parse(&with(&format!("[{bad}]")));
+            assert!(
+                matches!(result, Err(ConfigError::InvalidExcludedFile { .. })),
+                "{bad} must be refused: {result:?}"
+            );
         }
     }
 }

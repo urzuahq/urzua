@@ -25,3 +25,4 @@ A value matching the declared placeholder vocabulary in a required field of a re
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented: `status.required-field-missing` counts a whole value of the type's declared `statuses.pending` as missing; this repository's `adr` type declares `pending: [pending, unknown, none recorded]` and `placeholder_vocabulary_integration.rs` runs the shipped config. `Status` stays `Planned`. **Why:** the Done-when contract; status is a human decision. | **substantive** |

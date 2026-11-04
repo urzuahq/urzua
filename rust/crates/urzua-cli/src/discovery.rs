@@ -95,7 +95,9 @@ pub(crate) fn load_records(
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if !urzua_core::record::is_governed_record_filename(file_name) {
+            if !urzua_core::record::is_governed_record_filename(file_name)
+                || type_config.excludes(file_name)
+            {
                 continue;
             }
             let full_path = repo_root.join(rel_path);
