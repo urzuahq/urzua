@@ -1,6 +1,6 @@
 # NNNN — Title
 
-> Status: Proposed | Accepted | Rejected | Superseded
+> Status: Proposed | Accepted | Rejected | Superseded | Retired
 > Embodiment: Not started | Specified | Implemented | Verified | Drift detected | Inactive
 > Date: YYYY-MM-DD
 > Author: name
