@@ -74,6 +74,44 @@ struct Context<'a> {
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
     repo_root: PathBuf,
+    base_text: HashMap<PathBuf, String>,
+}
+
+/// `revision-log.version-bump-required` judges a changed record against the
+/// merge base's copy, so that copy is read here (`BUG-51`) and handed over as
+/// data. Only the changed records of a type declaring a bump are read; a
+/// record new in the diff has no merge-base copy and gets no entry.
+fn load_base_text(
+    session: &Session,
+    scope: &ReportScope,
+) -> Result<HashMap<PathBuf, String>, String> {
+    let mut out = HashMap::new();
+    let (Some(changes), Some(_)) = (
+        &scope.changed,
+        enabled_setting(
+            &session.config,
+            rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+        ),
+    ) else {
+        return Ok(out);
+    };
+    for record in &session.records {
+        let declares = session
+            .config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.version_bump().is_some());
+        if !declares || !changes.changed.contains(&record.path) {
+            continue;
+        }
+        // A path added since the merge base has no copy there: not an error.
+        if let Ok(text) =
+            urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path)
+        {
+            out.insert(record.path.clone(), text);
+        }
+    }
+    Ok(out)
 }
 
 impl<'a> Context<'a> {
@@ -101,6 +139,7 @@ impl<'a> Context<'a> {
             drifted: &self.drift.drifted,
             fresh: &self.drift.fresh,
             claim_ages: &self.claim_ages,
+            base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
@@ -401,6 +440,7 @@ fn load_context<'a>(
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
+    let base_text = load_base_text(session, scope)?;
 
     Ok((
         Context {
@@ -429,6 +469,7 @@ fn load_context<'a>(
                 .as_ref()
                 .map(|c| c.changed.iter().cloned().collect()),
             repo_root: repo_root.clone(),
+            base_text,
         },
         notices,
     ))

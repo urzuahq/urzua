@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-08
 Status: Accepted
 Author: beauwilliams
@@ -49,6 +49,11 @@ MILE-74 decided this field set: `Author` required (matching `adr`/`rfc`'s accoun
 than `SPEC-1`-specific, `Implements`/`Parent` declared since every spec already carries them.
 `MILE-91` added `Subject` and corrected `Parent`'s real meaning above, per `BUG-10`'s audit.
 
+**The version bump is checked.** This repository declares `revision_log.version_bump` on the `spec`
+type with the classes `substantive` and `structural` (`BUG-51`), so `urzua check --base` reports a
+changed spec that adds a row of either class while its `Version` equals the merge base's. A row of
+any other class, a new spec, or an unchanged log is not reported.
+
 ## What's deliberately not built
 
 - **Mechanical enforcement of "replayable end-to-end"** — ADR-14's amendment requires a spec's body
@@ -83,3 +88,4 @@ than `SPEC-1`-specific, `Implements`/`Parent` declared since every spec already 
 > | 2026-09-09 | Declared `pointer_fields = ["Derives-from", "Implements", "Parent"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing the "resolved regardless of per-type declaration" text above -- that was accurate before this version but became false the moment `pointer.resolution` became config-driven. | **substantive** |
 > | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`'s row stated the resolution mechanism but not the written form, and cited MILE-78 as precedent -- MILE-78 being the record that established the `'@handle'` form BUG-18 has now retired, so the citation pointed at the superseded convention. Both corrected. Also fixed "required as of this version", which was written when this spec was at `0.2` and silently re-pointed at every later version. | **substantive** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. Stated that the `Version` bump with every substantive or structural entry is now checked on a `--base` run, by `revision-log.version-bump-required` with `revision_log.version_bump` declared on this type. **Why:** `BUG-51`, maintainer decision of 2026-11-04: only the entry half of the rule was enforced. | **substantive** |

@@ -1,5 +1,5 @@
 ---
-Version: '0.55'
+Version: '0.56'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -112,6 +112,12 @@ Two details carry weight:
   `required` may stand alone (`revision_log: {required: false}`), leaving the identity at its
   default; an empty `{}` is still an error. `revision-log.change-class-required`,
   `urzua fix`'s revision row and the `skip_revision_log` option of `citation.path-exists` and `citation.resolution` all read it.
+  The declaration also takes `version_bump: {field, classes}` (`BUG-51`), absent for every type
+  unless written: a field name and the change classes (the revision log's Class column) that require
+  that field to change. `revision-log.version-bump-required` reports a changed record that adds a row
+  of one of those classes while its field equals the merge base's. `field` must be non-blank and
+  `classes` a non-empty list of non-blank names, else the config fails to load; `version_bump` may
+  stand alone like `required`. Enabling the rule when no type declares one is a load error.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -975,3 +981,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.55`. `sections.depth` now drives the section reading: a type declaring `depth: 2` has its `###` headings parsed as sections nested under their `##`, and a required section may declare `level` and `under` to be asked for one. A type declaring no `level` is read as before. **Why:** `MILE-98` -- this repository's own `###` headings were invisible to the section rules and a corpus that checks a considered option's subsection needs `###` to be checked at all. | **substantive** |
+> | 2026-11-04 | Bumped to `0.56`. Documented the `revision_log.version_bump` declaration: a field name and a list of change classes whose added revision-log rows require that field to change, read by `revision-log.version-bump-required`. **Why:** `BUG-51`, maintainer decision of 2026-11-04; `SPEC-18` requires a `Version` bump with every substantive or structural entry and nothing checked it. Off for every type unless declared. | **substantive** |
