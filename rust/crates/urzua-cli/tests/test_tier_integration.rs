@@ -131,3 +131,49 @@ fn a_test_path_outside_every_back_pointer_path_is_refused_at_load() {
     assert!(text.contains("test_paths"), "{text}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_glob_test_path_and_a_prefix_work_together_and_an_unmatched_entry_is_reported() {
+    // `src/tests/t.rs` is named by the prefix; `src/extra.test.rs` by the glob.
+    let dir = repo("glob", "    test_paths: [\"src/tests\", \"**/*.spec.*\"]\n");
+    std::fs::write(
+        dir.join("src/extra.spec.rs"),
+        "// Verifies: ADR-2\nfn s() {}\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "glob fixture"]);
+    let out = run_urzua(&dir, &["check"]);
+    // ADR-1 and ADR-2 are both Verified now; no consistency finding for them.
+    let found = consistency(&out);
+    assert!(
+        found
+            .iter()
+            .all(|f| !f["file"].as_str().unwrap().contains("ADR-2")),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    // A glob matching no tracked file under a scanned path is reported.
+    let dir2 = repo("glob-none", "    test_paths: [\"**/*.nomatch.*\"]\n");
+    let out2 = run_urzua(&dir2, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out2.stdout).expect("json");
+    let hit = parsed["findings"].as_array().unwrap().iter().any(|f| {
+        f["rule"] == "embodiment.back-pointer-resolution"
+            && f["message"]
+                .as_str()
+                .unwrap()
+                .contains("test path '**/*.nomatch.*'")
+    });
+    assert!(hit, "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&dir2).ok();
+}
+
+#[test]
+fn a_malformed_glob_test_path_is_refused_at_load() {
+    let dir = repo("badglob", "    test_paths: [\"src/[\"]\n");
+    let out = run_urzua(&dir, &["check"]);
+    assert!(!out.status.success());
+    std::fs::remove_dir_all(&dir).ok();
+}
