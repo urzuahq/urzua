@@ -1,6 +1,7 @@
 ---
 Status: Superseded
 Embodiment: Implemented
+Realized-by: code:rust/crates/urzua-core/src/report.rs, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams

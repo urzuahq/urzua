@@ -34,7 +34,7 @@ fn adr(dir: &Path, n: u32, embodiment: &str) {
 
 /// ADR-1: stated Verified, cited by `Verifies:` in a test file and by
 /// `Implements:` in source. ADR-2: stated Verified, cited by `Implements:`
-/// only. ADR-3: stated Verified, cited by nothing. None has `Realized-by`.
+/// only. ADR-3: stated Verified, cited by nothing. ADR-4: states no tier. None has `Realized-by`.
 fn repo(name: &str, test_paths: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("urzua-tier-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -59,6 +59,7 @@ fn repo(name: &str, test_paths: &str) -> std::path::PathBuf {
     for n in 1..=3 {
         adr(&dir, n, "Verified");
     }
+    adr(&dir, 4, "Specified");
     std::fs::write(
         dir.join("src/lib.rs"),
         "// Implements: ADR-1, ADR-2\nfn a() {}\n",
@@ -90,10 +91,17 @@ fn a_test_pointer_verifies_and_a_code_pointer_alone_does_not() {
     let dir = repo("on", "    test_paths: [\"src/tests\"]\n");
     let out = run_urzua(&dir, &["check"]);
     let found = consistency(&out);
-    // ADR-1 is Verified; ADR-2 computes Implemented (code only) and ADR-3 is
-    // cited by nothing, so it is not judged.
-    assert_eq!(found.len(), 1, "{}", String::from_utf8_lossy(&out.stdout));
+    // ADR-1 is Verified; ADR-2 computes Implemented (code only); ADR-3 states
+    // Verified with no evidence of either kind and is reported (`MILE-161`);
+    // ADR-4 states no tier and is not judged.
+    assert_eq!(found.len(), 2, "{}", String::from_utf8_lossy(&out.stdout));
     assert!(found[0]["file"].as_str().unwrap().contains("ADR-2"));
+    assert!(found[1]["file"].as_str().unwrap().contains("ADR-3"));
+    let none = found[1]["message"].as_str().unwrap();
+    assert!(
+        none.contains("'Not started'") && none.contains("no evidence"),
+        "{none}"
+    );
     let message = found[0]["message"].as_str().unwrap();
     assert!(message.contains("'Implemented'"), "{message}");
     assert!(message.contains("source back-pointers"), "{message}");
@@ -105,8 +113,8 @@ fn a_test_pointer_verifies_and_a_code_pointer_alone_does_not() {
 fn with_no_test_class_declared_a_verifies_comment_is_not_evidence() {
     let dir = repo("off", "");
     let out = run_urzua(&dir, &["check"]);
-    // ADR-1 and ADR-2 both compute Implemented.
-    assert_eq!(consistency(&out).len(), 2);
+    // ADR-1 and ADR-2 both compute Implemented; ADR-3 has no evidence.
+    assert_eq!(consistency(&out).len(), 3);
     std::fs::remove_dir_all(&dir).ok();
 }
 
