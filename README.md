@@ -124,10 +124,30 @@ Every applied write touches only the one field's line, byte-for-byte preserving 
 
 A pinned locator (`code:src/a.rs@sha256:...`) whose file changed is cleared the same way, by review: `urzua fix --rebaseline` lists each stale pin with its recorded and current hash, and `urzua fix --rebaseline --apply --ids <record> --by <who> --reason "<why it still holds>"` re-pins it and logs who attested and why.
 
+## Run the gate in CI
+
+This repository ships a composite action that installs a pinned release (checksum and build provenance verified), checks the checkout has the history drift reads, runs `urzua check` and, on a pull request, `urzua check --base`, and reports the findings as inline annotations and one pull request comment that is updated in place:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write # for the comment; without it the comment is skipped with a warning
+steps:
+  - uses: actions/checkout@<sha>
+    with:
+      fetch-depth: 0 # drift reads history; a shallow checkout fails with that reason
+  - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
+    with:
+      version: v0.3.0 # an exact release tag
+      base-ref: ${{ github.base_ref }} # empty outside pull requests
+```
+
+A run that could not run fails the job and is shown as NOT RUN; it is never a pass. Published builds are x86_64 Linux and arm64 and x86_64 macOS.
+
 ## Adopt without a rewrite
 
 ```sh
-git clone https://github.com/urzuahq/urzua && cd urzua && make build
+git clone https://github.com/urzuahq/urzua && cd urzua && make build # also wires the git hooks (`urzua doctor` verifies them)
 cd /path/to/your-repo
 /path/to/urzua/rust/target/release/urzua init --dry-run # preview .urzua/config.yaml from what's already there
 /path/to/urzua/rust/target/release/urzua init           # writes it; never moves or rewrites a single record
