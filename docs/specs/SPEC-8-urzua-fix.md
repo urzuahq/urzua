@@ -1,5 +1,5 @@
 ---
-Version: '0.12'
+Version: '0.13'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -126,7 +126,7 @@ derives nothing: it reads `repairs` from `fix --stdin-path`.
   persisted, and whom an unacknowledged block routes to, are undecided (`RFC-7`, `MILE-12`): the
   `persist_override` function in the script is the extension point, a no-op today.
 
-Only computed fields in `repairs` (today `Embodiment`) are judged; `check`'s header, field and status
+Only computed fields in `repairs` (today `Embodiment` and the delivered `Status` repair) are judged; `check`'s header, field and status
 rules have no prospective-content mode and run at commit and CI. The Claude Code adapter
 `scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
 `Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
@@ -136,6 +136,18 @@ corpus: about 0.19s per single-record judgement through the core and about 0.39s
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
 non-blocking.
+
+### The `Status` repair (`MILE-183`)
+
+A second Tier 1 repair exists, for a type that declares `statuses.delivery` (`SPEC-3`) with
+`status.delivery-agreement` or `embodiment.consistency` enabled. When a record's evidence (`Realized-by`
+locators and source back-pointers, drift ignored) computes to a declared delivered tier while its
+`Status` is a declared not-done status, `fix` proposes the declared `set_status` as a repair with
+`field: Status`, and `--apply` writes it through the same path and structural revision row as the
+`Embodiment` repair. The one correct value is computable only in this direction. A success `Status`
+with no evidence is not downgraded: `fix` reports it as a notice naming the record, since the repair is
+adding evidence. `fix` computes no drift for this repair, so it runs when only
+`status.delivery-agreement` is enabled.
 
 ## Apply mode (`--apply`)
 
@@ -212,4 +224,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.9`. `fix` takes `PATHS` that scope examination, drift and repair, and reports a path matching no record. **Why:** `MILE-159` -- an editor hook needs a quick single-file refresh, and the whole-corpus run is about 0.8s on this corpus against about 0.15s for one record. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. `fix --stdin-path <path>` judges proposed content for one record without writing, for a path that need not exist yet, with drift computed for that record alone; each repair carries the 1-based `line` of the stated field; the detect-mode example now shows the real snake_case shape. **Why:** `MILE-159` -- an editor hook judges a file before it is saved and must find its own repair without parsing the whole list. | **substantive** |
 > | 2026-11-04 | Bumped to `0.11`. Apply mode writes without a revision-log row for a type declaring `revision_log: {required: false}`; a required log (the default) still refuses a record with no section, now naming the identity looked for. **Why:** `MILE-159` -- an adopter's records have no revision log section, so `--apply` could never run on them. | **substantive** |
-> | 2026-11-04 | Bumped to `0.12`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.12`. `fix` proposes, and `--apply` writes, the declared success `Status` for a record whose evidence computes to a declared delivered tier while its `Status` is declared not done (`statuses.delivery`); a success `Status` with no evidence is reported as a notice and never downgraded; the revision row now names the computed value; `fix` runs when only `status.delivery-agreement` is enabled. **Why:** `MILE-183`. | **structural** |
+> | 2026-11-04 | Bumped to `0.13`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |

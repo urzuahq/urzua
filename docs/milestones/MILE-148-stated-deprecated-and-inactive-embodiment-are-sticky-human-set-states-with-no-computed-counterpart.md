@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNNNS5KTTBK4QAR0D3DEC
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs
 ---
 # 148 — Stated Deprecated and Inactive Embodiment are sticky human-set states with no computed counterpart
 
@@ -26,3 +27,4 @@ A record stating `Deprecated` or `Inactive` produces no consistency finding on t
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Sticky Embodiment states declared in configuration (`SPEC-2` `0.36`, `SPEC-3` `0.22`): this repository declares `sticky_states: [Deprecated, Inactive]` and `ADR-29`, superseded by `ADR-45`, now states `Deprecated`; a fixture covers sticky states beside a genuine drift. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #199: declared `sticky_states` are not drift and `fix` leaves them alone. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

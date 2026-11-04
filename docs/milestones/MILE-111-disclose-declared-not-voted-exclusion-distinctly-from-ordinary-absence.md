@@ -5,6 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-45
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-core/src/rules/shared.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 111 — Disclose every non-absent exclusion; no rule depends on another to do it
 
@@ -64,3 +65,4 @@ rule may depend on another rule being enabled to cover a gap in its own disclosu
 > | 2026-09-23 | Filed, `Status: Planned`. **Why:** `RFC-45`'s central question needed deciding before implementation; filed the same round it was resolved so the work is scheduled immediately rather than left open. | **substantive** |
 > | 2026-09-23 | Rescoped alongside `RFC-45`'s broadening: `BUG-125` (a live, reproduced defect, not the original narrow three-rule ambiguity alone) is now this milestone's primary driver. `Blocked-on` cleared since the design question was decided in the same session it was raised. | **substantive** |
 > | 2026-09-23 | `Status: Planned` → `Done`. **Why:** both parts implemented and verified: full test suite, clippy, `make ci`, and a real-corpus `check` diff reporting the same 70 findings before and after. Part 1 shipped as a dedicated rule rather than the originally-decided `Outcome` variant, corrected mid-implementation per `ADR-63`'s amendment. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
