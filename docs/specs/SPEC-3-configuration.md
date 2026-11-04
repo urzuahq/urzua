@@ -1,5 +1,5 @@
 ---
-Version: '0.19'
+Version: '0.20'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -458,6 +458,36 @@ rules:
 Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
 option-on-a-rule-that-does-not-take-it load error.
 
+### Source back-pointers as evidence (`MILE-128`, `MILE-146`, `MILE-149`)
+
+`embodiment.back-pointer-resolution` reads source comments as realization evidence and takes one
+optional option beside its required `back_pointer_paths`.
+
+```yaml
+rules:
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: ["src", "tests"]
+    test_paths: ["tests"]      # the test class, each entry inside a back_pointer_paths entry
+```
+
+- `Implements: ADR-12` in any file under `back_pointer_paths` is code-tier evidence for the record
+  it cites. `Verifies: ADR-12` in a file under `test_paths` is test-tier evidence, which computes
+  `Verified` exactly as a `test:` locator does, so a record needs no restated `test:` list. A
+  `Verifies:` comment outside `test_paths` is not read, and with no `test_paths` declared none is.
+  One record can be cited at both tiers.
+- Both markers are read the same way: at the start of a comment line or in a trailing comment after
+  code, an id list in which a note may sit between ids (`ADR-1 (why), ADR-2`).
+- A `test_paths` entry that is not inside any `back_pointer_paths` entry is a load error (nothing
+  there would be scanned), and one covering no tracked file is a finding.
+- `embodiment.consistency` judges a record with `Embodiment` but no `Realized-by` field when a
+  back-pointer cites it, computing from the back-pointers alone; the finding says so. A record
+  neither cited nor carrying `Realized-by` is still not judged. `urzua fix` repairs the same
+  records.
+
+The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
+option-on-a-rule-that-does-not-take-it load error.
+
 ### Date fields and the acceptance date (`MILE-137`)
 
 One opt-in rule validates dates, `date.field-valid`. Which fields are dates is a rule option; the
@@ -531,3 +561,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.17`. `statuses.require` counts a value in the type's declared `pending` vocabulary as missing, the same list `field.pending` reads. **Why:** `MILE-153` -- an Accepted record whose required field read `Unknown` passed; the vocabulary is declared once, in configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.18`. Documented the per-type `exclude_files` declaration: bare file names directly in a type's `dir` that are not its records, excluded from every rule's population and from `filename.identity-pattern`'s census. **Why:** `MILE-150` and `BUG-183` -- a `README.md` in a record directory was read as a record and failed every rule, with no way to say it is not one. | **substantive** |
 > | 2026-11-04 | Bumped to `0.NEXT`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.20`. Documented the `test_paths` option of `embodiment.back-pointer-resolution` and what source back-pointers compute: `Implements:` is code tier, `Verifies:` in a declared test file is test tier, and a record with no `Realized-by` field that a back-pointer cites is judged on that evidence. **Why:** `MILE-146` and `MILE-149` -- a record whose tests cite it should compute `Verified` without a hand-maintained `test:` list, and a field added only to make a checker look is restated evidence. | **substantive** |
