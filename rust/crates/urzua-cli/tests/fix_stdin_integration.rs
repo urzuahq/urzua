@@ -28,12 +28,8 @@ fn run_stdin(dir: &Path, args: &[&str], stdin: &str) -> std::process::Output {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("urzua binary should run");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    // A refusal exits before reading stdin, so a broken pipe is not a failure.
+    let _ = child.stdin.take().unwrap().write_all(stdin.as_bytes());
     child.wait_with_output().unwrap()
 }
 
