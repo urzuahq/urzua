@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M25Z27VBE63ABNE2QRSQSXGR
 Status: Accepted
-Embodiment: Implemented
+Embodiment: Drift detected
 Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-10
 Author: beauwilliams
@@ -176,3 +176,4 @@ nobody reads.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Implemented`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml` -- stated `Drift detected` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | `Embodiment` restored to `Drift detected`. **Why:** the previous row recomputed `Implemented` in a shallow checkout, where git history is missing and drift cannot be seen. In a full clone `knope.toml` (2026-09-16) and `.github/workflows/prepare-release.yml` (2026-09-19) are newer than this record's `Realized-by` line, so the evidence did change after it was last verified, and `embodiment.consistency` reports the mismatch. Found when `MILE-145` made warnings fail the build. | **substantive** |
