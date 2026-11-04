@@ -1,0 +1,488 @@
+use super::relation::{pair_carried_by, pair_slot_claims, pair_slots};
+use super::*;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Rule (`RFC-48`, `MILE-27`): a cycle in an `acyclic` relation pair. The
+/// graph has one edge per resolved claim, drawn in the direction its field
+/// declares: `A.forward = B` is `A -> B`, and `A.inverse = B` is `B -> A`, so
+/// a record that writes only the inverse side still takes part. A claim that
+/// resolves to no record, or to a type the pair does not carry, is no edge
+/// (`sequence.unresolved-blocker` reports the first). Every record on a cycle
+/// is reported with a shortest cycle through it, so a diff-scoped run that
+/// examines only one of them still sees the finding.
+pub fn sequence_cycle(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_SEQUENCE_CYCLE;
+    let mut findings = Vec::new();
+    let slots = pair_slots(records, config, |p| p.acyclic);
+
+    // One graph per pair, built from every readable claim.
+    type Graph = BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
+    let mut graphs: BTreeMap<&str, Graph> = BTreeMap::new();
+    for slot in &slots {
+        let Ok(references) = pair_slot_claims(slot) else {
+            continue;
+        };
+        let Some(own) = record_id(slot.record) else {
+            continue;
+        };
+        let own = crate::values::RecordId::new(&own);
+        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
+        graph.entry(own.clone()).or_default();
+        for reference in references {
+            let target = crate::values::RecordId::new(&reference);
+            let Some(record) = index.get(&target) else {
+                continue;
+            };
+            if record.header.is_unreadable() || !pair_carried_by(slot.pair, &record.record_type) {
+                continue;
+            }
+            graph.entry(target.clone()).or_default();
+            let (from, to) = if slot.forward {
+                (own.clone(), target)
+            } else {
+                (target, own.clone())
+            };
+            graph.entry(from).or_default().insert(to);
+        }
+    }
+
+    // The records on a cycle, per pair, each with its cycle path.
+    let mut on_cycle: BTreeMap<(&str, crate::values::RecordId), String> = BTreeMap::new();
+    for (pair, graph) in &graphs {
+        for component in strongly_connected(graph) {
+            let looped = component.len() > 1
+                || graph
+                    .get(&component[0])
+                    .is_some_and(|next| next.contains(&component[0]));
+            if !looped {
+                continue;
+            }
+            for member in &component {
+                if let Some(path) = shortest_cycle(graph, member) {
+                    on_cycle.insert((pair, member.clone()), path);
+                }
+            }
+        }
+    }
+
+    let mut reported: BTreeSet<(&str, crate::values::RecordId)> = BTreeSet::new();
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Field,
+        slots,
+        |slot| slot.record,
+        |slot| {
+            // A record can sit on a cycle that only other records wrote, so
+            // the report does not wait for a claim of its own.
+            if let Some(id) = record_id(slot.record) {
+                let key = (slot.pair.name.as_str(), crate::values::RecordId::new(&id));
+                if let Some(path) = on_cycle.get(&key) {
+                    if reported.insert(key) {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Error,
+                            file: slot.record.path.clone(),
+                            line: None,
+                            waived: None,
+                            declared_severity: None,
+                            message: format!(
+                                "{id} is on a cycle in acyclic pair '{}' ({} -> {}): {path}",
+                                slot.pair.name, slot.pair.forward, slot.pair.inverse
+                            ),
+                        });
+                    }
+                }
+            }
+            if let Err(outcome) = pair_slot_claims(slot) {
+                return outcome;
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// Rule (`RFC-48`, `MILE-27`): a value in either field of an `acyclic` pair
+/// that names no record. Two shapes, both reported: a reference that resolves
+/// to nothing, and a comma-separated entry that is not a record reference, so
+/// prose cannot sit in a sequencing field and be dropped from the graph without
+/// a word. A target whose header cannot be read is disclosed under its own
+/// entry, not blamed on the citer.
+pub fn sequence_unresolved_blocker(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_SEQUENCE_UNRESOLVED_BLOCKER;
+    let mut findings = Vec::new();
+    let slots = pair_slots(records, config, |p| p.acyclic);
+
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Field,
+        slots,
+        |slot| slot.record,
+        |slot| {
+            let references = match pair_slot_claims(slot) {
+                Ok(references) => references,
+                Err(outcome) => return outcome,
+            };
+            let field = slot.own_field();
+            let mut push = |message: String| {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: slot.record.path.clone(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    message,
+                });
+            };
+            for reference in &references {
+                if !index.contains_key(&crate::values::RecordId::new(reference)) {
+                    push(format!(
+                        "{field}: {reference} does not resolve to any discovered record (pair '{}')",
+                        slot.pair.name
+                    ));
+                }
+            }
+            let value = slot.record.header.get(field).unwrap_or("");
+            let mut remaining = references.iter();
+            for entry in value.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+                let is_reference = extract_references(entry).len() == 1;
+                if is_reference {
+                    remaining.next();
+                } else {
+                    push(format!(
+                        "{field}: '{entry}' is not a record reference, so it orders nothing (pair '{}')",
+                        slot.pair.name
+                    ));
+                }
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// Tarjan's algorithm, iterative so a long chain cannot exhaust the stack.
+/// Components and their members come out in `RecordId` order.
+fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
+    let nodes: Vec<&N> = graph.keys().collect();
+    let position: BTreeMap<&N, usize> = nodes.iter().enumerate().map(|(i, n)| (*n, i)).collect();
+    let edges: Vec<Vec<usize>> = nodes
+        .iter()
+        .map(|n| {
+            graph[*n]
+                .iter()
+                .filter_map(|m| position.get(m).copied())
+                .collect()
+        })
+        .collect();
+    let count = nodes.len();
+    let mut next_index = 0;
+    let mut order = vec![usize::MAX; count];
+    let mut low = vec![0; count];
+    let mut on_stack = vec![false; count];
+    let mut stack = Vec::new();
+    let mut components = Vec::new();
+    for root in 0..count {
+        if order[root] != usize::MAX {
+            continue;
+        }
+        let mut work = vec![(root, 0usize)];
+        while let Some(&(node, cursor)) = work.last() {
+            if cursor == 0 {
+                order[node] = next_index;
+                low[node] = next_index;
+                next_index += 1;
+                stack.push(node);
+                on_stack[node] = true;
+            }
+            if let Some(&next) = edges[node].get(cursor) {
+                work.last_mut().expect("work is non-empty").1 += 1;
+                if order[next] == usize::MAX {
+                    work.push((next, 0));
+                } else if on_stack[next] {
+                    low[node] = low[node].min(order[next]);
+                }
+                continue;
+            }
+            work.pop();
+            if let Some(&(parent, _)) = work.last() {
+                low[parent] = low[parent].min(low[node]);
+            }
+            if low[node] == order[node] {
+                let mut component = Vec::new();
+                while let Some(member) = stack.pop() {
+                    on_stack[member] = false;
+                    component.push(nodes[member].clone());
+                    if member == node {
+                        break;
+                    }
+                }
+                component.sort();
+                components.push(component);
+            }
+        }
+    }
+    components.sort();
+    components
+}
+
+/// A shortest cycle through `start`, rendered `A -> B -> A`; ties break on
+/// `RecordId` order, so the text is the same on every run.
+fn shortest_cycle(
+    graph: &BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>,
+    start: &crate::values::RecordId,
+) -> Option<String> {
+    let mut previous: BTreeMap<&crate::values::RecordId, &crate::values::RecordId> =
+        BTreeMap::new();
+    let mut queue = std::collections::VecDeque::from([start]);
+    while let Some(node) = queue.pop_front() {
+        for next in graph.get(node)? {
+            if next == start {
+                let mut path = vec![start.as_str()];
+                let mut at = node;
+                let mut reversed = vec![at.as_str()];
+                while at != start {
+                    at = previous[at];
+                    reversed.push(at.as_str());
+                }
+                reversed.reverse();
+                path.clear();
+                path.extend(reversed);
+                path.push(start.as_str());
+                return Some(path.join(" -> "));
+            }
+            if !previous.contains_key(next) {
+                previous.insert(next, node);
+                queue.push_back(next);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::tests::*;
+
+    fn seq_pair(reciprocity: crate::config::PairReciprocity) -> crate::config::RelationPair {
+        crate::config::RelationPair {
+            name: "sequencing".to_string(),
+            forward: "Depends-on".to_string(),
+            inverse: "Blocks".to_string(),
+            reciprocity,
+            cross_type: true,
+            provisional: None,
+            types: None,
+            acyclic: true,
+        }
+    }
+
+    fn seq_config(types: &[&str]) -> Config {
+        let mut config = config_with_types(
+            types
+                .iter()
+                .map(|t| {
+                    (
+                        *t,
+                        type_config_pointer(
+                            &[],
+                            Some(&["Depends-on", "Blocks", "Title"]),
+                            None,
+                            None,
+                        ),
+                    )
+                })
+                .collect(),
+        );
+        config.relation_pairs = vec![seq_pair(crate::config::PairReciprocity::None)];
+        config
+    }
+
+    fn mile(n: u32, header: &str) -> Record {
+        record_with_prefix(
+            &format!("docs/milestones/MILE-{n}-x.md"),
+            "milestone",
+            "MILE",
+            &format!("---\n{header}\n---\n"),
+        )
+    }
+
+    fn cycle(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+        let index = build_normalized_index(records);
+        sequence_cycle(records, config, &index)
+    }
+
+    fn unresolved(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+        let index = build_normalized_index(records);
+        sequence_unresolved_blocker(records, config, &index)
+    }
+
+    #[test]
+    fn a_two_record_cycle_is_reported_on_both_records_with_its_path() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Depends-on: MILE-2"), mile(2, "Depends-on: MILE-1")];
+        let (exec, findings) = cycle(&records, &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(findings.iter().all(|f| f.rule == RULE_SEQUENCE_CYCLE));
+        assert!(
+            findings[0].message.contains("MILE-1 -> MILE-2 -> MILE-1"),
+            "{findings:?}"
+        );
+        assert_eq!(examined(&exec), 2);
+    }
+
+    #[test]
+    fn a_record_that_depends_on_itself_is_a_cycle() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Depends-on: MILE-1")];
+        let (_, findings) = cycle(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("MILE-1 -> MILE-1"),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_cycle_across_record_types_is_reported() {
+        let config = seq_config(&["milestone", "bug"]);
+        let bug = record_with_prefix(
+            "docs/bugs/BUG-7-x.md",
+            "bug",
+            "BUG",
+            "---\nDepends-on: MILE-1\n---\n",
+        );
+        let records = [mile(1, "Depends-on: BUG-7"), bug];
+        let (_, findings) = cycle(&records, &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+    }
+
+    #[test]
+    fn a_chain_and_a_diamond_are_not_cycles_and_are_counted_examined() {
+        let config = seq_config(&["milestone"]);
+        let records = [
+            mile(1, "Depends-on: MILE-2, MILE-3"),
+            mile(2, "Depends-on: MILE-4"),
+            mile(3, "Depends-on: MILE-4"),
+            mile(4, "Title: leaf"),
+        ];
+        let (exec, findings) = cycle(&records, &config);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(examined(&exec), 3, "the leaf writes no claim");
+    }
+
+    #[test]
+    fn the_written_inverse_field_contributes_the_reverse_edge() {
+        // 1 depends on 2; 1 also says it blocks 2, i.e. 2 depends on 1.
+        let config = seq_config(&["milestone"]);
+        let records = [
+            mile(1, "Depends-on: MILE-2\nBlocks: MILE-2"),
+            mile(2, "Title: x"),
+        ];
+        let (_, findings) = cycle(&records, &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+    }
+
+    #[test]
+    fn a_cycle_is_only_looked_for_in_pairs_that_declare_acyclic() {
+        let mut config = seq_config(&["milestone"]);
+        config.relation_pairs[0].acyclic = false;
+        let records = [mile(1, "Depends-on: MILE-2"), mile(2, "Depends-on: MILE-1")];
+        let (exec, findings) = cycle(&records, &config);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn an_unresolved_target_is_no_edge_and_does_not_hide_a_real_cycle() {
+        let config = seq_config(&["milestone"]);
+        let records = [
+            mile(1, "Depends-on: MILE-2, MILE-99"),
+            mile(2, "Depends-on: MILE-1"),
+        ];
+        let (_, findings) = cycle(&records, &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+    }
+
+    #[test]
+    fn a_dangling_target_is_reported_by_the_unresolved_blocker_rule() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Depends-on: MILE-2, MILE-99"), mile(2, "Title: x")];
+        let (exec, findings) = unresolved(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].rule, RULE_SEQUENCE_UNRESOLVED_BLOCKER);
+        assert!(findings[0].message.contains("MILE-99"), "{findings:?}");
+        assert_eq!(examined(&exec), 1);
+    }
+
+    #[test]
+    fn a_value_that_names_no_record_is_reported_not_dropped() {
+        let config = seq_config(&["milestone"]);
+        let records = [
+            mile(1, "Depends-on: a real adopter asking for it, MILE-2"),
+            mile(2, "Title: x"),
+        ];
+        let (_, findings) = unresolved(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("a real adopter asking for it"),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn an_unwritten_field_and_the_nothing_here_sentinel_are_not_findings() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Depends-on: —"), mile(2, "Title: x")];
+        let (exec, findings) = unresolved(&records, &config);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(examined(&exec), 1, "the sentinel is an answer");
+    }
+
+    #[test]
+    fn the_blocks_side_is_checked_for_dangling_targets_too() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Blocks: MILE-98")];
+        let (_, findings) = unresolved(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Blocks"), "{findings:?}");
+    }
+
+    #[test]
+    fn an_unacyclic_pair_is_not_the_unresolved_blocker_rules() {
+        let mut config = seq_config(&["milestone"]);
+        config.relation_pairs[0].acyclic = false;
+        let records = [mile(1, "Depends-on: MILE-99")];
+        let (exec, findings) = unresolved(&records, &config);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+}

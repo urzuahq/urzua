@@ -190,15 +190,15 @@ pub fn relation_target_status_undeclared(
 /// One side of one declared relation pair on one record whose type declares
 /// that side's field -- the population unit of both pair rules (`RFC-47`).
 #[derive(Clone, Copy)]
-struct PairSlot<'a> {
-    record: &'a Record,
-    pair: &'a crate::config::RelationPair,
+pub(super) struct PairSlot<'a> {
+    pub(super) record: &'a Record,
+    pub(super) pair: &'a crate::config::RelationPair,
     /// Is this the pair's `forward` side (else its `inverse`).
-    forward: bool,
+    pub(super) forward: bool,
 }
 
 impl PairSlot<'_> {
-    fn own_field(&self) -> &str {
+    pub(super) fn own_field(&self) -> &str {
         if self.forward {
             &self.pair.forward
         } else {
@@ -218,7 +218,7 @@ impl PairSlot<'_> {
 
 /// Whether a record type carries a pair: every type does unless the pair
 /// declares `types` (`MILE-155`).
-fn pair_carried_by(pair: &crate::config::RelationPair, record_type: &str) -> bool {
+pub(super) fn pair_carried_by(pair: &crate::config::RelationPair, record_type: &str) -> bool {
     pair.types
         .as_ref()
         .is_none_or(|types| types.iter().any(|t| t == record_type))
@@ -227,7 +227,7 @@ fn pair_carried_by(pair: &crate::config::RelationPair, record_type: &str) -> boo
 /// Every `(record, pair, side)` where the record's type declares the side's
 /// field, for the pairs `keep` selects. A type that does not declare a pair's
 /// field is not that pair's business, the same gate `ADR-60` gives `Status`.
-fn pair_slots<'a>(
+pub(super) fn pair_slots<'a>(
     records: &'a [Record],
     config: &'a Config,
     keep: impl Fn(&crate::config::RelationPair) -> bool,
@@ -260,7 +260,7 @@ fn pair_slots<'a>(
 /// The references a pair slot claims, or the `Outcome` that ends the slot:
 /// no readable id, an unreadable header, an unwritten field (`Absent`), or
 /// the written "nothing here" sentinel (answered, so `Examined`).
-fn pair_slot_claims(slot: &PairSlot) -> Result<Vec<String>, Outcome> {
+pub(super) fn pair_slot_claims(slot: &PairSlot) -> Result<Vec<String>, Outcome> {
     if record_id(slot.record).is_none() {
         return Err(Outcome::OutOfScope);
     }
@@ -784,6 +784,7 @@ mod tests {
             cross_type,
             provisional: None,
             types: None,
+            acyclic: false,
         }
     }
 

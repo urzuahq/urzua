@@ -1,5 +1,5 @@
 ---
-Version: '0.54'
+Version: '0.55'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -562,6 +562,7 @@ relation_pairs:
     inverse: "Resolved-by"    # the resolved record -> this one
     reciprocity: required     # required | none
     cross_type: true          # optional, default true
+    acyclic: false            # optional (MILE-27), default false
     types: [rfc]              # optional (MILE-155), default: every type declaring a side
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
@@ -616,6 +617,43 @@ revisits it:
   (`MILE-80`), so a per-pair severity has nothing to set.
 - **Direction-mismatch.** `relation.direction-mismatch` is not built; an unechoed claim already
   reports a mismatched direction, because the echo is read from the opposite field.
+
+### Sequencing: `acyclic` (`MILE-27`, `RFC-48`)
+
+`acyclic: true` declares the pair a sequencing relation that must not loop. The graph has one edge per
+resolved claim, drawn the way the field declares it: `A.forward = B` is `A -> B` ("A cannot finish
+until B does"), and `A.inverse = B` is `B -> A`, so a record that writes only the inverse side still
+takes part. Two rules read acyclic pairs, and only those:
+
+- `sequence.cycle` reports every record on a cycle, with a shortest cycle through it
+  (`MILE-1 -> MILE-2 -> MILE-1`). A record that names itself is a cycle of one. The cycle may cross
+  record types where the pair allows it. A record is reported even when it wrote none of the claims
+  that close the loop.
+- `sequence.unresolved-blocker` reports a value in either field that names no record: a reference
+  that resolves to no discovered record, and a comma-separated entry that is not a record reference
+  (prose), so prose cannot sit in the field and be dropped from the graph unseen. The nothing-here
+  sentinel and an unwritten field are not findings. A target whose header cannot be read is disclosed
+  under its own entry, not blamed on the citer.
+
+Narrowest readings of what `RFC-48` leaves open, recorded here until an ADR revisits them:
+
+- **`reciprocity` is independent of `acyclic`.** `none` is the intended spelling for a pair whose
+  inverse is computed, never written (`Depends-on` / `Blocks`); `required` also works and adds the
+  echo check.
+- **`provisional` and `types` apply as for any pair.** A claim to a type outside `types` is no edge.
+  `provisional` does not soften either sequence rule.
+- **Edges are only resolved claims.** A claim that resolves to nothing is `sequence.unresolved-blocker`'s,
+  and does not hide a real cycle among the claims that resolve.
+- **Overlap.** A pair field also declared in `pointer_fields` is additionally resolved by
+  `pointer.resolution` and checked clean by `header.pointer-field-clean`, as `RFC-48` intends for
+  `Depends-on`; an unresolved target then reports under both rules.
+- **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
+  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
+  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
+  `MILE-182`).
+
+Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
+the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
 declared by no type (the pair could never examine a record), a field used by two pairs or twice by one
@@ -960,3 +998,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.52`. No change to the option reference. The `RuleSetting` option set is one definition (`accepted_statuses` now carries the `serde(default)` its siblings did), and a rule reads its options as a typed value. An option that is declared in the option tables but not accepted by the struct, or the reverse, fails a test. **Why:** `MILE-174` -- the set was defined four times, so a new option could be silently ignored. | **structural** |
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.55`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the narrowest reading of each question `RFC-48` leaves open. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |
