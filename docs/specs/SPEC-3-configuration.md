@@ -308,7 +308,7 @@ Two details carry weight:
   and reports an edge the graph does not list, or a new record outside `initial`; it needs `--base`
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
-  committed status is no longer declared is counted unreadable by the first rule, not judged. The
+  committed status is no longer declared is counted unreadable by the first rule, not judged. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
   derived `blocked` value is not part of this declaration (`MILE-27`).
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a

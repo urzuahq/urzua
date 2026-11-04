@@ -39,7 +39,8 @@ record_types:
       implementable: ["Accepted"]
       claim_retained: ["Superseded", "Retired"]
       # The lifecycle (MILE-144, ADR-72): a decision is Proposed, then Accepted or
-      # Rejected; an Accepted one is later Superseded or Retired.
+      # Rejected; an Accepted one is later Superseded or Retired. A decision enters
+      # Proposed and is accepted in a later change, never filed already Accepted.
       initial: ["Proposed"]
       transitions:
         Proposed: ["Accepted", "Rejected"]
@@ -100,6 +101,8 @@ record_types:
         Draft: ["Discussion", "Accepted", "Rejected"]
         Discussion: ["Draft", "Accepted", "Rejected"]
         Accepted: ["Superseded"]
+        # A rejected proposal can be reopened as a draft (RFC-30).
+        Rejected: ["Draft"]
     spec: "SPEC-17"
     pointer_fields:
       - "Implements"
@@ -135,7 +138,6 @@ record_types:
       initial: ["Draft"]
       transitions:
         Draft: ["Accepted"]
-        Accepted: ["Draft"]
     spec: "SPEC-18"
     pointer_fields:
       - "Derives-from"
@@ -163,15 +165,15 @@ record_types:
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.
       implementable: ["Planned", "InProgress", "Done"]
-      # A milestone the PR that files it delivers starts Done; Done and WontDo can
-      # be reopened, and nothing else leaves a finished milestone.
-      initial: ["Planned", "Done"]
+      # A milestone starts Planned, or Blocked when filed already waiting, or Done
+      # when the PR that files it delivers it. Done can be reopened; WontDo is
+      # terminal (SPEC-6).
+      initial: ["Planned", "Blocked", "Done"]
       transitions:
         Planned: ["InProgress", "Blocked", "Done", "WontDo"]
         InProgress: ["Planned", "Blocked", "Done", "WontDo"]
-        Blocked: ["Planned", "InProgress", "WontDo"]
+        Blocked: ["Planned", "InProgress", "Done", "WontDo"]
         Done: ["Planned", "InProgress"]
-        WontDo: ["Planned"]
       # Status is held to the evidence (MILE-183): the PR that delivers a
       # milestone sets Realized-by and Done together. Implemented or Verified
       # evidence under a not-done status is a disagreement `urzua fix --apply`
