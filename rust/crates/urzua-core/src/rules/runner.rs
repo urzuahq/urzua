@@ -131,6 +131,50 @@ pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Fin
         .collect()
 }
 
+/// How a run narrows what it reports on.
+pub enum Narrowing<'a> {
+    /// Path arguments, repository-relative. Matched against the prefixes
+    /// themselves, never the discovered set: that holds tracked files only, and
+    /// a rule may report on a file git does not track (a claim file is read
+    /// straight off disk) (`BUG-67`).
+    Paths(&'a [PathBuf]),
+    /// `--base`: the records the change reached, and the paths it changed.
+    Diff {
+        examined: &'a dyn Fn(&Path) -> bool,
+        changed: &'a HashSet<PathBuf>,
+    },
+}
+
+/// Whether a scoped run reports `finding`, decided by the anchor its rule
+/// declares (`Anchor`) and nothing else.
+pub fn finding_in_scope(config: &Config, finding: &Finding, narrowing: &Narrowing<'_>) -> bool {
+    let anchor = rule_def(&finding.rule).map_or(Anchor::Record, |d| d.anchor);
+    match anchor {
+        Anchor::Config | Anchor::Outside => return true,
+        Anchor::RecordOrDeclaredFile(declared) => {
+            if declared(config).as_deref() == Some(finding.file.as_path()) {
+                return true;
+            }
+        }
+        Anchor::Record | Anchor::ChangedPath | Anchor::Directory => {}
+    }
+    match narrowing {
+        Narrowing::Paths(prefixes) => prefixes.iter().any(|p| finding.file.starts_with(p)),
+        Narrowing::Diff { examined, changed } => {
+            examined(&finding.file)
+                || match anchor {
+                    // Not a loaded record, so never in the examined set; judged
+                    // by path, so a changed one keeps its finding.
+                    Anchor::ChangedPath => changed.contains(&finding.file),
+                    // A whole-corpus finding on a type's directory stays when any
+                    // changed path is inside it.
+                    Anchor::Directory => changed.iter().any(|p| p.starts_with(&finding.file)),
+                    _ => false,
+                }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +248,99 @@ mod tests {
             Phase::AfterScoping => 2,
         });
         assert_eq!(phases, sorted);
+    }
+
+    fn on(rule: &str, file: &str) -> Finding {
+        Finding {
+            rule: rule.to_string(),
+            file: PathBuf::from(file),
+            ..finding(None)
+        }
+    }
+
+    fn unconfigured() -> Config {
+        config_with("")
+    }
+
+    #[test]
+    fn a_path_scope_keeps_what_is_not_a_record_whatever_the_prefix() {
+        let config = unconfigured();
+        let prefixes = [PathBuf::from("docs/adr")];
+        let narrowing = Narrowing::Paths(&prefixes);
+        let keeps = |f: Finding| finding_in_scope(&config, &f, &narrowing);
+
+        assert!(keeps(on(RULE_HEADER_REQUIRED_FIELDS, "docs/adr/ADR-1.md")));
+        assert!(!keeps(on(RULE_HEADER_REQUIRED_FIELDS, "docs/rfc/RFC-1.md")));
+        // Anchored on the config or outside the corpus: every scope keeps it.
+        assert!(keeps(on(
+            RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
+            ".urzua/config.yaml"
+        )));
+        assert!(keeps(on(RULE_CLAIM_STATUS_AGREEMENT, ".changeset/c.md")));
+        assert!(keeps(on(
+            RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+            "src/lib.rs"
+        )));
+        // A path-anchored rule is judged by prefix under a path scope.
+        assert!(!keeps(on(
+            RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+            "docs/rfc/x.md"
+        )));
+        assert!(keeps(on(
+            RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+            "docs/adr/x.md"
+        )));
+    }
+
+    #[test]
+    fn a_diff_run_keeps_a_path_anchored_finding_only_for_a_changed_path() {
+        let config = unconfigured();
+        let changed: HashSet<PathBuf> = [PathBuf::from("docs/adr/stray.md")].into();
+        let examined = |p: &Path| p == Path::new("docs/adr/ADR-1.md");
+        let narrowing = Narrowing::Diff {
+            examined: &examined,
+            changed: &changed,
+        };
+        let keeps = |f: Finding| finding_in_scope(&config, &f, &narrowing);
+
+        assert!(keeps(on(RULE_HEADER_REQUIRED_FIELDS, "docs/adr/ADR-1.md")));
+        assert!(!keeps(on(RULE_HEADER_REQUIRED_FIELDS, "docs/adr/ADR-2.md")));
+        assert!(keeps(on(
+            RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+            "docs/adr/stray.md"
+        )));
+        assert!(!keeps(on(
+            RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
+            "docs/adr/other.md"
+        )));
+        // A finding on a type's directory stays when a changed path is inside it.
+        assert!(keeps(on(RULE_FILENAME_IDENTITY_PATTERN, "docs/adr")));
+        assert!(!keeps(on(RULE_FILENAME_IDENTITY_PATTERN, "docs/rfc")));
+        assert!(keeps(on(RULE_INDEX_FRESHNESS, "docs/adr/README.md")));
+    }
+
+    #[test]
+    fn a_declared_file_is_kept_only_for_the_rule_that_declares_it() {
+        let config = crate::config::parse(
+            "schema_version: 2\nrecord_types: {}\nrules:\n  citation.issue-exists:\n    level: error\n    reference_sections: [References]\n    issue_refs: {snapshot: .urzua/known-refs.json, repository: o/r, forms: [number]}\n",
+        )
+        .unwrap();
+        let prefixes = [PathBuf::from("docs")];
+        let narrowing = Narrowing::Paths(&prefixes);
+        assert!(finding_in_scope(
+            &config,
+            &on(RULE_CITATION_ISSUE_EXISTS, ".urzua/known-refs.json"),
+            &narrowing
+        ));
+        assert!(!finding_in_scope(
+            &config,
+            &on(RULE_CITATION_ISSUE_EXISTS, "other/a.md"),
+            &narrowing
+        ));
+        assert!(!finding_in_scope(
+            &config,
+            &on(RULE_CITATION_RESOLUTION, ".urzua/known-refs.json"),
+            &narrowing
+        ));
     }
 }

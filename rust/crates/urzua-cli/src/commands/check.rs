@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::report::{
-    CheckReport, CouldNotRun, Finding, Notice, NoticeSeverity, ReportStatus, ScopeInfo,
+    CheckReport, CouldNotRun, Notice, NoticeSeverity, ReportStatus, ScopeInfo,
 };
 use urzua_core::rules;
 
@@ -610,58 +610,22 @@ pub fn run(
         findings.extend(rule_findings);
     }
 
-    // Scoped against the requested prefixes themselves, never against the
-    // discovered set: that set holds the *tracked* files under the scope, and a
-    // rule may report on a file git does not track -- a claim file is read
-    // straight off disk -- whose finding then belonged to no scope at all and
-    // was dropped, so `check .` passed a corpus `check` blocked (BUG-67).
-    // A finding about the config survives every scope, being outside all of
-    // them, and so does one from a rule declared in
-    // `RULES_REPORTING_OUTSIDE_THE_CORPUS`: `claim.status-agreement`'s claim
-    // file lives under `claim_paths`, which no record-type `dir` scope covers,
-    // and a narrower-than-unscoped `check <path>` silently dropping a real
-    // finding is `BUG-86`'s own recurrence, not a new defect (`BUG-121`).
-    // `citation.issue-exists` also reports an unusable snapshot on the
-    // snapshot file itself, which is no record and belongs to every scope: a
-    // narrowed run that could check nothing must still say so.
-    let outside_corpus: std::collections::HashSet<&str> =
-        rules::rule_ids_where(|d| d.reports_outside_corpus).collect();
-    let snapshot_path = issue_refs_declaration(&config).map(|r| PathBuf::from(&r.snapshot));
-    let is_snapshot_finding = |f: &Finding| {
-        f.rule == rules::RULE_CITATION_ISSUE_EXISTS
-            && snapshot_path.as_deref() == Some(f.file.as_path())
-    };
+    // A scoped run keeps a finding by the anchor its rule declares
+    // (`rules::Anchor`): a finding about the config, or on a file no record-type
+    // `dir` covers, belongs to every scope (`BUG-67`, `BUG-86`, `BUG-121`).
     if !requested_scopes.is_empty() {
-        findings.retain(|f| {
-            f.file == config_path.as_path()
-                || is_snapshot_finding(f)
-                || outside_corpus.contains(f.rule.as_str())
-                || requested_scopes.iter().any(|s| f.file.starts_with(s))
-        });
+        let narrowing = rules::Narrowing::Paths(&requested_scopes);
+        findings.retain(|f| rules::finding_in_scope(&config, f, &narrowing));
     }
 
-    // A diff run reports only on what changed. The same exemptions as a path
-    // scope apply: a finding about the config, or from a rule that reports
-    // outside the corpus, is about the run rather than a record, and dropping
-    // it would be `BUG-86`'s failure again.
-    if diff_scope.is_some() {
-        findings.retain(|f| {
-            f.file == config_path.as_path()
-                || is_snapshot_finding(f)
-                || outside_corpus.contains(f.rule.as_str())
-                // A file below a declared dir that no type owns is not a loaded
-                // record, so it is never in the examined set; the rule judges
-                // it by path, so a changed one keeps its finding.
-                || (f.rule == rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR
-                    && changed.as_ref().is_some_and(|c| c.changed.contains(&f.file)))
-                // A whole-corpus finding sits on the type's directory, which is
-                // no record; it stays when any changed path is inside it.
-                || (f.rule == rules::RULE_FILENAME_IDENTITY_PATTERN
-                    && changed
-                        .as_ref()
-                        .is_some_and(|c| c.changed.iter().any(|p| p.starts_with(&f.file))))
-                || in_scope.contains(f.file.as_path())
-        });
+    // A diff run reports only on what changed, under the same anchors.
+    if let (Some(_), Some(changes)) = (&diff_scope, &changed) {
+        let examined = |p: &std::path::Path| in_scope.contains(p);
+        let narrowing = rules::Narrowing::Diff {
+            examined: &examined,
+            changed: &changes.changed,
+        };
+        findings.retain(|f| rules::finding_in_scope(&config, f, &narrowing));
     }
 
     // Every other finding names a repository-relative file; the config rules
