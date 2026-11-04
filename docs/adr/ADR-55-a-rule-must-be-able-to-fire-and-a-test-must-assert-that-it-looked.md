@@ -2,6 +2,7 @@
 Stable-Id: 01M2YMFMG02BH8JD5FAJQS4XQE
 Status: Accepted
 Date: 2026-09-20
+Accepted-on: 2026-09-20
 Author: beauwilliams
 Deciders: beauwilliams
 ---
@@ -110,3 +111,4 @@ is the same failure as not having it, arrived at more slowly.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-21 | Re-keyed the planted-test clause from `records_examined` to the rule's population. **Why:** this ADR's normative clause named a field that the same argument caused to be deleted -- the signal it told tests to assert on could not distinguish records from declared slots from configuration entries, so a test satisfying the clause could still be asserting against the wrong denominator. The requirement is unchanged; only the instrument it names is now one that carries its unit. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 64f7ce0ff. | **structural** |

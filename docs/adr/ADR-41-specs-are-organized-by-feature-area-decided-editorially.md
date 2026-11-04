@@ -3,6 +3,7 @@ Status: Accepted
 Stable-Id: 01M1Z6WVWN81TYEJ19XJYY3JCC
 Embodiment: Not started
 Date: 2026-09-07
+Accepted-on: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —

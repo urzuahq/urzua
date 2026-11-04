@@ -4,6 +4,7 @@ Status: Accepted
 Embodiment: Not started
 Realized-by: —
 Date: 2026-09-17
+Accepted-on: 2026-09-17
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-33
@@ -127,3 +128,4 @@ they do not close a vocabulary.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-17 | Initial decision, `Status: Accepted`. **Why:** `MILE-51` falsified the founding claim against the first foreign corpus, and the cause was one thing rather than seventeen -- the engine holds governance opinions an adopter cannot decline. Decides the principle and the declared document model; deliberately leaves the function vocabulary open, because `ADR-40` → `ADR-44` and `RFC-33`'s withdrawn grid are two prior instances of naming things specifically ahead of the evidence, and a third corpus is the cheap gate still outstanding. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit d53141f9c. | **structural** |

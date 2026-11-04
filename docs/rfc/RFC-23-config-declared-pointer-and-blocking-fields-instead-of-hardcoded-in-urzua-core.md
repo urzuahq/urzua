@@ -2,6 +2,7 @@
 Stable-Id: 01M21FK8QA0D6QJQWHKBND90WB
 Status: Accepted
 Date: 2026-09-08
+Accepted-on: 2026-09-09
 Author: beauwilliams
 Implements: BUG-8
 ---
@@ -169,3 +170,4 @@ RFC-24 per this project's "add a field once a pattern recurs" discipline.
 > | 2026-09-08 | Initial RFC. **Why:** found live discussing whether an adopting org could add its own relationship vocabulary the way it can already add record types -- it can't, today, closing exactly the gap BUG-8 names in the README's own claim. | **structural** |
 > | 2026-09-08 | Design settled through discussion: per-type only, no global list; renamed `blocking_fields` to `narrative_fields` (names the mechanism, not today's one use case); no backward-compatibility default -- an undeclared type gets zero fields of either kind checked, matching `header_layout`/`known_fields`'s own undeclared-means-skip precedent; `urzua graph` gains a `kind` field per edge. Config key names, per-type-vs-global, and backward compatibility were all previously open questions -- now decided; README correction scope and this RFC's own undeclared `Implements` field remain open. | **substantive** |
 > | 2026-09-09 | Amendment: resolved four gaps found on review -- added three new validation checks (`config.pointer-declaration-missing`, `config.pointer-field-not-known`, `config.pointer-narrative-overlap`) and clarified that `narrative_fields` are inherently staleness-checked, no mechanism change needed. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c922db8ee. | **structural** |
