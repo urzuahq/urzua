@@ -47,3 +47,4 @@ The per-record list is the stronger candidate: it is explicit, scoped to one rec
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** found while creating `ADR-72`; the same will recur for the other two ids. Left `Status: Open`: the declaration's shape needs a maintainer decision. | **substantive** |
+> | 2026-11-04 | Deciding ADR drafted: `ADR-75` (Proposed) proposes the per-record header declaration, with the inline marker and three other shapes weighed and five open questions. Nothing is built; `Status` stays `Open` and `Regression-test` stays `pending`. **Why:** the shape is written into records, including frozen ones, and no Accepted record decides it, so the maintainer decides first. | **substantive** |

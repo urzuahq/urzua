@@ -77,4 +77,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Drafting commands scaffold through urzua new and carry no schema knowledge of their own](ADR-70-drafting-commands-scaffold-through-urzua-new-and-carry-no-schema-knowledge-of-their-own.md)
 - [One gate runs at the editor, the commit, the push and CI, and only CI is relied on as the guarantee](ADR-71-one-gate-runs-at-the-editor-the-commit-the-push-and-ci-and-only-ci-is-relied-on-as-the-guarantee.md)
 - [Allowed status transitions are declared per type as a graph over the declared statuses](ADR-72-allowed-status-transitions-are-declared-per-type-as-a-graph-over-the-declared-statuses.md)
+- [A record declares the ids it cites as illustration, and the engine neither resolves nor reports them](ADR-75-a-record-declares-the-ids-it-cites-as-illustration-and-the-engine-neither-resolves-nor-reports-them.md)
 <!-- urzua:index:end -->
