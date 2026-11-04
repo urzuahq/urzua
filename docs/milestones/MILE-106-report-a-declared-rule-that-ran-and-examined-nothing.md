@@ -3,6 +3,7 @@ Stable-Id: 01M2YMFN53X5QB064ZV60ZSQJT
 Status: Done
 Phase: '0'
 Track: schema-governance
+Realized-by: code:rust/crates/urzua-core/src/report.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 106 — Report a declared rule that ran and examined nothing
 
@@ -125,3 +126,4 @@ round 6 wrote to fix two others.
 > | 2026-09-21 | Marked the pre-implementation design historical where it contradicts what shipped. **Why:** the section said nothing in the report contract moves and named `records_eligible` as the missing field; the release carries a third serialized field, `out_of_scope`, and fires on that rather than on `eligible > 0 && examined == 0`. A milestone whose own body describes a design the code does not have is the drift `AGENTS.md` requires grepping for. | **substantive** |
 > | 2026-09-21 | `Status: Planned` -> `Done`. Shipped as `config.scope-matches-nothing`, declared `warn` on this repository. **Why:** the discriminator this milestone asked for is `out_of_scope`, the candidate state restored alongside it -- a rule fires when the configuration cannot reach its candidates, and stays silent when the corpus simply has not written them. On a prefixless corpus `identity.collision` and `revision-log.change-class-required` both report `2/0`; only the first is reported, which is the distinction the milestone existed to draw. Silent on `Unreadable`, because `header.required-fields` already reports the parse error per record. | **substantive** |
 > | 2026-09-21 | Restated the Why as configuration feedback, and recorded that the discriminator was specified and dropped. **Why:** designing the rule stalled because every candidate predicate felt arbitrary, and the reason is that `Outcome` collapsed the plan's four states into two, so the milestone was trying to answer with two states a question the design said needed four. Reframing also corrects the scope: this is not only `ADR-55` self-detection, it is the diagnostic an engine owes an adopter who can misconfigure it -- the failure mode `BUG-61` found and the one a compiled-in linter cannot have. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

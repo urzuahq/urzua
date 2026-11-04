@@ -63,7 +63,7 @@ pub fn detect_repairs(
     let mut repairs = Vec::new();
     let sticky = crate::rules::sticky_states(config);
 
-    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+    let embodiment_outcome = |record: &Record, repairs: &mut Vec<Repair>| -> Outcome {
         let state_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentState);
         let locator_field =
@@ -119,9 +119,86 @@ pub fn detect_repairs(
             });
         }
         Outcome::Examined
+    };
+
+    let delivery_types = crate::rules::statuses_by_type(config);
+    let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        let embodiment = embodiment_outcome(record, &mut repairs);
+        // `Status` against delivery evidence (`MILE-183`): the one case with a
+        // single correct value is repaired; the reverse is `unevidenced_successes`.
+        let status = match delivery_types.get(&record.record_type) {
+            Some(decl) if decl.delivery.is_some() => {
+                match crate::rules::judge_delivery(record, config, decl, back_pointed) {
+                    Ok(judged) => {
+                        if let Some(crate::rules::DeliveryDisagreement::DeliveredButNotDone {
+                            set_status,
+                        }) = judged.disagreement
+                        {
+                            repairs.push(Repair {
+                                record: record.path.clone(),
+                                field: judged.status_field.clone(),
+                                line: record
+                                    .header
+                                    .fields
+                                    .iter()
+                                    .find(|f| f.key.as_str() == judged.status_field)
+                                    .map_or(0, |f| f.line),
+                                current_value: judged.status.clone(),
+                                computed_value: set_status,
+                                tier: 1,
+                                evidence: format!(
+                                    "{} computes to {}",
+                                    judged.evidence, judged.tier
+                                ),
+                            });
+                        }
+                        Outcome::Examined
+                    }
+                    Err(outcome) => outcome,
+                }
+            }
+            _ => Outcome::Absent,
+        };
+        if embodiment == Outcome::Examined || status == Outcome::Examined {
+            Outcome::Examined
+        } else if embodiment != Outcome::Absent {
+            embodiment
+        } else {
+            status
+        }
     });
 
     (population, repairs)
+}
+
+/// Records whose success `Status` has no delivery evidence (`MILE-183`). `fix`
+/// does not downgrade them -- the repair is adding evidence, which only a person
+/// or the delivering change can supply -- so they are reported, never written.
+pub fn unevidenced_successes(
+    records: &[Record],
+    config: &Config,
+    back_pointed: &BackPointerEvidence,
+) -> Vec<crate::report::Notice> {
+    let declared = crate::rules::statuses_by_type(config);
+    records
+        .iter()
+        .filter_map(|record| {
+            let decl = declared.get(&record.record_type)?;
+            let judged = crate::rules::judge_delivery(record, config, decl, back_pointed).ok()?;
+            matches!(
+                judged.disagreement,
+                Some(crate::rules::DeliveryDisagreement::SuccessWithoutEvidence)
+            )
+            .then(|| crate::report::Notice {
+                severity: crate::report::NoticeSeverity::Warning,
+                subject: record.path.display().to_string(),
+                message: format!(
+                    "{} is '{}' with no delivery evidence (computes to '{}'); not downgraded -- add the evidence that delivered it",
+                    judged.status_field, judged.status, judged.tier
+                ),
+            })
+        })
+        .collect()
 }
 
 /// Computes the new file content for applying one Tier-1 repair. Pure --
@@ -143,8 +220,14 @@ pub fn apply_repair(
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
 
+    // The field's own line first (`Status: Planned`), so a title or a prose line
+    // that mentions both words is not the one edited.
+    let own_line = format!("{}:", repair.field);
     let field_line = doc
-        .find_line(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
+        .find_line(|l| l.starts_with(&own_line) && l.contains(&repair.current_value))
+        .or_else(|| {
+            doc.find_line(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
+        })
         .ok_or_else(|| {
             format!(
                 "could not find a line containing both '{}' and '{}' to edit -- the record may have changed since detect ran",
@@ -182,8 +265,8 @@ pub fn apply_repair(
         .unwrap_or("> ")
         .to_string();
     let new_row = format!(
-        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value. | **structural** |",
-        repair.field, repair.evidence, repair.current_value
+        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value `{}`. | **structural** |",
+        repair.field, repair.evidence, repair.current_value, repair.computed_value
     );
     doc.insert_after(last_entry.line, new_row);
 
@@ -515,5 +598,37 @@ mod tests {
             &Default::default(),
         );
         assert!(repairs.is_empty(), "{repairs:?}");
+    }
+
+    #[test]
+    fn a_status_repair_edits_the_status_line_not_a_title_that_mentions_both_words() {
+        let content = "---\nStatus: Planned\n---\n# Planned work whose Status is open\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Filed. | **structural** |\n";
+        let repair = Repair {
+            record: PathBuf::from("docs/milestones/MILE-1-x.md"),
+            field: "Status".to_string(),
+            line: 2,
+            current_value: "Planned".to_string(),
+            computed_value: "Done".to_string(),
+            tier: 1,
+            evidence: "Realized-by computes to Implemented".to_string(),
+        };
+        let result = apply_repair(
+            content,
+            &repair,
+            "2026-11-04",
+            "beau",
+            &Default::default(),
+            true,
+        )
+        .unwrap();
+        assert!(result.contains("\nStatus: Done\n"), "{result}");
+        assert!(
+            result.contains("# Planned work whose Status is open"),
+            "{result}"
+        );
+        assert!(
+            result.contains("disagreed with the computed value `Done`"),
+            "{result}"
+        );
     }
 }

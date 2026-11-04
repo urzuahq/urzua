@@ -106,23 +106,33 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     // Drift is the expensive part (several `git` subprocesses per record) and
     // its only consumer is `embodiment.consistency`; with that rule off `fix`
     // has no embodiment verdict to repair, so say so instead of computing a
-    // verdict from an empty drift set (`MILE-159`, as `check` gates it).
-    if !config
-        .rules
-        .get(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
-        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
+    // verdict from an empty drift set (`MILE-159`, as `check` gates it). The
+    // `Status` repair (`MILE-183`) is the other thing `fix` writes, and needs
+    // no drift, so `status.delivery-agreement` being on is enough to proceed.
+    let enabled = |rule: &str| {
+        config
+            .rules
+            .get(rule)
+            .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
+    };
+    if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
+        && !enabled(urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
     {
         return emit(&CouldNotRun::from(
-            "urzua fix repairs the Embodiment field that embodiment.consistency judges, and that rule is off or undeclared in the configuration: nothing to repair",
+            "urzua fix repairs the Embodiment field that embodiment.consistency judges and the Status that status.delivery-agreement judges, and both rules are off or undeclared in the configuration: nothing to repair",
         ));
     }
-    let drift = match &proposed {
-        Some(content) => crate::discovery::compute_drifted_records_for_content(
-            &repo_root, &scoped, &config, content,
-        ),
-        None => crate::discovery::compute_drifted_records(&repo_root, &scoped, &config),
+    let drift = if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY) {
+        Default::default()
+    } else {
+        match &proposed {
+            Some(content) => crate::discovery::compute_drifted_records_for_content(
+                &repo_root, &scoped, &config, content,
+            ),
+            None => crate::discovery::compute_drifted_records(&repo_root, &scoped, &config),
+        }
     };
-    let drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
+    let mut drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
     let back_pointed =
         match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
             Ok(Some(sources)) => {
@@ -138,6 +148,11 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             Ok(None) => Default::default(),
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
+    drift_notices.extend(urzua_core::fix::unevidenced_successes(
+        &scoped,
+        &config,
+        &back_pointed,
+    ));
     let (population, repairs) = urzua_core::fix::detect_repairs(
         &scoped,
         &config,

@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -110,6 +110,18 @@ point for an editor hook that wants a verdict before the file is saved; an examp
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
 non-blocking.
 
+### The `Status` repair (`MILE-183`)
+
+A second Tier 1 repair exists, for a type that declares `statuses.delivery` (`SPEC-3`) with
+`status.delivery-agreement` or `embodiment.consistency` enabled. When a record's evidence (`Realized-by`
+locators and source back-pointers, drift ignored) computes to a declared delivered tier while its
+`Status` is a declared not-done status, `fix` proposes the declared `set_status` as a repair with
+`field: Status`, and `--apply` writes it through the same path and structural revision row as the
+`Embodiment` repair. The one correct value is computable only in this direction. A success `Status`
+with no evidence is not downgraded: `fix` reports it as a notice naming the record, since the repair is
+adding evidence. `fix` computes no drift for this repair, so it runs when only
+`status.delivery-agreement` is enabled.
+
 ## Apply mode (`--apply`)
 
 Every one of the following is a hard gate — none are optional, none are defaults-on:
@@ -185,3 +197,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.9`. `fix` takes `PATHS` that scope examination, drift and repair, and reports a path matching no record. **Why:** `MILE-159` -- an editor hook needs a quick single-file refresh, and the whole-corpus run is about 0.8s on this corpus against about 0.15s for one record. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. `fix --stdin-path <path>` judges proposed content for one record without writing, for a path that need not exist yet, with drift computed for that record alone; each repair carries the 1-based `line` of the stated field; the detect-mode example now shows the real snake_case shape. **Why:** `MILE-159` -- an editor hook judges a file before it is saved and must find its own repair without parsing the whole list. | **substantive** |
 > | 2026-11-04 | Bumped to `0.11`. Apply mode writes without a revision-log row for a type declaring `revision_log: {required: false}`; a required log (the default) still refuses a record with no section, now naming the identity looked for. **Why:** `MILE-159` -- an adopter's records have no revision log section, so `--apply` could never run on them. | **substantive** |
+> | 2026-11-04 | Bumped to `0.12`. `fix` proposes, and `--apply` writes, the declared success `Status` for a record whose evidence computes to a declared delivered tier while its `Status` is declared not done (`statuses.delivery`); a success `Status` with no evidence is reported as a notice and never downgraded; the revision row now names the computed value; `fix` runs when only `status.delivery-agreement` is enabled. **Why:** `MILE-183`. | **structural** |

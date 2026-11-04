@@ -5,6 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-43
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/declaration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 110 — Implement config.known-fields-declaration-missing and dogfood it on this repo's config
 
@@ -36,3 +37,4 @@ one-line addition to `rules:`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and implemented in one round. **Why:** `RFC-43`/`ADR-62` decided the design the same day the underlying question surfaced from a refuted code-review finding; scheduled and built together. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

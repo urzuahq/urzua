@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZT9ANCTR6QP7ZQGAYKQJ
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
+Realized-by: code:.urzua/config.yaml, code:Makefile, test:.github/workflows/checks.yml
 ---
 # 116 — Bring this repository's own check output to zero unexplained warnings
 
@@ -38,3 +39,4 @@ would otherwise be buried in. Counts were taken by running `urzua check` on this
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `check docs/` exits 0 with 69 standing warnings across six rules; filed so a new finding on a new record is visible instead of lost among them. | **substantive** |
 > | 2026-11-04 | Turned `embodiment.locator-promotion-candidate` off in `.urzua/config.yaml` (advisory only; several ADRs citing one rule module is expected after the MILE-131 split), and applied three record fixes (`MILE-56`, `RFC-39`/`ADR-59`, `BUG-38`). **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #161, #159, #139: `urzua check` over this repository reports zero unwaived findings: each warning is fixed or waived by a waiver record with a reason and an expiry. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
