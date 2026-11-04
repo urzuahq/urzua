@@ -25,4 +25,4 @@ The field name is declared in configuration; a provisional claim whose peer carr
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
-> | 2026-11-04 | Built: a pair's `provisional.acknowledged_by` names the peer's acknowledgement field, read only for a provisional claim (`SPEC-3` 0.40, `SPEC-2` 0.53). Exercised here: the `amendment` pair declares `Amended-by-pending`, RFC-2 acknowledges RFC-25 in it, and the standing waiver for that provisional warning is deleted. **Why:** the milestone's Done means. | **substantive** |
+> | 2026-11-04 | Built: a pair's `provisional.acknowledged_by` names the peer's acknowledgement field, read only for a provisional claim (`SPEC-3` 0.41, `SPEC-2` 0.53). Exercised here: the `amendment` pair declares `Amended-by-pending`, RFC-2 acknowledges RFC-25 in it, and the standing waiver for that provisional warning is deleted. **Why:** the milestone's Done means. | **substantive** |
