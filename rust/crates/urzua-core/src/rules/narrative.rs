@@ -23,6 +23,7 @@ pub fn narrative_field_stale(
 
     let declared_by_type = declared_fields_by_type(config);
     let declared_by_type = &declared_by_type;
+    let statuses = statuses_by_type(config);
     let narrative_fields_by_type = fields_with_capability(config, |k| k.check_target_staleness);
 
     // Declared narrative slots. A slot the record did not write, or wrote as
@@ -58,7 +59,7 @@ pub fn narrative_field_stale(
                 else {
                     continue;
                 };
-                if terminal_statuses.iter().any(|t| t == status) {
+                if is_finished(&statuses, &target.record_type, status, terminal_statuses) {
                     let source_status_field = relation_field_name(
                         config,
                         &record.record_type,
@@ -95,6 +96,21 @@ pub fn narrative_field_stale(
 mod tests {
     use super::*;
     use crate::rules::tests::*;
+
+    /// BUG-178: a target type that declares its terminals is judged by them,
+    /// not by the rule's hand-copied list, which lacks `Not a bug`.
+    #[test]
+    fn narrative_field_stale_reads_the_declared_terminals_observed_failing() {
+        let yaml = "schema_version: 2\nrecord_types:\n  bug:\n    dir: docs/bugs\n    required_fields: [Status]\n    known_fields: [Blocked-on]\n    pointer_fields: []\n    narrative_fields: [Blocked-on]\n    statuses:\n      values: [Open, Fixed, Not a bug]\n      success: [Fixed]\n      failure: [Not a bug]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let blocked = record("docs/bugs/BUG-1-x.md", "bug", "> Blocked-on: BUG-2\n");
+        let target = record("docs/bugs/BUG-2-y.md", "bug", "> Status: Not a bug\n");
+        let records = [blocked, target];
+        let index = build_normalized_index(&records);
+        let list = vec!["Fixed".to_string()];
+        let (_, findings) = narrative_field_stale(&records, &config, &list, &index);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
 
     #[test]
     fn narrative_field_stale_judges_a_type_the_engine_has_never_heard_of() {

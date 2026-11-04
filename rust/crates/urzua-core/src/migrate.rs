@@ -99,6 +99,7 @@ mod tests {
                     identity: None,
                     fields: None,
                     sections: None,
+                    statuses: None,
                     required_fields: Vec::new(),
                     header_shape,
                     prefix: None,

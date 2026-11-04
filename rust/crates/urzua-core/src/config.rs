@@ -305,6 +305,16 @@ pub struct RecordTypeConfig {
         skip_serializing_if = "Option::is_none"
     )]
     pub sections: Option<yaml_serde::Value>,
+    /// The raw `statuses` declaration (MILE-132): the type's status
+    /// vocabulary, which values are terminal, the fields a status requires or
+    /// forbids, and the type's own "pending" values. Kept as the YAML value
+    /// like `identity`; `status_model::validate` checks it at load.
+    #[serde(
+        default,
+        deserialize_with = "keep_raw",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub statuses: Option<yaml_serde::Value>,
     #[serde(default)]
     pub required_fields: Vec<String>,
     /// RFC-0010: the header shape is declared per profile, never sniffed.
@@ -853,6 +863,7 @@ pub fn parse_with_document_models(
         });
     }
     let models = crate::document_model::validate_declarations(&config.record_types)?;
+    crate::status_model::validate(&config.record_types)?;
     validate_relation_pairs(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
@@ -1301,6 +1312,7 @@ mod tests {
             identity: None,
             fields: None,
             sections: None,
+            statuses: None,
             required_fields: vec!["Status".to_string()],
             header_shape: HeaderShape::default(),
             prefix: None,

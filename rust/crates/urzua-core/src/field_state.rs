@@ -28,6 +28,17 @@ const PLACEHOLDER_TOKENS: &[&str] = &[
 /// [`FieldState::Blank`], same as an empty string -- absence and emptiness
 /// are the same defect from a reader's point of view.
 pub fn classify(value: Option<&str>) -> FieldState {
+    classify_with(value, None)
+}
+
+/// [`classify`], judging "pending" by the type's declared vocabulary when it
+/// declares one (BUG-65): whole values only, replacing the compiled-in
+/// `contains("pending")` match. A type declaring none keeps that match, so an
+/// undeclared type behaves exactly as before.
+pub fn classify_with(
+    value: Option<&str>,
+    declared: Option<&crate::status_model::StatusDecl>,
+) -> FieldState {
     let Some(value) = value else {
         return FieldState::Blank;
     };
@@ -42,7 +53,11 @@ pub fn classify(value: Option<&str>) -> FieldState {
         return FieldState::Placeholder;
     }
 
-    if lower.contains("pending") || lower == "todo" {
+    let pending = match declared.and_then(|d| d.is_pending_value(trimmed)) {
+        Some(declared_verdict) => declared_verdict,
+        None => lower.contains("pending") || lower == "todo",
+    };
+    if pending {
         return FieldState::Pending;
     }
 
