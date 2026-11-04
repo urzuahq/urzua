@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6J0TMERA6FQ26EE3Q8HWACH
-Status: Proposed
+Status: Accepted
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -61,3 +61,4 @@ later is additive, while removing `relation_pairs` would break any config that a
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed. **Why:** `RFC-47` is being built by `MILE-122`, and building part of an RFC needs its own decision record; the maintainer approves before it is Accepted. | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04 | **substantive** |
