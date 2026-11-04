@@ -113,10 +113,10 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
-    /// Statuses that count as accepted for a record whose type declares no
-    /// `statuses.success` (`MILE-133`). Only meaningful to
+    /// Statuses at which implementation is permitted for a record whose type
+    /// declares no `statuses.implementable` (`MILE-133`). Only meaningful to
     /// `embodiment.back-pointer-decision-accepted`; optional, because a type
-    /// that declares its success statuses needs no fallback.
+    /// that declares its implementable statuses needs no fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
 }
@@ -761,7 +761,7 @@ const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "accepted_statuses",
         owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED],
-        consequence_if_missing: "leaves a type with no declared success statuses unjudged",
+        consequence_if_missing: "leaves a type with no declared implementable statuses unjudged",
         optional: true,
     },
     RuleOption {

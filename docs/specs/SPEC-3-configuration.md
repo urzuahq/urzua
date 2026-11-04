@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -177,13 +177,17 @@ Two details carry weight:
         values:  [Open, Fixed, WontFix]   # every status the type allows; required
         success: [Fixed]                  # terminal, the work was done
         failure: [WontFix]                # terminal, it ended without being done
+        implementable: [Open]             # statuses at which code may implement the record
         pending: [pending, "not yet written"]
         require: [{when: [Fixed], fields: [Regression-test]}]
         forbid:  [{when: [Open], fields: [Fixed-in]}]
   ```
 
-  `values` must list at least one status; `success` and `failure` are optional, must be subsets of
-  `values` and must not overlap. `require` and `forbid` are lists of `{when: [status, ...], fields:
+  `values` must list at least one status; `success`, `failure` and `implementable` are optional and
+  must be subsets of `values`; `success` and `failure` must not overlap. `implementable` names the
+  statuses at which implementation of the record is permitted. It is independent of the terminals
+  (an in-progress milestone is implementable and not terminal; an accepted decision is both), and
+  the engine never infers it from `success`. `require` and `forbid` are lists of `{when: [status, ...], fields:
   [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
   `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
   required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
@@ -205,6 +209,9 @@ Two details carry weight:
     `terminal_statuses` / `closed_statuses` list, which stays the vocabulary for every target whose
     type declares none (`BUG-178`). `pointer.target-status`'s `not_in` is a separate policy and is
     unchanged.
+  - `embodiment.back-pointer-decision-accepted`: a source back-pointer is judged against the cited
+    type's `implementable` list. A type that omits it uses the rule's `accepted_statuses` option;
+    with neither, the status is reported as unjudgeable, never passed (`MILE-133`).
 
 ## Scope declaration
 
@@ -373,3 +380,4 @@ option-on-a-rule-that-does-not-take-it load error.
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.8`. Documented the per-type `statuses` declaration: the status vocabulary, terminal success and failure statuses, fields required or forbidden at a status, and the type's own pending vocabulary. **Why:** `MILE-132` Phase 0: which statuses a type has is repository configuration, not engine policy (`BUG-59`), and the pending vocabulary (`BUG-65`) and finished-status lists (`BUG-178`) were compiled in or hand-copied. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. Documented the `drift_grace_days` and `claim_max_age_days` options of `embodiment.consistency` and the `@sha256:` locator pin. **Why:** `MILE-129` -- all three opt-in and off by default, so drift can be pinned to content, held back for a fresh change, and an old claim flagged. | **substantive** |
+> | 2026-11-04 | Bumped to `0.10`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
