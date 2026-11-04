@@ -57,6 +57,7 @@ pub fn detect_repairs(
     back_pointed: &BackPointerEvidence,
 ) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
+    let sticky = crate::rules::sticky_states(config);
 
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         let state_field =
@@ -66,6 +67,10 @@ pub fn detect_repairs(
         let Some(stated) = record.header.get(state_field) else {
             return Outcome::Absent;
         };
+        // A sticky state is a human's; there is nothing to recompute (`MILE-148`).
+        if sticky.contains(stated.trim()) {
+            return Outcome::Examined;
+        }
         let cited_by_code = back_pointed.code.contains(&record.path);
         let cited_by_test = back_pointed.test.contains(&record.path);
         // No `Realized-by` is repaired only when a back-pointer cites the
@@ -183,6 +188,33 @@ mod tests {
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn a_sticky_state_is_never_repaired_and_a_neighbour_still_is() {
+        let mut config = no_relation_field_overrides();
+        config.rules.insert(
+            crate::rules::RULE_EMBODIMENT_CONSISTENCY.to_string(),
+            yaml_serde::from_str("{level: warn, sticky_states: [Deprecated]}").unwrap(),
+        );
+        let sticky = record(
+            "docs/adr/0001-x.md",
+            "> Embodiment: Deprecated\n> Realized-by: spec:docs/x.md\n",
+        );
+        let neighbour = record(
+            "docs/adr/0002-y.md",
+            "> Embodiment: Verified\n> Realized-by: spec:docs/x.md\n",
+        );
+        let (population, repairs) = detect_repairs(
+            &[sticky, neighbour],
+            &config,
+            &HashSet::new(),
+            &HashSet::new(),
+            &Default::default(),
+        );
+        assert_eq!(population.examined(), 2);
+        assert_eq!(repairs.len(), 1);
+        assert!(repairs[0].record.ends_with("0002-y.md"));
     }
 
     #[test]

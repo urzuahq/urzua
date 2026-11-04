@@ -1,5 +1,5 @@
 ---
-Version: '0.21'
+Version: '0.22'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -494,6 +494,27 @@ rules:
 The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
 option-on-a-rule-that-does-not-take-it load error.
 
+### Sticky Embodiment states (`MILE-148`)
+
+Some `Embodiment` values are a human's decision that no evidence can reproduce, such as
+`Deprecated` or `Inactive`. The repository declares them; the engine names none.
+
+```yaml
+rules:
+  embodiment.consistency:
+    level: warn
+    sticky_states: [Deprecated, Inactive]
+```
+
+- A record stating a listed value is examined (it counts in the rule's census) and produces no
+  finding: neither a disagreement with the computed tier nor a `claim_max_age_days` warning, since
+  a sticky state is not a verification claim. `urzua fix` does not rewrite it.
+- A listed value that evidence computes (`Verified`, `Implemented`, `Specified`, `Not started`,
+  `Drift detected`) is a load error: it would make that tier's drift unreportable. A blank entry
+  is refused like any other blank option entry.
+- Omitted, every stated value is held to the computed one, as before. The option belongs to
+  `embodiment.consistency` alone.
+
 ### Date fields and the acceptance date (`MILE-137`)
 
 One opt-in rule validates dates, `date.field-valid`. Which fields are dates is a rule option; the
@@ -570,3 +591,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.20`. Documented the `test_paths` option of `embodiment.back-pointer-resolution` and what source back-pointers compute: `Implements:` is code tier, `Verifies:` in a declared test file is test tier, and a record with no `Realized-by` field that a back-pointer cites is judged on that evidence. **Why:** `MILE-146` and `MILE-149` -- a record whose tests cite it should compute `Verified` without a hand-maintained `test:` list, and a field added only to make a checker look is restated evidence. | **substantive** |
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |

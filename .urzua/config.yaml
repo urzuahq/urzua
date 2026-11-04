@@ -209,6 +209,9 @@ rules:
   embodiment.consistency:
     level: warn
     drift_grace_days: 14
+    # States a human sets that no evidence can compute (MILE-148): a record
+    # stating one is not reported as drift, and `urzua fix` leaves it alone.
+    sticky_states: ["Deprecated", "Inactive"]
   embodiment.locator-exists: error
   # Off: an advisory suggestion, and several ADRs citing one rule module is
   # expected now that the rule engine is split into modules (MILE-131).
