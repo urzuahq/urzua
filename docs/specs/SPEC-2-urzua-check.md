@@ -2,7 +2,7 @@
 Version: '0.13'
 Date: 2026-08-20
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -423,4 +423,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Criterion 5 now reads "one adopter's codebase" and "that adopter's hand-written linter" in place of "one source codebase"; criterion 6 is marked as part of the Phase 1 exit, so "all five hold" is now the full Phase 0 set (`SPEC-1`, Exit bar); `Version` `0.11` -> `0.12`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-03 | Bumped to `0.13`. `git-diff` marked produced: `urzua check --base <ref>` reports only on records changed since the merge base of the ref and `HEAD` (working tree included), `scope` gains an always-present `base` (`null` unless `git-diff`), and §Discovery states the mode's contract, including that it is refused alongside an untracked named file. **Why:** `MILE-123` -- a pull-request gate over a large corpus should not sweep every record, and the table had reserved the value while marking it unbuilt so no consumer would branch on it before a run could produce it. | **substantive** |
 > | 2026-11-04 | `git-diff` scope examines the changed records **plus their dependents**, not the changed files alone: unchanged records that name a changed or deleted record's id, share a changed id, cite changed or deleted `Realized-by` evidence, or share a normalised `Realized-by` locator with a changed or deleted record. A configuration change puts every record in scope; an empty diff is `ok` with an info notice rather than `not-run`; `scope` gains `changed_paths`, `dependents` and `whole_corpus_reason` on `git-diff` runs; a ref with no merge base names that in its error. `Version` `0.13` stays (the `--base` row above is the same unreleased change). **Why:** review of `MILE-123` reproduced a hole -- deleting a target left its referrer unexamined, so `check --base` reported nothing where a full check reported `pointer.resolution` -- and an empty diff that could not be told from a clean pass of the whole corpus. | **substantive** |
-
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1ZAERYDAF7ANT3GPFAH2HFW
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, code:.urzua/templates/milestone.md, code:.urzua/config.yaml, code:scripts/generate-dashboard.py, test:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/narrative.rs, code:.urzua/templates/milestone.md, code:.urzua/config.yaml, code:scripts/generate-dashboard.py, test:rust/crates/urzua-core/src/rules/narrative.rs
 Date: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -98,3 +98,4 @@ lives physically in the file.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | `Realized-by` locator updated from `.urzua/config.toml` to `.urzua/config.yaml`. **Why:** `ADR-52` renamed the file on 2026-09-17 and this record kept naming the old path, so its embodiment claim pointed at nothing for two days. Found by `embodiment.locator-exists`, the rule written because nothing had noticed (`BUG-49`). | **substantive** |
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-core/src/fix.rs
 Date: 2026-09-05
 Author: beauwilliams
@@ -54,3 +54,10 @@ when they land.
 - ADR-18 — the one Tier-1 computation (Embodiment) this detect mode currently knows about.
 - RFC-2 §2 — the identity-resolution tiering apply mode will need.
 - ADR-14 — the revision-log shape apply mode's writes must append to.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-core/src/fix.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

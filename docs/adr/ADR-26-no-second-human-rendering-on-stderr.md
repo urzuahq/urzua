@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Date: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -80,3 +80,9 @@ Two things this does **not** touch, both already decided:
 - RFC-3 — the original proposal; this ADR resolves its "human still sees everything on the same
   terminal" framing in favor of no second rendering at all, since this tool has no human-primary
   invocation path left to serve.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

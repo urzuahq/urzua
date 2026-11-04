@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs
 Date: 2026-09-05
 Author: beauwilliams
@@ -61,3 +61,10 @@ predates this decision and is not migrated by it — that stays a separate, expl
 - ADR-16 — the declared-per-profile `header_shape` mechanism this reuses.
 - ADR-5, ADR-6, ADR-13 — the purity and cross-compilation constraints the dependency choice
   was checked against.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1ZHBEPZ8S9XNM9WYRCA0JP3
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/config.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/type_scope.rs, test:rust/crates/urzua-core/src/rules/type_scope.rs
 Date: 2026-09-08
 Author: beauwilliams
 Deciders: beauwilliams
@@ -75,3 +75,9 @@ either leaves every other rule and the existing schema untouched.
   a new axis (spec coverage) rather than layout or field set.
 - ADR-40/ADR-42 — the `pointer.resolution` extensions this ADR's own named follow-up gap would
   eventually parallel, if `spec` pointers are ever worth resolving mechanically.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
