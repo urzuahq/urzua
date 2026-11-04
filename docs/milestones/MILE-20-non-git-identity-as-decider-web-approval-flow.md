@@ -16,7 +16,13 @@ Let a non-technical Decider (a manager, a compliance officer) approve via someth
 
 Today every Decider is implicitly assumed to be someone who can author a commit; that's not true for every real organization.
 
+## Done means
+
+A Decider with no git identity can record approval through a flow urzua verifies (a signed or otherwise attributable artifact that `check` reads), the approval is attributed in the record without hand-editing, and a fixture shows an unattributed approval refused; the identity model is decided in an ADR first.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

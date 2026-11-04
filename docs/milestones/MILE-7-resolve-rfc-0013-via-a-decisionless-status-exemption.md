@@ -31,6 +31,10 @@ same primitive is wanted in the opposite direction, and naming only one half wou
 One capability: **a rule whose applicability is conditioned on a record's declared state.** Whether
 it reads as an exemption or a requirement is which way the condition points.
 
+## Done means
+
+A type declares statuses under `sections.exempt_statuses` whose records `section.required` and `section.shape` treat as out of scope, a planted record in an exempt status is not reported and one in another status is, and an exemption that matches no record is reported rather than silently doing nothing; the require-by-state half (a spec whose `Status` says the work shipped must carry `Embodiment` and `Realized-by`) is declared in config and a fixture shows an unconditional-field gap now reported; the capability is exercised in urzua's own `.urzua/config.yaml` and records.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -43,3 +47,4 @@ it reads as an exemption or a requirement is which way the condition points.
 > | 2026-11-04 | Built the exemption half: `exempt_statuses` under a type's declared `sections` lists statuses whose records `section.required` and `section.shape` count as out of scope (`SPEC-3`). `Status` stays `Planned`; the require-by-state half (`Embodiment`/`Realized-by` of a shipped spec) is not built and stays this milestone's open work. **Why:** the narrowest reading of where the set lives, since status vocabulary is another change's territory (`MILE-132`): it is read from the declaration, matched exactly against the type's declared status field, and a record whose header cannot be read is counted unreadable rather than assumed exempt. Declaring it without `required` fails the config load. | **substantive** |
 > | 2026-11-04 | `Blocked-on` now reads `MILE-98`. **Why:** `narrative-field.stale` flagged a blocker that reached `Done`, and the delivery backfill of `MILE-183` set it; the remaining blocker is still open. `Status` unchanged. | **substantive** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** the exemption half is built (`sections.exempt_statuses`, `rules/section.rs`, `section_rules_integration.rs`, merged in #172); the require-by-state half (`Embodiment` and `Realized-by` required of a shipped spec) is not built. `Status` stays Planned until it is. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

@@ -16,7 +16,13 @@ Two-way sync so a decision can originate from or update an external ticket, and 
 
 Named in roadmap research; neither has any RFC coverage today.
 
+## Done means
+
+A decision can be created from or updated by an external ticket through a two-way sync, a conflicting edit is reported, and a compliance export produces a record an auditor can read with every decision, its status history and its evidence; each integration is behind a declared option and has a fixture.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
