@@ -76,6 +76,11 @@ pub struct RuleSetting {
     /// `level` is the boundary's severity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub published_paths: Option<Vec<String>>,
+    /// Path prefixes of the source files scanned for `Implements:` comment
+    /// back-pointers (`MILE-128`). Only meaningful to
+    /// `embodiment.back-pointer-resolution`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_paths: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +144,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             fields: Option<Vec<String>>,
             #[serde(default)]
             published_paths: Option<Vec<String>>,
+            #[serde(default)]
+            source_paths: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -168,6 +175,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 terminal_statuses: table.terminal_statuses,
                 fields: table.fields,
                 published_paths: table.published_paths,
+                source_paths: table.source_paths,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -179,6 +187,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 terminal_statuses: None,
                 fields: None,
                 published_paths: None,
+                source_paths: None,
             })
         }
     }
@@ -497,9 +506,10 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
-    #[error("rule '{rule}' option 'published_paths' entry '{entry}' {reason}")]
+    #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
+        option: &'static str,
         entry: String,
         reason: &'static str,
     },
@@ -612,6 +622,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "source_paths",
+        owner: crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        consequence_if_missing: "scans no source file and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "fields",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "checks every declared field",
@@ -630,6 +646,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
+        "source_paths" => setting.source_paths.as_ref(),
         _ => None,
     }
 }
@@ -783,25 +800,33 @@ pub fn parse_with_document_models(
             }
         }
     }
-    // Published paths: reject what cannot name a path inside the repository,
-    // then store the normalised form so the rule, its messages and its
-    // findings all use the same spelling.
+    // Published and source paths: reject what cannot name a path inside the
+    // repository, then store the normalised form so the rule, its messages
+    // and its findings all use the same spelling.
     for (name, setting) in config.rules.iter_mut() {
-        let Some(paths) = setting.published_paths.as_mut() else {
-            continue;
-        };
-        for entry in paths.iter_mut() {
-            let normalised = normalize_published_path(entry);
-            if setting.level != RuleLevel::Off {
-                if let Some(reason) = published_path_problem(&normalised) {
-                    return Err(ConfigError::InvalidPublishedPath {
-                        rule: name.clone(),
-                        entry: entry.clone(),
-                        reason,
-                    });
+        let level = setting.level;
+        let options: [(&'static str, Option<&mut Vec<String>>); 2] = [
+            ("published_paths", setting.published_paths.as_mut()),
+            ("source_paths", setting.source_paths.as_mut()),
+        ];
+        for (option, paths) in options {
+            let Some(paths) = paths else {
+                continue;
+            };
+            for entry in paths.iter_mut() {
+                let normalised = normalize_published_path(entry);
+                if level != RuleLevel::Off {
+                    if let Some(reason) = published_path_problem(&normalised) {
+                        return Err(ConfigError::InvalidPublishedPath {
+                            rule: name.clone(),
+                            option,
+                            entry: entry.clone(),
+                            reason,
+                        });
+                    }
                 }
+                *entry = normalised;
             }
-            *entry = normalised;
         }
     }
     // `fields` must name something the repository declared: a name matching no
@@ -1202,6 +1227,35 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'published_paths'"));
+    }
+
+    #[test]
+    fn source_paths_is_required_by_the_back_pointer_rule_and_by_no_other() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        assert!(parse(&format!(
+            "{base}  embodiment.back-pointer-resolution: error\n"
+        ))
+        .unwrap_err()
+        .to_string()
+        .contains("source_paths"));
+        let ok = parse(&format!(
+            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    source_paths: [\"./src/\"]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["embodiment.back-pointer-resolution"].source_paths,
+            Some(vec!["src".to_string()])
+        );
+        let bad = parse(&format!(
+            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    source_paths: [\"../x\"]\n"
+        ));
+        assert!(bad.unwrap_err().to_string().contains("source_paths"));
+        let elsewhere =
+            format!("{base}  field.quality:\n    level: error\n    source_paths: [\"src\"]\n");
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'source_paths'"));
     }
 
     #[test]

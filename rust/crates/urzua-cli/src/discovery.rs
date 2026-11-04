@@ -288,3 +288,87 @@ pub(crate) fn compute_drifted_records(
 
     drifted
 }
+
+/// Reads every tracked file under one of the declared path prefixes, for the
+/// rules that scan paths (`boundary.published-path-reference`,
+/// `embodiment.back-pointer-resolution`); `rule` names the caller in an I/O
+/// error. Kept in the CLI because `urzua-core` is pure (ADR-5).
+///
+/// Nothing is skipped silently. A file that is not valid UTF-8, a symlink or
+/// anything else that is not a regular file is handed over with no content, so
+/// the rule counts it as unreadable instead of clean. A tracked file that is
+/// gone from disk (a staged deletion, or one deleted and not yet staged) is
+/// not published and is left out. Any other I/O failure aborts the run: a file
+/// the rule could not read is a file it did not check.
+pub(crate) fn read_files_under(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    prefixes: &[String],
+    rule: &str,
+) -> Result<Vec<rules::PublishedFile>, String> {
+    let mut out = Vec::new();
+    for path in &discovered.paths {
+        if discovered.staged_deletions.contains(path)
+            || !prefixes
+                .iter()
+                .any(|entry| rules::path_is_published(path, entry))
+        {
+            continue;
+        }
+        let full = repo_root.join(path);
+        let meta = match std::fs::symlink_metadata(&full) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("{rule}: could not stat {}: {e}", full.display())),
+        };
+        let content = if meta.is_file() {
+            match urzua_io::read_to_string(&full) {
+                Ok(text) => Some(text),
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => None,
+                Err(e) => return Err(format!("{rule}: could not read {}: {e}", full.display())),
+            }
+        } else {
+            None
+        };
+        out.push(rules::PublishedFile {
+            path: path.clone(),
+            content,
+        });
+    }
+    Ok(out)
+}
+
+/// The source files `embodiment.back-pointer-resolution` scans, with the
+/// declared `source_paths` (`MILE-128`).
+pub(crate) struct BackPointerSources {
+    pub(crate) files: Vec<rules::PublishedFile>,
+    pub(crate) source_paths: Vec<String>,
+}
+
+/// Reads the back-pointer sources, or `None` when the rule is absent or off:
+/// evidence is collected only while the rule is enabled, so a repository that
+/// never opted in pays for no scan and sees no change in `Embodiment`.
+pub(crate) fn read_back_pointer_sources(
+    repo_root: &Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    config: &Config,
+) -> Result<Option<BackPointerSources>, String> {
+    let Some(source_paths) = config
+        .rules
+        .get(rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
+        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+        .and_then(|s| s.source_paths.clone())
+    else {
+        return Ok(None);
+    };
+    let files = read_files_under(
+        repo_root,
+        discovered,
+        &source_paths,
+        rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    )?;
+    Ok(Some(BackPointerSources {
+        files,
+        source_paths,
+    }))
+}

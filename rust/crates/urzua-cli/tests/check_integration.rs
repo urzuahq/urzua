@@ -3068,6 +3068,10 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "boundary.published-path-reference",
             "population is published files, not records",
         ),
+        (
+            "embodiment.back-pointer-resolution",
+            "population is source files, not records",
+        ),
     ];
 
     for (id, _) in EXEMPT {
@@ -3093,6 +3097,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "pointer.target-status" => format!("{id}: {{level: error, not_in: [\"Done\"]}}"),
             "boundary.published-path-reference" => {
                 format!("{id}: {{level: error, published_paths: [\"docs/claims\"]}}")
+            }
+            "embodiment.back-pointer-resolution" => {
+                format!("{id}: {{level: error, source_paths: [\"docs/claims\"]}}")
             }
             _ => format!("{id}: error"),
         })

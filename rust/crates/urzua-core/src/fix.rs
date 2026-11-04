@@ -52,6 +52,7 @@ pub fn detect_repairs(
     records: &[Record],
     config: &Config,
     drifted: &HashSet<PathBuf>,
+    back_pointed: &HashSet<PathBuf>,
 ) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
 
@@ -73,6 +74,7 @@ pub fn detect_repairs(
         let computed = compute_embodiment(
             &parse_realized_by(realized_by_value),
             drifted.contains(&record.path),
+            back_pointed.contains(&record.path),
         );
         let stated = stated.trim();
         if stated != computed {
@@ -167,13 +169,34 @@ mod tests {
     }
 
     #[test]
+    fn a_back_pointed_record_repairs_to_implemented_not_specified_observed_failing() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "> Embodiment: Specified\n> Realized-by: spec:docs/x.md\n",
+        );
+        let cited: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
+        let (_, repairs) = detect_repairs(
+            &[r],
+            &no_relation_field_overrides(),
+            &HashSet::new(),
+            &cited,
+        );
+        assert_eq!(repairs.len(), 1);
+        assert_eq!(repairs[0].computed_value, "Implemented");
+    }
+
+    #[test]
     fn a_mismatched_embodiment_is_a_tier_1_repair_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
             "> Embodiment: Not started\n> Realized-by: code:src/lib.rs\n",
         );
-        let (population, repairs) =
-            detect_repairs(&[r], &no_relation_field_overrides(), &HashSet::new());
+        let (population, repairs) = detect_repairs(
+            &[r],
+            &no_relation_field_overrides(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].field, "Embodiment");
@@ -189,7 +212,12 @@ mod tests {
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
         let drifted: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
-        let (_, repairs) = detect_repairs(&[r], &no_relation_field_overrides(), &drifted);
+        let (_, repairs) = detect_repairs(
+            &[r],
+            &no_relation_field_overrides(),
+            &drifted,
+            &HashSet::new(),
+        );
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].computed_value, "Drift detected");
     }
@@ -200,8 +228,12 @@ mod tests {
             "docs/adr/0001-x.md",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (population, repairs) =
-            detect_repairs(&[r], &no_relation_field_overrides(), &HashSet::new());
+        let (population, repairs) = detect_repairs(
+            &[r],
+            &no_relation_field_overrides(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(repairs.is_empty());
     }
@@ -242,7 +274,7 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        let (population, repairs) = detect_repairs(&[r], &config, &HashSet::new());
+        let (population, repairs) = detect_repairs(&[r], &config, &HashSet::new(), &HashSet::new());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1, "{repairs:?}");
         assert_eq!(repairs[0].field, "Phase");
@@ -255,8 +287,12 @@ mod tests {
         // function and reached no verdict, which is what `eligible() > 0`
         // says and a bare examined-count could not.
         let r = record("docs/adr/0001-x.md", "> Embodiment: Not started\n");
-        let (population, repairs) =
-            detect_repairs(&[r], &no_relation_field_overrides(), &HashSet::new());
+        let (population, repairs) = detect_repairs(
+            &[r],
+            &no_relation_field_overrides(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         assert_eq!((population.eligible(), population.examined()), (1, 0));
         assert!(repairs.is_empty());
     }

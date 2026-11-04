@@ -190,63 +190,6 @@ fn read_claim_files(
     Ok(out)
 }
 
-/// Reads every tracked file under a declared published path, for
-/// `boundary.published-path-reference`. Kept in the CLI because `urzua-core` is
-/// pure (ADR-5).
-///
-/// Nothing is skipped silently. A file that is not valid UTF-8, a symlink or
-/// anything else that is not a regular file is handed over with no content, so
-/// the rule counts it as unreadable instead of clean. A tracked file that is
-/// gone from disk (a staged deletion, or one deleted and not yet staged) is
-/// not published and is left out. Any other I/O failure aborts the run: a file
-/// the rule could not read is a file it did not check.
-fn read_published_files(
-    repo_root: &std::path::Path,
-    discovered: &urzua_io::DiscoveredFiles,
-    published: &[String],
-) -> Result<Vec<rules::PublishedFile>, String> {
-    let mut out = Vec::new();
-    for path in &discovered.paths {
-        if discovered.staged_deletions.contains(path)
-            || !published
-                .iter()
-                .any(|entry| rules::path_is_published(path, entry))
-        {
-            continue;
-        }
-        let full = repo_root.join(path);
-        let meta = match std::fs::symlink_metadata(&full) {
-            Ok(m) => m,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => {
-                return Err(format!(
-                    "boundary.published-path-reference: could not stat {}: {e}",
-                    full.display()
-                ))
-            }
-        };
-        let content = if meta.is_file() {
-            match urzua_io::read_to_string(&full) {
-                Ok(text) => Some(text),
-                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => None,
-                Err(e) => {
-                    return Err(format!(
-                        "boundary.published-path-reference: could not read {}: {e}",
-                        full.display()
-                    ))
-                }
-            }
-        } else {
-            None
-        };
-        out.push(rules::PublishedFile {
-            path: path.clone(),
-            content,
-        });
-    }
-    Ok(out)
-}
-
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<String>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
@@ -446,10 +389,21 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
         .and_then(|s| s.published_paths.clone())
         .unwrap_or_default();
-    let published_files = match read_published_files(&repo_root, &discovered, &published_paths) {
+    let published_files = match crate::discovery::read_files_under(
+        &repo_root,
+        &discovered,
+        &published_paths,
+        rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+    ) {
         Ok(files) => files,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+
+    let back_pointer_sources =
+        match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
+            Ok(sources) => sources,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
 
     // `compute_drifted_records` spawns several `git` subprocesses per
     // `Realized-by`-carrying record; skip that work entirely when its only
@@ -478,6 +432,13 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     // that rule (`BUG-116`).
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
     notices.extend(rules::identity_collision_notices(&identity_collisions));
+
+    // Records a source comment cites (`MILE-128`): code-tier evidence for
+    // `embodiment.consistency`, read from files the CLI already loaded.
+    let back_pointed = back_pointer_sources
+        .as_ref()
+        .map(|s| rules::back_pointer_evidence(&s.files, &s.source_paths, &config, &record_index))
+        .unwrap_or_default();
 
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
@@ -530,8 +491,24 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             || rules::revision_log_change_class(&records, &full_text),
         ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
-            rules::embodiment_consistency(&records, &config, &drifted)
+            rules::embodiment_consistency(&records, &config, &drifted, &back_pointed)
         }),
+        crate::gate::gated(
+            &config,
+            rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+            || {
+                let (files, source_paths): (&[_], &[String]) = match &back_pointer_sources {
+                    Some(s) => (&s.files, &s.source_paths),
+                    None => (&[], &[]),
+                };
+                rules::embodiment_back_pointer_resolution(
+                    files,
+                    source_paths,
+                    &config,
+                    &record_index,
+                )
+            },
+        ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
             // Tracked *and* on disk: tracked alone passes a staged deletion,
             // since discovery unions `ls-files` with the cached diff, and on

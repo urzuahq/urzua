@@ -44,6 +44,7 @@ pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
+pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -83,6 +84,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+    RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -242,6 +244,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
         description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
     },
+    RuleMeta {
+        id: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        description: "A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids) in a file under a `source_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. Only whole-line comments are read; the marker is case-sensitive; ids are compared numerically. Opt-in and needs `source_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean.",
+    },
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -257,7 +263,12 @@ pub const RULE_METADATA: &[RuleMeta] = &[
 /// already gives a finding about the config file itself, or `BUG-86`'s
 /// "scoped invocation silently drops a real finding" recurs for any narrower
 /// scope than the one that repository's own Makefile was changed to use.
-pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[RULE_CLAIM_STATUS_AGREEMENT];
+pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[
+    RULE_CLAIM_STATUS_AGREEMENT,
+    // A dangling back-pointer is reported on the source file that holds it,
+    // which no record-type `dir` scope covers.
+    RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with
 /// none is a config load error.

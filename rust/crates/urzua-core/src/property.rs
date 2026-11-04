@@ -431,7 +431,12 @@ mod tests {
             ),
             (
                 "embodiment.consistency",
-                rules::embodiment_consistency(&records, &config, &Default::default()),
+                rules::embodiment_consistency(
+                    &records,
+                    &config,
+                    &Default::default(),
+                    &Default::default(),
+                ),
             ),
             (
                 "embodiment.locator-exists",
