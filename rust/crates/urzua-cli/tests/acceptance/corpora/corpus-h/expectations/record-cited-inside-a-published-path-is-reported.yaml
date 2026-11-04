@@ -1,0 +1,8 @@
+id: record-cited-inside-a-published-path-is-reported
+corpus: corpus-h
+invocation: [--config, .urzua/boundary.yaml, check]
+expect_exit: 1
+expect_findings:
+  - {rule: boundary.published-path-reference, file: pub/lib.rs, severity: error}
+expect_no_findings:
+  - {rule: boundary.published-path-reference, file: pub/clean.rs}

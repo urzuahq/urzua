@@ -1,0 +1,12 @@
+id: source-and-records-in-one-change-is-mixed
+corpus: corpus-h
+commits:
+  - write:
+      src/lib.rs: "fn a() { 2; }\n"
+      records/adr/ADR-0001-clean.md: "---\nStatus: Accepted\n---\n# ADR-0001 — Clean\n\n## Context\n\nThe clean positive control, edited again.\n"
+invocation: [--config, .urzua/diff.yaml, check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: diff.source-and-records-mixed, severity: warning}
+expect_no_findings:
+  - {rule: diff.source-requires-record}

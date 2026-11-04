@@ -1,0 +1,9 @@
+id: source-change-without-a-record-change-is-blocked
+corpus: corpus-h
+commits:
+  - write:
+      src/lib.rs: "fn a() { 1; }\n"
+invocation: [--config, .urzua/diff.yaml, check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: diff.source-requires-record, file: src/lib.rs, severity: error}

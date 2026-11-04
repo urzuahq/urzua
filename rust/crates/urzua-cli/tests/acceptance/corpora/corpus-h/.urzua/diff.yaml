@@ -1,0 +1,18 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records/adr
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+
+rules:
+  header.required-fields: error
+  diff.source-requires-record:
+    level: error
+    source_paths: [src]
+  diff.source-and-records-mixed:
+    level: warn
+    application_paths: [src]
+    exclude_paths: [src/tests]

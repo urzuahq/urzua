@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K40D4E9SWM11EVM5723VGM
-Status: InProgress
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-4
 Blocked-on: —
+Realized-by: test:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/acceptance_property.rs, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-g/manifest.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-h/manifest.yaml
 ---
 # 170 — Complete the corpus acceptance harness that SPEC-4 specifies
 
@@ -30,3 +31,4 @@ Every case `SPEC-4` names for the foundation surface is executable under `expect
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
 > | 2026-11-04 | `Status` `Planned` -> `InProgress`; no `Realized-by`. **Why:** the harness machinery is built, but Done means every `SPEC-4` case for the foundation surface is executable and this change does not reach that: the "silent zeros" git-history cases, the drift-while-exiting-0 case and several table rows have no case, and four rules (the report names them) have none either. Delivered: mutation proof of every case, the uncovered-rules report, the "Nth record type" case, the generative property in `acceptance_property.rs`, `corpus-d` to `corpus-f`, a corpus-zero case per rule family, and the `SPEC-4` 0.5 revision. `Realized-by` waits for the PR that finishes the remaining cases. | **substantive** |
+> | 2026-11-04 | `Status` `InProgress` -> `Done`; `Realized-by` added (the runner, the property, and the manifests of the two corpora this change adds; corpora `d` to `f` are covered by the same runner). **Why:** the remaining Done-when items are met: the runner can make further commits, pass `--base` and run in a shallow clone, and `corpus-g` (git history: a shallow clone is a notice, a value-only edit and a renamed record are drift, drift blocks the exit, a neighbouring file is not drift, a mention does not define a back-pointer, a shared locator is a promotion candidate) and `corpus-h` (the two `diff.*` rules, the published-path boundary, `citation.issue-exists` against a fixture snapshot, `status.delivery-agreement`, and the permanent-ceiling case) are executable. The coverage report now shows 53 of 53 rules proven, none uncovered. | **substantive** |

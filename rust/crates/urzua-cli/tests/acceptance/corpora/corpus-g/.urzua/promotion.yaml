@@ -1,0 +1,11 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Embodiment, Realized-by]
+    header_shape: yaml-frontmatter
+rules:
+  header.required-fields: error
+  embodiment.locator-promotion-candidate: warn

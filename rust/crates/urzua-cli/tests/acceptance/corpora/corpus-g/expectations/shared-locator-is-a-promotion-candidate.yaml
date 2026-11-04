@@ -1,0 +1,8 @@
+id: shared-locator-is-a-promotion-candidate
+corpus: corpus-g
+invocation: [--config, .urzua/promotion.yaml, check]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.locator-promotion-candidate, message_contains: src/cache.rs}
+expect_no_findings:
+  - {rule: embodiment.locator-promotion-candidate, message_contains: src/queue.rs}

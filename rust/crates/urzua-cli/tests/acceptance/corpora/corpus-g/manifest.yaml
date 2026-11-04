@@ -1,0 +1,31 @@
+# Never reflow or normalize these fixtures: whitespace and wrapping are the material under test.
+# Git history is part of the material: each case lists the commits it makes on top of the fixture commit.
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: >-
+      the config the git-history cases run under; embodiment drift is a warning and fail_on is warning; not a record.
+  - path: .urzua/promotion.yaml
+    irregularity: >-
+      a config enabling only the locator-promotion-candidate rule; not a record.
+  - path: records/ADR-0001-queue.md
+    irregularity: >-
+      cites src/queue.rs, which has neighbours (src/queue.rs.bak, src/queue_ext.rs) a near-match query would confuse
+      with it, and mentions ADR-0099 in prose so a back-pointer to ADR-0099 would be defined by mention alone.
+  - path: records/ADR-0002-cache.md
+    irregularity: >-
+      cites src/cache.rs, the same locator ADR-0003 cites.
+  - path: records/ADR-0003-spool.md
+    irregularity: >-
+      cites src/cache.rs, the same locator ADR-0002 cites: a promotion candidate.
+  - path: src/queue.rs
+    irregularity: >-
+      the cited file; cases edit its value without changing its length or its occurrence counts.
+  - path: src/queue.rs.bak
+    irregularity: >-
+      a neighbour whose name begins with the cited path.
+  - path: src/queue_ext.rs
+    irregularity: >-
+      a neighbour sharing the cited file's stem.
+  - path: src/cache.rs
+    irregularity: >-
+      the cited file of ADR-0002 and ADR-0003.

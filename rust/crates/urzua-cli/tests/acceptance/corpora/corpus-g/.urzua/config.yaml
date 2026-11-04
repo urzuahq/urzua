@@ -1,0 +1,14 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Embodiment, Realized-by]
+    header_shape: yaml-frontmatter
+rules:
+  embodiment.consistency: warn
+  embodiment.locator-exists: error
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: [src]

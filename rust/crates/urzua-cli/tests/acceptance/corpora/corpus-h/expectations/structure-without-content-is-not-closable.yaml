@@ -1,0 +1,12 @@
+id: structure-without-content-is-not-closable
+corpus: corpus-h
+# The permanent ceiling (SPEC-4): a rule can require that a Context section
+# exists and has text, never that the text is about the decision. ADR-0003's
+# Context is off topic and the check is clean. This case does not say the gap
+# is handled; it records that no mechanical check can close it, and fails the
+# day a check claims to (the expectation would then need to change on purpose).
+invocation: [check]
+expect_exit: 0
+expect_rules_ran: [section.required]
+expect_no_findings:
+  - {file: records/adr/ADR-0003-off-topic.md}

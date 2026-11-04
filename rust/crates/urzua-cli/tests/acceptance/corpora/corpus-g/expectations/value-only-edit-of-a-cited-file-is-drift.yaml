@@ -1,0 +1,14 @@
+id: value-only-edit-of-a-cited-file-is-drift
+corpus: corpus-g
+# `push(1)` becomes `push(2)`: the file keeps the same length and the same
+# occurrence count of every token, so an occurrence-count query (`git log -S`)
+# sees nothing. Drift must be detected from the path's history.
+commits:
+  - write:
+      src/queue.rs: "fn queue() { push(2); }\n"
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.consistency, file: records/ADR-0001-queue.md}
+expect_no_findings:
+  - {rule: embodiment.consistency, file: records/ADR-0002-cache.md}
