@@ -253,6 +253,10 @@ pub struct NewRecordParams<'a> {
     /// declares an `identity` pattern, whose title form is `PREFIX-N`
     /// (`RFC-44`). `None` keeps the bare number.
     pub h1_prefix: Option<&'a str>,
+    /// The width the H1's number is zero-padded to: the width of the `number`
+    /// capture the declared pattern reads from the file name written beside it
+    /// (`BUG-188`), so the two ids agree. `0` is unpadded.
+    pub h1_width: usize,
     /// The status a new record starts at: the first value of the type's
     /// declared `statuses.values`. `None` when the type declares none, and the
     /// field stays blank for a human.
@@ -273,7 +277,11 @@ impl NewRecordParams<'_> {
     /// identity, the bare number otherwise.
     fn h1_number(&self) -> String {
         match self.h1_prefix {
-            Some(prefix) => format!("{prefix}-{}", self.display_number),
+            Some(prefix) => format!(
+                "{prefix}-{:0width$}",
+                self.display_number,
+                width = self.h1_width
+            ),
             None => self.display_number.to_string(),
         }
     }
@@ -300,7 +308,11 @@ impl NewRecordParams<'_> {
 /// serializer's plain-scalar analysis quotes a value exactly when leaving it
 /// bare would change what it parses back as -- verified by round-trip tests,
 /// not assumed.
-pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String]) -> String {
+pub fn render_synthetic_yaml(
+    params: &NewRecordParams,
+    required_fields: &[String],
+    template_fields: &[String],
+) -> String {
     use yaml_serde::Value;
 
     let mut mapping = yaml_serde::Mapping::new();
@@ -320,6 +332,15 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
         mapping.insert(Value::String(field.clone()), value);
     }
 
+    // Fields the template's header names beyond the required ones (`BUG-188`),
+    // already filtered to those the type declares, stay blank for a human.
+    for field in template_fields {
+        let key = Value::String(field.clone());
+        if !mapping.contains_key(&key) {
+            mapping.insert(key, Value::Null);
+        }
+    }
+
     let yaml_body = yaml_serde::to_string(&Value::Mapping(mapping)).unwrap_or_default();
     let mut out = String::from("---\n");
     out.push_str(yaml_body.trim_start_matches("---\n"));
@@ -329,6 +350,34 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
     out.push_str("---\n");
     out.push_str(&format!("# {} — {}\n", params.h1_number(), params.title));
     out
+}
+
+/// The field names a template's header lists, in order: the `> Name: value`
+/// lines of a blockquote header or the keys of a leading YAML frontmatter
+/// block, read before the first `## ` section. Only the names are used
+/// (`BUG-188`); the caller keeps those the type declares.
+pub fn template_header_fields(template: &str) -> Vec<String> {
+    let head = match template.find("\n## ") {
+        Some(idx) => &template[..idx],
+        None => template,
+    };
+    let mut names: Vec<String> = Vec::new();
+    for line in head.lines() {
+        let line = line.trim_start_matches('>').trim_start();
+        let Some((name, _)) = line.split_once(':') else {
+            continue;
+        };
+        let name = name.trim();
+        let plausible = !name.is_empty()
+            && !name.starts_with('#')
+            && name
+                .chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '/'));
+        if plausible && !names.iter().any(|n| n == name) {
+            names.push(name.to_string());
+        }
+    }
+    names
 }
 
 /// A template's body -- everything from its first `## ` section heading
@@ -517,6 +566,7 @@ mod tests {
     fn render_synthetic_yaml_lists_required_fields_as_blank() {
         let params = NewRecordParams {
             h1_prefix: None,
+            h1_width: 0,
             initial_status: None,
             status_field: "Status",
             display_number: 1,
@@ -526,7 +576,7 @@ mod tests {
             today: "2026-09-06",
         };
         let required = vec!["Status".to_string(), "Severity".to_string()];
-        let result = render_synthetic_yaml(&params, &required);
+        let result = render_synthetic_yaml(&params, &required, &[]);
         assert!(result.starts_with("---\n"));
         // A real YAML serializer renders an unset field as the `null` scalar,
         // not a bare trailing colon -- both are valid YAML for "unset," but
@@ -548,6 +598,7 @@ mod tests {
         // yaml` itself performs, not `yaml_serde`'s parser in isolation.
         let params = NewRecordParams {
             h1_prefix: None,
+            h1_width: 0,
             initial_status: None,
             status_field: "Status",
             display_number: 4,
@@ -556,7 +607,7 @@ mod tests {
             author: "Doe, J: Platform",
             today: "2026-09-06",
         };
-        let result = render_synthetic_yaml(&params, &["Author".to_string()]);
+        let result = render_synthetic_yaml(&params, &["Author".to_string()], &[]);
         let header =
             crate::header::parse_with_shape(&result, crate::header::HeaderShape::YamlFrontmatter);
         assert_eq!(header.get("Author"), Some("Doe, J: Platform"));
@@ -569,6 +620,7 @@ mod tests {
         // real parser `check`/`urzua new` themselves use.
         let params = NewRecordParams {
             h1_prefix: None,
+            h1_width: 0,
             initial_status: None,
             status_field: "Status",
             display_number: 1,
@@ -577,7 +629,7 @@ mod tests {
             author: "0.2",
             today: "2026-09-06",
         };
-        let result = render_synthetic_yaml(&params, &["Author".to_string()]);
+        let result = render_synthetic_yaml(&params, &["Author".to_string()], &[]);
         let header =
             crate::header::parse_with_shape(&result, crate::header::HeaderShape::YamlFrontmatter);
         assert_eq!(header.get("Author"), Some("0.2"));
@@ -644,10 +696,19 @@ mod tests {
     }
 
     #[test]
+    fn template_header_fields_reads_blockquote_and_frontmatter_names_in_order() {
+        let t = "# NNNN — Title\n\n> Rule: r\n> Expires: YYYY-MM-DD (optional)\n> Rule: again\n\n## What\n\nNote: prose\n";
+        assert_eq!(template_header_fields(t), ["Rule", "Expires"]);
+        let y = "---\nStatus: x\nSeverity: y\n---\n# T\n\n## S\n";
+        assert_eq!(template_header_fields(y), ["Status", "Severity"]);
+    }
+
+    #[test]
     fn the_status_field_starts_at_the_initial_status_and_stays_blank_without_one() {
         let mut params = NewRecordParams {
             display_number: 4,
             h1_prefix: Some("ADR"),
+            h1_width: 0,
             initial_status: Some("Proposed"),
             status_field: "State",
             title: "T",
@@ -655,12 +716,12 @@ mod tests {
             author: "a",
             today: "2026-11-04",
         };
-        let rendered = render_synthetic_yaml(&params, &["State".to_string()]);
+        let rendered = render_synthetic_yaml(&params, &["State".to_string()], &[]);
         assert!(rendered.contains("State: Proposed\n"), "{rendered}");
         assert!(rendered.contains("Stable-Id: 01ABC"), "{rendered}");
         assert!(rendered.contains("# ADR-4 — T\n"), "{rendered}");
         params.initial_status = None;
-        let rendered = render_synthetic_yaml(&params, &["State".to_string()]);
+        let rendered = render_synthetic_yaml(&params, &["State".to_string()], &[]);
         assert!(rendered.contains("State: null"), "{rendered}");
     }
 }
