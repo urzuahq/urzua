@@ -25,3 +25,4 @@ Make `urzua fix` accept a path argument or prospective content, make `--apply` w
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Scope extended: the path-scoped run must also check prospective content for an editor hook (a file judged before it is saved), not only repair on disk. **Why:** a re-run of urzua over a real adopter corpus showed the editor-hook use needs it; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |

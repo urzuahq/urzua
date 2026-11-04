@@ -1,0 +1,27 @@
+---
+Stable-Id: 01M6JW44A9FTFNEAK19MVS7EN0
+Status: Planned
+Phase: '0'
+Track: embodiment-model
+Implements: SPEC-1
+Blocked-on: —
+---
+# 161 — A record stating a tier value with no Realized-by field and no citing back-pointer is judged, so a claim with zero evidence does not pass silently
+
+## What
+
+Judge a record that states a tier value (Verified or Implemented) while carrying no Realized-by field and no back-pointer citing it, instead of skipping it.
+
+## Why
+
+`MILE-149` made embodiment consistency judge a record with no Realized-by field when back-pointers cite it, but a record with neither is still not examined, so a claim of Verified or Implemented with zero evidence passes silently. That breaks the no-silent-no-op principle: a rule that finds nothing must be distinguishable from one that ran on nothing. It is capability parity that a real adopter corpus needs from urzua's governance, and Phase 0 is urzua reproducing that functionality in its own repository.
+
+## Done means
+
+A record stating Verified or Implemented with no evidence of either kind is reported as a finding; a record that states no tier stays unjudged and is counted as such; a fixture covers all three cases and the capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |

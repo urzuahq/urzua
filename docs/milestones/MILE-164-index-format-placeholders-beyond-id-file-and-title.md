@@ -1,0 +1,27 @@
+---
+Stable-Id: 01M6JW45THD92VBR56J6NCNP9Z
+Status: Planned
+Phase: '0'
+Track: schema-governance
+Implements: SPEC-1
+Blocked-on: —
+---
+# 164 — Index format placeholders beyond id, file and title
+
+## What
+
+Let an index format line use placeholders for declared field columns, such as status and date, in addition to `{id}`, `{file}` and `{title}` (`MILE-152`).
+
+## Why
+
+Real adopter indexes list a record's status and date beside its title, so a format limited to three placeholders cannot describe them and the index cannot be checked. It is capability parity that a real adopter corpus needs from urzua's governance, and Phase 0 is urzua reproducing that functionality in its own repository.
+
+## Done means
+
+A placeholder naming a declared field is filled from that field and checked against the index; a placeholder naming no declared field is a configuration error rather than a silent no-op; a fixture covers a status column and a date column and the capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
