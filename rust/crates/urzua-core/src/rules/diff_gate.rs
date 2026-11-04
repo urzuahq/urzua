@@ -214,7 +214,10 @@ mod tests {
         let (exec, findings) = source_requires_record(Some(&only_tests), &src, &exclude, &config());
         assert!(findings.is_empty(), "{findings:?}");
         let pop = exec.population.unwrap();
-        assert_eq!((pop.eligible(), pop.examined(), pop.out_of_scope()), (3, 0, 0));
+        assert_eq!(
+            (pop.eligible(), pop.examined(), pop.out_of_scope()),
+            (3, 0, 0)
+        );
         // Code beside the tests still triggers, and names only the code file.
         let mixed = paths(&["src/a.test.ts", "src/a.ts"]);
         let (_, findings) = source_requires_record(Some(&mixed), &src, &exclude, &config());

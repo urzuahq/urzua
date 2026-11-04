@@ -251,7 +251,10 @@ fn a_diff_touching_only_test_files_beside_the_code_is_not_a_trigger() {
     assert_eq!(run["status"], "ran");
     assert_eq!(run["population"]["eligible"], 2, "{run}");
     assert_eq!(run["population"]["examined"], 0, "{run}");
-    assert!(findings(&report, "config.scope-matches-nothing").is_empty(), "{report}");
+    assert!(
+        findings(&report, "config.scope-matches-nothing").is_empty(),
+        "{report}"
+    );
 }
 
 #[test]
@@ -302,7 +305,10 @@ fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_sour
         1,
         "{report}"
     );
-    assert!(findings(&report, "config.scope-matches-nothing").is_empty(), "{report}");
+    assert!(
+        findings(&report, "config.scope-matches-nothing").is_empty(),
+        "{report}"
+    );
 
     edit(&dir, "rust/crates/x/src/lib.rs");
     let (_, report) = check(&dir, &["--base", "base"]);
