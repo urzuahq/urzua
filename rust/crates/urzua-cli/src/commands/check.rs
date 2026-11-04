@@ -524,6 +524,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
             || rules::config_known_fields_declaration_missing(&config, &config_path),
         ),
+        crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
+            rules::citation_resolution(&records, &config, &full_text, &record_index)
+        }),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());

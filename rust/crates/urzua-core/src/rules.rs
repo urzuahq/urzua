@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 mod catalog;
+mod citation;
 mod claim;
 mod declaration;
 mod embodiment;
@@ -31,6 +32,7 @@ mod shared;
 mod type_scope;
 
 pub use catalog::*;
+pub use citation::*;
 pub use claim::*;
 pub use declaration::*;
 pub use embodiment::*;
