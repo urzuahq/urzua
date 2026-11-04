@@ -27,3 +27,4 @@ This milestone builds the parts of `RFC-7` section 2 and section 3 (first bullet
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's pre-write hook has no counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Progress: `scripts/hooks/record-edit-hook.sh` (harness-neutral core), `scripts/hooks/claude-code-record-edit.py` (adapter) and `.claude/settings.json` wiring built and tested with recorded Write, Edit and MultiEdit payloads for block, permit, cannot-judge and named-override cases; about 0.19s per record through the core, 0.39s through the adapter. Status stays Planned: milestones declare no `Realized-by` yet, and override persistence and routing stay open under `MILE-12`. **Why:** `ADR-69` Accepted. | **substantive** |

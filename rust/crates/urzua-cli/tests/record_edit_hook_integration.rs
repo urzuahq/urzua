@@ -21,7 +21,8 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 const CONFIG: &str = "schema_version: 2\nrules: {embodiment.consistency: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
-const RECORD: &str = "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\nprose\n";
+const RECORD: &str =
+    "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\nprose\n";
 
 /// A clean git repo; `Realized-by: code:src/a.rs` computes `Implemented`.
 fn fixture(name: &str, record: &str) -> PathBuf {
@@ -58,7 +59,12 @@ fn run(cmd: &mut Command, root: &Path, stdin: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("bash/python3 must be installed");
-    child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
     child.wait_with_output().unwrap()
 }
 
@@ -67,7 +73,8 @@ fn adapter(root: &Path, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
     let script = repo_root().join("scripts/hooks/claude-code-record-edit.py");
     let mut c = Command::new("python3");
     c.arg("-I").arg(script);
-    c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua")).env_remove("URZUA_HOOK_OVERRIDE");
+    c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .env_remove("URZUA_HOOK_OVERRIDE");
     for (k, v) in env {
         c.env(k, v);
     }
@@ -81,8 +88,10 @@ fn adapter(root: &Path, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
 
 fn core(root: &Path, args: &[&str], env: &[(&str, &str)], stdin: &str) -> (i32, serde_json::Value) {
     let mut c = Command::new("bash");
-    c.arg(repo_root().join("scripts/hooks/record-edit-hook.sh")).args(args);
-    c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua")).env_remove("URZUA_HOOK_OVERRIDE");
+    c.arg(repo_root().join("scripts/hooks/record-edit-hook.sh"))
+        .args(args);
+    c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .env_remove("URZUA_HOOK_OVERRIDE");
     for (k, v) in env {
         c.env(k, v);
     }
@@ -107,7 +116,10 @@ fn a_hand_set_embodiment_is_blocked_with_the_computed_value_and_evidence() {
         let v = adapter(&root, name, &[]);
         assert!(denied(&v), "{name}: {v}");
         let why = hook(&v)["permissionDecisionReason"].as_str().unwrap();
-        assert!(why.contains("\"Verified\"") && why.contains("computes \"Implemented\""), "{why}");
+        assert!(
+            why.contains("\"Verified\"") && why.contains("computes \"Implemented\""),
+            "{why}"
+        );
         assert!(why.contains("Realized-by: code:src/a.rs"), "{why}");
         assert!(why.contains(":2:"), "names the line: {why}");
     }
@@ -125,7 +137,13 @@ fn the_computed_value_and_edits_to_other_fields_pass() {
     let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], RECORD);
     assert_eq!(code, 0, "{v}");
     assert_eq!(v["verdict"], "allow");
-    assert!(v["message"].as_str().unwrap().contains("Already disagreeing on disk"), "{v}");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("Already disagreeing on disk"),
+        "{v}"
+    );
 }
 
 #[test]
@@ -143,15 +161,43 @@ fn when_urzua_cannot_judge_the_edit_proceeds_and_says_so() {
     // The record states no Embodiment: urzua answers not-run.
     let v = adapter(&root, "write-no-embodiment", &[]);
     assert!(!denied(&v));
-    assert!(v["systemMessage"].as_str().unwrap().contains("did NOT judge"), "{v}");
-    assert!(hook(&v)["additionalContext"].as_str().unwrap().contains("did NOT judge"));
+    assert!(
+        v["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("did NOT judge"),
+        "{v}"
+    );
+    assert!(hook(&v)["additionalContext"]
+        .as_str()
+        .unwrap()
+        .contains("did NOT judge"));
     // No binary at all.
-    let v = adapter(&root, "write-wrong", &[("URZUA_BIN", "/nonexistent/urzua"), ("PATH", "/usr/bin:/bin")]);
+    let v = adapter(
+        &root,
+        "write-wrong",
+        &[
+            ("URZUA_BIN", "/nonexistent/urzua"),
+            ("PATH", "/usr/bin:/bin"),
+        ],
+    );
     assert!(!denied(&v), "{v}");
-    assert!(v["systemMessage"].as_str().unwrap().contains("did NOT judge"), "{v}");
+    assert!(
+        v["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("did NOT judge"),
+        "{v}"
+    );
     // An Edit whose text is not in the file cannot be turned into a proposal.
     let v = adapter(&root, "edit-missing", &[]);
-    assert!(v["systemMessage"].as_str().unwrap().contains("did NOT judge"), "{v}");
+    assert!(
+        v["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("did NOT judge"),
+        "{v}"
+    );
 }
 
 #[test]
@@ -172,25 +218,51 @@ fn an_unreadable_history_is_cannot_judge() {
     let (code, v) = core(&dst, &["docs/adr/ADR-1-a.md"], &[], &wrong);
     assert_eq!(code, 0, "{v}");
     assert_eq!(v["verdict"], "allow-unjudged", "{v}");
-    assert!(v["message"].as_str().unwrap().contains("shallow clone"), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("shallow clone"),
+        "{v}"
+    );
 }
 
 #[test]
 fn a_named_override_lets_the_edit_through_and_appears_in_the_output() {
     let root = fixture("override", RECORD);
-    let v = adapter(&root, "write-wrong", &[("URZUA_HOOK_OVERRIDE", "alice-reviewed")]);
+    let v = adapter(
+        &root,
+        "write-wrong",
+        &[("URZUA_HOOK_OVERRIDE", "alice-reviewed")],
+    );
     assert!(!denied(&v), "{v}");
     let msg = v["systemMessage"].as_str().unwrap();
-    assert!(msg.contains("OVERRIDE 'alice-reviewed'") && msg.contains("computes \"Implemented\""), "{msg}");
+    assert!(
+        msg.contains("OVERRIDE 'alice-reviewed'") && msg.contains("computes \"Implemented\""),
+        "{msg}"
+    );
 
     let wrong = RECORD.replace("Not started", "Verified");
-    let (code, v) = core(&root, &["--override", "bob", "docs/adr/ADR-1-a.md"], &[], &wrong);
-    assert_eq!((code, v["verdict"].as_str(), v["override"].as_str()), (0, Some("allow-override"), Some("bob")));
+    let (code, v) = core(
+        &root,
+        &["--override", "bob", "docs/adr/ADR-1-a.md"],
+        &[],
+        &wrong,
+    );
+    assert_eq!(
+        (code, v["verdict"].as_str(), v["override"].as_str()),
+        (0, Some("allow-override"), Some("bob"))
+    );
 
     // An override without a name is not accepted: the block stands.
-    let (code, v) = core(&root, &["--override", "  ", "docs/adr/ADR-1-a.md"], &[], &wrong);
+    let (code, v) = core(
+        &root,
+        &["--override", "  ", "docs/adr/ADR-1-a.md"],
+        &[],
+        &wrong,
+    );
     assert_eq!((code, v["verdict"].as_str()), (1, Some("block")));
-    assert!(v["message"].as_str().unwrap().contains("needs a name"), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("needs a name"),
+        "{v}"
+    );
 }
 
 #[test]
