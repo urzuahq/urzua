@@ -47,3 +47,4 @@ that through -- not a change to any pure rule function.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- exact mechanism (post-hoc message enrichment in `urzua-cli` vs. a richer discovery-layer signal threaded through) not yet decided. | **structural** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. In a repository where `ADR-3` has `Derives-from: ADR-9` and `docs/adr/ADR-9-untracked.md` exists but is not `git add`ed, `urzua check` reports `Derives-from: ADR-9 does not resolve to any discovered record`, identical to a reference to a record that exists nowhere; after `git add` it reports nothing. **Why:** the fix is at the `urzua-io` discovery boundary and the record leaves its shape (enrich the message, or make discovery distinguish untracked from absent) undecided. | **substantive** |

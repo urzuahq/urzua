@@ -33,3 +33,4 @@ Matching semantics, and a typo'd `Rule` is listed there under "not built".
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed, left `Status: Open`. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. A waiver record with `Rule` and `Scope` and no `Reason` still waives: `urzua check` marks the targeted `embodiment.locator-exists` finding `waived` by it. **Why:** refuse a reasonless waiver, or keep enforcement in `header.required-fields` and say so in `SPEC-10`, is the decision the record names. | **substantive** |
