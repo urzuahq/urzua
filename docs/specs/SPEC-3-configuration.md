@@ -1,5 +1,5 @@
 ---
-Version: '0.56'
+Version: '0.57'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -264,6 +264,23 @@ Two details carry weight:
   `section::parse_sections_to_depth` (`section.rs`) splits a record body into its sections down to
   `sections.depth`, each with its level, its parent and its line range (`parse_sections` is the
   depth-1 reading, `##` only).
+
+- **A record type may declare companion field pairs: `companion_fields`** (`BUG-41`). An optional
+  list under a record type, each entry exactly two distinct relation role keys (`status`,
+  `embodiment_state`, `embodiment_locator`, `supersession`); anything else is refused at load. The
+  fields are the ones the type's `relation_fields` names for those roles (default literals
+  otherwise). `config.companion-declaration-missing` reports a type that declares one field of a
+  declared pair in `required_fields`/`known_fields` without the other, or neither. No pair is known
+  to the engine; this repository declares `[embodiment_state, embodiment_locator]` for `adr` and
+  `spec`.
+
+  ```yaml
+  record_types:
+    spec:
+      known_fields: [Embodiment, Realized-by]
+      companion_fields:
+        - [embodiment_state, embodiment_locator]
+  ```
 
 - **A record type may declare its status vocabulary: `statuses`** (`MILE-132`, `BUG-59`, `BUG-65`,
   `BUG-178`). An optional mapping under a record type. The field it describes is the type's `Status`
@@ -992,4 +1009,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.55`. `sections.depth` now drives the section reading: a type declaring `depth: 2` has its `###` headings parsed as sections nested under their `##`, and a required section may declare `level` and `under` to be asked for one. A type declaring no `level` is read as before. **Why:** `MILE-98` -- this repository's own `###` headings were invisible to the section rules and a corpus that checks a considered option's subsection needs `###` to be checked at all. | **substantive** |
-> | 2026-11-04 | Bumped to `0.56`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.56`. Documented the per-type `companion_fields` declaration: a list of pairs of relation role keys (`status`, `embodiment_state`, `embodiment_locator`, `supersession`) whose fields the type declares together, resolved through `relation_fields`; an entry that is not two distinct role keys is refused at load, and `config.companion-declaration-missing` reports a pair the type declares one half of or neither. **Why:** `BUG-41` -- the one companion pair checked was hardcoded. | **substantive** |
+> | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |

@@ -11,6 +11,7 @@ pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-
 pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
 pub const RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS: &str =
     "config.header-none-has-no-required-fields";
+pub const RULE_CONFIG_COMPANION_DECLARATION_MISSING: &str = "config.companion-declaration-missing";
 pub const RULE_POINTER_RESOLUTION: &str = "pointer.resolution";
 pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
 pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
