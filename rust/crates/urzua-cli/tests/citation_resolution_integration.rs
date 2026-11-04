@@ -257,3 +257,85 @@ fn a_declared_revision_log_heading_is_the_log_and_prose_mentions_are_not_observe
     assert_eq!(found.len(), 1, "{report}");
     assert!(found[0]["message"].as_str().unwrap().contains("2026-01-01"));
 }
+
+fn nonref_fixture(name: &str, records: &[(&str, &str)]) -> std::path::PathBuf {
+    let dir = fixture(
+        name,
+        "{ citation.resolution: { level: error, non_reference_field: Non-reference-ids } }",
+        records,
+    );
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: { citation.resolution: { level: error, non_reference_field: Non-reference-ids } }\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Non-reference-ids\"]\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "config"]);
+    dir
+}
+
+const DECLARES: &str =
+    "---\nStatus: Accepted\nNon-reference-ids: ADR-72\n---\n# 1 — X\n\nAn example: ADR-72/73/74.\n";
+
+#[test]
+fn a_declared_non_reference_id_survives_the_id_becoming_a_real_record_end_to_end_observed_failing()
+{
+    let dir = nonref_fixture("nonref", &[("ADR-1-x.md", DECLARES)]);
+    let (code, before) = check(&dir);
+    assert_eq!(code, 0, "{before}");
+    assert!(
+        findings_of(&before, "citation.resolution").is_empty(),
+        "{before}"
+    );
+
+    std::fs::write(
+        dir.join("docs/adr/ADR-72-real.md"),
+        "---\nStatus: Accepted\n---\n# 72 — Real\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "ADR-72 now exists"]);
+    let (code, after) = check(&dir);
+    assert_eq!(code, 0, "{after}");
+    assert!(
+        findings_of(&after, "citation.resolution").is_empty(),
+        "{after}"
+    );
+    let notices = after["notices"].to_string();
+    assert!(
+        notices.contains("non-reference") && notices.contains("ADR-72"),
+        "{after}"
+    );
+}
+
+#[test]
+fn a_declared_id_the_record_never_cites_is_a_finding_end_to_end_observed_failing() {
+    let doc = "---\nStatus: Accepted\nNon-reference-ids: ADR-72\n---\n# 1 — X\n\nNothing cited.\n";
+    let dir = nonref_fixture("nonref-uncited", &[("ADR-1-x.md", doc)]);
+    let (code, report) = check(&dir);
+    assert_ne!(code, 0, "{report}");
+    let found = findings_of(&report, "citation.resolution");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"].as_str().unwrap().contains("ADR-72"));
+}
+
+#[test]
+fn a_non_reference_field_no_type_lists_fails_the_config_load() {
+    let dir = fixture(
+        "nonref-bad",
+        "{ citation.resolution: { level: error, non_reference_field: Nope } }",
+        &[("ADR-1-x.md", "---\nStatus: Accepted\n---\n# 1 — X\n")],
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["check", "docs/"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(output.status.code(), Some(0));
+    let all = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(all.contains("non_reference_field"), "{all}");
+}

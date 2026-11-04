@@ -1,5 +1,5 @@
 ---
-Version: '0.57'
+Version: '0.58'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -420,6 +420,42 @@ rules:
   read a declared external id as a configuration that fails to reach its candidates (`BUG-186`). An id the list does not name is still resolved against the
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
+
+## Named, not cited: `citation.resolution`'s `non_reference_field`
+
+A record can name an id without citing it as a reference: an example, a number minted and
+retracted, a hypothetical corpus. `citation.resolution` takes an optional `non_reference_field`
+naming a header field in which a record lists those ids (`BUG-190`, `ADR-75`):
+
+```yaml
+rules:
+  citation.resolution:
+    level: error
+    non_reference_field: "Non-reference-ids"
+```
+
+```yaml
+---
+Status: Accepted
+Non-reference-ids: ADR-72
+---
+```
+
+- The field holds a comma-separated list of exact ids (`PREFIX-N`); there are no ranges. Ids compare
+  by value (`ADR-072` is `ADR-72`) and the prefix is case-sensitive. Id parsing is the exact-id
+  parsing of `external_ids`, so the two cannot disagree on what an id is.
+- In a record that declares an id, a prose citation of it is counted as eligible and unexamined,
+  neither resolved nor reported. In any other record the same id resolves as before. `external_ids`
+  takes precedence. "Cited" means the prose the rule reads: an id appearing only in the header, a
+  fenced block, or a revision-log row while `skip_revision_log` is on counts as uncited.
+- A declared id the record never cites, and an entry that is not an exact id of a declared prefix,
+  are findings on the record, naming the field, the entry and the line of the field.
+- The option must name a field some record type lists in `known_fields` (or `required_fields`), and
+  not a `pointer_fields`, `narrative_fields` or relation-role field, since those rules would resolve
+  the ids as references; either failure is a load-time error. Other rules do not take the option.
+- When a declared id resolves to a real record, `check` prints one aggregated `Info` notice naming
+  the records and ids. A notice never changes the exit code.
+- Adding the field to an Accepted record is a `structural` revision-log row, not an amendment.
 
 ## Cited issues and pull requests: `citation.issue-exists`
 
@@ -1011,3 +1047,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.55`. `sections.depth` now drives the section reading: a type declaring `depth: 2` has its `###` headings parsed as sections nested under their `##`, and a required section may declare `level` and `under` to be asked for one. A type declaring no `level` is read as before. **Why:** `MILE-98` -- this repository's own `###` headings were invisible to the section rules and a corpus that checks a considered option's subsection needs `###` to be checked at all. | **substantive** |
 > | 2026-11-04 | Bumped to `0.56`. Documented the per-type `companion_fields` declaration: a list of pairs of relation role keys (`status`, `embodiment_state`, `embodiment_locator`, `supersession`) whose fields the type declares together, resolved through `relation_fields`; an entry that is not two distinct role keys is refused at load, and `config.companion-declaration-missing` reports a pair the type declares one half of or neither. **Why:** `BUG-41` -- the one companion pair checked was hardcoded. | **substantive** |
 > | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.58`. Documented the optional `non_reference_field` option of `citation.resolution`: a header field listing the exact ids a record names without citing as a reference, set aside in that record only, with a finding for a declared id never cited and for a malformed entry, a load error for a field that is unknown or a pointer, narrative or relation-role field, and an aggregated Info notice for ids that now match a real record. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
