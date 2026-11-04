@@ -274,6 +274,7 @@ mod tests {
         record_types.insert("milestone".to_string(), type_config(None));
         let config = Config {
             schema_version: 2,
+            relation_pairs: Vec::new(),
             rules: std::collections::BTreeMap::new(),
             record_types,
         };
@@ -291,6 +292,7 @@ mod tests {
         record_types.insert("milestone".to_string(), type_config(Some("SPEC-6")));
         let config = Config {
             schema_version: 2,
+            relation_pairs: Vec::new(),
             rules: std::collections::BTreeMap::new(),
             record_types,
         };

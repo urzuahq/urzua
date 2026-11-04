@@ -513,6 +513,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
             || rules::supersession_reciprocity(&records, &config, &record_index),
         ),
+        crate::gate::gated(&config, rules::RULE_RELATION_PAIR_RECIPROCITY, || {
+            rules::relation_pair_reciprocity(&records, &config, &record_index)
+        }),
+        crate::gate::gated(&config, rules::RULE_RELATION_CROSS_TYPE_DISALLOWED, || {
+            rules::relation_cross_type_disallowed(&records, &config, &record_index)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_RELATION_TARGET_STATUS_UNDECLARED,

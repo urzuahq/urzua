@@ -33,3 +33,4 @@ what the config-driven thesis asks for: a hardcoded pair is a type-specific assu
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `BUG-17` and `BUG-41` describe halves of one gap and neither plans the general fix; filed as the milestone that does. | **substantive** |
+> | 2026-11-04 | Built: `relation_pairs` config declaration and the `relation.pair-reciprocity` and `relation.cross-type-disallowed` rules, beside the unchanged `relation.supersession-reciprocity`. The narrowest reading of each question `RFC-47` leaves open is recorded in `SPEC-3`. **Why:** `RFC-47` was accepted on 2026-11-04. `Status` is left for the maintainer. | **substantive** |

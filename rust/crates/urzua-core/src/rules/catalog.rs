@@ -31,6 +31,8 @@ pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =
     "embodiment.locator-promotion-candidate";
 pub const RULE_RELATION_SUPERSESSION_RECIPROCITY: &str = "relation.supersession-reciprocity";
+pub const RULE_RELATION_PAIR_RECIPROCITY: &str = "relation.pair-reciprocity";
+pub const RULE_RELATION_CROSS_TYPE_DISALLOWED: &str = "relation.cross-type-disallowed";
 pub const RULE_RELATION_TARGET_STATUS_UNDECLARED: &str = "relation.target-status-undeclared";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
@@ -77,6 +79,8 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
     RULE_FIELD_LEADING_RESERVED_INDICATOR,
     RULE_HEADER_CASE_VARIANT_KEY,
+    RULE_RELATION_PAIR_RECIPROCITY,
+    RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
 ];
@@ -223,6 +227,14 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         description: "One record's header writes two keys differing only by case (`Status`/`status`), reported as the fact of the difference, never as which spelling is right (`MILE-113`). Opt-in and declaration-free: it reads the keys a record wrote, not a declared vocabulary, and composes beside the exact-match rules without changing them (`ADR-57`). An exact repeat of one spelling stays `header.required-fields`' finding.",
     },
     RuleMeta {
+        id: RULE_RELATION_PAIR_RECIPROCITY,
+        description: "For each declared `relation_pairs` entry with `reciprocity: required` (`RFC-47`, `MILE-122`): a claim `A.forward = B` is echoed by `B.inverse = A`, and a claim `A.inverse = B` by `B.forward = A`, across record types where the pair allows it. Needs `relation_pairs`; enabling it with none declared is a load error. Beside, not replacing, `relation.supersession-reciprocity`, which keeps the combined `Supersedes / Superseded-by` key.",
+    },
+    RuleMeta {
+        id: RULE_RELATION_CROSS_TYPE_DISALLOWED,
+        description: "A claim in a declared pair's field whose target is a different record type, for a pair declaring `cross_type: false` (`RFC-47`, `MILE-122`). Such a claim is excluded from `relation.pair-reciprocity` and reported here, never skipped silently.",
+    },
+    RuleMeta {
         id: RULE_CITATION_RESOLUTION,
         description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in and option-free; its population counts the citations examined, so a run over none is distinguishable from a clean one.",
     },
@@ -247,6 +259,13 @@ pub const RULE_METADATA: &[RuleMeta] = &[
 /// scope than the one that repository's own Makefile was changed to use.
 pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[RULE_CLAIM_STATUS_AGREEMENT];
 
+/// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with
+/// none is a config load error.
+pub const RULES_REQUIRING_RELATION_PAIRS: &[&str] = &[
+    RULE_RELATION_PAIR_RECIPROCITY,
+    RULE_RELATION_CROSS_TYPE_DISALLOWED,
+];
+
 pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
     RULE_POINTER_RESOLUTION,
     RULE_POINTER_TARGET_STATUS,
@@ -259,6 +278,8 @@ pub const IDENTITY_DEPENDENT_RULES: &[&str] = &[
     // rule resolves nothing for exactly the same reason its sibling does
     // (`BUG-61`'s shape, missed here when the rule was added).
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
+    RULE_RELATION_PAIR_RECIPROCITY,
+    RULE_RELATION_CROSS_TYPE_DISALLOWED,
 ];
 
 #[cfg(test)]

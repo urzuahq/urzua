@@ -155,6 +155,7 @@ mod tests {
     fn no_relation_field_overrides() -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            relation_pairs: Vec::new(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -166,6 +167,7 @@ mod tests {
     ) -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            relation_pairs: Vec::new(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),

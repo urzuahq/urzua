@@ -3102,7 +3102,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\nrules: {{{}}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n",
+            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n",
             rules.join(", ")
         ),
     )
@@ -3271,4 +3271,51 @@ fn target_status_fields_naming_an_undeclared_field_is_a_config_error_observed_fa
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(text.contains("Implments"), "{text}");
+}
+
+/// `MILE-122`: a declared relation pair is checked end to end through `check`,
+/// across two record types, from config alone.
+#[test]
+fn check_reports_an_unechoed_claim_in_a_declared_cross_type_relation_pair() {
+    let dir = fixture_repo("relation-pair-e2e");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {relation.pair-reciprocity: error}\n\nrelation_pairs:\n  - {name: resolution, forward: Resolves, inverse: Resolved-by, reciprocity: required}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Resolves\"]\n  bug:\n    dir: \"docs/bug\"\n    required_fields: []\n    known_fields: [\"Resolved-by\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "# 1 — X\n\n> Resolves: BUG-7\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/bug/BUG-7-y.md"),
+        "# 7 — Y\n\n> Resolved-by: —\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
+    assert!(stdout.contains("relation.pair-reciprocity"), "{stdout}");
+    assert!(stdout.contains("Resolved-by"), "{stdout}");
+
+    std::fs::write(
+        dir.join("docs/bug/BUG-7-y.md"),
+        "# 7 — Y\n\n> Resolved-by: ADR-1\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let output = run_urzua(&dir, &["check", "docs/"]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
 }
