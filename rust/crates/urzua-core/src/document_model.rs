@@ -16,7 +16,7 @@
 //! The three keys sit under the record type in YAML but are held apart from
 //! `RecordTypeConfig` (see `config::parse_with_document_models`).
 
-use crate::config::ConfigError;
+use crate::config::{ConfigError, RecordTypeConfig};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -107,30 +107,18 @@ fn default_depth() -> u8 {
     1
 }
 
-/// Removes `identity`, `fields` and `sections` from every record type of a
-/// parsed config and returns them as declarations, validated.
+/// Validates the `identity`, `fields` and `sections` declarations of every
+/// record type of a typed-parsed config and returns them as declarations.
 ///
-/// A type that declares none of the three is absent from the result, and the
-/// value is left untouched when no type declares any, so a config without the
-/// declaration is read exactly as before.
-pub(crate) fn split_declarations(
-    config: &mut yaml_serde::Value,
+/// A type that declares none of the three is absent from the result.
+pub(crate) fn validate_declarations(
+    types: &BTreeMap<String, RecordTypeConfig>,
 ) -> Result<BTreeMap<String, DocumentModel>, ConfigError> {
     let mut models = BTreeMap::new();
-    let Some(types) = config
-        .get_mut("record_types")
-        .and_then(yaml_serde::Value::as_mapping_mut)
-    else {
-        // Not a mapping: the typed load reports it with its own message.
-        return Ok(models);
-    };
-    for (name, body) in types.iter_mut() {
-        let (Some(name), Some(body)) = (name.as_str(), body.as_mapping_mut()) else {
-            continue;
-        };
-        let identity = take::<IdentityDecl>(body, name, "identity")?;
-        let fields = take::<FieldsDecl>(body, name, "fields")?;
-        let sections = take::<SectionsDecl>(body, name, "sections")?;
+    for (name, rt) in types {
+        let identity = take::<IdentityDecl>(rt.identity.as_ref(), name, "identity")?;
+        let fields = take::<FieldsDecl>(rt.fields.as_ref(), name, "fields")?;
+        let sections = take::<SectionsDecl>(rt.sections.as_ref(), name, "sections")?;
         if let Some(i) = &identity {
             if i.pattern.trim().is_empty() {
                 return Err(invalid(
@@ -142,7 +130,7 @@ pub(crate) fn split_declarations(
         }
         if identity.is_some() || fields.is_some() || sections.is_some() {
             models.insert(
-                name.to_string(),
+                name.clone(),
                 DocumentModel {
                     identity,
                     fields,
@@ -162,15 +150,15 @@ fn invalid(record_type: &str, key: &'static str, reason: String) -> ConfigError 
     }
 }
 
-/// Removes `key` from a record type's mapping and parses it. A key present
-/// with no value is refused rather than read as absent, which would turn a
-/// half-written declaration into a silent no-op.
+/// Parses one raw declaration. A key present with no value is refused rather
+/// than read as absent, which would turn a half-written declaration into a
+/// silent no-op.
 fn take<T: serde::de::DeserializeOwned>(
-    body: &mut yaml_serde::Mapping,
+    value: Option<&yaml_serde::Value>,
     record_type: &str,
     key: &'static str,
 ) -> Result<Option<T>, ConfigError> {
-    let Some(value) = body.remove(key) else {
+    let Some(value) = value else {
         return Ok(None);
     };
     if value.is_null() {
@@ -180,7 +168,7 @@ fn take<T: serde::de::DeserializeOwned>(
             "present with no value; give it a mapping or remove the key".into(),
         ));
     }
-    yaml_serde::from_value(value)
+    yaml_serde::from_value(value.clone())
         .map(Some)
         .map_err(|e| invalid(record_type, key, e.to_string()))
 }
@@ -190,8 +178,8 @@ mod tests {
     use super::*;
 
     fn split(yaml: &str) -> Result<BTreeMap<String, DocumentModel>, ConfigError> {
-        let mut v: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
-        split_declarations(&mut v)
+        let c: crate::config::Config = yaml_serde::from_str(yaml).unwrap();
+        validate_declarations(&c.record_types)
     }
 
     fn cfg(type_body: &str) -> String {
@@ -238,21 +226,9 @@ mod tests {
     }
 
     #[test]
-    fn a_type_declaring_nothing_is_absent_and_the_value_is_left_alone() {
+    fn a_type_declaring_nothing_is_absent() {
         let yaml = cfg("    required_fields: [Status]\n");
-        let mut v: yaml_serde::Value = yaml_serde::from_str(&yaml).unwrap();
-        let before = v.clone();
-        assert!(split_declarations(&mut v).unwrap().is_empty());
-        assert_eq!(v, before);
-    }
-
-    #[test]
-    fn the_declared_keys_are_removed_so_the_rest_still_loads_strictly() {
-        let yaml = cfg("    fields: {from: prefix-lines}\n    required_fields: [Status]\n");
-        let mut v: yaml_serde::Value = yaml_serde::from_str(&yaml).unwrap();
-        split_declarations(&mut v).unwrap();
-        let t = &v["record_types"]["adr"];
-        assert!(t.get("fields").is_none() && t.get("required_fields").is_some());
+        assert!(split(&yaml).unwrap().is_empty());
     }
 
     #[test]

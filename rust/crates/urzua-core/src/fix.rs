@@ -219,6 +219,9 @@ mod tests {
                 "adr".to_string(),
                 crate::config::RecordTypeConfig {
                     dir: "docs/adr".to_string(),
+                    identity: None,
+                    fields: None,
+                    sections: None,
                     required_fields: vec![],
                     header_shape: crate::header::HeaderShape::default(),
                     prefix: None,
