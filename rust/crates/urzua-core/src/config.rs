@@ -30,6 +30,26 @@ pub struct Config {
     /// `RelationPair`. Absent means none declared.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_pairs: Vec<RelationPair>,
+    /// The lowest finding severity that makes `urzua check` exit 1. Absent
+    /// means `error`, so a repository that does not declare it is unchanged.
+    #[serde(default, skip_serializing_if = "FailOn::is_default")]
+    pub fail_on: FailOn,
+}
+
+/// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
+/// it: the report's `blocking` and `status` keep meaning "an error".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FailOn {
+    #[default]
+    Error,
+    Warning,
+}
+
+impl FailOn {
+    fn is_default(&self) -> bool {
+        *self == FailOn::Error
+    }
 }
 
 impl Config {
@@ -1910,6 +1930,21 @@ record_types:
     }
 
     const AMEND_PAIR: &str = "relation_pairs:\n  - {name: amendment, forward: Amends, inverse: Amended-by, reciprocity: required, cross_type: false}\n";
+
+    #[test]
+    fn fail_on_defaults_to_error_and_accepts_warning() {
+        assert_eq!(parse(&pair_cfg("", "")).unwrap().fail_on, FailOn::Error);
+        let c = parse(&pair_cfg("", "fail_on: warning\n")).unwrap();
+        assert_eq!(c.fail_on, FailOn::Warning);
+        let c = parse(&pair_cfg("", "fail_on: error\n")).unwrap();
+        assert_eq!(c.fail_on, FailOn::Error);
+    }
+
+    #[test]
+    fn fail_on_rejects_any_other_value() {
+        assert!(parse(&pair_cfg("", "fail_on: info\n")).is_err());
+        assert!(parse(&pair_cfg("", "fail_on: Warning\n")).is_err());
+    }
 
     #[test]
     fn a_declared_relation_pair_loads_and_cross_type_defaults_to_true() {

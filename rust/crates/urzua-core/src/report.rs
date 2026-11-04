@@ -416,15 +416,29 @@ pub struct CheckReport {
     pub findings: Vec<Finding>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+    /// The exit threshold in force (`fail_on` / `--fail-on`). Never
+    /// serialized: stdout is the same whatever the threshold, only the exit
+    /// code moves.
+    #[serde(skip)]
+    pub fail_on: crate::config::FailOn,
 }
 
 impl CheckReport {
     /// SPEC-0001's exit codes: 0 clean, 1 blocking findings, 2 could not run.
+    /// Under `fail_on: warning` an unwaived warning also exits 1.
     /// Collapsing these is how "0 errors" comes to mean "never executed."
     pub fn exit_code(&self) -> i32 {
         match self.status {
             ReportStatus::NotRun => 2,
             _ if self.blocking => 1,
+            _ if self.fail_on == crate::config::FailOn::Warning
+                && self
+                    .findings
+                    .iter()
+                    .any(|f| f.waived.is_none() && f.severity == FindingSeverity::Warning) =>
+            {
+                1
+            }
             _ => 0,
         }
     }
@@ -810,8 +824,52 @@ mod tests {
             blocking: false,
             findings: vec![],
             notices: vec![warning_notice()],
+            fail_on: Default::default(),
         };
         assert_eq!(Report::exit_code(&report), ExitCode::from(0));
+    }
+
+    fn report_with_warning(fail_on: crate::config::FailOn, waived: Option<&str>) -> CheckReport {
+        CheckReport {
+            status: ReportStatus::FindingsPresent,
+            files_examined: 1,
+            records_read_by_any_rule: 1,
+            rules_executed: vec![],
+            scope: ScopeInfo {
+                source: ScopeSource::TrackedSweep,
+                base: None,
+                record_types: vec![],
+                diff: None,
+            },
+            blocking: false,
+            findings: vec![Finding {
+                rule: "field.pending".to_string(),
+                severity: FindingSeverity::Warning,
+                file: PathBuf::from("docs/bugs/BUG-1.md"),
+                line: None,
+                message: "pending".to_string(),
+                waived: waived.map(str::to_string),
+                declared_severity: None,
+            }],
+            notices: vec![],
+            fail_on,
+        }
+    }
+
+    #[test]
+    fn a_warning_exits_0_by_default_and_1_when_fail_on_is_warning() {
+        use crate::config::FailOn;
+        let default = report_with_warning(FailOn::Error, None);
+        assert_eq!(CheckReport::exit_code(&default), 0);
+        let strict = report_with_warning(FailOn::Warning, None);
+        assert_eq!(CheckReport::exit_code(&strict), 1);
+    }
+
+    #[test]
+    fn a_waived_warning_never_fails_under_fail_on_warning() {
+        use crate::config::FailOn;
+        let waived = report_with_warning(FailOn::Warning, Some("WAIVER-1"));
+        assert_eq!(CheckReport::exit_code(&waived), 0);
     }
 
     /// ...and a not-run report stays not-run, whether or not notices are

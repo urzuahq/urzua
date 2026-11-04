@@ -241,7 +241,12 @@ fn read_index_artifacts(
     Ok(out)
 }
 
-pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<String>) -> ExitCode {
+pub fn run(
+    config_path: Option<PathBuf>,
+    paths: Vec<PathBuf>,
+    base: Option<String>,
+    fail_on: Option<urzua_core::config::FailOn>,
+) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
         Err(e) => return emit(&CouldNotRun::from(e)),
@@ -943,6 +948,8 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         blocking,
         findings,
         notices,
+        // The flag wins over the configuration; either only moves the exit code.
+        fail_on: fail_on.unwrap_or(config.fail_on),
     };
 
     emit(&report)

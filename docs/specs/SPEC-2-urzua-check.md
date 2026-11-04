@@ -1,5 +1,5 @@
 ---
-Version: '0.27'
+Version: '0.28'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -368,8 +368,11 @@ covers it.
 | Code | When |
 |---|---|
 | 0 | no findings at or above the configured blocking severity |
-| 1 | blocking findings |
+| 1 | blocking findings; under `fail_on: warning` (or `--fail-on warning`), also any unwaived warning (`SPEC-3`) |
 | 2 | the check could not run — bad config, unreadable path, explicit paths matching zero files |
+
+`--fail-on error|warning` overrides the configuration's `fail_on` for one run. It moves only the exit
+code: `blocking` and the rest of the report are unchanged.
 
 2 is distinct on purpose. A tool that cannot run and a tool that ran and found problems are
 different states, and collapsing them is how "0 errors" comes to mean "never executed".
@@ -475,3 +478,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.25`. `embodiment.back-pointer-decision-accepted` now judges a back-pointer against the cited type's declared `statuses.implementable` rather than its terminal `success`; a type declaring none uses the rule's `accepted_statuses`, and with neither the status is reported as unjudgeable. Rule id unchanged. **Why:** the engine holds no type knowledge, so a terminal success status cannot stand for "implementation allowed" (`MILE-133`, `SPEC-3` 0.13). | **substantive** |
 > | 2026-11-04 | Bumped to `0.26`. `embodiment.requires-accepted-status` also allows the claim at the type's declared `statuses.claim_retained`, not only `success`. Rule id unchanged. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a record may keep an Implemented or Verified claim in a status reached only after acceptance. | **substantive** |
 > | 2026-11-04 | Bumped to `0.27`. Inside `drift_grace_days`, `embodiment.consistency` accepts either the tier value or a stated `Drift detected` (the window only holds back reporting, so it never contradicts a record that already says so) and `urzua fix` leaves such a record alone; drift outside the window still computes `Drift detected`. The generated rule table row says so. **Why:** `BUG-179`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.28`. Exit code 1 also covers an unwaived warning when `fail_on: warning` or `--fail-on warning` is in force; the report itself is unchanged. **Why:** `MILE-145` -- a repository at zero warnings needs warnings to fail its own build. | **substantive** |
