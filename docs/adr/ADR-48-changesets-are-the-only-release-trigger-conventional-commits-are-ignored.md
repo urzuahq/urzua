@@ -4,6 +4,7 @@ Status: Accepted
 Embodiment: Implemented
 Realized-by: code:knope.toml
 Date: 2026-09-16
+Accepted-on: 2026-09-16
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -99,3 +100,4 @@ format changes; `.changeset/*.md` fragments and `CHANGELOG.md` are unaffected.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** an undecided default sat beside a decided mechanism and contradicted it, and the first commit to expose that cut an unintended release. Removing the second trigger costs nothing here -- no release has ever been computed from a commit prefix except the mistaken one. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit befa27e42. | **structural** |

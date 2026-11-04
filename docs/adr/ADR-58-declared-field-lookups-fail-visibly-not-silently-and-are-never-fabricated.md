@@ -2,6 +2,7 @@
 Stable-Id: 01M33RT75Z3NJKPK7A3SHBF0FY
 Status: Accepted
 Date: 2026-09-22
+Accepted-on: 2026-09-22
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-40
@@ -97,3 +98,4 @@ existence as a search hit.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Decided and implemented in the same pass as `RFC-40`'s filing, given the small scope. **Why:** the fix was already correct and complete before the decision was written down; documenting after implementation risked the decision record becoming a description of what happened rather than a choice among real alternatives, so the rejected fourth option (a `MissingButCased` state) is recorded explicitly even though it was never built. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 055f434c3. | **structural** |

@@ -2,6 +2,7 @@
 Stable-Id: 01M6J91RCGFRT55SHNQ2K8GQM8
 Status: Accepted
 Date: 2026-11-04
+Accepted-on: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
 ---
@@ -55,3 +56,4 @@ its fallback option.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit dafb2cb12. | **structural** |

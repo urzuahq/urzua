@@ -2,6 +2,7 @@
 Stable-Id: 01M35PK7FGGHVAYRTHJD6SDKW0
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-09-23
 Author: beauwilliams
 ---
 # 42 — Declared relation field names replace hardcoded status embodiment and supersession literals
@@ -132,3 +133,4 @@ there, so no additional wiring is needed beyond the seven rule bodies above and 
 > |---|---|---|
 > | 2026-09-23 | Filed as `Draft`. **Why:** a round-18 code review found the same hardcoded-field-name defect shape (`BUG-110`) recurring in four more rules; consolidating into one design decision rather than patching each independently. | **substantive** |
 > | 2026-09-23 | Accepted via `ADR-61`, all three open questions resolved in favor of the broadest consistent scope. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit b455c5226. | **structural** |

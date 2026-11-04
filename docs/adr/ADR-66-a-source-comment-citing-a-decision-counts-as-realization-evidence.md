@@ -2,6 +2,7 @@
 Stable-Id: 01M6J25TBPS0M0ESR5MW9MBV71
 Status: Accepted
 Date: 2026-11-04
+Accepted-on: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-5
@@ -87,3 +88,4 @@ adopter who enabled it and stated `Implemented` on the strength of comments alon
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04 | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit d9f3bb449. | **structural** |

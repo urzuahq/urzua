@@ -2,6 +2,7 @@
 Stable-Id: 01M36B85BTBW86WVKZRCEY1JXM
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-09-23
 Author: beauwilliams
 ---
 # 45 — a rule population discloses every non-absent exclusion, and no rule depends on another to do it
@@ -133,3 +134,4 @@ touched, verified by the compiler (a missing argument is a build failure), not a
 > | 2026-09-23 | Broadened significantly after the user asked whether silently folding `Absent`/`Unreadable` was itself a design problem. Investigating surfaced `BUG-125`, a live, reproduced instance of `ADR-55`'s defect class, and the user stated the general principle directly: no rule may depend on another rule being enabled to cover its own disclosure gap. Retitled and rescoped from a narrow three-rule fix to `Population`'s general disclosure discipline. | **substantive** |
 > | 2026-09-23 | Accepted via `ADR-63`: `Population` gains an `unreadable` count (Part 2), fixed once in shared `census`/`census_records` machinery. Part 1 initially decided as a new `Outcome::Undeclared` variant. | **substantive** |
 > | 2026-09-23 | Part 1 redesigned twice more, same day, before implementation landed. First: found mid-build that `Outcome::Undeclared` can't actually reach `Population` for the three affected rules (the ambiguity is nested one level below the census candidate) — reverted, replaced with a `Finding` bolted onto each of the three rules' own `continue`. Second, on review: that repeats "every caller invents its own check" one level down from what `header.field-case-mismatch` already prevents for case mismatches — replaced with one dedicated rule, `relation.target-status-undeclared`, covering all three consuming rules' shared concern in one place. `Outcome::Undeclared` removed entirely; unused once the new rule made it unnecessary. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 23e40a7b4. | **structural** |

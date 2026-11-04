@@ -2,6 +2,7 @@
 Stable-Id: 01M36CH8TTHSJF7T4V4V8B4X4X
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-09-23
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-45
@@ -99,3 +100,4 @@ is removed once this ships — a structural fix supersedes a prose stopgap rathe
 > |---|---|---|
 > | 2026-09-23 | Decided. **Why:** `RFC-45` named two related gaps and needed both naming and scope decided before implementation; resolved toward fixing the shared `census`/`census_records` machinery once rather than auditing every rule individually, and stated the "no rule depends on another rule" principle explicitly as the governing rule for all future rule design, not just this instance. | **substantive** |
 > | 2026-09-23 | Amended, same day: Part 1's `Outcome::Undeclared` decision did not survive implementation (see Amendment section) and is corrected to one dedicated rule instead, per `AGENTS.md`'s "don't silently rewrite an Accepted decision." | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 23e40a7b4. | **structural** |
