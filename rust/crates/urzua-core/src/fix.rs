@@ -4,6 +4,9 @@
 //! revision-log write-path, each its own piece of work. Detect mode alone
 //! is "a real Phase 1 feature" per ADR-0015, not a stub.
 
+use std::collections::HashSet;
+use std::path::PathBuf;
+
 use crate::config::{Config, RelationRole};
 use crate::line_edit::{table_row_prefix, LineDoc};
 use crate::record::Record;
@@ -45,7 +48,11 @@ pub struct Repair {
 /// Returns the population alongside the repairs found, so a caller can
 /// distinguish "examined some, found nothing to repair" from "examined
 /// nothing" -- the same no-silent-no-op discipline `check` follows.
-pub fn detect_repairs(records: &[Record], config: &Config) -> (Population, Vec<Repair>) {
+pub fn detect_repairs(
+    records: &[Record],
+    config: &Config,
+    drifted: &HashSet<PathBuf>,
+) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
 
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
@@ -60,11 +67,13 @@ pub fn detect_repairs(records: &[Record], config: &Config) -> (Population, Vec<R
             return Outcome::Absent;
         };
 
-        // Drift (ADR-0032) is deliberately not checked here: it needs the
-        // same git-history plumbing `check` gets from its caller, and
-        // `fix`-writability of `Drift detected` is named, separate
-        // follow-up work, not assumed by this tier.
-        let computed = compute_embodiment(&parse_realized_by(realized_by_value), false);
+        // Drift (ADR-32) is computed by the caller from git history and
+        // handed in as plain data, the same shape `embodiment_consistency`
+        // takes, so this function stays pure (MILE-15).
+        let computed = compute_embodiment(
+            &parse_realized_by(realized_by_value),
+            drifted.contains(&record.path),
+        );
         let stated = stated.trim();
         if stated != computed {
             repairs.push(Repair {
@@ -162,7 +171,8 @@ mod tests {
             "docs/adr/0001-x.md",
             "> Embodiment: Not started\n> Realized-by: code:src/lib.rs\n",
         );
-        let (population, repairs) = detect_repairs(&[r], &no_relation_field_overrides());
+        let (population, repairs) =
+            detect_repairs(&[r], &no_relation_field_overrides(), &HashSet::new());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].field, "Embodiment");
@@ -172,12 +182,25 @@ mod tests {
     }
 
     #[test]
+    fn a_drifted_record_is_repaired_to_drift_detected_observed_failing() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+        );
+        let drifted: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
+        let (_, repairs) = detect_repairs(&[r], &no_relation_field_overrides(), &drifted);
+        assert_eq!(repairs.len(), 1);
+        assert_eq!(repairs[0].computed_value, "Drift detected");
+    }
+
+    #[test]
     fn a_matching_embodiment_is_not_a_repair() {
         let r = record(
             "docs/adr/0001-x.md",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (population, repairs) = detect_repairs(&[r], &no_relation_field_overrides());
+        let (population, repairs) =
+            detect_repairs(&[r], &no_relation_field_overrides(), &HashSet::new());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(repairs.is_empty());
     }
@@ -214,7 +237,7 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        let (population, repairs) = detect_repairs(&[r], &config);
+        let (population, repairs) = detect_repairs(&[r], &config, &HashSet::new());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1, "{repairs:?}");
         assert_eq!(repairs[0].field, "Phase");
@@ -227,7 +250,8 @@ mod tests {
         // function and reached no verdict, which is what `eligible() > 0`
         // says and a bare examined-count could not.
         let r = record("docs/adr/0001-x.md", "> Embodiment: Not started\n");
-        let (population, repairs) = detect_repairs(&[r], &no_relation_field_overrides());
+        let (population, repairs) =
+            detect_repairs(&[r], &no_relation_field_overrides(), &HashSet::new());
         assert_eq!((population.eligible(), population.examined()), (1, 0));
         assert!(repairs.is_empty());
     }

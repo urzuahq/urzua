@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -33,8 +33,10 @@ Done when all five hold:
 | 2 | It reports files examined, records read by any rule, rules executed, **and each rule's input population with its unit** | A |
 | 3 | It exits non-zero when given paths that match zero files | A |
 | 4 | Every rule family in §Rules is implemented and configurable | B |
-| 5 | It runs green in one source codebase with that codebase's hand-written linter **deleted** | C |
+| 5 | It runs green in one adopter's codebase with that adopter's hand-written linter **deleted** | C |
 | 6 | It reproduces every documented bug in SPEC-1's acceptance suite against real corpora (SPEC-4) | D |
+
+Criterion 6 belongs to the Phase 1 exit (`SPEC-1`, Exit bar), not to this spec's done.
 
 Criterion 5 is the bar for the *product*. Criterion 1 is the bar for *momentum*: until the tool
 validates this repository, every rule after it is written against corpora nobody has run.
@@ -107,7 +109,7 @@ it merges.
 
 ### Phase C — the second corpus
 
-The falsifiable one. A second codebase runs green under the same binary with no code change, and its
+Part of the Phase 1 exit (`SPEC-1`), not Phase 0's. The falsifiable one. A second codebase runs green under the same binary with no code change, and its
 hand-written linter is deleted. A failure here is a schema
 finding to record rather than a code path to add.
 
@@ -374,3 +376,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-09-23 | The rule table is now generated, not hand-maintained: `urzua_core::rules::RULE_METADATA` is the single source, `scripts/generate-rule-table.py` renders it between `<!-- rule-table:start/end -->` markers, `make rule-table-check` (wired into `make ci`) fails the build on drift. Backfilled the two rows `ALL_RULES` had gained since the last manual sync (`config.known-fields-declaration-missing`, `relation.target-status-undeclared`) and corrected `config.header-none-has-no-required-fields`'s description for its round-22 broadening. **Why:** `BUG-52` named this as the real fix -- not a comparison rule re-deriving the same fact a second time, but collapsing to one source so there is nothing left to drift. `BUG-52` is `Fixed`. | **substantive** |
 > | 2026-11-02 | `pointer.target-status` gains the optional `fields` option, restricting the rule to named declared pointer/narrative fields; the rule's row in the generated table is updated. **Why:** one `not_in` list judged lineage (`Derives-from`) and dependency (`Implements`) fields alike, so a Superseded lineage target warned as stale (`BUG-172`). Omitted, the rule is unchanged. | **substantive** |
 > | 2026-11-03 | `header.case-variant-key` added to the generated rule table: an opt-in, declaration-free rule reporting two keys in one record's header that differ only by case. **Why:** `MILE-113` -- a type declaring no vocabulary had nothing that flagged a `Status`/`status` pair, and `ADR-57` rules out making `duplicate_keys()` case-insensitive, so the signal is a separate rule that changes no exact-match verdict. | **substantive** |
+> | 2026-11-04 | Criterion 5 now reads "one adopter's codebase" and "that adopter's hand-written linter" in place of "one source codebase"; criterion 6 is marked as part of the Phase 1 exit, so "all five hold" is now the full Phase 0 set (`SPEC-1`, Exit bar); `Version` `0.11` -> `0.12`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

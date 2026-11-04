@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M30ZA1SK9EGJ4NWN49ZHW0CT
-Status: Draft
+Status: Accepted
 Date: 2026-09-21
 Author: beauwilliams
 Supersedes / Superseded-by: —
@@ -245,6 +245,7 @@ there being two implementations.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | `Draft` -> `Accepted`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-09-21 | Deprecated `audit` emits `rules_selected` as well. **Why:** the equivalence claim was ambiguous for a consumer reading the report as a schema rather than as a list. `audit` has always been a fixed selection, so naming it costs nothing, and it means migrating from `audit` to `check --rules` changes the invocation and not the shape of what comes back. | **substantive** |
 > | 2026-09-21 | Defined the filtered report's contract; downgraded the `fix` half from a settled design to a named direction. **Why:** review found three things the first draft asserted without working out. An excluded rule had no status that was not already taken, and reusing `not-enabled` would have reported a declared policy as declined. And sharing `embodiment_consistency` with `fix` was claimed to close the drift divergence and change no behaviour; it does neither, because `check` gates the rule and supplies a `drifted` set `fix` has no plumbing to build. The divergence is in the rule's input, not in there being two implementations. | **substantive** |
 > | 2026-09-21 | Filed. **Why:** `BUG-99` was filed against `audit`'s empty-rule-set edge case, and examining it showed the edge case was a symptom: `audit` is a read-only subset of `check` that outlived `ADR-53`, and `fix` carries the duplicate-implementation risk `ADR-30` was written to avoid. Filed as an RFC rather than three bug fixes because the question is which commands the surface should have, not how to patch the ones it has. | **substantive** |
