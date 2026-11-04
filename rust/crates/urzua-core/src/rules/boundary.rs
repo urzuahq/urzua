@@ -10,7 +10,8 @@ pub struct PublishedFile {
     pub content: Option<String>,
 }
 
-/// Whether `path` sits at or below the declared `published` entry. Compared by
+/// Whether `path` sits at or below the declared `published` entry, a path
+/// prefix (never a glob) already normalised by config parse. Compared by
 /// path component, so `pkg` covers `pkg/a.rs` and not `pkg2/a.rs`. The one
 /// definition both the caller (choosing which files to read) and the rule
 /// (choosing which declared entry covers a file) use.
@@ -44,8 +45,11 @@ fn declared_prefixes(config: &Config) -> Vec<String> {
 }
 
 /// Every identifier on `line` that is a declared prefix, a hyphen and a
-/// number, standing on its own: not the tail of a longer word (`XADR-26`) or
-/// run into letters after the number (`ADR-26x`).
+/// number, standing on its own: not the tail of a longer word (`XADR-26`), a
+/// URL or path segment (`x.org/ADR-1`) or a snake_case or dotted name, and not
+/// run into letters after the number (`ADR-26x`). A trailing `.` is allowed, so
+/// `(ADR-1.2)` reports `ADR-1`. An identifier split across lines is not
+/// detected: each line is scanned alone.
 ///
 /// Deliberately wider than the evidence collector's structured-marker matcher
 /// (`RFC-11` section 3): this answers "was a record cited here at all", prose
@@ -55,8 +59,14 @@ fn cited_identifiers(line: &str, prefixes: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut i = 0;
     'scan: while i < bytes.len() {
-        let standing_alone =
-            i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-');
+        // Not the tail of a word, a hyphenated name, a URL or path segment, a
+        // snake_case name or a dotted one: `/`, `_` and `.` join an identifier
+        // to what precedes it the way a letter, digit or `-` does.
+        let standing_alone = line.is_char_boundary(i)
+            && !line[..i]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '/' | '_' | '.'));
         if standing_alone {
             for prefix in prefixes {
                 let p = prefix.as_bytes();
@@ -69,7 +79,12 @@ fn cited_identifiers(line: &str, prefixes: &[String]) -> Vec<String> {
                     .take_while(|b| b.is_ascii_digit())
                     .count();
                 let end = digits_at + digits;
-                if digits == 0 || bytes.get(end).is_some_and(|b| b.is_ascii_alphanumeric()) {
+                if digits == 0
+                    || line[end..]
+                        .chars()
+                        .next()
+                        .is_some_and(char::is_alphanumeric)
+                {
                     continue;
                 }
                 out.push(line[i..end].to_string());
@@ -245,7 +260,7 @@ mod tests {
     fn several_citations_on_one_line_are_each_reported() {
         let (_, findings) = run(&[file(
             "rust/published/a.rs",
-            "// (ADR-26), ADR-27/BUG-3 and `ADR-28`.\n",
+            "// (ADR-26), ADR-27 BUG-3 and `ADR-28`.\n",
         )]);
         assert_eq!(findings.len(), 4, "{findings:?}");
     }
@@ -354,5 +369,26 @@ mod tests {
         assert!(!path_is_published(Path::new("a/bc/d.rs"), "a/b"));
         assert!(!path_is_published(Path::new("a/b.rs"), "a/b"));
         assert!(!path_is_published(Path::new("a/b/c.rs"), "."));
+    }
+
+    #[test]
+    fn an_identifier_inside_a_url_path_or_snake_case_name_is_not_standing_alone() {
+        let body = "// https://x.org/ADR-1 foo_ADR-1 file.ADR-1\n";
+        let (_, findings) = run(&[file("rust/published/a.rs", body)]);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn an_identifier_run_into_a_non_ascii_letter_is_not_a_citation() {
+        let (_, findings) = run(&[file("rust/published/a.rs", "// ADR-1\u{e9} and ADR-2\n")]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-2"));
+    }
+
+    #[test]
+    fn a_parenthesised_dotted_identifier_still_reports_the_identifier() {
+        let (_, findings) = run(&[file("rust/published/a.rs", "// (ADR-1.2)\n")]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("cites ADR-1,"));
     }
 }

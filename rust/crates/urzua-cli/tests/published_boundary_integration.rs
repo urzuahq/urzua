@@ -274,3 +274,25 @@ fn an_undeclared_rule_is_reported_not_enabled() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_dot_slash_entry_covers_its_files_and_names_the_normalised_path() {
+    let dir = repo_with_boundary("dotslash", "error", "[\"./pkg/sdk/\"]");
+    std::fs::create_dir_all(dir.join("pkg/sdk")).unwrap();
+    std::fs::write(dir.join("pkg/sdk/a.txt"), "see ADR-1\n").unwrap();
+    commit_all(&dir);
+
+    let parsed = report(&run_urzua(&dir, &["check"]));
+    let findings = boundary_findings(&parsed);
+    assert_eq!(findings.len(), 1, "{parsed}");
+    assert_eq!(findings[0]["file"], "pkg/sdk/a.txt");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("'pkg/sdk'"),
+        "{parsed}"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

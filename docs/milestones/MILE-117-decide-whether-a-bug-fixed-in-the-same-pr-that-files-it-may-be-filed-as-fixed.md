@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M6CXZTS2PNQ6Q0A7BN67K70E
 Status: Planned
-Phase: '0'
+Phase: '1'
 Track: governance-process
 ---
 # 117 — Decide whether a bug fixed in the same PR that files it may be filed as Fixed
@@ -32,3 +32,4 @@ way it is decided, the edit and a `SPEC-19` revision-log entry belong in the PR 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Rounds 25 to 27 filed same-PR bugs as `Fixed` against the rule that only a human sets that status; filed as an open decision rather than silently picking a side. | **substantive** |
+> | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
