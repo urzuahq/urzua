@@ -46,6 +46,8 @@ pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 pub const RULE_SECTION_REQUIRED: &str = "section.required";
 pub const RULE_SECTION_SHAPE: &str = "section.shape";
+pub const RULE_DIFF_SOURCE_REQUIRES_RECORD: &str = "diff.source-requires-record";
+pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mixed";
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 
 pub const ALL_RULES: &[&str] = &[
@@ -88,6 +90,8 @@ pub const ALL_RULES: &[&str] = &[
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     RULE_SECTION_REQUIRED,
     RULE_SECTION_SHAPE,
+    RULE_DIFF_SOURCE_REQUIRES_RECORD,
+    RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
     RULE_FILENAME_IDENTITY_PATTERN,
 ];
 
@@ -257,6 +261,14 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning.",
     },
     RuleMeta {
+        id: RULE_DIFF_SOURCE_REQUIRES_RECORD,
+        description: "A `--base` diff changes a path under a declared `source_paths` prefix but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`). One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
+    },
+    RuleMeta {
+        id: RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        description: "A `--base` diff changes both a governed record and a path under a declared `application_paths` prefix (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean.",
+    },
+    RuleMeta {
         id: RULE_FILENAME_IDENTITY_PATTERN,
         description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined.",
     },
@@ -275,7 +287,15 @@ pub const RULE_METADATA: &[RuleMeta] = &[
 /// already gives a finding about the config file itself, or `BUG-86`'s
 /// "scoped invocation silently drops a real finding" recurs for any narrower
 /// scope than the one that repository's own Makefile was changed to use.
-pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[RULE_CLAIM_STATUS_AGREEMENT];
+///
+/// The diff gates report on a changed source path, which is no record at all,
+/// so the diff scope's "only examined records" filter would otherwise drop
+/// exactly the finding they exist to make.
+pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[
+    RULE_CLAIM_STATUS_AGREEMENT,
+    RULE_DIFF_SOURCE_REQUIRES_RECORD,
+    RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with
 /// none is a config load error.
