@@ -55,9 +55,14 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     let (exec3, findings3) = crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
         rules::identity_collision(&records, identity_collisions)
     });
+    let (exec4, findings4) =
+        crate::gate::gated(&config, rules::RULE_FILENAME_IDENTITY_PATTERN, || {
+            rules::filename_identity_pattern(&records, &config)
+        });
     let mut findings = findings1;
     findings.extend(findings2);
     findings.extend(findings3);
+    findings.extend(findings4);
 
     let waivers = urzua_core::waiver::load_waivers(&records);
     urzua_core::waiver::apply_waivers(&mut findings, &waivers, &urzua_io::today());
@@ -66,7 +71,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     let blocking =
         active_findings().any(|f| f.severity == urzua_core::report::FindingSeverity::Error);
 
-    let executed = [exec1.clone(), exec2.clone(), exec3.clone()];
+    let executed = [exec1.clone(), exec2.clone(), exec3.clone(), exec4.clone()];
     let status = if records.is_empty() || !crate::gate::any_rule_looked(&executed) {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
@@ -75,7 +80,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         ReportStatus::FindingsPresent
     };
 
-    let rules_executed = vec![exec1, exec2, exec3];
+    let rules_executed = vec![exec1, exec2, exec3, exec4];
     let report = CheckReport {
         status,
         files_examined: records.len(),

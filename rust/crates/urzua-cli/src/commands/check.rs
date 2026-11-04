@@ -711,6 +711,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
             || rules::config_known_fields_declaration_missing(&config, &config_path),
         ),
+        crate::gate::gated(&config, rules::RULE_FILENAME_IDENTITY_PATTERN, || {
+            rules::filename_identity_pattern(&records, &config)
+        }),
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
         }),
@@ -773,6 +776,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
                 // it by path, so a changed one keeps its finding.
                 || (f.rule == rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR
                     && changed.as_ref().is_some_and(|c| c.changed.contains(&f.file)))
+                // A whole-corpus finding sits on the type's directory, which is
+                // no record; it stays when any changed path is inside it.
+                || (f.rule == rules::RULE_FILENAME_IDENTITY_PATTERN
+                    && changed
+                        .as_ref()
+                        .is_some_and(|c| c.changed.iter().any(|p| p.starts_with(&f.file))))
                 || in_scope.contains(f.file.as_path())
         });
     }

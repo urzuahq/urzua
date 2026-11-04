@@ -44,6 +44,7 @@ pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
+pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 
@@ -85,6 +86,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+    RULE_FILENAME_IDENTITY_PATTERN,
     RULE_INDEX_FRESHNESS,
 ];
 
@@ -107,7 +109,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_HEADER_FIELD_SET_CONSISTENCY,
-        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39).",
+        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding.",
     },
     RuleMeta {
         id: RULE_TYPE_NO_DECLARED_SPEC,
@@ -244,6 +246,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
         description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
+    },
+    RuleMeta {
+        id: RULE_FILENAME_IDENTITY_PATTERN,
+        description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined.",
     },
     RuleMeta {
         id: RULE_INDEX_FRESHNESS,
