@@ -231,6 +231,7 @@ mod tests {
                         narrative_fields: None,
                         spec: None,
                         relation_fields: None,
+                        companion_fields: None,
                         revision_log: None,
                     },
                 )]
@@ -368,6 +369,7 @@ mod tests {
                     narrative_fields: Some(fields(&["Blocked-on"])),
                     spec: None,
                     relation_fields: None,
+                    companion_fields: None,
                     revision_log: None,
                 },
             )]
@@ -559,6 +561,7 @@ mod tests {
                         narrative_fields: None,
                         spec: None,
                         relation_fields: None,
+                        companion_fields: None,
                         revision_log: None,
                     },
                 )]

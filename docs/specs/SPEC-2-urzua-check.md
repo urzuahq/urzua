@@ -1,5 +1,5 @@
 ---
-Version: '0.65'
+Version: '0.66'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -263,6 +263,7 @@ which stays only for what genuinely isn't built yet.
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
 | `header.pointer-field-clean` | A type's `pointer_fields` entries are clean, comma-separated references only, format-enforced (MILE-90/ADR-44) — an empty entry between commas or freeform trailing prose is flagged. Never applies to `narrative_fields`, which tolerate prose. |
+| `config.companion-declaration-missing` | A type's `companion_fields` lists pairs of relation roles, for example `[embodiment_state, embodiment_locator]`, whose fields it must declare together (`BUG-41`). A type declaring one field of a pair in `required_fields`/`known_fields` without the other is reported, as is a pair whose fields it declares neither of: a rule reading both, such as `embodiment.consistency`, cannot judge a record that lacks one. The fields are the ones the type's `relation_fields` names for the roles; no pair is known to the engine. |
 | `config.pointer-declaration-missing` | A type declaring either `pointer_fields` or `narrative_fields` must declare both explicitly, even as `[]` (MILE-90/ADR-44) — omitting one is not the same as declaring zero fields of that kind. |
 | `config.pointer-field-not-known` | Every field named in a type's `pointer_fields`/`narrative_fields` must also appear in that type's own `required_fields`/`known_fields` (MILE-90/ADR-44) — otherwise `header.field-set-consistency` would never have heard of it. |
 | `config.pointer-narrative-overlap` | A field must be exactly one kind: named in both `pointer_fields` and `narrative_fields` for the same type is a contradiction (MILE-90/ADR-44). |
@@ -537,3 +538,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.63`. A path argument and `--base` keep or drop a finding by the anchor its rule's table entry declares (a record, the configuration, a file outside the corpus, a tracked path, a type's directory, or a record plus a file the rule's options declare), replacing the rule ids `check` named. No finding is kept or dropped differently. **Why:** `MILE-171` step 3: each new rule that reported on a non-record path had to be added to a list by hand or be silently dropped from a narrowed run. | **structural** |
 > | 2026-11-04 | Bumped to `0.64`. `config.relation-field-not-known` also checks the `date` and `author` fields a type declares under `relation_fields` (`MILE-176`): one not in the type's `required_fields` or `known_fields` is a finding, as an undeclared relation role already was. **Why:** `urzua new` fills those fields by name, so an undeclared one was written to a header the rest of the engine never examines. | **substantive** |
 > | 2026-11-04 | Bumped to `0.65`. A type's records are the files directly in its `dir` and each `extra_dirs` entry; `type.dir-matches-nothing` also reports an `extra_dirs` entry that does not exist. Rule table regenerated. **Why:** `MILE-130` -- one identity namespace across several directories. | **substantive** |
+> | 2026-11-04 | Bumped to `0.66`. Added `config.companion-declaration-missing` to the generated rule table: a type declaring one field of a declared `companion_fields` pair without the other is reported. **Why:** `BUG-41` -- a type declaring `Embodiment` without `Realized-by` let records claim a state `embodiment.consistency` could not check. | **substantive** |

@@ -18,6 +18,7 @@ mod boundary;
 mod catalog;
 mod citation;
 mod claim;
+mod companion;
 mod dates;
 mod declaration;
 mod diff_gate;
@@ -45,6 +46,8 @@ pub use boundary::*;
 pub use catalog::*;
 pub use citation::*;
 pub use claim::*;
+
+pub use companion::*;
 pub use dates::*;
 pub use declaration::*;
 pub use diff_gate::*;
