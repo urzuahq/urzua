@@ -113,6 +113,12 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// Statuses that count as accepted for a record whose type declares no
+    /// `statuses.success` (`MILE-133`). Only meaningful to
+    /// `embodiment.back-pointer-decision-accepted`; optional, because a type
+    /// that declares its success statuses needs no fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_statuses: Option<Vec<String>>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -216,6 +222,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             drift_grace_days: Option<u32>,
             #[serde(default)]
             claim_max_age_days: Option<u32>,
+            #[serde(default)]
+            accepted_statuses: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -253,6 +261,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: table.back_pointer_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
+                accepted_statuses: table.accepted_statuses,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -272,6 +281,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
+                accepted_statuses: None,
             })
         }
     }
@@ -683,7 +693,7 @@ fn dir_escapes_repo(dir: &str) -> bool {
 /// that could drift from each other.
 struct RuleOption {
     name: &'static str,
-    owner: &'static str,
+    owners: &'static [&'static str],
     consequence_if_missing: &'static str,
     /// An optional option may be omitted, but a declared one is still
     /// validated (non-empty, no blanks) so it cannot be a silent no-op.
@@ -693,61 +703,70 @@ struct RuleOption {
 const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "not_in",
-        owner: crate::rules::RULE_POINTER_TARGET_STATUS,
+        owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
     RuleOption {
         name: "claim_paths",
-        owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+        owners: &[crate::rules::RULE_CLAIM_STATUS_AGREEMENT],
         consequence_if_missing: "scans nothing and can never report",
         optional: false,
     },
     RuleOption {
         name: "closed_statuses",
-        owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+        owners: &[crate::rules::RULE_CLAIM_STATUS_AGREEMENT],
         consequence_if_missing: "treats every claim as a violation, including correct ones",
         optional: false,
     },
     RuleOption {
         name: "terminal_statuses",
-        owner: crate::rules::RULE_NARRATIVE_FIELD_STALE,
+        owners: &[crate::rules::RULE_NARRATIVE_FIELD_STALE],
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
     RuleOption {
         name: "published_paths",
-        owner: crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        owners: &[crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE],
         consequence_if_missing: "declares no boundary and can never report",
         optional: false,
     },
     RuleOption {
         name: "source_paths",
-        owner: crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
+        owners: &[crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD],
         consequence_if_missing: "declares no source and can never report",
         optional: false,
     },
     RuleOption {
         name: "application_paths",
-        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
         consequence_if_missing: "declares no application source and can never report",
         optional: false,
     },
     RuleOption {
         name: "exclude_paths",
-        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
         consequence_if_missing: "excludes nothing from the application source",
         optional: true,
     },
     RuleOption {
         name: "back_pointer_paths",
-        owner: crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        owners: &[
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+        ],
         consequence_if_missing: "scans no source file and can never report",
         optional: false,
     },
     RuleOption {
+        name: "accepted_statuses",
+        owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED],
+        consequence_if_missing: "leaves a type with no declared success statuses unjudged",
+        optional: true,
+    },
+    RuleOption {
         name: "fields",
-        owner: crate::rules::RULE_POINTER_TARGET_STATUS,
+        owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "checks every declared field",
         optional: true,
     },
@@ -768,6 +787,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "application_paths" => setting.application_paths.as_ref(),
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
+        "accepted_statuses" => setting.accepted_statuses.as_ref(),
         _ => None,
     }
 }
@@ -775,7 +795,8 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    rule == crate::rules::RULE_INDEX_FRESHNESS || RULE_OPTIONS.iter().any(|o| o.owner == rule)
+    rule == crate::rules::RULE_INDEX_FRESHNESS
+        || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
 }
 
 /// Why an `indexes` entry cannot be compared, or `None` when it can. Every
@@ -949,7 +970,7 @@ pub fn parse_with_document_models(
     for (name, setting) in &config.rules {
         for opt in RULE_OPTIONS {
             let present = option_field(opt.name, setting).is_some();
-            if present && name != opt.owner {
+            if present && !opt.owners.contains(&name.as_str()) {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: opt.name.to_string(),
@@ -987,7 +1008,10 @@ pub fn parse_with_document_models(
         if setting.level == RuleLevel::Off {
             continue;
         }
-        for opt in RULE_OPTIONS.iter().filter(|o| o.owner == name) {
+        for opt in RULE_OPTIONS
+            .iter()
+            .filter(|o| o.owners.contains(&name.as_str()))
+        {
             // Non-empty *and* no blank entries, not merely present: an empty
             // list is the harm each consequence describes, and a list of
             // blanks is the same list wearing a value.

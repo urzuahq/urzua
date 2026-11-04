@@ -24,3 +24,4 @@ A gate that reports a change to implementation paths (for example `rust/`) when 
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** A gap the Phase 0 roadmap found with no record. | **substantive** |
 > | 2026-11-02 | Scoped to proposal implementations. **Why:** `AGENTS.md` lets mechanical bug fixes land with only a bug record. | **substantive** |
+> | 2026-11-04 | Narrowest buildable reading shipped as `embodiment.back-pointer-decision-accepted` (`SPEC-2` 0.21): a source back-pointer citing a record not in an accepted status is reported, file-granular on `--base`. Detecting a change that implements a proposal with no back-pointer, and classifying a change as a mechanical fix, remain open. **Why:** a back-pointer is the only machine-readable claim that code implements a record. | **substantive** |
