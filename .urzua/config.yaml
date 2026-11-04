@@ -154,6 +154,9 @@ rules:
   field.pending: warn
   status.undeclared-value: error
   status.required-field-missing: error
+  date.field-valid:
+    level: error
+    date_fields: ["Date"]
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error

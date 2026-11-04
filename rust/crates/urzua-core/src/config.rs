@@ -113,15 +113,24 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
+    /// (`MILE-137`). Only meaningful to `date.field-valid`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_fields: Option<Vec<String>>,
+    /// The one field holding the acceptance date (`MILE-137`). Only
+    /// meaningful to `date.acceptance-by-status`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance_field: Option<String>,
     /// Severity per field, within one rule (`MILE-140`): a field named here
     /// reports at its own level (`warn` or `error`), every other field at the
     /// rule's `level`. Only meaningful to the rules that report per field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_levels: Option<BTreeMap<String, RuleLevel>>,
     /// Statuses that count as accepted for a record whose type declares no
-    /// `statuses.success` (`MILE-133`). Only meaningful to
-    /// `embodiment.back-pointer-decision-accepted`; optional, because a type
-    /// that declares its success statuses needs no fallback.
+    /// `statuses.success` (`MILE-133`, `MILE-137`). Only meaningful to
+    /// `embodiment.back-pointer-decision-accepted` and
+    /// `date.acceptance-by-status`; optional, because a type that declares its
+    /// success statuses needs no fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
 }
@@ -228,6 +237,10 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             claim_max_age_days: Option<u32>,
             #[serde(default)]
+            date_fields: Option<Vec<String>>,
+            #[serde(default)]
+            acceptance_field: Option<String>,
+            #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
         }
@@ -267,6 +280,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: table.back_pointer_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
+                date_fields: table.date_fields,
+                acceptance_field: table.acceptance_field,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
             })
@@ -288,6 +303,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
+                date_fields: None,
+                acceptance_field: None,
                 field_levels: None,
                 accepted_statuses: None,
             })
@@ -769,8 +786,17 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "date_fields",
+        owners: &[crate::rules::RULE_DATE_FIELD_VALID],
+        consequence_if_missing: "names no date field and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "accepted_statuses",
-        owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED],
+        owners: &[
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+            crate::rules::RULE_DATE_ACCEPTANCE_BY_STATUS,
+        ],
         consequence_if_missing: "leaves a type with no declared success statuses unjudged",
         optional: true,
     },
@@ -801,12 +827,13 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "closed_statuses" => setting.closed_statuses.as_ref(),
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
+        "date_fields" => setting.date_fields.as_ref(),
+        "accepted_statuses" => setting.accepted_statuses.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
         "source_paths" => setting.source_paths.as_ref(),
         "application_paths" => setting.application_paths.as_ref(),
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
-        "accepted_statuses" => setting.accepted_statuses.as_ref(),
         _ => None,
     }
 }
@@ -1052,6 +1079,28 @@ pub fn parse_with_document_models(
                     option: option.to_string(),
                 });
             }
+        }
+
+        if setting.acceptance_field.is_some()
+            && name != crate::rules::RULE_DATE_ACCEPTANCE_BY_STATUS
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "acceptance_field".to_string(),
+            });
+        }
+        if name == crate::rules::RULE_DATE_ACCEPTANCE_BY_STATUS
+            && setting.level != RuleLevel::Off
+            && setting
+                .acceptance_field
+                .as_deref()
+                .is_none_or(|f| f.trim().is_empty())
+        {
+            return Err(ConfigError::OptionRequired {
+                rule: name.clone(),
+                option: "acceptance_field".to_string(),
+                consequence: "names no acceptance date and can never report",
+            });
         }
 
         // An option-taking rule given no option does not fall back to a sane
