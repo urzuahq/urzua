@@ -37,6 +37,14 @@ record_types:
     pointer_fields:
       - "Derives-from"
     narrative_fields: []
+    # Every decision states its Context (MILE-4). A Rejected ADR made no
+    # decision, so it is set aside on purpose (MILE-7, BUG-187): eligible and
+    # unexamined, not a configuration that reaches nothing.
+    sections:
+      from: headings
+      required:
+        - {name: Context}
+      exempt_statuses: ["Rejected"]
   rfc:
     dir: "docs/rfc"
     required_fields:
@@ -190,6 +198,7 @@ rules:
   config.known-fields-declaration-missing: error
   config.header-none-has-no-required-fields: error
   config.scope-matches-nothing: warn
+  section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error
   field.quality: error

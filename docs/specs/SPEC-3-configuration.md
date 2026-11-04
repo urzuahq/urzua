@@ -1,5 +1,5 @@
 ---
-Version: '0.32'
+Version: '0.33'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -182,7 +182,8 @@ Two details carry weight:
       a data row with every cell empty does not count, the largest table in the section decides, and
       a table inside a fenced code block is not read.
     - `exempt_statuses` lists statuses of a record that made no decision (`MILE-7`). Such a record is
-      counted out of scope by both rules, not asked for the sections. It is matched exactly against
+      counted eligible and unexamined by both rules, not asked for the sections: set aside on purpose,
+      so `config.scope-matches-nothing` does not report it (`BUG-187`). It is matched exactly against
       the type's declared status field. A record whose header cannot be read is counted unreadable,
       never assumed exempt, and a record with no status is not exempt. Declaring it without
       `required`, a blank status, a duplicate section name, an unknown `shape`, `min_rows` missing
@@ -730,3 +731,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.30`. `date_order` entries are mappings `{earlier, later}` instead of an `Earlier <= Later` string; a relation pair's `types` scoping counts a claim to an uncarried type as eligible and unexamined, not out of scope. **Why:** `ADR-64` (structured in, structured out) for `MILE-157`, and `MILE-155` -- a legitimate cross-type claim is not a configuration the tool cannot reach. | **substantive** |
 > | 2026-11-04 | Bumped to `0.31`. Documented the optional `skip_tables` option of `citation.path-exists` (markers naming tables whose rows are history and are not read; empty by default), and that a declared `external_ids` citation is counted eligible and unexamined, not out of scope. **Why:** `MILE-143` -- a revision log under `## References` names paths as they were; `BUG-186` -- a declared external id was reported by `config.scope-matches-nothing` as a misconfiguration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.33`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
