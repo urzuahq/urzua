@@ -45,6 +45,10 @@ pub struct RuleCtx<'a> {
     pub config_path: &'a Path,
     pub records: &'a [Record],
     pub full_text: &'a HashMap<PathBuf, String>,
+    /// Each type's template header (`field -> value`), read by the caller from
+    /// `.urzua/templates/<type>.md`; empty unless `field.quality` declares
+    /// `template_placeholders`.
+    pub templates: &'a crate::new_record::TemplateValues,
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],

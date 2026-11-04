@@ -215,8 +215,17 @@ pub fn field_leading_reserved_indicator(
     )
 }
 
-pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
+pub fn field_quality(
+    records: &[Record],
+    config: &Config,
+    templates: &crate::new_record::TemplateValues,
+) -> (RuleExecution, Vec<Finding>) {
     let required_by_type = required_fields_by_type(config);
+    let statuses = statuses_by_type(config);
+    // `BUG-22`: the template is the placeholder vocabulary when declared.
+    let from_templates = config
+        .rule_opts::<FieldQualityOpts>(RULE_FIELD_QUALITY)
+        .template_placeholders;
     let required_by_type = &required_by_type;
     const RULE_ID: &str = RULE_FIELD_QUALITY;
     let mut findings = Vec::new();
@@ -243,7 +252,19 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
-            let state = classify(record.header.get(field.as_str()));
+            let value = record.header.get(field.as_str());
+            let state = if from_templates {
+                crate::field_state::classify_against_template(
+                    value,
+                    templates
+                        .get(&record.record_type)
+                        .and_then(|t| t.get(field.as_str()))
+                        .map(String::as_str),
+                    statuses.get(&record.record_type),
+                )
+            } else {
+                classify(value)
+            };
             // `Pending` is `field.pending`'s subject, not this rule's: it means
             // someone declared the work unfinished, where Blank and Placeholder
             // mean someone forgot. One rule carries one declared level, so
@@ -400,7 +421,7 @@ mod tests {
         );
         let config = config_for_required(vec![("adr", vec!["Status", "Date"])]);
 
-        let (exec, findings) = field_quality(&[r.clone()], &config);
+        let (exec, findings) = field_quality(&[r.clone()], &config, &Default::default());
         let population = exec.population.expect("the rule carries a population");
         assert_eq!(
             (population.eligible(), population.examined()),
@@ -576,7 +597,7 @@ mod tests {
         let r = record("docs/adr/0001-x.md", "adr", "---\nAuthor: name\n---\n");
         let config = config_for_required(vec![("adr", vec!["Author"])]);
 
-        let (exec, findings) = field_quality(&[r], &config);
+        let (exec, findings) = field_quality(&[r], &config, &Default::default());
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Placeholder"));
@@ -591,7 +612,7 @@ mod tests {
         let r = record("docs/adr/0001-x.md", "adr", "this is not a header at all");
         let config = config_for_required(vec![("adr", vec!["Status"])]);
 
-        let (exec, findings) = field_quality(&[r], &config);
+        let (exec, findings) = field_quality(&[r], &config, &Default::default());
         assert_eq!(examined(&exec), 0, "{exec:?}");
         assert_eq!(unreadable(&exec), 1, "{exec:?}");
         assert!(findings.is_empty(), "{findings:?}");
@@ -606,7 +627,7 @@ mod tests {
         let r = record("docs/adr/0001-x.md", "adr", "---\nDeciders: Pending\n---\n");
         let config = config_for_required(vec![("adr", vec!["Deciders"])]);
 
-        let (_, quality) = field_quality(std::slice::from_ref(&r), &config);
+        let (_, quality) = field_quality(std::slice::from_ref(&r), &config, &Default::default());
         assert!(quality.is_empty(), "{quality:?}");
 
         let (_, pending) = field_pending(std::slice::from_ref(&r), &config);
@@ -616,7 +637,7 @@ mod tests {
         // The forgotten case stays with field.quality, and field.pending
         // must not claim it.
         let blank = record("docs/adr/0002-y.md", "adr", "---\nDeciders:\n---\n");
-        let (_, q2) = field_quality(std::slice::from_ref(&blank), &config);
+        let (_, q2) = field_quality(std::slice::from_ref(&blank), &config, &Default::default());
         assert_eq!(q2.len(), 1);
         assert_eq!(q2[0].severity, FindingSeverity::Error);
         let (_, p2) = field_pending(&[blank], &config);
@@ -628,7 +649,7 @@ mod tests {
         let r = record("docs/adr/0001-x.md", "adr", "---\nAuthor: someone\n---\n");
         let config = config_for_required(vec![("adr", vec!["Author"])]);
 
-        let (_, findings) = field_quality(&[r], &config);
+        let (_, findings) = field_quality(&[r], &config, &Default::default());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -644,7 +665,7 @@ mod tests {
         );
         let config = config_for_required(vec![("adr", vec!["Author"])]);
 
-        let (_, findings) = field_quality(&[r], &config);
+        let (_, findings) = field_quality(&[r], &config, &Default::default());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -667,7 +688,7 @@ mod tests {
             },
         )]);
 
-        let (exec, findings) = field_quality(&[r], &config);
+        let (exec, findings) = field_quality(&[r], &config, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -753,7 +774,7 @@ mod tests {
             "---\nDeciders:\nReviewers:\n---\n",
         );
         let config = levelled("field.quality", "{Deciders: error, Reviewers: warn}");
-        let (_, findings) = field_quality(&[r], &config);
+        let (_, findings) = field_quality(&[r], &config, &Default::default());
         let by = |f: &str| {
             findings
                 .iter()
@@ -773,7 +794,7 @@ mod tests {
             "---\nDeciders:\nReviewers:\n---\n",
         );
         let config = levelled("field.quality", "{Deciders: error}");
-        let (_, findings) = field_quality(&[r], &config);
+        let (_, findings) = field_quality(&[r], &config, &Default::default());
         let reviewers = findings
             .iter()
             .find(|x| x.message.contains("'Reviewers'"))
@@ -789,7 +810,7 @@ mod tests {
             "---\nDeciders:\nReviewers:\n---\n",
         );
         let config = config_for_required(vec![("adr", vec!["Deciders", "Reviewers"])]);
-        let (_, findings) = field_quality(&[r], &config);
+        let (_, findings) = field_quality(&[r], &config, &Default::default());
         assert_eq!(findings.len(), 2);
         assert!(findings.iter().all(|f| f.declared_severity.is_none()));
     }

@@ -1,5 +1,5 @@
 ---
-Version: '0.54'
+Version: '0.55'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -336,6 +336,15 @@ Two details carry weight:
     field some `statuses.require` entry names, until the record's status is one that requires it:
     the slot stays eligible and is counted unexamined. A field no `require` entry names is judged
     as before, and the option is refused on any other rule at load.
+  - `field.quality`: the optional boolean `template_placeholders` (`BUG-22`, `false` by default). Declared
+    `true`, a required field whose value is identical after trimming to the type's template text for that
+    field is a Placeholder, where the template is `.urzua/templates/<type>.md` and its header is read for
+    `field: value` pairs. The compiled-in placeholder tokens and the `nnnn` reference heuristic no longer
+    apply to the rule, and a value is Pending only when the type's declared `pending` vocabulary says so. A
+    type with no template is judged by that vocabulary alone. Declaring the option when no record type has a
+    template is reported as a warning notice rather than a rule that reads nothing, and it is refused on any other
+    rule at load. A template must therefore not carry a real default (a `Phase: 0` would flag every record
+    that legitimately holds it); write the placeholder text a person is meant to replace.
   - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
     `statuses`, `success` and `failure` together are the finished statuses, in place of the rule's
     `terminal_statuses` / `closed_statuses` list, which stays the vocabulary for every target whose
@@ -960,3 +969,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.52`. No change to the option reference. The `RuleSetting` option set is one definition (`accepted_statuses` now carries the `serde(default)` its siblings did), and a rule reads its options as a typed value. An option that is declared in the option tables but not accepted by the struct, or the reverse, fails a test. **Why:** `MILE-174` -- the set was defined four times, so a new option could be silently ignored. | **structural** |
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.55`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |

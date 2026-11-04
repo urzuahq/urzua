@@ -273,7 +273,11 @@ rules:
   section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error
-  field.quality: error
+  # A required field whose value is identical to its type's template text is
+  # a placeholder (BUG-22); the template is the vocabulary, not a token list.
+  field.quality:
+    level: error
+    template_placeholders: true
   field.pending:
     level: warn
     pending_until_required: true

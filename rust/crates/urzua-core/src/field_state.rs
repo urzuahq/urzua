@@ -67,6 +67,33 @@ pub fn classify_with(
     FieldState::Present
 }
 
+/// [`classify_with`] for a type whose placeholder vocabulary is its template
+/// (`BUG-22`): a value identical after trimming to `template_value`, the
+/// template's text for the same field, is a Placeholder. The compiled-in tokens
+/// and the `nnnn` heuristic do not apply, and a value is Pending only when the
+/// type's declared `pending` vocabulary says so. A field the template does not
+/// carry has no template value and is never a Placeholder.
+pub fn classify_against_template(
+    value: Option<&str>,
+    template_value: Option<&str>,
+    declared: Option<&crate::status_model::StatusDecl>,
+) -> FieldState {
+    let Some(value) = value else {
+        return FieldState::Blank;
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return FieldState::Blank;
+    }
+    if template_value.is_some_and(|t| t.trim() == trimmed) {
+        return FieldState::Placeholder;
+    }
+    if declared.and_then(|d| d.is_pending_value(trimmed)) == Some(true) {
+        return FieldState::Pending;
+    }
+    FieldState::Present
+}
+
 /// Matches unedited placeholder references like `RFC-NNNN` or `ADR-NNNN`,
 /// copied from the template's `Derives-from: RFC-NNNN (optional)` line. Four
 /// literal `n`s in a row is not a real record number in any real value.
@@ -126,5 +153,25 @@ mod tests {
         assert_eq!(classify(Some("(project lead)")), FieldState::Placeholder);
         assert_eq!(classify(Some("(session author)")), FieldState::Placeholder);
         assert_eq!(classify(Some("(Project Lead)")), FieldState::Placeholder);
+    }
+
+    #[test]
+    fn a_value_equal_to_its_template_text_is_a_placeholder() {
+        let t = Some("how/where this was actually discovered");
+        assert_eq!(
+            classify_against_template(Some("  how/where this was actually discovered "), t, None),
+            FieldState::Placeholder
+        );
+        assert_eq!(
+            classify_against_template(Some("found in review"), t, None),
+            FieldState::Present
+        );
+        assert_eq!(classify_against_template(None, t, None), FieldState::Blank);
+        // No template value for the field: nothing to be identical to, and
+        // none of the compiled-in tokens apply.
+        assert_eq!(
+            classify_against_template(Some("tbd"), None, None),
+            FieldState::Present
+        );
     }
 }
