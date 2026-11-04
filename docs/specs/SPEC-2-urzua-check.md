@@ -1,5 +1,5 @@
 ---
-Version: '0.60'
+Version: '0.61'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -177,7 +177,7 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   dependents are not pulled in.
 - Reference resolution and every other corpus-wide computation still index the whole tracked
   corpus, so an unchanged target is never reported missing. A finding about the configuration, and
-  one from a rule that reports outside the corpus (`RULES_REPORTING_OUTSIDE_THE_CORPUS`), survive
+  one from a rule whose table entry says it reports outside the corpus (`reports_outside_corpus`), survive
   the scope exactly as they survive a path argument (`BUG-86`, `BUG-121`).
 - A change to the configuration file the run loaded puts **every record** in scope (the rules
   themselves changed), and `scope.whole_corpus_reason` says so. A configuration that is a symlink
@@ -219,9 +219,9 @@ records to invent content or its linters to be switched off.
 
 ### Shipped, by actual rule id
 
-This is the complete, current set — generated from `urzua_core::rules::RULE_METADATA` by
+This is the complete, current set — generated from `urzua_core::rules::RULE_TABLE` by
 `scripts/generate-rule-table.py` (`BUG-52`), never hand-edited, so it cannot drift from
-`ALL_RULES` the way its hand-maintained predecessor did. Regenerate with `make rule-table`; `make
+the rule table the way its hand-maintained predecessor did. Regenerate with `make rule-table`; `make
 ci` fails if the committed table is stale. Not a delta on top of the aspirational language below,
 which stays only for what genuinely isn't built yet.
 
@@ -526,3 +526,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.58`. Added the opt-in `citation.issue-exists` rule: an issue or pull request cited in a declared reference section (`#123`, or a link to the declared repository) must be in the committed snapshot written by `urzua refs refresh`; an absent, unreadable or foreign snapshot is one finding on the snapshot path and every citation is counted eligible and unexamined; every finding names the snapshot's generated date and `check` adds an info notice with it. `check` reads the file and never the network. The rule table is regenerated and the snapshot finding is exempt from path scoping. **Why:** `MILE-143` -- the issue and pull request half. | **substantive** |
 > | 2026-11-04 | Bumped to `0.59`. Added the opt-in `status.delivery-agreement` rule to the generated rule table: a `Status` held to the delivery evidence the type declares in `statuses.delivery`, both ways. **Why:** `MILE-183`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.60`. `citation.issue-exists` also reads the header fields named by the optional `issue_refs.fields` (a finding names the field and its line); the rule-table row is regenerated. Off unless declared. **Why:** `MILE-184` -- numbers in header fields such as a BUG's `Found-in` were unchecked. | **substantive** |
+> | 2026-11-04 | Bumped to `0.61`. The shipped rule set is `RULE_TABLE`, one entry per rule carrying its description and properties; `RULE_METADATA`, `RULES_REPORTING_OUTSIDE_THE_CORPUS`, `IDENTITY_DEPENDENT_RULES` and `RULES_REQUIRING_RELATION_PAIRS` are derived from it. No rule or output changes. **Why:** `MILE-171`: a rule's properties lived in parallel lists. | **structural** |

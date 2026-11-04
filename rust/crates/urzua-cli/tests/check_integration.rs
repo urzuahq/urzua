@@ -3031,99 +3031,15 @@ fn fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector() {
 /// `MILE-119`: every rule that builds a per-record or per-slot population must
 /// classify a `header_shape: none` type (`ADR-50`) as out of scope -- it has no
 /// header, so "unreadable" would misreport a deliberate declaration as a
-/// malformed file. The rule set is `ALL_RULES`, not a hand-picked list, so a
+/// malformed file. The rule set is `RULE_TABLE`, not a hand-picked list, so a
 /// rule added later is covered without anyone remembering to extend this test.
 ///
-/// A rule is exempt only if it cannot read a header at all, and each entry says
-/// why. Everything else must show `eligible > 0` (a rule with no candidate
+/// A rule is exempt only if it cannot read a header at all, and its table entry
+/// (`RuleDef::header_none`) says why. Everything else must show `eligible > 0` (a rule with no candidate
 /// proves nothing), `examined == 0` and `unreadable == 0`, and every candidate
 /// out of scope.
 #[test]
 fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
-    const EXEMPT: &[(&str, &str)] = &[
-        // Config-level: judge the configuration, never a record's header.
-        ("type.no-declared-spec", "config-level"),
-        ("type.dir-matches-nothing", "config-level"),
-        ("type.record-outside-declared-dir", "path-level"),
-        ("config.pointer-declaration-missing", "config-level"),
-        ("config.pointer-field-not-known", "config-level"),
-        ("config.pointer-narrative-overlap", "config-level"),
-        ("config.header-none-has-no-required-fields", "config-level"),
-        ("config.relation-field-not-known", "config-level"),
-        ("config.known-fields-declaration-missing", "config-level"),
-        (
-            "config.scope-matches-nothing",
-            "judges other rules' populations",
-        ),
-        // Record-level but header-independent: filename and body text only.
-        ("identity.collision", "reads the filename identifier only"),
-        ("filename.title-consistency", "reads filename and H1 only"),
-        ("filename.identity-pattern", "reads the filename only"),
-        ("revision-log.change-class-required", "reads body text only"),
-        (
-            "citation.resolution",
-            "reads body text only; a header-less record is read whole",
-        ),
-        (
-            "citation.path-exists",
-            "reads body text only; a header-less record is read whole",
-        ),
-        (
-            "citation.issue-exists",
-            "reads body text only; a header-less record is read whole",
-        ),
-        (
-            "section.required",
-            "reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)",
-        ),
-        ("section.shape", "same as section.required"),
-        // Claim-level: judges claim files, not records.
-        (
-            "claim.status-agreement",
-            "population is claims, not records",
-        ),
-        // File-level: judges the text of files under a published path.
-        (
-            "boundary.published-path-reference",
-            "population is published files, not records",
-        ),
-        (
-            "embodiment.back-pointer-resolution",
-            "population is source files, not records",
-        ),
-        (
-            "embodiment.back-pointer-decision-accepted",
-            "population is source files, not records",
-        ),
-        // File-level: judges committed index artifacts against the records.
-        (
-            "index.freshness",
-            "population is index artifacts, not records",
-        ),
-        // Waiver-level: reads the waiver's own Rule/Scope/Expires, reserved
-        // fields the engine names, and only for a type called `waiver`.
-        (
-            "waiver.matches-nothing",
-            "judges waiver records against the run's findings, not a configured header",
-        ),
-        // Diff-level: judge the changed paths of a `--base` run.
-        (
-            "diff.source-requires-record",
-            "population is changed paths, and only on a --base run",
-        ),
-        (
-            "diff.source-and-records-mixed",
-            "population is changed paths, and only on a --base run",
-        ),
-    ];
-
-    for (id, _) in EXEMPT {
-        assert!(
-            urzua_core::rules::ALL_RULES.contains(id),
-            "exemption names '{id}', which is not a shipped rule"
-        );
-    }
-
     let dir = fixture_repo("header-none-all-rules");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/note")).unwrap();
@@ -3190,8 +3106,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     let executed = parsed["rules_executed"].as_array().unwrap();
 
     let mut failures = Vec::new();
-    for id in urzua_core::rules::ALL_RULES {
-        if EXEMPT.iter().any(|(exempt, _)| exempt == id) {
+    for def in urzua_core::rules::RULE_TABLE {
+        let id = &def.id;
+        if matches!(def.header_none, urzua_core::rules::HeaderNone::Exempt(_)) {
             continue;
         }
         let Some(entry) = executed.iter().find(|r| r["rule"] == *id) else {

@@ -29,3 +29,4 @@ Adding a rule is one table entry plus the rule function; no other list, closure 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
+> | 2026-11-04 | First step landed (the rule definition table, `RULE_TABLE`, with the rule metadata and the three parallel lists derived from it); `Status` stays Planned. **Why:** the milestone is delivered in steps (table and metadata, then the runner for gating and severity, then scoping by anchor), each its own reviewable PR; `Realized-by` and `Done` are set by the PR that completes it. | **structural** |

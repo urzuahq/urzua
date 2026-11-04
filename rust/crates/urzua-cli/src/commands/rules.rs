@@ -7,7 +7,7 @@
 use std::process::ExitCode;
 
 use urzua_core::report::{Notice, Report};
-use urzua_core::rules::RULE_METADATA;
+use urzua_core::rules::RULE_TABLE;
 
 #[derive(serde::Serialize)]
 struct RuleEntry {
@@ -32,11 +32,11 @@ impl Report for RulesReport {
 }
 
 pub fn run() -> ExitCode {
-    let rules = RULE_METADATA
+    let rules = RULE_TABLE
         .iter()
-        .map(|m| RuleEntry {
-            id: m.id.to_string(),
-            description: m.description.to_string(),
+        .map(|d| RuleEntry {
+            id: d.id.to_string(),
+            description: d.description.to_string(),
         })
         .collect();
     crate::emit(&RulesReport {

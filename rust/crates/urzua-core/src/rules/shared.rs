@@ -12,7 +12,7 @@ use super::*;
 /// A rule that never reads a header (`identity.collision`,
 /// `filename.title-consistency`, `revision-log.change-class-required`) uses
 /// `census_records` directly. The all-rules test in `check_integration.rs`
-/// iterates `ALL_RULES` and names each such exemption.
+/// iterates `RULE_TABLE`; each such exemption is the rule's own `header_none`.
 pub(super) fn scoped_census_records<'a, T>(
     config: &Config,
     unit: PopulationUnit,

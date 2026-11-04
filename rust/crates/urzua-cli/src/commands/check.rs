@@ -924,6 +924,8 @@ pub fn run(
     // `citation.issue-exists` also reports an unusable snapshot on the
     // snapshot file itself, which is no record and belongs to every scope: a
     // narrowed run that could check nothing must still say so.
+    let outside_corpus: std::collections::HashSet<&str> =
+        rules::rule_ids_where(|d| d.reports_outside_corpus).collect();
     let snapshot_path = issue_refs_declaration(&config).map(|r| PathBuf::from(&r.snapshot));
     let is_snapshot_finding = |f: &Finding| {
         f.rule == rules::RULE_CITATION_ISSUE_EXISTS
@@ -933,7 +935,7 @@ pub fn run(
         findings.retain(|f| {
             f.file == config_path.as_path()
                 || is_snapshot_finding(f)
-                || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
+                || outside_corpus.contains(f.rule.as_str())
                 || requested_scopes.iter().any(|s| f.file.starts_with(s))
         });
     }
@@ -946,7 +948,7 @@ pub fn run(
         findings.retain(|f| {
             f.file == config_path.as_path()
                 || is_snapshot_finding(f)
-                || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
+                || outside_corpus.contains(f.rule.as_str())
                 // A file below a declared dir that no type owns is not a loaded
                 // record, so it is never in the examined set; the rule judges
                 // it by path, so a changed one keeps its finding.
