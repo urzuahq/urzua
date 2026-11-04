@@ -1,5 +1,5 @@
 ---
-Version: '0.19'
+Version: '0.20'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -297,6 +297,7 @@ relation_pairs:
     inverse: "Resolved-by"    # the resolved record -> this one
     reciprocity: required     # required | none
     cross_type: true          # optional, default true
+    types: [rfc]              # optional (MILE-155), default: every type declaring a side
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
       level: warn             # warn (default) | error
@@ -322,10 +323,15 @@ level; the engine does not read that field. A status listed that no record type 
 The narrowest reading of what `RFC-47` leaves open, each a decision recorded here until an ADR
 revisits it:
 
-- **Per-type binding.** None. A pair's two names are global: every type that declares a name in
-  `required_fields` or `known_fields` carries that side. A type declaring neither is not that pair's
-  business. A claim to a type that does not declare the echoing field is an unechoed claim.
-  `relation_fields` is unchanged and still binds only the fixed roles.
+- **Per-type binding** (`MILE-155`). Optional. A pair's two names are global by default: every type
+  that declares a name in `required_fields` or `known_fields` carries that side, and a claim to a
+  type that does not declare the echoing field is an unechoed claim. A pair that declares
+  `types: [rfc]` is carried by those record types only: a record of another type is not that pair's
+  business (its fields are not slots), and a claim whose target is another type is excluded as out
+  of scope, counted in the population, not reported as unechoed, because that type cannot hold the
+  inverse field. Each listed type must be a configured record type declaring at least one of the
+  pair's fields; an empty or duplicated list is refused at load. `relation_fields` is unchanged and
+  still binds only the fixed roles.
 - **Config shape.** Top-level `relation_pairs`, not per type.
 - **Fixed `RelationRole` set.** Unchanged. `Supersession` keeps its combined
   `Supersedes / Superseded-by` key and `relation.supersession-reciprocity` stays beside the general
@@ -530,4 +536,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.16`. Documented the optional `external_ids` option of `citation.resolution`: exact ids or inclusive numeric ranges under a declared record prefix that are skipped (counted out of scope) instead of resolved. **Why:** `MILE-156` -- a public standard number such as `RFC-4122` shares a record prefix and was reported as a dangling citation, with no way to say it is not ours. | **substantive** |
 > | 2026-11-04 | Bumped to `0.17`. `statuses.require` counts a value in the type's declared `pending` vocabulary as missing, the same list `field.pending` reads. **Why:** `MILE-153` -- an Accepted record whose required field read `Unknown` passed; the vocabulary is declared once, in configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.18`. Documented the per-type `exclude_files` declaration: bare file names directly in a type's `dir` that are not its records, excluded from every rule's population and from `filename.identity-pattern`'s census. **Why:** `MILE-150` and `BUG-183` -- a `README.md` in a record directory was read as a record and failed every rule, with no way to say it is not one. | **substantive** |
-> | 2026-11-04 | Bumped to `0.NEXT`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.20`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.20`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |

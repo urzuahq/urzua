@@ -1293,6 +1293,13 @@ pub struct RelationPair {
     /// to the provisional level instead of the rule's.
     #[serde(default)]
     pub provisional: Option<ProvisionalClaim>,
+    /// The record types that carry this pair (`MILE-155`). Omitted means
+    /// global, as before: every type declaring a side's field carries it.
+    /// Declared, a record of another type is not the pair's business, and a
+    /// claim to a record of another type is out of scope rather than an
+    /// unechoed claim, because that type cannot hold the inverse field.
+    #[serde(default)]
+    pub types: Option<Vec<String>>,
 }
 
 /// Which claimants make a pair's claim provisional, and how loudly an
@@ -1360,6 +1367,40 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             if let Some(other) = fields.insert(field.as_str(), label) {
                 return bad(format!(
                     "field '{field}' is used by pair '{other}' and pair '{label}' (or twice by one pair); each field belongs to exactly one side of one pair"
+                ));
+            }
+        }
+    }
+    // A pair scoped to types that do not exist, or that carry neither of its
+    // fields, would examine nothing (ADR-7).
+    for pair in &config.relation_pairs {
+        let Some(types) = &pair.types else { continue };
+        let label = pair.name.as_str();
+        if types.is_empty() {
+            return bad(format!(
+                "pair '{label}' types must list at least one record type"
+            ));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for name in types {
+            if !seen.insert(name.as_str()) {
+                return bad(format!("pair '{label}' types lists '{name}' twice"));
+            }
+            let Some(rt) = config.record_types.get(name) else {
+                return bad(format!(
+                    "pair '{label}' types names '{name}', which is not a configured record type"
+                ));
+            };
+            let declares = |f: &str| {
+                rt.required_fields
+                    .iter()
+                    .chain(rt.known_fields.iter().flatten())
+                    .any(|d| d == f)
+            };
+            if !declares(&pair.forward) && !declares(&pair.inverse) {
+                return bad(format!(
+                    "pair '{label}' types names '{name}', which declares neither '{}' nor '{}', so it could never carry the pair",
+                    pair.forward, pair.inverse
                 ));
             }
         }
@@ -2163,6 +2204,26 @@ record_types:
                 "{bad} must be refused"
             );
         }
+    }
+
+    #[test]
+    fn a_pair_scoped_to_types_loads_and_a_misdeclared_scope_is_refused() {
+        let pair = |types: &str| {
+            format!("relation_pairs:\n  - {{name: a, forward: Amends, inverse: Amended-by, reciprocity: required, types: {types}}}\n")
+        };
+        let c = parse(&pair_cfg("", &pair("[rfc]"))).unwrap();
+        assert_eq!(c.relation_pairs[0].types, Some(vec!["rfc".to_string()]));
+        assert!(parse(&pair_cfg("", AMEND_PAIR)).unwrap().relation_pairs[0]
+            .types
+            .is_none());
+        for bad in ["[]", "[rfc, rfc]", "[nope]", "rfc"] {
+            assert!(
+                parse(&pair_cfg("", &pair(bad))).is_err(),
+                "{bad} must be refused"
+            );
+        }
+        let neither = "schema_version: 2\nrelation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required, types: [adr]}\nrecord_types:\n  rfc:\n    dir: docs/rfc\n    known_fields: [Amends, Amended-by]\n  adr:\n    dir: docs/adr\n    known_fields: [Title]\n";
+        assert!(parse(neither).is_err());
     }
 
     #[test]
