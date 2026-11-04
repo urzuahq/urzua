@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6JW438QHFRMZPF22SZM9JAM
-Status: Open
+Status: Fixed
 Found-in: 'a re-run of urzua over a real adopter corpus (2026-11-04)'
-Regression-test: 'planned: a test that fails before the fix and passes after, plus the same case exercised through urzua check in this repository'
+Regression-test: 'rust/crates/urzua-cli/tests/new_integration.rs::new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing, rust/crates/urzua-cli/tests/new_integration.rs::new_keeps_the_templates_declared_non_required_header_fields_observed_failing'
 ---
 # 188 — Urzua new writes an H1 id that does not follow the declared identity pattern's padding and drops a template's non-required header fields
 
@@ -23,3 +23,4 @@ Related: `BUG-182`, `MILE-151`. Done when `urzua new` writes an H1 id padded exa
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this defect. | **substantive** |
+> | 2026-11-04 | Fixed. The H1 id is padded to the width of the `number` the declared pattern reads from the file name written beside it (derived from config, not hardcoded); header fields the template names that the type declares but does not require are kept, blank. Exercised by `urzua new waiver` here (padded pattern, optional `Expires`). **Why:** `SPEC-12` 0.10. | **substantive** |
