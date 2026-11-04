@@ -8,7 +8,7 @@ Embodiment: null
 Supersedes / Superseded-by: null
 Derives-from: RFC-48
 ---
-# 75 — An acyclic relation pair is a sequencing relation, checked by two sequence rules
+# 76 — An acyclic relation pair is a sequencing relation, checked by two sequence rules
 
 ## Context
 
