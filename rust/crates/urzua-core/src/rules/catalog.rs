@@ -280,11 +280,11 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_DIFF_SOURCE_REQUIRES_RECORD,
-        description: "A `--base` diff changes a path under a declared `source_paths` prefix but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`). One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
+        description: "A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
     },
     RuleMeta {
         id: RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
-        description: "A `--base` diff changes both a governed record and a path under a declared `application_paths` prefix (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean.",
+        description: "A `--base` diff changes both a governed record and a path under a declared `application_paths` entry, a prefix or a glob (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean.",
     },
     RuleMeta {
         id: RULE_FILENAME_IDENTITY_PATTERN,

@@ -793,12 +793,14 @@ pub fn run(
             rules::index_freshness(&records, &full_text, &index_artifacts)
         }),
         crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_REQUIRES_RECORD, || {
-            let source = config
-                .rules
-                .get(rules::RULE_DIFF_SOURCE_REQUIRES_RECORD)
+            let setting = config.rules.get(rules::RULE_DIFF_SOURCE_REQUIRES_RECORD);
+            let source = setting
                 .and_then(|s| s.source_paths.clone())
                 .unwrap_or_default();
-            rules::source_requires_record(changed_paths.as_deref(), &source, &config)
+            let excluded = setting
+                .and_then(|s| s.exclude_paths.clone())
+                .unwrap_or_default();
+            rules::source_requires_record(changed_paths.as_deref(), &source, &excluded, &config)
         }),
         crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED, || {
             let setting = config.rules.get(rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED);

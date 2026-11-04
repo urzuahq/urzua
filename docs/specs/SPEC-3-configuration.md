@@ -1,5 +1,5 @@
 ---
-Version: '0.23'
+Version: '0.24'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -285,6 +285,34 @@ fail_on: warning   # error (default) | warning
 - Only the exit code changes. The report is byte-identical under either value: `blocking` and
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
+
+## Diff rule path options
+
+`diff.source-requires-record` (`source_paths`, `exclude_paths`) and `diff.source-and-records-mixed`
+(`application_paths`, `exclude_paths`) take path entries that are either a **prefix** or a **glob**
+(`MILE-158`). An entry with none of `*`, `?` or `[` is a prefix, compared by whole path component
+exactly as before, so a prefix-only configuration is unchanged. A glob is anchored to the whole
+repository-relative path with forward slashes:
+
+- `*` matches within one path component, `**` across components (`**/` also matches no directory),
+  `?` one character other than `/`, `[abc]` and `[!abc]` a character class.
+- A glob matches the path itself and anything below it, so `rust/crates/*/tests` covers every file
+  in each crate's `tests` directory, as a prefix would.
+- `exclude_paths` removes matching paths from the rule's source set. A changed path under a source
+  entry that an exclusion also matches is not a trigger. It stays in the rule's population as
+  eligible and unexamined, so a test-only diff shows what was set aside, without
+  `config.scope-matches-nothing` reading a deliberate exclusion as an unreachable configuration.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
+```
+
+A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
+`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
 
 ## Relation pairs
 
@@ -594,3 +622,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |
 > | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
+> | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |

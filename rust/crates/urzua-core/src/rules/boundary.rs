@@ -26,6 +26,79 @@ pub fn path_is_published(path: &std::path::Path, published: &str) -> bool {
         && path.starts_with(declared)
 }
 
+/// Whether a path option entry is a glob (`MILE-158`): it carries `*`, `?` or
+/// `[`. An entry with none is a plain prefix, compared by component exactly as
+/// before.
+pub fn is_path_glob(entry: &str) -> bool {
+    entry.contains(['*', '?', '['])
+}
+
+/// The anchored regex for a glob entry, or why it is not one. `*` matches
+/// within one path component, `**` across components (`**/` also matches no
+/// directory at all), `?` one non-separator character, `[abc]` / `[!abc]` a
+/// class. The match covers the path itself and anything below it, so a glob
+/// naming a directory (`crates/*/tests`) covers its files, as a prefix does.
+pub fn path_glob_regex(entry: &str) -> Result<regex::Regex, String> {
+    let chars: Vec<char> = entry.chars().collect();
+    let mut re = String::from("^(?:");
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '*' if chars.get(i + 1) == Some(&'*') => {
+                i += 2;
+                if chars.get(i) == Some(&'/') {
+                    i += 1;
+                    re.push_str("(?:.*/)?");
+                } else {
+                    re.push_str(".*");
+                }
+                continue;
+            }
+            '*' => re.push_str("[^/]*"),
+            '?' => re.push_str("[^/]"),
+            '[' => {
+                let mut j = i + 1;
+                let mut class = String::from("[");
+                if matches!(chars.get(j), Some('!') | Some('^')) {
+                    class.push('^');
+                    j += 1;
+                }
+                let start = class.len();
+                while j < chars.len() && (chars[j] != ']' || class.len() == start) {
+                    if chars[j] == '\\' || chars[j] == '[' {
+                        class.push('\\');
+                    }
+                    class.push(chars[j]);
+                    j += 1;
+                }
+                if j >= chars.len() || class.len() == start {
+                    return Err("has an unclosed or empty `[` class".to_string());
+                }
+                class.push(']');
+                re.push_str(&class);
+                i = j;
+            }
+            c => re.push_str(&regex::escape(&c.to_string())),
+        }
+        i += 1;
+    }
+    re.push_str(")(?:/.*)?$");
+    regex::Regex::new(&re).map_err(|e| format!("is not a valid glob: {e}"))
+}
+
+/// Whether `path` is covered by a diff-rule path option entry (`MILE-158`): a
+/// glob by `path_glob_regex`, anything else as the component-wise prefix
+/// `path_is_published` has always been. An entry that cannot compile covers
+/// nothing; config parse refuses one before it gets here.
+pub fn path_matches_entry(path: &std::path::Path, entry: &str) -> bool {
+    if !is_path_glob(entry) {
+        return path_is_published(path, entry);
+    }
+    path_glob_regex(entry)
+        .map(|re| re.is_match(&path.to_string_lossy()))
+        .unwrap_or(false)
+}
+
 /// A record identifier cited from inside a declared published path
 /// (`RFC-11` section 1, `MILE-125`).
 ///
@@ -300,6 +373,29 @@ mod tests {
         assert!(!path_is_published(Path::new("a/bc/d.rs"), "a/b"));
         assert!(!path_is_published(Path::new("a/b.rs"), "a/b"));
         assert!(!path_is_published(Path::new("a/b/c.rs"), "."));
+    }
+
+    #[test]
+    fn a_glob_entry_matches_by_component_and_a_plain_entry_is_still_a_prefix() {
+        use std::path::Path;
+        let m = |p: &str, e: &str| path_matches_entry(Path::new(p), e);
+        // Plain prefixes are unchanged.
+        assert!(m("src/a.rs", "src") && !m("srcx/a.rs", "src"));
+        // `*` stays inside one component; `**` crosses them.
+        assert!(m("rust/crates/a/tests/t.rs", "rust/crates/*/tests"));
+        assert!(!m("rust/crates/a/b/tests/t.rs", "rust/crates/*/tests"));
+        assert!(m("rust/crates/a/b/tests/t.rs", "rust/**/tests"));
+        assert!(m("a/b/foo.test.ts", "**/*.test.*"));
+        assert!(m("foo.test.ts", "**/*.test.*"));
+        assert!(!m("a/b/foo.ts", "**/*.test.*"));
+        assert!(m("src/a_test.go", "src/*_test.go") && !m("src/x/a_test.go", "src/*_test.go"));
+        assert!(m("src/a1.rs", "src/a?.rs") && !m("src/a12.rs", "src/a?.rs"));
+        assert!(m("src/b.rs", "src/[ab].rs") && !m("src/c.rs", "src/[ab].rs"));
+        assert!(!m("src/b.rs", "src/[!b].rs"));
+        // A dot is a dot, not any character.
+        assert!(!m("src/aXrs", "src/a.rs*"));
+        assert!(path_glob_regex("src/[ab").is_err());
+        assert!(path_glob_regex("src/[]").is_err());
     }
 
     #[test]
