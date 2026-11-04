@@ -5,7 +5,7 @@ Phase: '0'
 Track: accountability-identity
 Implements: ADR-31
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
+Realized-by: code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-io/src/lib.rs
 ---
 # 66 — Trust a verified gh login over --by for identity resolution
 
@@ -23,3 +23,4 @@ An unverified, typed name overriding a verified login is exactly backwards for a
 > |---|---|---|
 > | 2026-09-06 | Backfilled: shipped before milestone tracking existed. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | `Realized-by` test locator corrected to the unit tests in `urzua-io/src/lib.rs` (`resolve_identity_lets_gh_win_over_a_differing_explicit_by`, `resolve_identity_never_lets_explicit_by_override_a_verified_gh_login`, `resolve_identity_prefers_explicit_by_over_git_config`, `resolve_identity_falls_through_to_git_config_when_gh_is_unavailable`); the old locator `new_integration.rs` only passes `--by`. The resolution order described in the What was later superseded: the 2026-09-10 amendment of `ADR-31` split the ambient tiers so that `--by` now outranks `git config`, the order being a verified `gh` login, then `--by`, then `git config user.name`. `Status` stays Done for what shipped on 2026-09-06. **Why:** the closure audit of #234 found the What stale and the test locator weak. | **structural** |
