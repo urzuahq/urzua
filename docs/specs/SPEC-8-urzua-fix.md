@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -66,6 +66,20 @@ Git trouble is never read as "no drift" (`MILE-159`). A shallow clone, detected 
 git call that fails while computing drift (a commit the repository does not have, say) are reported as
 `notices` with subject `embodiment-drift-git`, in `check` and in `fix` alike; the affected records are
 not judged for drift. The per-record `git blame` calls run on a few threads.
+
+### Scoping to paths
+
+`urzua fix [PATHS...]` examines, computes drift for and repairs only the records the paths select
+(`MILE-159`). A path is a record file or a directory; a record is selected when its repo-relative
+path equals the path or sits under it. Paths are relative to the working directory or absolute. The
+population counts the selected records only, and `git blame` and the drift computation run for those
+records alone, so a single-record run costs a fraction of a whole-corpus run. The corpus a
+back-pointer resolves against stays whole.
+
+A path that selects no record, or lies outside the repository, is reported in `failed` naming it
+(`partial-failure`, exit 1), never skipped. In apply mode `--ids` and `--force` select among the
+scoped repairs only, so an `--ids` entry outside the given paths matches no pending repair and fails
+as above.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
@@ -141,3 +155,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-03 | Bumped to `0.6`. `fix` now computes `Drift detected` (ADR-32) from the same drifted-record set `check` uses, so it is detected and, on `--apply`, written like any other Tier 1 repair. **Why:** MILE-15 -- ADR-32 named this as separate follow-up work. | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. Noted that `fix` reads the same opt-in locator pins and grace window as `check` and never rewrites a pin. **Why:** `MILE-129` -- `fix` shares `check`'s drifted-record set, so a new drift input changes what it repairs. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. `fix` computes drift only when `embodiment.consistency` is enabled and reports git failures and shallow clones as `embodiment-drift-git` notices. **Why:** `MILE-159` -- drift ran unconditionally (about 1.1s on this corpus), and git errors read as a clean zero, which is how a shallow clone once produced a false zero. | **substantive** |
+> | 2026-11-04 | Bumped to `0.9`. `fix` takes `PATHS` that scope examination, drift and repair, and reports a path matching no record. **Why:** `MILE-159` -- an editor hook needs a quick single-file refresh, and the whole-corpus run is about 0.8s on this corpus against about 0.15s for one record. | **substantive** |

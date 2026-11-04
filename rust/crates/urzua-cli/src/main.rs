@@ -177,6 +177,10 @@ enum Command {
     /// computes (ADR-0015). Read-only by default. Only Tier 1 (Embodiment)
     /// exists.
     Fix {
+        /// Examine and repair only these records: a record file, or a
+        /// directory holding records. A path that matches no record is
+        /// reported as a failure. With none, the whole corpus.
+        paths: Vec<PathBuf>,
         #[arg(long, default_value_t = 1)]
         tier: u8,
         /// Write the computed values back. Requires --ids or --force, and
@@ -294,12 +298,13 @@ fn main() -> ExitCode {
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(cli.config, apply),
         Command::Fix {
+            paths,
             tier,
             apply,
             ids,
             by,
             force,
-        } => commands::fix::run(cli.config, tier, apply, ids, by, force),
+        } => commands::fix::run(cli.config, paths, tier, apply, ids, by, force),
     }
 }
 
