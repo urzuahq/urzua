@@ -55,6 +55,8 @@ pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-pr
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
+pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
+    "embodiment.back-pointer-decision-accepted";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -104,6 +106,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
     RULE_INDEX_FRESHNESS,
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -303,6 +306,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         id: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
         description: "A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. Only whole-line comments are read; the marker is case-sensitive; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean.",
     },
+    RuleMeta {
+        id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+        description: "A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not an accepted one is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Accepted means the cited type's declared `statuses.success`; a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision.",
+    },
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -330,6 +337,7 @@ pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[
     // A dangling back-pointer is reported on the source file that holds it,
     // which no record-type `dir` scope covers.
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with

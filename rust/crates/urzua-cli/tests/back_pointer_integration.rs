@@ -128,3 +128,61 @@ fn fix_detect_agrees_with_check_about_a_cited_record() {
     );
     std::fs::remove_dir_all(&uncited).ok();
 }
+
+/// `embodiment.back-pointer-decision-accepted` (`MILE-133`): a back-pointer to
+/// a record that is not yet Accepted is reported, with `--base` limiting the
+/// judgement to files the diff changed.
+fn gate_repo(name: &str, status: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("urzua-gate-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n  embodiment.back-pointer-decision-accepted:\n    level: error\n    \
+         back_pointer_paths: [\"src\"]\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    \
+         required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      \
+         values: [Proposed, Accepted]\n      success: [Accepted]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        format!("---\nStatus: {status}\n---\n# 1 — X\n"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/old.rs"), "// Implements: ADR-1\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+#[test]
+fn a_back_pointer_to_a_proposed_decision_is_reported_and_an_accepted_one_is_not() {
+    let proposed = gate_repo("proposed", "Proposed");
+    let out = run_urzua(&proposed, &["check"]);
+    let found = findings(&out, "embodiment.back-pointer-decision-accepted");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["file"], "src/old.rs");
+    assert_eq!(out.status.code(), Some(1));
+
+    let accepted = gate_repo("accepted", "Accepted");
+    let out = run_urzua(&accepted, &["check"]);
+    assert!(findings(&out, "embodiment.back-pointer-decision-accepted").is_empty());
+}
+
+#[test]
+fn on_a_base_run_only_changed_source_files_are_judged() {
+    let dir = gate_repo("diff", "Proposed");
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    std::fs::write(dir.join("src/new.rs"), "// Implements: ADR-1\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "change"]);
+    let out = run_urzua(&dir, &["check", "--base", "main"]);
+    let found = findings(&out, "embodiment.back-pointer-decision-accepted");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["file"], "src/new.rs");
+}
