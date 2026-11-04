@@ -229,6 +229,7 @@ mod tests {
                         narrative_fields: None,
                         spec: None,
                         relation_fields: None,
+                        revision_log: None,
                     },
                 )]
                 .into_iter()
@@ -363,6 +364,7 @@ mod tests {
                     narrative_fields: Some(fields(&["Blocked-on"])),
                     spec: None,
                     relation_fields: None,
+                    revision_log: None,
                 },
             )]
             .into_iter()
@@ -404,7 +406,7 @@ mod tests {
             ),
             (
                 "revision-log.change-class-required",
-                rules::revision_log_change_class(&records, &full_text),
+                rules::revision_log_change_class(&records, &config, &full_text),
             ),
             (
                 "status.undeclared-value",
@@ -547,6 +549,7 @@ mod tests {
                         narrative_fields: None,
                         spec: None,
                         relation_fields: None,
+                        revision_log: None,
                     },
                 )]
                 .into_iter()

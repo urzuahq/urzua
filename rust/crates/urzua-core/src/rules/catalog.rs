@@ -192,7 +192,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
-        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking.",
+        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
     },
     RuleMeta {
         id: RULE_EMBODIMENT_CONSISTENCY,
@@ -260,7 +260,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_CITATION_PATH_EXISTS,
-        description: "A repository path cited in backticks inside a `reference_sections` section (a `##` heading, matched exactly) exists in the working tree, tracked and on disk (`MILE-143`). A cited path is a code span with no whitespace, containing a `/` and ending in a file name with an extension or in `/`; a URL, a host-led path (`example.com/x`), an absolute or `~` path, a glob or placeholder (`*?<>{}$|`) and anything else is not a path and is not read. A trailing `:line` or `#anchor` is dropped, and `./` or `../` resolves from the record's directory. Fenced code blocks are not read. Needs `reference_sections`; a record without such a section is out of scope, and the population counts the paths cited. The optional `skip_tables` option lists markers (a bold label such as the one that opens a revision log); a line containing one, and the pipe table after it, are not read, so append-only history that names a path as it was is not reported. It is empty by default. Offline and deterministic. Cited issue and pull request numbers are not checked here.",
+        description: "A repository path cited in backticks inside a `reference_sections` section (a `##` heading, matched exactly) exists in the working tree, tracked and on disk (`MILE-143`). A cited path is a code span with no whitespace, containing a `/` and ending in a file name with an extension or in `/`; a URL, a host-led path (`example.com/x`), an absolute or `~` path, a glob or placeholder (`*?<>{}$|`) and anything else is not a path and is not read. A trailing `:line` or `#anchor` is dropped, and `./` or `../` resolves from the record's directory. Fenced code blocks are not read. Needs `reference_sections`; a record without such a section is out of scope, and the population counts the paths cited. The optional `skip_revision_log` option, when `true`, leaves each record's revision log (the table under its type's declared `revision_log` identity) unread, so append-only history that names a path as it was is not reported. It is `false` by default. Offline and deterministic. Cited issue and pull request numbers are not checked here.",
     },
     RuleMeta {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,

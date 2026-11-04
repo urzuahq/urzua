@@ -1,5 +1,5 @@
 ---
-Version: '0.32'
+Version: '0.33'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -90,6 +90,23 @@ Two details carry weight:
   error naming the shape, and a record still written in one is reported as unreadable with the form
   named, so neither is mistaken for a record with no header. `header_layout` and the
   `header.layout-consistency` and `header.deprecated-shape` rules went with them.
+- **A record type may declare how its revision log is found: `revision_log`** (`MILE-167`). Exactly
+  one of `marker` (a whole line, blockquote marks aside, such as `**Revision log**`) or `heading`
+  (the text of a markdown heading of any level, such as `Revision log`):
+
+  ```yaml
+  record_types:
+    adr:
+      dir: docs/adr
+      revision_log: {heading: "Revision log"}   # or {marker: "**Revision log**"}
+  ```
+
+  The section opens at the first line that *is* the marker or heading, outside a fenced code block;
+  a line that merely mentions the text (`The **Revision log** below ...`) does not open it, so prose
+  cannot make a record read the wrong table. Omitted, the type uses the marker `**Revision log**`,
+  so an existing repository is unchanged. A declaration naming both or neither, a blank identity,
+  or one spanning lines is a load-time error naming the type. `revision-log.change-class-required`,
+  `urzua fix`'s revision row and `citation.path-exists`'s `skip_revision_log` all read it.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -280,17 +297,17 @@ rules:
   citation.path-exists:
     level: warn
     reference_sections: ["References"]
-    skip_tables: ["**Change history**"]   # optional
+    skip_revision_log: true   # optional
 ```
 
 - `reference_sections` lists `##` heading texts, matched exactly after trimming. Only backtick-quoted
   code spans inside those sections are read; a record with no such section is out of scope.
-- `skip_tables` is optional and empty by default, so behaviour is unchanged unless declared. Each
-  entry is a marker: a line containing it, and the pipe table that follows (blockquoted or not), are
-  not read, and the paths in them are not in the population. It exists for append-only history such
-  as a revision log, whose rows name a path as it was when the row was written; the rest of the
-  section is still read. A declared list must be non-empty with no blank entries, and it belongs to
-  this rule alone (`MILE-143`).
+- `skip_revision_log` is optional and `false` by default, so behaviour is unchanged unless declared.
+  When `true`, each record's revision log (the line opening it under the type's declared
+  `revision_log` identity, below, and the pipe table that follows, blockquoted or not) is not read,
+  and the paths in it are not in the population. It exists for append-only history, whose rows name
+  a path as it was when the row was written; the rest of the section is still read. It belongs to
+  this rule alone (`MILE-143`, `MILE-167`).
 - A span is read as a path only when it is plainly one: no whitespace, a `/` present, ending in a
   file name with an extension or in `/`, not a URL or host-led path, not absolute, and no glob or
   placeholder character. A bare file name without a directory (`Makefile`) is not read. A trailing
@@ -730,3 +747,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.30`. `date_order` entries are mappings `{earlier, later}` instead of an `Earlier <= Later` string; a relation pair's `types` scoping counts a claim to an uncarried type as eligible and unexamined, not out of scope. **Why:** `ADR-64` (structured in, structured out) for `MILE-157`, and `MILE-155` -- a legitimate cross-type claim is not a configuration the tool cannot reach. | **substantive** |
 > | 2026-11-04 | Bumped to `0.31`. Documented the optional `skip_tables` option of `citation.path-exists` (markers naming tables whose rows are history and are not read; empty by default), and that a declared `external_ids` citation is counted eligible and unexamined, not out of scope. **Why:** `MILE-143` -- a revision log under `## References` names paths as they were; `BUG-186` -- a declared external id was reported by `config.scope-matches-nothing` as a misconfiguration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.33`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |

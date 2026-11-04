@@ -120,11 +120,11 @@ pub fn citation_path_exists(
         .get(RULE_ID)
         .and_then(|s| s.reference_sections.clone())
         .unwrap_or_default();
-    let skip_tables: Vec<String> = config
+    let skip_revision_log = config
         .rules
         .get(RULE_ID)
-        .and_then(|s| s.skip_tables.clone())
-        .unwrap_or_default();
+        .and_then(|s| s.skip_revision_log)
+        .unwrap_or(false);
 
     struct Cited<'a> {
         record: &'a Record,
@@ -142,7 +142,11 @@ pub fn citation_path_exists(
             .filter(|s| sections.iter().any(|name| name == &s.heading))
         {
             let lines = super::section::prose_lines(section);
-            let skipped = skipped_table_lines(&lines, &skip_tables);
+            let skipped = if skip_revision_log {
+                skipped_table_lines(&lines, &config.revision_log_id(&record.record_type))
+            } else {
+                HashSet::new()
+            };
             for (line, content) in lines {
                 if skipped.contains(&line) {
                     continue;
@@ -192,19 +196,20 @@ pub fn citation_path_exists(
     )
 }
 
-/// The line numbers set aside by `skip_tables`: each line containing a marker,
-/// and the pipe table after it (blank or `>`-only lines may sit between, as in
+/// The line numbers set aside by `skip_revision_log`: the line opening the
+/// type's declared revision log (matched as that line, not by containing the
+/// text), and the pipe table after it (blank or `>`-only lines may sit between, as in
 /// a blockquoted table; the table ends at the first line that is not a row).
 /// Append-only history in such a table names paths as they were.
-fn skipped_table_lines(lines: &[(usize, &str)], markers: &[String]) -> HashSet<usize> {
+fn skipped_table_lines(
+    lines: &[(usize, &str)],
+    id: &crate::config::RevisionLogId,
+) -> HashSet<usize> {
     let mut skipped = HashSet::new();
-    if markers.is_empty() {
-        return skipped;
-    }
     // None outside a skipped block; Some(seen_a_row) inside one.
     let mut block: Option<bool> = None;
     for (number, content) in lines {
-        if markers.iter().any(|m| content.contains(m.as_str())) {
+        if id.opens_at(content) {
             block = Some(false);
             skipped.insert(*number);
             continue;
@@ -772,18 +777,18 @@ mod tests {
     const LOG_RECORD: &str = "# 1\n\n## References\n\n- `docs/live.md` and `docs/gone-now.md`\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Named `src/old/path.rs`. | **substantive** |\n> | 2026-01-02 | Named `src/older.rs`. | **substantive** |\n\nAfter: `docs/after-gone.md`\n";
 
     #[test]
-    fn without_skip_tables_a_revision_log_row_is_read_observed_failing() {
+    fn without_skip_revision_log_a_revision_log_row_is_read_observed_failing() {
         let (_, findings) = paths(&[(ADR, LOG_RECORD)], &["docs/live.md"]);
         let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
         assert_eq!(named.len(), 4, "{named:?}");
     }
 
     #[test]
-    fn a_declared_skip_table_is_set_aside_and_the_rest_of_the_section_is_still_read() {
+    fn a_skipped_revision_log_is_set_aside_and_the_rest_of_the_section_is_still_read() {
         let (exec, findings) = paths_skipping(
             &[(ADR, LOG_RECORD)],
             &["docs/live.md"],
-            "skip_tables: [\"**Revision log**\"]\n",
+            "skip_revision_log: true\n",
         );
         let named: Vec<_> = findings.iter().map(|f| f.message.as_str()).collect();
         assert_eq!(named.len(), 2, "{named:?}");
@@ -794,11 +799,11 @@ mod tests {
     }
 
     #[test]
-    fn a_skip_table_marker_matching_nothing_changes_nothing() {
+    fn skip_revision_log_false_changes_nothing() {
         let (_, findings) = paths_skipping(
             &[(ADR, LOG_RECORD)],
             &["docs/live.md"],
-            "skip_tables: [\"**Other**\"]\n",
+            "skip_revision_log: false\n",
         );
         assert_eq!(findings.len(), 4);
     }

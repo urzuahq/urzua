@@ -585,7 +585,7 @@ pub fn run(
         crate::gate::gated(
             &config,
             rules::RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
-            || rules::revision_log_change_class(&records, &full_text),
+            || rules::revision_log_change_class(&records, &config, &full_text),
         ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
             rules::embodiment_consistency(
