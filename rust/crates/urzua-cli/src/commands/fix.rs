@@ -12,6 +12,7 @@ use crate::{emit, NOTICE_IDENTITY};
 
 pub fn run(
     config_path: Option<PathBuf>,
+    paths: Vec<PathBuf>,
     tier: u8,
     apply: bool,
     ids: Vec<String>,
@@ -55,6 +56,10 @@ pub fn run(
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+    // `PATHS` narrow what is examined, drifted and repaired (`MILE-159`); the
+    // corpus a back-pointer resolves against stays whole. A path that matches
+    // no record is a failure naming it, never a silent skip.
+    let (scoped, unmatched) = scope_records(&repo_root, &paths, &records);
     // Drift is the expensive part (several `git` subprocesses per record) and
     // its only consumer is `embodiment.consistency`; with that rule off `fix`
     // has no embodiment verdict to repair, so say so instead of computing a
@@ -68,7 +73,7 @@ pub fn run(
             "urzua fix repairs the Embodiment field that embodiment.consistency judges, and that rule is off or undeclared in the configuration: nothing to repair",
         ));
     }
-    let drift = crate::discovery::compute_drifted_records(&repo_root, &records, &config);
+    let drift = crate::discovery::compute_drifted_records(&repo_root, &scoped, &config);
     let drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
     let back_pointed =
         match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
@@ -86,7 +91,7 @@ pub fn run(
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
     let (population, repairs) = urzua_core::fix::detect_repairs(
-        &records,
+        &scoped,
         &config,
         &drift.drifted,
         &drift.fresh,
@@ -97,7 +102,7 @@ pub fn run(
         return emit(&build_fix_report(
             population,
             repairs,
-            Vec::new(),
+            unmatched,
             None,
             false,
             drift_notices,
@@ -120,7 +125,7 @@ pub fn run(
         .collect();
 
     let mut applied = Vec::new();
-    let mut failed = Vec::new();
+    let mut failed = unmatched;
     // An `--ids` entry that selected nothing is a failure naming it, not a
     // clean `ok`: the selector is matched against a record's repo-relative
     // path, and a typo or a record id (`ADR-1`) would otherwise read as
@@ -184,6 +189,65 @@ pub fn run(
     ))
 }
 
+/// The records `PATHS` select: a record whose repo-relative path equals a
+/// path or sits under it (a directory). No paths selects every record. Each
+/// path that selects nothing comes back as a failure naming it.
+fn scope_records(
+    repo_root: &std::path::Path,
+    paths: &[PathBuf],
+    records: &[urzua_core::record::Record],
+) -> (Vec<urzua_core::record::Record>, Vec<(PathBuf, String)>) {
+    if paths.is_empty() {
+        return (records.to_vec(), Vec::new());
+    }
+    let cwd = std::env::current_dir()
+        .and_then(|c| c.canonicalize())
+        .unwrap_or_default();
+    let mut unmatched = Vec::new();
+    let mut scopes = Vec::new();
+    for p in paths {
+        let joined = if p.is_absolute() {
+            p.clone()
+        } else {
+            cwd.join(p)
+        };
+        let mut normal = PathBuf::new();
+        for c in joined.components() {
+            match c {
+                std::path::Component::ParentDir => {
+                    normal.pop();
+                }
+                std::path::Component::CurDir => {}
+                other => normal.push(other),
+            }
+        }
+        match normal.strip_prefix(repo_root) {
+            Ok(rel) => scopes.push((p.clone(), rel.to_path_buf())),
+            Err(_) => unmatched.push((
+                p.clone(),
+                format!("{} is outside the repository", p.display()),
+            )),
+        }
+    }
+    for (given, rel) in &scopes {
+        if !records.iter().any(|r| r.path.starts_with(rel)) {
+            unmatched.push((
+                given.clone(),
+                format!(
+                    "path '{}' matched no record (a path is a record file or a directory holding records)",
+                    given.display()
+                ),
+            ));
+        }
+    }
+    let selected = records
+        .iter()
+        .filter(|r| scopes.iter().any(|(_, rel)| r.path.starts_with(rel)))
+        .cloned()
+        .collect();
+    (selected, unmatched)
+}
+
 /// `ran_apply` matters because the two modes disagree on what
 /// `population.examined() == 0` should mean for the exit code: detect mode
 /// treats it as `NotRun` (exit 2, nothing to report on); apply mode's exit
@@ -199,7 +263,7 @@ fn build_fix_report(
     ran_apply: bool,
     extra_notices: Vec<Notice>,
 ) -> FixReport {
-    let status = if population.examined() == 0 && !ran_apply {
+    let status = if population.examined() == 0 && !ran_apply && failed.is_empty() {
         FixStatus::NotRun
     } else if !failed.is_empty() {
         FixStatus::PartialFailure
