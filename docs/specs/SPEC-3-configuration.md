@@ -1,5 +1,5 @@
 ---
-Version: '0.40'
+Version: '0.41'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -434,6 +434,7 @@ relation_pairs:
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
       level: warn             # warn (default) | error
+      acknowledged_by: "Amended-by-pending"   # optional (MILE-163), a field on the peer
 ```
 
 A claim `A.forward = B` is echoed by `B.inverse = A`, and `A.inverse = B` by `B.forward = A`.
@@ -449,7 +450,11 @@ whose status is listed in `provisional.statuses` and that the peer does not echo
 keeps the rule's own level, so it is an error once the claimant is accepted. A claim already echoed
 by the peer's inverse field is settled and is not reported at either level. A claim echoed only in a
 differently named, unpaired field (a pending field) is not an echo, so it is held to the provisional
-level; the engine does not read that field. A status listed that no record type declares in
+level, unless the pair declares `provisional.acknowledged_by` (`MILE-163`): then a provisional claim
+whose peer names the claimant in that field is settled by the peer's own declaration and is not
+reported. The field is read only for a provisional claim; a claim from any other status still needs the
+inverse relation. It must be a non-blank field in the `required_fields` or `known_fields` of a type the
+pair carries, and not itself a pair field, or the load is refused. A status listed that no record type declares in
 `statuses.values`, a blank or duplicated status, an empty list, or a `level` other than `warn` and
 `error` is refused at load, so the split cannot silently apply to nothing.
 
@@ -782,3 +787,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.38`. Documented `drift_audit_field` of `embodiment.consistency`: the `drift_grace_days` window counts from a declared last-audit date on the record when present, else from the cited file's last change; a malformed date is reported. **Why:** `MILE-166` -- a file changes for reasons unrelated to its evidence, so its last change mis-dates the audit. | **substantive** |
 > | 2026-11-04 | Bumped to `0.39`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
 > | 2026-11-04 | Bumped to `0.40`. Removed the `Last-audited: 2026-11-04` field from this spec's header. **Why:** it was added only to exercise `MILE-166` and no audit took place, so it attested to something that did not happen; the `Last-audited` declaration and `drift_audit_field` in the configuration are unchanged. | **structural** |
+> | 2026-11-04 | Bumped to `0.41`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |

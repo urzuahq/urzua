@@ -1696,6 +1696,12 @@ pub struct ProvisionalClaim {
     /// `warn`; the rule's own level is the full severity.
     #[serde(default = "default_provisional_level")]
     pub level: ProvisionalLevel,
+    /// A field on the peer record that acknowledges a pending claim by naming
+    /// the claimant (`MILE-163`), so a provisional claim is settled by the
+    /// peer's own declaration as well as by the inverse relation. Read only for
+    /// a provisional claim; a claim from any other status still needs the echo.
+    #[serde(default)]
+    pub acknowledged_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -1798,6 +1804,39 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             return bad(format!(
                 "pair '{label}' provisional.statuses must list at least one status"
             ));
+        }
+        if let Some(ack) = &prov.acknowledged_by {
+            if ack.trim().is_empty() || *ack != ack.trim() {
+                return bad(format!(
+                    "pair '{label}' provisional.acknowledged_by '{ack}' is blank or has surrounding whitespace"
+                ));
+            }
+            if config
+                .relation_pairs
+                .iter()
+                .any(|p| p.forward == *ack || p.inverse == *ack)
+            {
+                return bad(format!(
+                    "pair '{label}' provisional.acknowledged_by '{ack}' is a relation field of a pair; it names a different, unpaired field"
+                ));
+            }
+            let carried = config.record_types.iter().any(|(name, rt)| {
+                let carries = match &pair.types {
+                    Some(types) => types.contains(name),
+                    None => true,
+                };
+                carries
+                    && rt
+                        .required_fields
+                        .iter()
+                        .chain(rt.known_fields.iter().flatten())
+                        .any(|d| d == ack)
+            });
+            if !carried {
+                return bad(format!(
+                    "pair '{label}' provisional.acknowledged_by '{ack}' is not in the required_fields or known_fields of any record type the pair carries, so it could never be read"
+                ));
+            }
         }
         let declared: std::collections::BTreeSet<String> = config
             .record_types
@@ -2758,6 +2797,26 @@ record_types:
                 parse(&prov_cfg(&pair(bad))).is_err(),
                 "{bad} must be refused"
             );
+        }
+    }
+
+    #[test]
+    fn a_declared_acknowledgement_field_loads_and_a_misdeclared_one_is_refused_observed_failing() {
+        let cfg = |ack: &str| {
+            format!("schema_version: 2\nrelation_pairs:\n  - {{name: a, forward: Amends, inverse: Amended-by, reciprocity: required, provisional: {{statuses: [Draft], acknowledged_by: {ack}}}}}\nrecord_types:\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Amends\", \"Amended-by\", \"Amended-by-pending\"]\n    statuses:\n      values: [Draft, Accepted]\n")
+        };
+        let c = parse(&cfg("Amended-by-pending")).unwrap();
+        assert_eq!(
+            c.relation_pairs[0]
+                .provisional
+                .as_ref()
+                .unwrap()
+                .acknowledged_by
+                .as_deref(),
+            Some("Amended-by-pending")
+        );
+        for bad in ["''", "' Amended-by-pending'", "Nowhere", "Amended-by"] {
+            assert!(parse(&cfg(bad)).is_err(), "{bad} must be refused");
         }
     }
 

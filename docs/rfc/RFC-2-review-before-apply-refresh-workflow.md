@@ -4,6 +4,7 @@ Date: 2026-07-30
 Accepted-on: 2026-09-06
 Author: beauwilliams
 Supersedes / Superseded-by: —
+Amended-by-pending: RFC-25
 ---
 # 2 — The re-verification/refresh workflow: detect is read-only, apply requires review or an explicit bypass
 
