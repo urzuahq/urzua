@@ -60,7 +60,7 @@ fn sorted(changed: &[PathBuf]) -> Vec<&PathBuf> {
 
 /// A diff that changes declared source paths but no governed record
 /// (`MILE-124`). A changed path matching `exclude_paths` is not source (a test
-/// file beside the code, `MILE-158`) and is counted out of scope, so a diff
+/// file beside the code, `MILE-158`) and is left unexamined, so a diff
 /// that touches only excluded files is not a trigger. Population: every
 /// changed path, examined when it is source or a record.
 pub fn source_requires_record(
@@ -83,8 +83,11 @@ pub fn source_requires_record(
         if !under_any(path, source_paths) {
             return Outcome::Absent;
         }
+        // Set aside on purpose, so `Absent` (eligible, not examined) and not
+        // `OutOfScope`, which `config.scope-matches-nothing` reads as a
+        // configuration the rule cannot reach.
         if under_any(path, exclude_paths) {
-            return Outcome::OutOfScope;
+            return Outcome::Absent;
         }
         if !record_changed {
             findings.push(finding(
@@ -210,7 +213,8 @@ mod tests {
         let only_tests = paths(&["src/a.test.ts", "src/deep/b.test.ts", "src/tests/c.rs"]);
         let (exec, findings) = source_requires_record(Some(&only_tests), &src, &exclude, &config());
         assert!(findings.is_empty(), "{findings:?}");
-        assert_eq!(exec.population.unwrap().out_of_scope(), 3);
+        let pop = exec.population.unwrap();
+        assert_eq!((pop.eligible(), pop.examined(), pop.out_of_scope()), (3, 0, 0));
         // Code beside the tests still triggers, and names only the code file.
         let mixed = paths(&["src/a.test.ts", "src/a.ts"]);
         let (_, findings) = source_requires_record(Some(&mixed), &src, &exclude, &config());

@@ -141,6 +141,12 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// `Embodiment` values a human sets that no evidence can compute
+    /// (`Deprecated`, `Inactive`): a record stating one is not reported as
+    /// drift (`MILE-148`). Only meaningful to `embodiment.consistency`;
+    /// omitted means every stated value must match the computed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky_states: Option<Vec<String>>,
     /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -270,6 +276,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             claim_max_age_days: Option<u32>,
             #[serde(default)]
+            sticky_states: Option<Vec<String>>,
+            #[serde(default)]
             date_fields: Option<Vec<String>>,
             #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
@@ -314,6 +322,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 test_paths: table.test_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
+                sticky_states: table.sticky_states,
                 date_fields: table.date_fields,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
@@ -338,6 +347,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 test_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
+                sticky_states: None,
                 date_fields: None,
                 field_levels: None,
                 accepted_statuses: None,
@@ -674,6 +684,8 @@ pub enum ConfigError {
     },
     #[error("rule '{rule}' option 'test_paths' entry '{entry}' is not inside any 'back_pointer_paths' entry, so no file under it is scanned and a `Verifies:` comment there would count for nothing")]
     TestPathOutsideBackPointerPaths { rule: String, entry: String },
+    #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
+    StickyStateIsComputed { rule: String, state: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -856,6 +868,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: true,
     },
     RuleOption {
+        name: "sticky_states",
+        owners: &[crate::rules::RULE_EMBODIMENT_CONSISTENCY],
+        consequence_if_missing: "holds every stated Embodiment to the computed value",
+        optional: true,
+    },
+    RuleOption {
         name: "date_fields",
         owners: &[crate::rules::RULE_DATE_FIELD_VALID],
         consequence_if_missing: "names no date field and can never report",
@@ -912,6 +930,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         "external_ids" => setting.external_ids.as_ref(),
         "test_paths" => setting.test_paths.as_ref(),
+        "sticky_states" => setting.sticky_states.as_ref(),
         _ => None,
     }
 }
@@ -1154,6 +1173,19 @@ pub fn parse_with_document_models(
                         reason: format!(
                             "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
                         ),
+                    });
+                }
+            }
+        }
+
+        // A sticky state equal to a computed one would hide real drift: that
+        // state is exactly what the evidence can reproduce.
+        if setting.level != RuleLevel::Off {
+            for state in setting.sticky_states.iter().flatten() {
+                if crate::rules::COMPUTED_EMBODIMENT_STATES.contains(&state.trim()) {
+                    return Err(ConfigError::StickyStateIsComputed {
+                        rule: name.clone(),
+                        state: state.clone(),
                     });
                 }
             }
@@ -1800,6 +1832,35 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'published_paths'"));
+    }
+
+    #[test]
+    fn sticky_states_belongs_to_consistency_and_may_not_name_a_computed_state() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [Deprecated, Inactive]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["embodiment.consistency"].sticky_states.as_deref(),
+            Some(&["Deprecated".to_string(), "Inactive".to_string()][..])
+        );
+        let computed = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [Deprecated, Verified]\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(computed.contains("'Verified'") && computed.contains("sticky_states"));
+        let elsewhere = parse(&format!(
+            "{base}  field.quality:\n    level: error\n    sticky_states: [Deprecated]\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(elsewhere.contains("does not take the option 'sticky_states'"));
+        let blank = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [\" \"]\n"
+        ));
+        assert!(blank.is_err(), "a blank entry is not a declaration");
     }
 
     #[test]
