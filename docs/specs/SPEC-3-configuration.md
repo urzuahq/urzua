@@ -1,5 +1,5 @@
 ---
-Version: '0.46'
+Version: '0.47'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -105,7 +105,12 @@ Two details carry weight:
   a line that merely mentions the text (`The **Revision log** below ...`) does not open it, so prose
   cannot make a record read the wrong table. Omitted, the type uses the marker `**Revision log**`,
   so an existing repository is unchanged. A declaration naming both or neither, a blank identity,
-  or one spanning lines is a load-time error naming the type. `revision-log.change-class-required`,
+  or one spanning lines is a load-time error naming the type. The declaration also takes
+  `required: true|false` (`MILE-159`; `true` when omitted, so behaviour is unchanged): whether
+  `urzua fix --apply` needs the section. Required, a record with no section fails that write with a
+  message naming the identity looked for; `required: false` writes the field without a log row.
+  `required` may stand alone (`revision_log: {required: false}`), leaving the identity at its
+  default; an empty `{}` is still an error. `revision-log.change-class-required`,
   `urzua fix`'s revision row and the `skip_revision_log` option of `citation.path-exists` and `citation.resolution` all read it.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
@@ -858,3 +863,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.44`. `citation.resolution` takes the optional `skip_revision_log` option, with the meaning it has for `citation.path-exists`. **Why:** `MILE-156` -- revision logs are append-only history, so an id they cite as it was must not be reported or rewritten. | **substantive** |
 > | 2026-11-04 | Bumped to `0.45`. `field.pending` takes the optional `pending_until_required` option, off unless declared `true`: a pending value in a field the type's `statuses.require` ties to certain statuses is not reported before the record reaches one of them, and the skipped slot stays eligible and unexamined. **Why:** `MILE-169` -- a placeholder `Regression-test` is legitimate on an `Open` bug and a gap on a `Fixed` one; `status.required-field-missing` already judges the latter. | **substantive** |
 > | 2026-11-04 | Bumped to `0.46`. Documented the opt-in `citation.issue-exists` rule and its structured `issue_refs` option (`snapshot`, `repository`, `forms: [number, url]`); `reference_sections` and `skip_revision_log` are also accepted by it. **Why:** `MILE-143` -- the issue and pull request half; `SPEC-1` documents the `urzua refs refresh` command that writes the snapshot. | **substantive** |
+> | 2026-11-04 | Bumped to `0.47`. A type's `revision_log` takes `required: true|false` (default `true`), which `urzua fix --apply` reads; it may stand alone. **Why:** `MILE-159` -- records without a revision log section could never be written by `fix --apply`. | **substantive** |

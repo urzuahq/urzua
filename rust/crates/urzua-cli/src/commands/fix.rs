@@ -240,17 +240,21 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
                 continue;
             }
         };
-        let log_id = records
+        let record_type = records
             .iter()
             .find(|r| r.path == repair.record)
-            .map(|r| config.revision_log_id(&r.record_type))
+            .map(|r| r.record_type.as_str());
+        let log_id = record_type
+            .map(|t| config.revision_log_id(t))
             .unwrap_or_default();
+        let log_required = record_type.is_none_or(|t| config.revision_log_required(t));
         match urzua_core::fix::apply_repair(
             &fresh_content,
             &repair,
             &today,
             &identity.name,
             &log_id,
+            log_required,
         ) {
             Ok(new_content) => match std::fs::write(&full_path, new_content) {
                 Ok(()) => applied.push(repair),
