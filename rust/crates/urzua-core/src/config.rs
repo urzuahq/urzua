@@ -531,6 +531,13 @@ pub struct RecordTypeConfig {
     /// `config.pointer-field-not-known`.
     #[serde(default)]
     pub relation_fields: Option<RelationFields>,
+    /// Pairs of relation roles (`RelationRole::config_key`) whose fields a
+    /// record must carry together (`BUG-41`): `config.companion-declaration-missing`
+    /// reports a type declaring one field of a pair without the other. Each
+    /// entry is exactly two distinct role keys; a role whose field the type does not declare is
+    /// reported by `config.companion-declaration-missing`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub companion_fields: Option<Vec<[String; 2]>>,
     /// How this type's revision-log section is found (`MILE-167`): the
     /// `marker` line (default `**Revision log**`) or a `heading`. Omitted means
     /// the default marker, so an existing config needs no change.
@@ -689,6 +696,13 @@ impl RelationRole {
             RelationRole::EmbodimentLocator => "Realized-by",
             RelationRole::Supersession => "Supersedes / Superseded-by",
         }
+    }
+
+    /// The role declared under `key` in `relation_fields` or `companion_fields`.
+    pub fn from_config_key(key: &str) -> Option<RelationRole> {
+        RelationRole::ALL
+            .into_iter()
+            .find(|role| role.config_key() == key)
     }
 
     /// The config key this role is declared under in `relation_fields`
@@ -869,6 +883,8 @@ pub enum ConfigError {
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
+    #[error("record type '{record_type}' companion_fields: {reason}")]
+    InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -1281,6 +1297,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
+    validate_companion_fields(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
@@ -1850,6 +1867,35 @@ fn default_provisional_level() -> ProvisionalLevel {
     ProvisionalLevel::Warn
 }
 
+/// Load-time checks for `companion_fields` (`BUG-41`): a pair that cannot run
+/// reads as a clean corpus, so every misdeclaration is refused.
+fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
+    for (name, rt) in &config.record_types {
+        let Some(pairs) = &rt.companion_fields else {
+            continue;
+        };
+        let bad = |reason: String| {
+            Err(ConfigError::InvalidCompanionFields {
+                record_type: name.clone(),
+                reason,
+            })
+        };
+        for [a, b] in pairs {
+            if a == b {
+                return bad(format!("pair [{a}, {b}] names one role twice"));
+            }
+            for key in [a, b] {
+                if RelationRole::from_config_key(key).is_none() {
+                    return bad(format!(
+                        "'{key}' is not a relation role (one of status, embodiment_state, embodiment_locator, supersession)"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
 /// because a pair that cannot run reads as a clean corpus.
 fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
@@ -2172,6 +2218,7 @@ mod tests {
             narrative_fields: None,
             spec: None,
             relation_fields: None,
+            companion_fields: None,
             revision_log: None,
         };
         let declared = t.declared_fields();
@@ -3093,6 +3140,21 @@ record_types:
         assert!(bad("relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required}\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required}\n"));
         // blank name
         assert!(bad("relation_pairs:\n  - {name: ' ', forward: Amends, inverse: Amended-by, reciprocity: required}\n"));
+    }
+
+    #[test]
+    fn a_companion_pair_naming_no_relation_role_is_refused_observed_failing() {
+        let cfg = |pair: &str| {
+            format!("schema_version: 2\nrecord_types:\n  spec:\n    dir: \"docs/specs\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - {pair}\n")
+        };
+        assert!(parse(&cfg("[embodiment_state, embodiment_locator]")).is_ok());
+        for bad in [
+            "[embodiment_state, Realized-by]",
+            "[status, status]",
+            "[status]",
+        ] {
+            assert!(parse(&cfg(bad)).is_err(), "{bad} must be refused");
+        }
     }
 
     #[test]
