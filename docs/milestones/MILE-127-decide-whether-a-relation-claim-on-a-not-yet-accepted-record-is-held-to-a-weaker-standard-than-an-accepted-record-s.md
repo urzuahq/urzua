@@ -22,6 +22,10 @@ assertion. Today `relation.supersession-reciprocity` treats both sides identical
 corpus will have in-flight proposals that name what they would supersede, so the answer decides whether
 its records can be checked without lying about their state.
 
+## Decision (2026-11-04)
+
+A relation claim from a record that is not yet accepted is reported as pending (a warning), and becomes an error once the claiming record is accepted.
+
 ## References
 
 - `relation.supersession-reciprocity` -- the rule that treats both sides identically today.
@@ -31,3 +35,4 @@ its records can be checked without lying about their state.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Whether an in-flight proposal may name what it would supersede, without asserting it, is undecided and an adopter will hit it. | **substantive** |
+> | 2026-11-04 | Decision recorded: a relation claim from a record that is not yet accepted is reported as pending (a warning) and becomes an error once the claiming record is accepted. `Status` stays `Planned`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
