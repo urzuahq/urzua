@@ -3096,6 +3096,12 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "index.freshness",
             "population is index artifacts, not records",
         ),
+        // Waiver-level: reads the waiver's own Rule/Scope/Expires, reserved
+        // fields the engine names, and only for a type called `waiver`.
+        (
+            "waiver.matches-nothing",
+            "judges waiver records against the run's findings, not a configured header",
+        ),
         // Diff-level: judge the changed paths of a `--base` run.
         (
             "diff.source-requires-record",

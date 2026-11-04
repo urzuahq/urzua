@@ -34,7 +34,7 @@ impl Waiver {
         }
     }
 
-    fn covers(&self, finding: &Finding) -> bool {
+    pub fn covers(&self, finding: &Finding) -> bool {
         if self.rule != finding.rule {
             return false;
         }
