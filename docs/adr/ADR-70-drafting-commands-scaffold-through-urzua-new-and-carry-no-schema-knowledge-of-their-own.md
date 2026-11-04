@@ -1,7 +1,8 @@
 ---
 Stable-Id: 01M6K4FP7JT62G3SJG8X1BDHKP
-Status: Proposed
+Status: Accepted
 Date: 2026-11-04
+Accepted-on: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-7
@@ -54,3 +55,9 @@ Easy. The commands are markdown files; deleting them returns to `AGENTS.md` pros
 - `MILE-177` -- the milestone that builds this.
 - `MILE-103`, `MILE-151`, `BUG-182` -- hand-authoring and generator/checker disagreement.
 - `ADR-27`, `ADR-56` -- what `urzua new` writes and why a new file is invisible to `check`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
