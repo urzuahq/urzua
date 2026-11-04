@@ -230,7 +230,6 @@ fn read_declarations(
 pub fn non_reference_notices(
     records: &[Record],
     config: &Config,
-    _full_text: &HashMap<PathBuf, String>,
     index: &RecordIndex,
 ) -> Vec<Notice> {
     let prefixes = declared_prefixes(config);
@@ -1152,7 +1151,7 @@ mod tests {
         let config = nonref_config(extra);
         let (index, _) = build_index_reporting_collisions(&records);
         let (exec, findings) = citation_resolution(&records, &config, &full_text, &index);
-        let notices = non_reference_notices(&records, &config, &full_text, &index);
+        let notices = non_reference_notices(&records, &config, &index);
         (exec, findings, notices)
     }
 
@@ -1244,9 +1243,9 @@ mod tests {
     fn external_ids_take_precedence_over_the_declaration_observed_failing() {
         let doc = declaring("ADR-72", "See ADR-72.");
         let (exec, findings, _) = run_nonref(&[(DECLARER, &doc)], "external_ids: [\"ADR-72\"]\n");
-        // The id is set aside by external_ids, so the declaration cites nothing
-        // it owns: the uncited-declaration finding does not fire for a citation
-        // that external_ids already took.
+        // Precedence (ADR-75): external_ids takes the citation first. It still
+        // counts as cited for the declaration, so the redundant declaration is
+        // not reported as uncited.
         assert!(findings.is_empty(), "{findings:?}");
         assert_eq!(exec.population.unwrap().eligible(), 1);
     }
@@ -1294,7 +1293,7 @@ mod tests {
         let (index, _) = build_index_reporting_collisions(&records);
         let (_, findings) = citation_resolution(&records, &config, &full_text, &index);
         assert_eq!(findings.len(), 1, "{findings:?}");
-        assert!(non_reference_notices(&records, &config, &full_text, &index).is_empty());
+        assert!(non_reference_notices(&records, &config, &index).is_empty());
     }
 
     #[test]

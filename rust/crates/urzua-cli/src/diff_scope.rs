@@ -5,13 +5,13 @@
 //! change introduces in an unchanged record: delete a target and its
 //! referrer, untouched, is left pointing at nothing.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use urzua_core::config::{Config, RelationRole};
 use urzua_core::record::Record;
 use urzua_core::report::DiffScope;
-use urzua_core::rules;
+use urzua_core::rules::{self, CommittedStatus};
 
 /// The examined set and the account of how it was reached.
 pub(crate) struct DiffExamination {
@@ -129,6 +129,57 @@ fn touched_waiver_scopes(
         }
     }
     Ok(waivers.into_iter().map(|w| w.scope).collect())
+}
+
+/// Each changed record's `Status` at the merge base, for the types that declare
+/// `transitions` (`ADR-72`). A path the base does not have reads as new; the
+/// diff reports a rename as a deletion plus an addition, so a renamed record
+/// reads as new too.
+pub(crate) fn committed_statuses(
+    repo_root: &Path,
+    config: &Config,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+) -> HashMap<PathBuf, CommittedStatus> {
+    let mut out = HashMap::new();
+    for record in records {
+        if !changes.changed.contains(&record.path) {
+            continue;
+        }
+        let Some(type_config) = config.record_types.get(&record.record_type) else {
+            continue;
+        };
+        if !type_config
+            .status_decl()
+            .is_some_and(|d| d.has_transitions())
+        {
+            continue;
+        }
+        let committed = match urzua_io::read_at_commit(repo_root, &changes.merge_base, &record.path)
+        {
+            Err(_) => CommittedStatus::New,
+            Ok(content) => {
+                let old = Record::parse_with_shape_and_prefix(
+                    record.path.clone(),
+                    record.record_type.clone(),
+                    &content,
+                    type_config.header_shape,
+                    type_config
+                        .prefix
+                        .clone()
+                        .unwrap_or_else(|| record.record_type.to_ascii_uppercase()),
+                );
+                let field =
+                    rules::relation_field_name(config, &record.record_type, RelationRole::Status);
+                match old.header.get(field).map(str::trim) {
+                    Some(v) if !v.is_empty() => CommittedStatus::Status(v.to_string()),
+                    _ => CommittedStatus::Unreadable,
+                }
+            }
+        };
+        out.insert(record.path.clone(), committed);
+    }
+    out
 }
 
 pub(crate) fn examine(
