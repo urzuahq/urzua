@@ -349,3 +349,46 @@ fn refresh_needs_the_rule_declared() {
     assert_eq!(code, 2, "{report}");
     assert!(report["error"].as_str().unwrap().contains("issue_refs"));
 }
+
+#[test]
+fn a_declared_header_field_is_checked_end_to_end_and_only_when_declared() {
+    let body =
+        "---\nStatus: Accepted\nFound-in: 'PR #99 review'\n---\n# 1\n\n## References\n\n- none\n";
+    let with_fields = RULE.replace(
+        "forms: [number, url] }",
+        "forms: [number, url], fields: [Status, Found-in] }",
+    );
+    let dir = fixture("fieldcheck", &with_fields, body, Some(SNAPSHOT));
+    // Found-in is not declared by the fixture's type: refused at load.
+    let (code, report, _) = urzua(&dir, &["check", "docs/"], &[]);
+    assert_ne!(code, 0, "{report}");
+    assert!(report.to_string().contains("Found-in"), "{report}");
+
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace(
+            "required_fields: [\"Status\"]",
+            "required_fields: [\"Status\", \"Found-in\"]",
+        ),
+    )
+    .unwrap();
+    let (_, report, _) = urzua(&dir, &["check", "docs/"], &[]);
+    let found = findings_of(&report, "citation.issue-exists");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"].as_str().unwrap().contains("Found-in"));
+    assert_eq!(found[0]["line"], 3);
+
+    // Default off: the same record with no `fields` is clean.
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace(", fields: [Status, Found-in]", ""),
+    )
+    .unwrap();
+    let (_, report, _) = urzua(&dir, &["check", "docs/"], &[]);
+    assert!(
+        findings_of(&report, "citation.issue-exists").is_empty(),
+        "{report}"
+    );
+}
