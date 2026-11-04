@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M2W3XAGYFHAGSQ8NQRP8KBZR
-Phase: '0'
+Phase: '1'
 Track: section-checks
 Implements: SPEC-1
 Blocked-on: MILE-98
@@ -69,3 +69,4 @@ which no rule can enforce.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** none of the twenty-one shipping rules examines section structure, so `SPEC-1` shipped with two `## Open questions` giving contradictory answers and `check` stayed green. Separated from `MILE-4` deliberately: a missing required section is a governance finding, a duplicated one is a broken document, and no configuration makes the second acceptable. | **substantive** |
 > | 2026-09-19 | Order and skipped-level cases specified against their sources. **Why:** both were stated absolutely. *Out of a declared order* had no declaration to read -- `required_fields` is a set, not a sequence -- and *a skipped level* assumed `##` is always the top, which `MILE-98`'s `sections.depth` makes configurable. A milestone that cannot say where its rule reads from is a direction, not a deliverable. | **substantive** |
+> | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
