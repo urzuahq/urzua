@@ -24,6 +24,10 @@ whether a comment may be accepted as a claim the record already makes; that dist
 to make. If decided in favour, it needs its own ADR that narrows `RFC-5` section 2 rather than editing
 it.
 
+## Decision (2026-11-04)
+
+A code comment citing a decision (`Implements: ADR-N`) counts as realization evidence, and a comment citing a record that does not exist is reported.
+
 ## References
 
 - `RFC-5` -- section 2: the pointer lives on the record.
@@ -35,3 +39,4 @@ it.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Two accepted-or-drafted records reject in-code comments as the evidence model while a first adopter uses them at scale; filed as a decision. | **substantive** |
+> | 2026-11-04 | Decision recorded: a code comment citing a decision (`Implements: ADR-N`) counts as realization evidence, and a comment citing a record that does not exist is reported. `Status` stays `Planned`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

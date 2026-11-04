@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6D5B1RDDZ5FJPDP635XB6W4
-Status: Draft
+Status: Accepted
 Date: 2026-11-02
 Author: beauwilliams
 ---
@@ -171,3 +171,4 @@ correct and from wrong, in the spirit of the three-field-states rule in `AGENTS.
 > |---|---|---|
 > | 2026-11-02 | Filed as `Draft`. **Why:** the combined `Supersedes / Superseded-by` key hides direction and only that one pair is reciprocity-checked. | **substantive** |
 > | 2026-11-02 | Review corrections: the config's actual supersession declaration; per-type binding marked unresolved; one population unit; cross-type claims reported by a named rule; alias handling spelled out; reciprocal-side direction corrected; alternatives moved under Proposal. **Why:** review found each stated as more settled or different than the code. | **substantive** |
+> | 2026-11-04 | `Draft` -> `Accepted`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

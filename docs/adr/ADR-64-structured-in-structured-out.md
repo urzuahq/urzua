@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6DGQK2J4AW7QRSB486Q7THH
-Status: Proposed
+Status: Accepted
 Date: 2026-11-02
 Author: beauwilliams
 Deciders: beauwilliams
@@ -90,3 +90,4 @@ wholesale once rules and views depend on structured values, which is the point.
 > | 2026-11-02 | Drafted as Proposed. **Why:** Author stated the principle while settling `RFC-48`. | **substantive** |
 > | 2026-11-02 | Headers structured and sections prose; contradicted hand-written values are errors; config held to the same rule; JSON-only output. **Why:** Author's answers to the draft's open points. | **substantive** |
 > | 2026-11-03 | Prose-tolerant fields defined as the stated exception under the `narrative_fields` contract; Consequences reworded as pending and aligned with `RFC-48`: `Blocked-on` stays as a prose note beside `Depends-on`, whose contract is stated. **Why:** Review findings; the earlier wording retired `Blocked-on`, contradicting the decision that both fields exist. | **substantive** |
+> | 2026-11-04 | `Proposed` -> `Accepted`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
