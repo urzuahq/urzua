@@ -1,7 +1,8 @@
 ---
 Stable-Id: 01M6K4FPRR5MJ8YWAYDGXXGQHB
-Status: Proposed
+Status: Accepted
 Date: 2026-11-04
+Accepted-on: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-7
@@ -56,3 +57,9 @@ Easy to extend and to relax. The decision adds `doctor` reporting and a rule tha
 - `ADR-69` -- the editor layer.
 - `MILE-99`, `MILE-179`, `MILE-180` -- the commit/push hooks and the CI integration this builds.
 - `BUG-96`, `MILE-159` -- a guard that ran only where someone ran it, and the history-depth false zero.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

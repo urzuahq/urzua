@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -26,7 +26,7 @@ record_types:
     prefix: "MILE"
     required_fields: ["Status", "Phase", "Track"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Implements", "Blocked-on"]
+    known_fields: ["Stable-Id", "Implements", "Blocked-on", "Realized-by"]
     spec: "SPEC-6"
     pointer_fields: ["Implements"]
     narrative_fields: ["Blocked-on"]
@@ -44,6 +44,7 @@ Per-record-type, not global — any type can shorten its own prefix without affe
 | `Phase` | a plain tag (`0`, `1`, ...) | Sequential grouping. Not a resolved pointer — no cross-referencing, just a bucket. |
 | `Track` | a plain tag (`header-format`, `section-checks`, ...) | Parallel workstream. Also a plain tag, not a pointer. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). Declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
+| `Realized-by` | `spec:`, `code:`, `test:` locators; set by the delivering PR | Delivery evidence (`MILE-183`). The PR that fully delivers a milestone sets it and `Status: Done` together; `status.delivery-agreement` fails when the evidence computes to `Implemented` or `Verified` under `Planned`, `InProgress` or `Blocked`, and when `Done` has no evidence. A decision milestone's evidence is the record of the decision (a `spec:` locator), which is neither. Leave it off a milestone that is only partly delivered. |
 | `Blocked-on` | free text, optionally citing a record ID; optional | What has to be true before this milestone can move. Free text with no reference token stays legal ("a decision not yet made"); a real ID (`BUG-3`) is checked by `pointer.resolution` for resolution and by `narrative-field.stale` (ADR-42, generalized by MILE-90/ADR-44) for whether the target has since reached a terminal status. Declared as this type's one `narrative_fields` entry (MILE-90/ADR-44) — prose-tolerant, unlike `Implements`. Was a body section (`## Blocked on`) before this version — moved into the header (ADR-42) since it's the one field-shaped exception in the schema that hadn't been. |
 
 `Status` is documented here but not mechanically validated: nothing in `urzua-core` checks a
@@ -120,3 +121,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
 > | 2026-11-02 | Added the "Phase vocabulary" section defining `0` bootstrap, `1` worth installing, `2` agent-facing, `3` differentiated, `4` scale; bumped to `0.8`. **Why:** `Phase` was documented only as "a plain tag (`0`, `1`, ...)", so the same number meant different things across records and nothing said where adopter-blocking work belongs; `0` now has a stated meaning, which `MILE-35` and the first-adopter milestones rely on. | **substantive** |
 > | 2026-11-04 | Phase vocabulary: the `0` row now states the single Phase 0 exit (`SPEC-1`, Exit bar) instead of only "the first adopter replacement"; `Version` `0.8` -> `0.9`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | Bumped to `0.10`. The type declares `Realized-by` (delivery evidence) and `statuses.delivery`; the delivering PR sets `Realized-by` and `Status: Done`. **Why:** `MILE-183`. | **substantive** |

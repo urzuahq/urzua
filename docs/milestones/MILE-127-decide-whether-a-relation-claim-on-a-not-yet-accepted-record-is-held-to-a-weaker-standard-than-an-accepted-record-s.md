@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZY4QSHAD89X81W3MW6SN
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
+Realized-by: code:rust/crates/urzua-core/src/rules/relation.rs, test:rust/crates/urzua-cli/tests/provisional_claim_integration.rs
 ---
 # 127 — Decide whether a relation claim on a not-yet-accepted record is held to a weaker standard than an accepted record's
 
@@ -36,3 +37,4 @@ A relation claim from a record that is not yet accepted is reported as pending (
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Whether an in-flight proposal may name what it would supersede, without asserting it, is undecided and an adopter will hit it. | **substantive** |
 > | 2026-11-04 | Decision recorded: a relation claim from a record that is not yet accepted is reported as pending (a warning) and becomes an error once the claiming record is accepted. `Status` stays `Planned`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: the decision is recorded (a claim from a not-yet-accepted record is pending, then an error once accepted) and built as the pair `provisional` option. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

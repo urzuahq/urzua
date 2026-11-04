@@ -352,7 +352,7 @@ mod tests {
                     sections: None,
                     statuses: Some(
                         yaml_serde::from_str(
-                            "{values: [Open, Done], require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
+                            "{values: [Open, Done], success: [Done], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
                         )
                         .unwrap(),
                     ),
@@ -419,6 +419,10 @@ mod tests {
             (
                 "status.forbidden-field-present",
                 rules::status_forbidden_field_present(&records, &config),
+            ),
+            (
+                "status.delivery-agreement",
+                rules::status_delivery_agreement(&records, &config, &Default::default()),
             ),
             (
                 "identity.collision",

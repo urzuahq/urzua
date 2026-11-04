@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JW44TCEWCNANCN4X8ZZ8K0
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs, test:rust/crates/urzua-cli/tests/placeholder_vocabulary_integration.rs
 ---
 # 162 — `statuses.pending` supports declared pattern matching for placeholder families
 
@@ -26,3 +27,4 @@ A declared pattern in `statuses.pending` makes every matching value read as pend
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Built: `statuses.pending` accepts the structured entry `{pattern: "..."}` beside whole values (`SPEC-3` 0.39, `SPEC-2` 0.52); an invalid, blank or repeated pattern is a load error. Exercised by this repository's ADR type (a `TBD` / `to be decided` family) and `placeholder_vocabulary_integration.rs`. **Why:** the milestone's Done means. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: `statuses.pending` accepts `{pattern: ...}` entries. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

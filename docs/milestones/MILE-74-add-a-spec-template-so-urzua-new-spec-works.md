@@ -5,6 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:.urzua/templates/spec.md, test:rust/crates/urzua-cli/tests/new_integration.rs
 ---
 # 74 — Add a spec template so urzua new spec works
 
@@ -38,3 +39,4 @@ this project is built around -- can't be created through `urzua new` at all.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | `Status: Done`. The mechanical failure was already resolved as a side effect of ADR-33's yaml-frontmatter migration (`spec`'s `header_shape` got declared, so `urzua new spec` stopped erroring). The real remaining scope -- the canonical field set -- decided: `Author` required (MILE-78's accountability argument, backfilled onto all 16 pre-existing specs lacking it); `Embodiment`/`Derives-from` a project-wide optional convention, not `SPEC-1`-specific baggage; `Implements`/`Parent` declared in `known_fields` since every spec already carries them. `.urzua/templates/spec.md` built so `urzua new spec` produces real section scaffolding, not a bare skeleton. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

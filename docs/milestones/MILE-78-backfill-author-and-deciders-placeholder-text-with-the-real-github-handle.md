@@ -5,6 +5,7 @@ Phase: '0'
 Track: accountability-identity
 Implements: —
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 78 — Backfill Author and Deciders placeholder text with the real GitHub handle
 
@@ -34,3 +35,4 @@ placeholder-shaped prose that happens to already be non-empty.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped: mechanically replaced all 92 placeholder instances (`Author`/`Deciders`) with `@beauwilliams` across every ADR, RFC, and spec. **Why:** the placeholder defeated the actual purpose of the `Author`/`Deciders` fields (RFC-1's accountability requirement) in every single record that had one; the real value has been known the whole time, so leaving it unfixed was pure debt, not an open question. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

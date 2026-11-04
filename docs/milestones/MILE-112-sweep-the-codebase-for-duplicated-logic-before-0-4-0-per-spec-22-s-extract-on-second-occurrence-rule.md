@@ -4,6 +4,7 @@ Status: Done
 Phase: '1'
 Track: release-process
 Implements: SPEC-22
+Realized-by: code:rust/crates/urzua-core/src/rules/shared.rs
 ---
 # 112 — sweep the codebase for duplicated logic before 0.4.0, per SPEC-22's extract-on-second-occurrence rule
 
@@ -66,3 +67,4 @@ follow-up decision, not decided here.
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** the user asked directly for this recurring pattern to be cleaned up before 0.4.0 ships, after `SPEC-22`'s duplication rule was tightened from reactive to proactive in the same conversation. | **substantive** |
 > | 2026-09-23 | Done. The sweep ran over all six files; found and fixed 3 new instances (`BUG-139`/`140`/`141`), all mechanical. Closes per this record's own stated bar: the sweep happened and every instance found has an outcome on record. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
