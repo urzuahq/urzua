@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -224,10 +224,11 @@ Each `records` entry:
 | `header` | array | The header as the configured `header_shape` parser (the one `check` uses) read it, in file order: `{ "name", "value", "line" }`. A list, not a map, so a repeated key stays visible. Values are strings exactly as parsed. |
 | `raw_text` | string | The file's complete text, unmodified, header included. |
 
-**There is no `sections` field yet.** No record type declares where its sections come from
-(`MILE-98`), so the body is one raw string and a consumer that needs a section (`## What`) must
-extract it from `raw_text` itself. When `MILE-98` lands, sections are added as a new field beside
-`raw_text`; this spec is then revised.
+| `sections` | array or `null` | For a type that declares `sections` (SPEC-3), the record's `##` sections in document order, split by the same parser `section.required` uses; `[]` when the record has none. `null` (the key is present) when the type declares no `sections`, so "this type has no declared document model" is never confused with "declared, but this record has no sections", and a consumer cannot mistake an unread type for an empty one. Each entry: `name` (the declared `required` name when the heading is that name or one of its aliases, otherwise the heading), `heading` (as written), `line` and `end_line` (1-based, file-relative), `content` (the lines after the heading through `end_line`, each ending `\n`). |
+| `preamble` | string or `null` | For a type that declares `sections`, the text between the header and the first section (`""` when none); `null` exactly when `sections` is `null`. |
+
+`raw_text` stays beside `sections` and remains the complete file. A record whose header is unreadable
+is still split from its first line, since no header region is known.
 
 ## Configuration
 
@@ -308,3 +309,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-04 | Bumped to `0.10`. A panic exits 2, the documented code for could not run, after printing its `not-run` result (Rust's default is 101); a closed stdout pipe ends the run without a panic. **Why:** `MILE-176` -- the hook's JSON contract and the process exit code disagreed, and `urzua check | head -1` panicked. | **substantive** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a, `rust/crates/urzua-cli/tests/export_integration.rs` 510343733f3f -> e1ad4b495f5b. Reason: Re-verified: spec revision log is current through v0.10; main.rs and test changes add index, refs, fix flags, --fail-on and panic exit 2, all specified. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Bumped to `0.11`. Added rows for `urzua rules` and `urzua index` to the child-spec table; both commands are specified in `SPEC-2` (the rule table, `index.freshness`) and `SPEC-3` (`indexes`). No behaviour changes. **Why:** drift review of 2026-11-04: the table named neither command, so a reader could not tell where they are specified. | **structural** |
+> | 2026-11-04 | Bumped to `0.12`. The export contract gains `sections` and `preamble` (`MILE-115`). **Why:** the ADR, bug and milestone types now declare `sections`, so the condition the contract named for adding them holds. A type with no declaration gets an explicit `null`, not an absent key: absence reads as "not exported", while `null` states "no declaration" and `[]` states "declared, none present", so no consumer takes a silent default. Aliases resolve to the declared name as in `MILE-165`. | **substantive** |
