@@ -14,6 +14,10 @@ Track: write-path
 
 `RFC-46` was rejected in favour of one convention: a corpus in another shape is renamed rather than tolerated. The first such adoption is renamed by a one-off script inside its own switchover change, so the tool is later work; it becomes worth building once adopting a second corpus repeats the same rename.
 
+## Done means
+
+`urzua migrate filenames` renames a corpus's record files to the convention the type's `identity.pattern` declares (never a hardcoded shape), rewrites relative links and path mentions to the renamed files and reports every rewrite, is a dry run by default, and a second applied run changes nothing; a fixture with bare zero-padded filenames renames to `TYPE-NNNN-slug.md` and then passes `check`; documented in `SPEC-14`.
+
 ## References
 
 - `RFC-46` -- the rejected alternative.
@@ -27,3 +31,4 @@ Track: write-path
 > | 2026-11-02 | Filed. **Why:** A gap the Phase 0 roadmap found with no record. | **substantive** |
 > | 2026-11-02 | Target follows the declared pattern. **Why:** The tool must not hardcode one filename shape. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 2 to Phase 1; `Status` unchanged. The switchover (`MILE-102`) renames the adopter's files with a one-off script instead, so the reusable tool is no longer on the Phase 0 path. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

@@ -54,6 +54,10 @@ second-occurrence threshold in one case by six occurrences). That is evidence a 
 (a lint or a script-based duplication check) would catch what convention alone did not -- worth a
 follow-up decision, not decided here.
 
+## Done means
+
+The sweep ran over `rules.rs`, `config.rs`, `check.rs`, `discovery.rs`, `graph.rs` and `property.rs` applying `SPEC-22`'s extract-on-second-occurrence rule, every duplicated instance found has an outcome on record (three new mechanical instances were found and fixed as `BUG-139`, `BUG-140` and `BUG-141`, with shared helpers in `rules/shared.rs`), and the test suite and `check` output are unchanged.
+
 ## References
 
 - `SPEC-22` -- the convention this milestone applies retroactively.
@@ -68,3 +72,4 @@ follow-up decision, not decided here.
 > | 2026-09-23 | Filed. **Why:** the user asked directly for this recurring pattern to be cleaned up before 0.4.0 ships, after `SPEC-22`'s duplication rule was tightened from reactive to proactive in the same conversation. | **substantive** |
 > | 2026-09-23 | Done. The sweep ran over all six files; found and fixed 3 new instances (`BUG-139`/`140`/`141`), all mechanical. Closes per this record's own stated bar: the sweep happened and every instance found has an outcome on record. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
