@@ -274,6 +274,8 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     // reaches, not the changed files alone (`MILE-123`): the corpus above is
     // whole, so a dependent can be found and judged.
     let mut diff_scope = None;
+    // How many records the diff reached before a path argument narrowed it.
+    let mut reached_before_narrowing = 0usize;
     if let Some(changes) = &changed {
         let examination = match crate::diff_scope::examine(
             &repo_root,
@@ -285,6 +287,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             Ok(e) => e,
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
+        reached_before_narrowing = examination.examined.len();
         scoped.retain(|p| examination.examined.contains(p));
         let mut scope = examination.scope;
         let kept: std::collections::HashSet<&std::path::Path> =
@@ -649,7 +652,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     let empty_diff = diff_scope
         .as_ref()
         .is_some_and(|d| examined.is_empty() && d.whole_corpus_reason.is_none());
-    if empty_diff {
+    if empty_diff && reached_before_narrowing > 0 {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: "scope".to_string(),
+            message: format!(
+                "the path argument excluded all {reached_before_narrowing} record(s) the change since {} reached (changed or dependent); nothing was examined",
+                base.as_deref().unwrap_or_default(),
+            ),
+        });
+    } else if empty_diff {
         notices.push(Notice {
             severity: NoticeSeverity::Info,
             subject: "scope".to_string(),

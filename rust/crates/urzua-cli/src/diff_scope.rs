@@ -29,15 +29,27 @@ fn display(paths: impl IntoIterator<Item = impl AsRef<Path>>) -> Vec<String> {
     out
 }
 
-/// The ids of records that were deleted: read from the merge base, since they
-/// are no longer in the tree. A deleted path that no configured type governs
-/// has no id to look up and is skipped.
-fn deleted_record_ids(
+/// The locators a record cites under its type's embodiment-locator field.
+fn cited_locators(config: &Config, record: &Record) -> Vec<String> {
+    let field =
+        rules::relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
+    record
+        .header
+        .get(field)
+        .map(rules::realized_by_locator_paths)
+        .unwrap_or_default()
+}
+
+/// The ids and cited locators of records that were deleted: read from the
+/// merge base, since they are no longer in the tree. A deleted path that no
+/// configured type governs has nothing to look up and is skipped.
+fn deleted_record_facts(
     repo_root: &Path,
     config: &Config,
     changes: &urzua_io::GitChanges,
-) -> Result<Vec<String>, String> {
+) -> Result<(Vec<String>, Vec<String>), String> {
     let mut ids = Vec::new();
+    let mut locators = Vec::new();
     for path in &changes.deleted {
         let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
@@ -65,9 +77,10 @@ fn deleted_record_ids(
             if let Some(id) = rules::record_id(&record) {
                 ids.push(urzua_core::values::RecordId::new(&id).as_str().to_string());
             }
+            locators.extend(cited_locators(config, &record));
         }
     }
-    Ok(ids)
+    Ok((ids, locators))
 }
 
 pub(crate) fn examine(
@@ -116,9 +129,11 @@ pub(crate) fn examine(
 
     // The ids a change can strand a reference to: every changed record's, and
     // every deleted record's, which only the merge base still holds.
-    let mut ids: HashSet<String> = deleted_record_ids(repo_root, config, changes)?
-        .into_iter()
-        .collect();
+    let (deleted_ids, deleted_locators) = deleted_record_facts(repo_root, config, changes)?;
+    let mut ids: HashSet<String> = deleted_ids.into_iter().collect();
+    // The locators a changed or deleted record cites: an unchanged record
+    // citing one too is half of a shared-locator finding the change created.
+    let mut changed_locators: HashSet<String> = deleted_locators.into_iter().collect();
     for record in records
         .iter()
         .filter(|r| changed_records.contains(r.path.as_path()))
@@ -126,6 +141,7 @@ pub(crate) fn examine(
         if let Some(id) = rules::record_id(record) {
             ids.insert(urzua_core::values::RecordId::new(&id).as_str().to_string());
         }
+        changed_locators.extend(cited_locators(config, record));
     }
 
     let mut dependents: HashSet<PathBuf> = HashSet::new();
@@ -140,26 +156,19 @@ pub(crate) fn examine(
         // collision the change created.
         let shares_an_id = rules::record_id(record)
             .is_some_and(|id| ids.contains(urzua_core::values::RecordId::new(&id).as_str()));
-        let evidence_changed = {
-            let field = rules::relation_field_name(
-                config,
-                &record.record_type,
-                RelationRole::EmbodimentLocator,
-            );
-            record.header.get(field).is_some_and(|value| {
-                rules::realized_by_locator_paths(value)
-                    .iter()
-                    .any(|locator| {
-                        // An empty locator is a path prefix of everything.
-                        if locator.is_empty() {
-                            return false;
-                        }
-                        let locator = Path::new(locator);
-                        changes.changed.iter().any(|c| c.starts_with(locator))
-                    })
-            })
-        };
-        if names_a_change || shares_an_id || evidence_changed {
+        let locators = cited_locators(config, record);
+        let evidence_changed = locators.iter().any(|locator| {
+            // An empty locator is a path prefix of everything.
+            if locator.is_empty() {
+                return false;
+            }
+            let path = Path::new(locator);
+            changes.changed.iter().any(|c| c.starts_with(path))
+        });
+        let shares_a_locator = locators
+            .iter()
+            .any(|l| !l.is_empty() && changed_locators.contains(l));
+        if names_a_change || shares_an_id || evidence_changed || shares_a_locator {
             dependents.insert(record.path.clone());
         }
     }

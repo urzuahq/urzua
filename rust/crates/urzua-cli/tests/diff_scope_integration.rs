@@ -557,3 +557,73 @@ fn unrelated_histories_say_there_is_no_merge_base() {
     assert!(report.to_string().contains("no merge base"), "{report}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_shared_locator_pulls_in_the_unchanged_record_citing_it() {
+    let config = RICH_CONFIG.replace(
+        "  embodiment.consistency: error\n",
+        "  embodiment.consistency: error\n  embodiment.locator-promotion-candidate: error\n",
+    );
+    let dir = empty_repo("shared-locator", &config);
+    std::fs::create_dir_all(dir.join("src/a")).unwrap();
+    std::fs::write(dir.join("src/a/x.rs"), "fn a() {}\n").unwrap();
+    adr(
+        &dir,
+        "ADR-1-first.md",
+        "Accepted",
+        &[
+            ("Embodiment", "Implemented"),
+            ("Realized-by", "code: src/a/x.rs"),
+        ],
+    );
+    tag_base(&dir);
+    adr(
+        &dir,
+        "ADR-2-second.md",
+        "Accepted",
+        &[
+            ("Embodiment", "Implemented"),
+            ("Realized-by", "code: ./src/a/x.rs"),
+        ],
+    );
+    commit(&dir, "add a second citer");
+
+    assert_full_and_diff_agree(
+        &dir,
+        "embodiment.locator-promotion-candidate",
+        "ADR-1-first.md",
+    );
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(
+        report["scope"]["dependents"],
+        serde_json::json!(["docs/adr/ADR-1-first.md"]),
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_path_argument_that_excludes_the_changed_records_says_so() {
+    let dir = evidence_fixture("path-excludes-change");
+    git(&dir, &["rm", "-q", "docs/adr/ADR-2-other.md"]);
+    adr(
+        &dir,
+        "ADR-3-referrer.md",
+        "Accepted",
+        &[("Implements", "ADR-2")],
+    );
+    // The referrer is new and staged, hence changed; ADR-2 is gone.
+    git(&dir, &["add", "-A"]);
+    let (code, report) = check(&dir, &["--base", "base", "src"]);
+    let notices = report["notices"].to_string();
+    assert!(
+        !notices.contains("no governed record changed"),
+        "a record changed; the notice must not deny it: {report}"
+    );
+    assert!(
+        notices.contains("path argument"),
+        "the notice should name the path argument: {report}"
+    );
+    assert_eq!(code, Some(0), "{report}");
+    std::fs::remove_dir_all(&dir).ok();
+}
