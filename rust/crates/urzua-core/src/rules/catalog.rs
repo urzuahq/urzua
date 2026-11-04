@@ -45,6 +45,8 @@ pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 
+pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
+
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
     RULE_HEADER_LAYOUT_CONSISTENCY,
@@ -83,6 +85,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+    RULE_INDEX_FRESHNESS,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -242,6 +245,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
         description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
     },
+    RuleMeta {
+        id: RULE_INDEX_FRESHNESS,
+        description: "A committed index of one record type (a file, or a marked list inside a README, in a declared `format` with `{id}`, `{file}` and `{title}` placeholders) lists exactly the records: a record with no entry, an entry naming no record, a duplicated entry, an entry whose file or title differs from the record's, and a line the format does not match are each an error (`MILE-139`). A missing artifact, or one whose declared `begin`/`end` markers are absent, is an error too. Needs `indexes` (`path`, `type`, `format`, optional `begin`/`end`); the engine reads the artifacts and compares, it never regenerates one. The population counts the artifacts compared, so a run over none is distinguishable from a clean one.",
+    },
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -257,7 +264,8 @@ pub const RULE_METADATA: &[RuleMeta] = &[
 /// already gives a finding about the config file itself, or `BUG-86`'s
 /// "scoped invocation silently drops a real finding" recurs for any narrower
 /// scope than the one that repository's own Makefile was changed to use.
-pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[RULE_CLAIM_STATUS_AGREEMENT];
+pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] =
+    &[RULE_CLAIM_STATUS_AGREEMENT, RULE_INDEX_FRESHNESS];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with
 /// none is a config load error.

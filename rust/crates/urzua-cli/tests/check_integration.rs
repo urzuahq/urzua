@@ -3068,6 +3068,11 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "boundary.published-path-reference",
             "population is published files, not records",
         ),
+        // File-level: judges committed index artifacts against the records.
+        (
+            "index.freshness",
+            "population is index artifacts, not records",
+        ),
     ];
 
     for (id, _) in EXEMPT {
@@ -3094,6 +3099,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "boundary.published-path-reference" => {
                 format!("{id}: {{level: error, published_paths: [\"docs/claims\"]}}")
             }
+            "index.freshness" => format!(
+                "{id}: {{level: error, indexes: [{{path: \"docs/claims/c.md\", type: note, format: \"{{id}}\"}}]}}"
+            ),
             _ => format!("{id}: error"),
         })
         .collect();
