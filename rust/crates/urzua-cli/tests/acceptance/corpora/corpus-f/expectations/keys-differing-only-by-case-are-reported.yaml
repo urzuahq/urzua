@@ -1,0 +1,9 @@
+id: keys-differing-only-by-case-are-reported
+corpus: corpus-f
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: header.case-variant-key
+    file: records/docs/DOC-0003-case-variant.md
+    severity: error
+    message_contains: "'Status' (line 2)"

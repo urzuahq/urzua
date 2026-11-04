@@ -1,0 +1,47 @@
+schema_version: 2
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Date, Author]
+    known_fields: [Deciders, Implements, "Supersedes / Superseded-by", Accepted-on]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted, Superseded, Rejected]
+      success: [Accepted]
+      failure: [Rejected, Superseded]
+      implementable: [Accepted]
+      pending: [pending, unknown]
+      require:
+        - {when: [Accepted], fields: [Deciders]}
+    pointer_fields: [Implements, "Supersedes / Superseded-by"]
+    narrative_fields: []
+    sections:
+      from: headings
+      required:
+        - {name: Context}
+rules:
+  header.required-fields: error
+  header.field-set-consistency: error
+  field.quality: error
+  field.pending: error
+  field.untrimmed-value: error
+  header.field-case-mismatch: error
+  status.undeclared-value: error
+  status.required-field-missing: error
+  date.field-valid:
+    level: error
+    date_fields: [Date, Accepted-on]
+  pointer.resolution: error
+  filename.title-consistency: error
+  filename.identity-pattern: error
+  identity.collision: error
+  relation.supersession-reciprocity: error
+  section.required: error
+  citation.resolution: error
+  citation.path-exists:
+    level: error
+    reference_sections: [References]
+  revision-log.change-class-required: error
+  type.record-outside-declared-dir: error
+  type.dir-matches-nothing: error

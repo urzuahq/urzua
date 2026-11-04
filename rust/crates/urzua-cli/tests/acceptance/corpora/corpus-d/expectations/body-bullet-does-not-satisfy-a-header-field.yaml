@@ -1,0 +1,9 @@
+id: body-bullet-does-not-satisfy-a-header-field
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: header.required-fields
+    file: records/ADR-0009-body-bullet.md
+    severity: error
+    message_contains: "'Date'"

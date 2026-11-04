@@ -1,0 +1,9 @@
+id: record-in-a-subdirectory-is-not-silently-ungoverned
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: type.record-outside-declared-dir
+    file: records/archive/ADR-0018-stray.md
+    severity: error
+    message_contains: "not directly in it"

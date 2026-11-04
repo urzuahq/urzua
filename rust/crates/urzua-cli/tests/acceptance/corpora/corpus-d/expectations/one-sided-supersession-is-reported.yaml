@@ -1,0 +1,9 @@
+id: one-sided-supersession-is-reported
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: relation.supersession-reciprocity
+    file: records/ADR-0006-supersedes.md
+    severity: error
+    message_contains: "ADR-0001"

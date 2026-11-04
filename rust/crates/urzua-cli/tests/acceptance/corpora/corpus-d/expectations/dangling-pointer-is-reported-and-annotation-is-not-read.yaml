@@ -1,0 +1,9 @@
+id: dangling-pointer-is-reported-and-annotation-is-not-read
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: pointer.resolution
+    file: records/ADR-0007-dangling.md
+    severity: error
+    message_contains: "ADR-0099"

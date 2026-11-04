@@ -1,0 +1,12 @@
+id: clean-record-draws-no-finding
+corpus: corpus-f
+invocation: [check]
+expect_exit: 1
+expect_json:
+  - {at: /files_examined, equals: 7}
+expect_rules_ran:
+  - section.shape
+  - status.forbidden-field-present
+expect_no_findings:
+  - {file: records/docs/DOC-0001-clean.md}
+  - {file: records/notes/NOT-0001-note.md}

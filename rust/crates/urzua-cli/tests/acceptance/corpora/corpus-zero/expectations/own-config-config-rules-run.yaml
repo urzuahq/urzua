@@ -1,0 +1,18 @@
+id: own-config-config-rules-run
+corpus: "@repo"
+invocation: [check]
+# This repository's own .urzua/config.yaml over its own records: every rule of
+# the config family that the config enables runs over a non-empty population, and
+# the whole check is clean (fail_on: warning). A refactor of the rule wiring
+# that drops, silences or newly flags any of them fails here.
+expect_exit: 0
+expect_json:
+  - {at: /blocking, equals: false}
+expect_rules_ran:
+  - config.pointer-declaration-missing
+  - config.pointer-field-not-known
+  - config.pointer-narrative-overlap
+  - config.header-none-has-no-required-fields
+  - config.relation-field-not-known
+  - config.known-fields-declaration-missing
+  - config.scope-matches-nothing

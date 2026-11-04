@@ -1,0 +1,14 @@
+id: an-undeclared-type-receives-no-rule
+corpus: corpus-e
+# The control for the case above: with the declaration absent the same records
+# are not examined at all. The difference between the two runs is exactly the
+# declaration.
+invocation: [--config, .urzua/adr-only.yaml, check]
+expect_exit: 1
+expect_json:
+  - {at: /files_examined, equals: 8}
+expect_findings:
+  - {rule: field.quality, file: records/adr/ADR-0002-blank-owner.md}
+expect_no_findings:
+  - {file: records/gizmo/GIZ-0002-blank-owner.md}
+  - {file: records/gizmo/GIZ-0005-dangling.md}
