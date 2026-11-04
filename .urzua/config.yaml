@@ -97,6 +97,7 @@ record_types:
       - "Derives-from"
       - "Implements"
       - "Parent"
+      - "Last-audited"
     statuses:
       values: ["Draft", "Accepted"]
       success: ["Accepted"]
@@ -241,6 +242,10 @@ rules:
   embodiment.consistency:
     level: warn
     drift_grace_days: 14
+    # A spec's file changes for reasons unrelated to its evidence, so a spec
+    # can declare the day its evidence was last audited and the window counts
+    # from that instead of from the cited file's last change (MILE-166).
+    drift_audit_field: "Last-audited"
     # States a human sets that no evidence can compute (MILE-148): a record
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]

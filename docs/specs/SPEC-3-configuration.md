@@ -1,8 +1,9 @@
 ---
-Version: '0.38'
+Version: '0.39'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
+Last-audited: 2026-11-04
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -585,6 +586,13 @@ rules:
 - `drift_grace_days` (whole days, `0` or more): drift is not reported while the cited file's last
   commit is newer than the window, so a code change can land before its record catches up. Once the
   window passes the drift reports.
+- `drift_audit_field` (a field name some record type declares; needs `drift_grace_days`): a record
+  that carries a `YYYY-MM-DD` date in that field is held back while that date is newer than the
+  window, in place of the cited file's last commit, so the window counts from the day the evidence
+  was last audited. A record without the field, or with a blank one, counts from the file's last
+  commit as before; a malformed date is a warning from `embodiment.consistency` naming the value
+  and falls back the same way. A blank name, an undeclared field, or the option without
+  `drift_grace_days` is a load error.
 - `claim_max_age_days` (whole days): a warning when the commit that last touched the record's
   `Realized-by` line is older than the limit, whether or not the evidence changed. It reports in
   addition to any disagreement, and a record whose line git cannot date is not warned.
@@ -772,4 +780,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.35`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
 > | 2026-11-04 | Bumped to `0.36`. `test_paths` accepts globs as well as prefixes, matched by the diff rules' glob matcher. **Why:** `MILE-160` -- test files named by suffix cannot be named by a prefix list. | **substantive** |
 > | 2026-11-04 | Bumped to `0.37`. Documented that `embodiment.consistency` reports a record stating `Verified` or `Implemented` with no `Realized-by` field and no citing back-pointer. **Why:** `MILE-161` -- a claim with no evidence passed silently. | **substantive** |
-> | 2026-11-04 | Bumped to `0.38`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.38`. Documented `drift_audit_field` of `embodiment.consistency`: the `drift_grace_days` window counts from a declared last-audit date on the record when present, else from the cited file's last change; a malformed date is reported. **Why:** `MILE-166` -- a file changes for reasons unrelated to its evidence, so its last change mis-dates the audit. | **substantive** |
+> | 2026-11-04 | Bumped to `0.39`. `statuses.pending` accepts the structured pattern entry `{pattern: "..."}` beside whole values, for a placeholder family; an invalid, blank or repeated pattern is a load error. **Why:** `MILE-162` -- an exact-value list needs an entry per variant and misses the next one. | **substantive** |
