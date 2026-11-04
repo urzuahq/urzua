@@ -384,6 +384,20 @@ impl<'de> Deserialize<'de> for RuleSetting {
 }
 
 impl RecordTypeConfig {
+    /// Every directory this type's records live in: `dir` first (where
+    /// `urzua new` writes), then `extra_dirs`. One identity namespace spans
+    /// all of them (`MILE-130`).
+    pub fn all_dirs(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.dir.as_str()).chain(self.extra_dirs.iter().map(String::as_str))
+    }
+
+    /// Whether `parent` (a path's parent directory) is one of this type's
+    /// directories. A directory, never its subtree (`RFC-35`).
+    pub fn owns_dir(&self, parent: Option<&std::path::Path>) -> bool {
+        self.all_dirs()
+            .any(|d| parent == Some(std::path::Path::new(d)))
+    }
+
     /// Whether `file_name` is declared a non-record file of this type
     /// (`exclude_files`): it is not loaded and no rule examines it.
     pub fn excludes(&self, file_name: &str) -> bool {
@@ -395,6 +409,14 @@ impl RecordTypeConfig {
 #[serde(deny_unknown_fields)]
 pub struct RecordTypeConfig {
     pub dir: String,
+    /// Further directories holding this type's records (`MILE-130`): one
+    /// identity namespace across `dir` and each of these. `urzua new` writes
+    /// to `dir` but numbers past every directory; ids, pointers, collisions and
+    /// `filename.identity-pattern` see them as one population. Each is a
+    /// directory like `dir` (not its subtree, `RFC-35`); no two types may
+    /// own the same directory.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_dirs: Vec<String>,
     /// The raw `identity` declaration (RFC-33 layer 1, MILE-98), kept as the
     /// YAML value so the typed parse of every other key is unchanged;
     /// `parse_with_document_models` validates it afterwards. A key present
@@ -855,6 +877,14 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("record type '{record_type}' declares directory '{dir}' more than once -- list each directory once")]
+    DuplicateDir { record_type: String, dir: String },
+    #[error("record types '{first}' and '{second}' both own directory '{dir}' -- a directory holds one type's records")]
+    SharedDir {
+        dir: String,
+        first: String,
+        second: String,
+    },
     #[error("record type '{record_type}' declares exclude_files entry '{entry}', which is not a bare file name -- it would exclude nothing")]
     InvalidExcludedFile { record_type: String, entry: String },
     #[error("record type '{record_type}' declares revision_log {reason}")]
@@ -1242,12 +1272,31 @@ pub fn parse_with_document_models(
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
+    let mut seen_dir: std::collections::BTreeMap<std::path::PathBuf, &String> = Default::default();
     for (name, rt) in &config.record_types {
-        if dir_names_nothing(&rt.dir) || dir_escapes_repo(&rt.dir) {
-            return Err(ConfigError::InvalidDir {
-                record_type: name.clone(),
-                dir: rt.dir.clone(),
-            });
+        let mut own_dirs: std::collections::BTreeSet<std::path::PathBuf> = Default::default();
+        for dir in rt.all_dirs() {
+            if dir_names_nothing(dir) || dir_escapes_repo(dir) {
+                return Err(ConfigError::InvalidDir {
+                    record_type: name.clone(),
+                    dir: dir.to_string(),
+                });
+            }
+            // Compared as paths so `docs/adr/` and `docs/adr` are one directory.
+            let path: std::path::PathBuf = std::path::Path::new(dir.trim()).components().collect();
+            if !own_dirs.insert(path.clone()) {
+                return Err(ConfigError::DuplicateDir {
+                    record_type: name.clone(),
+                    dir: dir.to_string(),
+                });
+            }
+            if let Some(first) = seen_dir.insert(path, name) {
+                return Err(ConfigError::SharedDir {
+                    dir: dir.to_string(),
+                    first: first.clone(),
+                    second: name.clone(),
+                });
+            }
         }
         for entry in &rt.exclude_files {
             let bare = !entry.is_empty()
@@ -2098,6 +2147,7 @@ mod tests {
         let t = RecordTypeConfig {
             exclude_files: Vec::new(),
             dir: "docs/adr".to_string(),
+            extra_dirs: Vec::new(),
             identity: None,
             fields: None,
             sections: None,
@@ -2815,6 +2865,45 @@ record_types:
             );
         }
         assert!(parse(&rt_config("  adr:\n    dir: \"docs/adr\"\n")).is_ok());
+    }
+
+    /// `MILE-130`: a type may own several directories; each is validated like
+    /// `dir`, listed once, and owned by one type only.
+    #[test]
+    fn extra_dirs_are_validated_like_dir_and_owned_by_one_type() {
+        let ok = parse(&rt_config(
+            "  adr:\n    dir: docs/adr\n    extra_dirs: [docs/adr-archive, pkg/a/adr]\n",
+        ))
+        .unwrap();
+        let adr = &ok.record_types["adr"];
+        assert_eq!(
+            adr.all_dirs().collect::<Vec<_>>(),
+            ["docs/adr", "docs/adr-archive", "pkg/a/adr"]
+        );
+        assert!(adr.owns_dir(Some(std::path::Path::new("pkg/a/adr"))));
+        assert!(!adr.owns_dir(Some(std::path::Path::new("pkg/a"))));
+        for bad in ["..", "/etc", ".", ""] {
+            let yaml = rt_config(&format!(
+                "  adr:\n    dir: docs/adr\n    extra_dirs: [\"{bad}\"]\n"
+            ));
+            assert!(
+                matches!(parse(&yaml), Err(ConfigError::InvalidDir { .. })),
+                "extra dir {bad:?} must be refused"
+            );
+        }
+        for dup in ["[docs/adr]", "[a, a]", "[\"docs/adr/\"]"] {
+            let yaml = rt_config(&format!(
+                "  adr:\n    dir: docs/adr\n    extra_dirs: {dup}\n"
+            ));
+            assert!(
+                matches!(parse(&yaml), Err(ConfigError::DuplicateDir { .. })),
+                "{dup} must be refused"
+            );
+        }
+        let shared = rt_config(
+            "  adr:\n    dir: docs/adr\n    extra_dirs: [shared]\n  rfc:\n    dir: shared\n",
+        );
+        assert!(matches!(parse(&shared), Err(ConfigError::SharedDir { .. })));
     }
 
     /// Round 30 review: a `dir` outside the repository is refused too.

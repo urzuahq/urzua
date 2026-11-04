@@ -43,19 +43,31 @@ pub fn run(
         )));
     }
 
-    let dir = repo_root.join(&type_config.dir);
-    let filenames: Vec<String> = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.file_name().into_string().ok())
-            .collect(),
-        Err(e) => {
-            return emit(&CouldNotRun::from(format!(
-                "could not read {}: {e}",
-                dir.display()
-            )))
+    // One namespace across every directory the type declares (`MILE-130`):
+    // the number is taken past the highest in any of them. The primary `dir`
+    // must be readable; an extra directory that is absent holds no ids, so it
+    // is skipped with a notice (`type.dir-matches-nothing` reports it).
+    let mut filenames: Vec<String> = Vec::new();
+    for (index, declared_dir) in type_config.all_dirs().enumerate() {
+        let dir = repo_root.join(declared_dir);
+        match std::fs::read_dir(&dir) {
+            Ok(entries) => filenames.extend(
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter_map(|e| e.file_name().into_string().ok()),
+            ),
+            Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
+                "urzua: extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
+            ),
+            Err(e) => {
+                return emit(&CouldNotRun::from(format!(
+                    "could not read {}: {e}",
+                    dir.display()
+                )))
+            }
         }
-    };
+    }
+    let dir = repo_root.join(&type_config.dir);
     // The type's declared identity pattern, when it has one, decides which
     // numbers are taken and what a conforming file name is (`MILE-151`): the
     // generator reads the same grammar the checker does.
@@ -81,8 +93,12 @@ pub fn run(
             None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
         }
     };
-    let display_number =
-        assign_display_number(&repo_root, &type_config.dir, &filenames, &number_of);
+    let display_number = assign_display_number(
+        &repo_root,
+        &type_config.all_dirs().collect::<Vec<_>>(),
+        &filenames,
+        &number_of,
+    );
 
     let title = title.unwrap_or_else(|| "Title".to_string());
     // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
@@ -273,11 +289,11 @@ pub fn run(
 /// the working-tree-only number and says so on stderr.
 fn assign_display_number(
     repo_root: &std::path::Path,
-    dir: &str,
+    dirs: &[&str],
     filenames: &[String],
     number_of: &dyn Fn(&str) -> Option<u32>,
 ) -> u32 {
-    let claims = match other_ref_claims(repo_root, dir) {
+    let claims = match other_ref_claims(repo_root, dirs) {
         Ok(c) => c,
         Err(reason) => {
             eprintln!(
@@ -323,7 +339,7 @@ fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, Str
 /// which ref a name came from.
 fn other_ref_claims(
     repo_root: &std::path::Path,
-    dir: &str,
+    dirs: &[&str],
 ) -> Result<Vec<(String, Vec<String>)>, String> {
     let refs = git_output(
         repo_root,
@@ -352,13 +368,15 @@ fn other_ref_claims(
             .or_default()
             .push(short.to_string());
     }
-    let pathspec = format!("{}/", dir.trim_end_matches('/'));
+    let pathspecs: Vec<String> = dirs
+        .iter()
+        .map(|dir| format!("{}/", dir.trim_end_matches('/')))
+        .collect();
     let mut claims = Vec::new();
     for (sha, names) in by_commit {
-        let listing = git_output(
-            repo_root,
-            &["ls-tree", "-z", "--name-only", &sha, "--", &pathspec],
-        )?;
+        let mut args = vec!["ls-tree", "-z", "--name-only", &sha, "--"];
+        args.extend(pathspecs.iter().map(String::as_str));
+        let listing = git_output(repo_root, &args)?;
         let files: Vec<String> = listing
             .split(|b| *b == 0)
             .filter(|p| !p.is_empty())
