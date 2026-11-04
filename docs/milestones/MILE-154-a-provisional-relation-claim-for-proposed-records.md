@@ -25,3 +25,4 @@ A real adopter treats an unreciprocated claim from a Proposed record as a warnin
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented: a relation pair declares `provisional: {statuses, level}`; `relation.pair-reciprocity` reports an unechoed claim from a claimant at those statuses at the provisional level and any other at the rule level. This repository declares the `amendment` pair (RFC `Amends` / `Amended-by`) with `statuses: [Draft, Discussion]`; RFC-25 is the live provisional case, covered by a waiver that expires 2027-02-04. `Status` stays `Planned`. **Why:** the Done-when contract; status is a human decision. | **substantive** |

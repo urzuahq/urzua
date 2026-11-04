@@ -1,5 +1,5 @@
 ---
-Version: '0.18'
+Version: '0.19'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -297,6 +297,9 @@ relation_pairs:
     inverse: "Resolved-by"    # the resolved record -> this one
     reciprocity: required     # required | none
     cross_type: true          # optional, default true
+    provisional:              # optional (MILE-154)
+      statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
+      level: warn             # warn (default) | error
 ```
 
 A claim `A.forward = B` is echoed by `B.inverse = A`, and `A.inverse = B` by `B.forward = A`.
@@ -304,6 +307,17 @@ Direction is the field name, so two records each claiming the `forward` side do 
 other. `relation.pair-reciprocity` checks `reciprocity: required` pairs; `relation.cross-type-disallowed`
 reports a claim whose target is another record type in a `cross_type: false` pair, which the
 reciprocity rule excludes (counted out of scope) rather than skipping silently.
+
+`provisional` (`MILE-154`, from the `MILE-127` decision) splits `relation.pair-reciprocity` by the
+**claimant's** status, read from its `Status` role field by exact comparison. A claim from a record
+whose status is listed in `provisional.statuses` and that the peer does not echo is reported at
+`provisional.level` (`warn` by default), with the message saying so; a claim from any other status
+keeps the rule's own level, so it is an error once the claimant is accepted. A claim already echoed
+by the peer's inverse field is settled and is not reported at either level. A claim echoed only in a
+differently named, unpaired field (a pending field) is not an echo, so it is held to the provisional
+level; the engine does not read that field. A status listed that no record type declares in
+`statuses.values`, a blank or duplicated status, an empty list, or a `level` other than `warn` and
+`error` is refused at load, so the split cannot silently apply to nothing.
 
 The narrowest reading of what `RFC-47` leaves open, each a decision recorded here until an ADR
 revisits it:
@@ -516,3 +530,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.16`. Documented the optional `external_ids` option of `citation.resolution`: exact ids or inclusive numeric ranges under a declared record prefix that are skipped (counted out of scope) instead of resolved. **Why:** `MILE-156` -- a public standard number such as `RFC-4122` shares a record prefix and was reported as a dangling citation, with no way to say it is not ours. | **substantive** |
 > | 2026-11-04 | Bumped to `0.17`. `statuses.require` counts a value in the type's declared `pending` vocabulary as missing, the same list `field.pending` reads. **Why:** `MILE-153` -- an Accepted record whose required field read `Unknown` passed; the vocabulary is declared once, in configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.18`. Documented the per-type `exclude_files` declaration: bare file names directly in a type's `dir` that are not its records, excluded from every rule's population and from `filename.identity-pattern`'s census. **Why:** `MILE-150` and `BUG-183` -- a `README.md` in a record directory was read as a record and failed every rule, with no way to say it is not one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.NEXT`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |

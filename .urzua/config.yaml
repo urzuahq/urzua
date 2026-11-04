@@ -47,6 +47,7 @@ record_types:
       - "Stable-Id"
       - "Supersedes / Superseded-by"
       - "Amends"
+      - "Amended-by"
       - "Implements"
     statuses:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
@@ -145,6 +146,20 @@ record_types:
     pointer_fields: []
     narrative_fields: []
 
+# An RFC that amends another is echoed by the amended RFC's Amended-by. A claim
+# from an RFC that is not yet accepted is provisional (MILE-154, MILE-127): it
+# is a warning while the claimant is a Draft or in Discussion, and an error
+# once it is accepted without the amended RFC naming it back.
+relation_pairs:
+  - name: amendment
+    forward: "Amends"
+    inverse: "Amended-by"
+    reciprocity: required
+    cross_type: false
+    provisional:
+      statuses: ["Draft", "Discussion"]
+      level: warn
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
@@ -181,6 +196,7 @@ rules:
   filename.title-consistency: error
   filename.identity-pattern: warn
   relation.supersession-reciprocity: error
+  relation.pair-reciprocity: error
   relation.target-status-undeclared: error
   revision-log.change-class-required: error
   narrative-field.stale:
