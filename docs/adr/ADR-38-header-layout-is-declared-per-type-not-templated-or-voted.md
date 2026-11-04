@@ -1,5 +1,5 @@
 ---
-Status: Accepted
+Status: Retired
 Stable-Id: 01M1Z17D93V6R1JMM21ETKZKV8
 Embodiment: Deprecated
 Realized-by: code:rust/crates/urzua-core/src/header.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-core/src/rules/header.rs
@@ -96,7 +96,7 @@ call to make.
 
 ## Amendment (2026-11-04): the mechanism was removed
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged, and so is `Status`; see the revision log.*
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged; see the revision log.*
 
 The 2026-09-08 amendment above says "the rule and the `HeaderLayout` enum stay in the codebase,
 unused rather than deleted". That is no longer true. `MILE-85` (`#205`), which removed blockquote and
@@ -128,3 +128,4 @@ pins were attesting. The locators remain as the historical location of the code.
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 80dfe63c2. | **structural** |
 > | 2026-11-04 | `Embodiment` set to `Deprecated` and the `@sha256:` pins on `Realized-by` dropped; amendment added saying `MILE-85` (`#205`) removed `header_layout`, `header.layout-consistency` and `HeaderLayout`. **Why:** drift review of 2026-11-04, approved by beauwilliams; the pinned evidence still hashed, but the mechanism it attested no longer exists, and re-baselining would have certified it. `Status` is left `Accepted` for the maintainer: the ADR vocabulary has `Superseded`, which needs a successor record, and none exists. The amendment is proposed, pending maintainer acceptance. | **substantive** |
+> | 2026-11-04 | `Status` changed from Accepted to Retired, and the 2026-11-04 amendment accepted. **Why:** maintainer decision, 2026-11-04: the mechanism this decision governs was removed (`MILE-85`) with no successor record, and `Retired` was added to the adr vocabulary for that case. | **substantive** |
