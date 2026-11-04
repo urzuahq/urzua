@@ -146,7 +146,7 @@ fn gate_repo(name: &str, status: &str) -> std::path::PathBuf {
         "schema_version: 2\nrules:\n  embodiment.back-pointer-decision-accepted:\n    level: error\n    \
          back_pointer_paths: [\"src\"]\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    \
          required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      \
-         values: [Proposed, Accepted]\n      success: [Accepted]\n",
+         values: [Proposed, Accepted]\n      success: [Accepted]\n      implementable: [Accepted]\n",
     )
     .unwrap();
     std::fs::write(

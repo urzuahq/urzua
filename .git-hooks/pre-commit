@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Opt-in (`make hooks-install`). Runs the diff-aware gate on what is about to
+# be committed: `urzua check --base HEAD` reports on records changed since HEAD
+# (staged and unstaged edits included) and enforces the diff.* rules, the same
+# gate CI runs against the PR base. Needs a built binary; it skips with a notice
+# rather than failing when there is none, since `make records` builds it.
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+bin="$root/rust/target/release/urzua"
+
+if [ ! -x "$bin" ]; then
+  echo "pre-commit: $bin not built -- run 'make rust-build' to enable the urzua gate" >&2
+  exit 0
+fi
+
+echo "pre-commit: urzua check --base HEAD"
+cd "$root"
+"$bin" check --base HEAD >/dev/null

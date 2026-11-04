@@ -18,6 +18,8 @@ record_types:
       values: ["Proposed", "Accepted", "Rejected", "Superseded"]
       success: ["Accepted"]
       failure: ["Rejected", "Superseded"]
+      implementable: ["Accepted"]
+      claim_retained: ["Superseded"]
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
     spec: "SPEC-16"
@@ -40,6 +42,7 @@ record_types:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
       success: ["Accepted"]
       failure: ["Rejected", "Superseded"]
+      implementable: ["Accepted"]
     spec: "SPEC-17"
     pointer_fields:
       - "Implements"
@@ -64,6 +67,7 @@ record_types:
     statuses:
       values: ["Draft", "Accepted"]
       success: ["Accepted"]
+      implementable: ["Accepted"]
     spec: "SPEC-18"
     pointer_fields:
       - "Derives-from"
@@ -86,6 +90,7 @@ record_types:
       values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
+      implementable: ["Planned", "InProgress"]
     spec: "SPEC-6"
     pointer_fields:
       - "Implements"
@@ -107,6 +112,7 @@ record_types:
       values: ["Open", "Fixed", "WontFix", "Not a bug", "Rejected"]
       success: ["Fixed"]
       failure: ["WontFix", "Not a bug", "Rejected"]
+      implementable: ["Open"]
       # Whole values only (BUG-65): a Regression-test that merely mentions
       # the word, or names a test called a_pending_..., is a real value.
       pending: ["pending", "not yet written"]
@@ -133,6 +139,8 @@ record_types:
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
 rules:
+  embodiment.requires-accepted-status:
+    level: warn
   header.required-fields: error
   header.layout-consistency: warn
   header.field-set-consistency: warn
@@ -194,3 +202,14 @@ rules:
     # Superseded record is permanently true history, not a stale dependency
     # (BUG-172).
     fields: ["Implements", "Amends", "Parent", "Blocked-on"]
+  # Code that cites a record (`Implements: ADR-12`) must cite one at a status
+  # its type declares `implementable` (MILE-133). Zero findings when enabled.
+  embodiment.back-pointer-decision-accepted:
+    level: error
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+  # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
+  # Rust sources must change a governing record in the same diff (MILE-124).
+  # Inert on a whole-repo run, where it reports not-applicable.
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]

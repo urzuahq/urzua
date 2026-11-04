@@ -185,8 +185,8 @@ pub fn embodiment_back_pointer_resolution(
 /// implements that decision, so landing it while the decision is still
 /// `Proposed` puts implementation ahead of the decision.
 ///
-/// "Accepted" is the cited type's declared `statuses.success`; a type that
-/// declares none falls back to `accepted_fallback` (the rule's
+/// A status permits implementation when it is in the cited type's declared
+/// `statuses.implementable`; a type that declares none falls back to `accepted_fallback` (the rule's
 /// `accepted_statuses`), and with neither the status cannot be judged, which
 /// is a finding rather than a pass. With `changed` (a `--base` run) only the
 /// back-pointers in files the diff changed are judged. File granularity: a
@@ -237,8 +237,15 @@ pub fn embodiment_back_pointer_decision_accepted(
                 crate::config::RelationRole::Status,
             );
             let status = target.header.get(status_field).map(str::trim).unwrap_or("");
-            let accepted: Option<bool> = match declared.get(&target.record_type) {
-                Some(decl) => Some(decl.success.iter().any(|s| s == status)),
+            // The type's own `implementable` list, then the rule's
+            // `accepted_statuses`; a terminal `success` is not "implementation
+            // allowed" (the engine holds no type knowledge).
+            let own = declared
+                .get(&target.record_type)
+                .map(|d| d.implementable.as_slice())
+                .filter(|l| !l.is_empty());
+            let accepted: Option<bool> = match own {
+                Some(list) => Some(list.iter().any(|s| s == status)),
                 None if accepted_fallback.is_empty() => None,
                 None => Some(accepted_fallback.iter().any(|s| s == status)),
             };
@@ -247,8 +254,8 @@ pub fn embodiment_back_pointer_decision_accepted(
                 Some(false) => push(
                     &pointer,
                     format!(
-                        "back-pointer cites {}, whose {status_field} is '{status}', not an \
-                         accepted status; the decision must be accepted before the code that \
+                        "back-pointer cites {}, whose {status_field} is '{status}', not a status \
+                         at which implementation is permitted; the decision must be accepted before the code that \
                          implements it lands",
                         pointer.id
                     ),
@@ -256,7 +263,7 @@ pub fn embodiment_back_pointer_decision_accepted(
                 None => push(
                     &pointer,
                     format!(
-                        "back-pointer cites {}, but type '{}' declares no success statuses and \
+                        "back-pointer cites {}, but type '{}' declares no implementable statuses and \
                          the rule declares no accepted_statuses, so its status cannot be judged",
                         pointer.id, target.record_type
                     ),
@@ -459,7 +466,7 @@ mod tests {
         let mut t = type_config(None);
         t.prefix = Some("ADR".to_string());
         t.statuses = Some(
-            yaml_serde::from_str("values: [Proposed, Accepted, Rejected]\nsuccess: [Accepted]\nfailure: [Rejected]\n")
+            yaml_serde::from_str("values: [Proposed, Accepted, Rejected]\nsuccess: [Accepted]\nfailure: [Rejected]\nimplementable: [Accepted]\n")
                 .unwrap(),
         );
         config_with_types(vec![("adr", t)])
@@ -527,5 +534,59 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].file, PathBuf::from("src/b.rs"));
         assert_eq!(exec.population.unwrap().examined(), 1);
+    }
+
+    fn config_with_vocab(vocab: &str) -> Config {
+        let mut t = type_config(None);
+        t.prefix = Some("ADR".to_string());
+        t.statuses = Some(yaml_serde::from_str(vocab).unwrap());
+        config_with_types(vec![("adr", t)])
+    }
+
+    #[test]
+    fn terminal_success_alone_does_not_permit_implementation_observed_failing() {
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Accepted")];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1\n")];
+        let cfg = config_with_vocab("values: [Proposed, Accepted]\nsuccess: [Accepted]\n");
+        let (_, findings) = gate(&records, &files, &[], None, &cfg);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("cannot be judged"));
+    }
+
+    #[test]
+    fn a_non_terminal_implementable_status_passes_observed_failing() {
+        let vocab = "values: [Planned, InProgress, Done]\nsuccess: [Done]\nimplementable: [Planned, InProgress]\n";
+        let records = vec![
+            adr_with("docs/adr/ADR-1-a.md", "InProgress"),
+            adr_with("docs/adr/ADR-2-b.md", "Done"),
+        ];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1, ADR-2\n")];
+        let (_, findings) = gate(&records, &files, &[], None, &config_with_vocab(vocab));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-2"));
+    }
+
+    #[test]
+    fn implementable_takes_precedence_over_the_rule_fallback() {
+        let vocab = "values: [Proposed, Accepted]\nimplementable: [Accepted]\n";
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Proposed")];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1\n")];
+        let (_, findings) = gate(
+            &records,
+            &files,
+            &["Proposed"],
+            None,
+            &config_with_vocab(vocab),
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_declared_type_without_implementable_falls_back_to_the_rule_option_observed_failing() {
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Accepted")];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1\n")];
+        let cfg = config_with_vocab("values: [Proposed, Accepted]\nsuccess: [Accepted]\n");
+        let (_, findings) = gate(&records, &files, &["Accepted"], None, &cfg);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }
