@@ -3077,6 +3077,10 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "boundary.published-path-reference",
             "population is published files, not records",
         ),
+        (
+            "embodiment.back-pointer-resolution",
+            "population is source files, not records",
+        ),
         // File-level: judges committed index artifacts against the records.
         (
             "index.freshness",
@@ -3125,6 +3129,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             }
             "diff.source-and-records-mixed" => {
                 format!("{id}: {{level: error, application_paths: [\"src\"]}}")
+            }
+            "embodiment.back-pointer-resolution" => {
+                format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             _ => format!("{id}: error"),
         })

@@ -98,6 +98,11 @@ pub struct RuleSetting {
     /// `true` exempts prefixed keys from that rule and nothing else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_extension_prefix: Option<bool>,
+    /// Path prefixes of the source files scanned for `Implements:` comment
+    /// back-pointers (`MILE-128`). Only meaningful to
+    /// `embodiment.back-pointer-resolution`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back_pointer_paths: Option<Vec<String>>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -195,6 +200,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             exclude_paths: Option<Vec<String>>,
             #[serde(default)]
             allow_extension_prefix: Option<bool>,
+            #[serde(default)]
+            back_pointer_paths: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -229,6 +236,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 application_paths: table.application_paths,
                 exclude_paths: table.exclude_paths,
                 allow_extension_prefix: table.allow_extension_prefix,
+                back_pointer_paths: table.back_pointer_paths,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -245,6 +253,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 application_paths: None,
                 exclude_paths: None,
                 allow_extension_prefix: None,
+                back_pointer_paths: None,
             })
         }
     }
@@ -703,6 +712,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: true,
     },
     RuleOption {
+        name: "back_pointer_paths",
+        owner: crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        consequence_if_missing: "scans no source file and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "fields",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "checks every declared field",
@@ -724,6 +739,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "source_paths" => setting.source_paths.as_ref(),
         "application_paths" => setting.application_paths.as_ref(),
         "exclude_paths" => setting.exclude_paths.as_ref(),
+        "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         _ => None,
     }
 }
@@ -954,11 +970,12 @@ pub fn parse_with_document_models(
     // findings all use the same spelling.
     for (name, setting) in config.rules.iter_mut() {
         let level = setting.level;
-        let path_options: [(&'static str, &mut Option<Vec<String>>); 4] = [
+        let path_options: [(&'static str, &mut Option<Vec<String>>); 5] = [
             ("published_paths", &mut setting.published_paths),
             ("source_paths", &mut setting.source_paths),
             ("application_paths", &mut setting.application_paths),
             ("exclude_paths", &mut setting.exclude_paths),
+            ("back_pointer_paths", &mut setting.back_pointer_paths),
         ];
         for (option, paths) in path_options {
             let Some(paths) = paths.as_mut() else {
@@ -1378,6 +1395,36 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'published_paths'"));
+    }
+
+    #[test]
+    fn back_pointer_paths_is_required_by_the_back_pointer_rule_and_by_no_other() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        assert!(parse(&format!(
+            "{base}  embodiment.back-pointer-resolution: error\n"
+        ))
+        .unwrap_err()
+        .to_string()
+        .contains("back_pointer_paths"));
+        let ok = parse(&format!(
+            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"./src/\"]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["embodiment.back-pointer-resolution"].back_pointer_paths,
+            Some(vec!["src".to_string()])
+        );
+        let bad = parse(&format!(
+            "{base}  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"../x\"]\n"
+        ));
+        assert!(bad.unwrap_err().to_string().contains("back_pointer_paths"));
+        let elsewhere = format!(
+            "{base}  field.quality:\n    level: error\n    back_pointer_paths: [\"src\"]\n"
+        );
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'back_pointer_paths'"));
     }
 
     #[test]

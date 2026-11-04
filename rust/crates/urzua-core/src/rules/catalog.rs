@@ -51,6 +51,7 @@ pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mi
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
+pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -96,6 +97,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
     RULE_FILENAME_IDENTITY_PATTERN,
     RULE_INDEX_FRESHNESS,
+    RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -279,6 +281,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         id: RULE_INDEX_FRESHNESS,
         description: "A committed index of one record type (a file, or a marked list inside a README, in a declared `format` with `{id}`, `{file}` and `{title}` placeholders) lists exactly the records: a record with no entry, an entry naming no record, a duplicated entry, an entry whose file or title differs from the record's, and a line the format does not match are each an error (`MILE-139`). A missing artifact, or one whose declared `begin`/`end` markers are absent, is an error too. Needs `indexes` (`path`, `type`, `format`, optional `begin`/`end`); the engine reads the artifacts and compares, it never regenerates one. The population counts the artifacts compared, so a run over none is distinguishable from a clean one.",
     },
+    RuleMeta {
+        id: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        description: "A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. Only whole-line comments are read; the marker is case-sensitive; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean.",
+    },
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -303,6 +309,9 @@ pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[
     RULE_DIFF_SOURCE_REQUIRES_RECORD,
     RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
     RULE_INDEX_FRESHNESS,
+    // A dangling back-pointer is reported on the source file that holds it,
+    // which no record-type `dir` scope covers.
+    RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
 ];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with
