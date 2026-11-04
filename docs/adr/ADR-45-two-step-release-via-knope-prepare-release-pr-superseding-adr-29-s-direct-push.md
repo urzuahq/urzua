@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M25Z27VBE63ABNE2QRSQSXGR
 Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml
+Embodiment: Implemented
+Realized-by: code:knope.toml@sha256:8557a6d8ecaa3736fb1ebc6ad20b976967de3289bd0e1be6ec5ac8ffe529f9d9, code:.github/workflows/prepare-release.yml@sha256:50c0f37fa931de7590fb4970a294785df44f88375e3075883115fc4a01515c19, code:.github/workflows/publish-release.yml@sha256:f8fb928d07b3111e943f644be05b48656b7e796bdd8d0b4fb86237400b173591
 Date: 2026-09-10
 Accepted-on: 2026-09-10
 Author: beauwilliams
@@ -87,6 +87,28 @@ any other workflow in this repo.
   done; a one-time setting, not a per-release action.
 - The `release` branch is long-lived and force-pushed on every `prepare-release` run, the same way
   the recipe itself does it -- never a source of real work, always disposable.
+
+## Amendment (2026-11-04): the release gate and the guard on an empty release are those of `ADR-47` and `BUG-48`
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+Several statements in the Decision and in the two earlier amendments no longer describe the
+workflows. The two-step flow (a prepare workflow opening the release PR, a publish workflow running
+when it merges) stands.
+
+- **`continue-on-error: true` is gone.** The Decision has `prepare-release.yml` carry it on the
+  knope invocation. The workflow now tolerates only knope's `no_release` outcome, through
+  `.github/scripts/release-guard.sh` (`BUG-48`), and fails on anything else.
+- **`verify-ci` is replaced.** The first amendment says `verify-ci` checks the release PR's head sha,
+  and the second that it asks whether a human approved the run. `publish-release.yml` now runs
+  `.github/workflows/checks.yml` itself on the PR's `merge_commit_sha`, the commit that is tagged
+  (`ADR-47`). Whether the PR's own `ci` ran or was approved no longer decides the publish.
+- **"The one manual step per release" no longer holds.** The `action_required` approval described in
+  the second amendment is not a publish gate, because the checks run inside the workflow the merge
+  triggers.
+- **Changesets alone trigger a release.** `knope.toml` sets `ignore_conventional_commits = true`
+  (`ADR-48`), so a conventional commit no longer triggers a release; the Decision's "unchanged from
+  `ADR-29`" for the changeset fragments stands.
 
 ## References
 
@@ -179,3 +201,6 @@ nobody reads.
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml` -- stated `Drift detected` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | `Embodiment` restored to `Drift detected`. **Why:** the previous row recomputed `Implemented` in a shallow checkout, where git history is missing and drift cannot be seen. In a full clone `knope.toml` (2026-09-16) and `.github/workflows/prepare-release.yml` (2026-09-19) are newer than this record's `Realized-by` line, so the evidence did change after it was last verified, and `embodiment.consistency` reports the mismatch. Found when `MILE-145` made warnings fail the build. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 3b0fe6682. | **structural** |
+> | 2026-11-04 | Amendment added: the empty-release guard (`BUG-48`), `ADR-47`'s checks on the merge commit in place of `verify-ci`, and `ADR-48`'s changesets-only trigger replace what the Decision and its two amendments describe. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Pinned `knope.toml`, `.github/workflows/prepare-release.yml`, `.github/workflows/publish-release.yml` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-pinned with the amendment above: the two-step flow holds and the changes since the last verification are recorded. | **structural** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml@sha256:8557a6d8ecaa3736fb1ebc6ad20b976967de3289bd0e1be6ec5ac8ffe529f9d9, code:.github/workflows/prepare-release.yml@sha256:50c0f37fa931de7590fb4970a294785df44f88375e3075883115fc4a01515c19, code:.github/workflows/publish-release.yml@sha256:f8fb928d07b3111e943f644be05b48656b7e796bdd8d0b4fb86237400b173591` -- stated `Drift detected` disagreed with the computed value `Implemented`. | **structural** |

@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:1b6a076de8bdc7c3f534a819d821617b1d62fad313ccb108d3d70412634e76fd, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:288a08b371a85ebb981626b959f5acdce0319f2d2d38c0c06544d77d383a5b20
+Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:e085b319c36373a235488b6fd0a2b5568df9a95a3aa2841179b0d75d191e6510, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b668d62f2f4a538e1b48383362b11314795407225697dd62f3f560ada9e74348
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -89,3 +89,4 @@ Two things this does **not** touch, both already decided:
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 314829bf1. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a. Reason: Re-verified: results still print one JSON object to stdout; the only eprintln! calls are the two pre-existing urzua new numbering notices. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

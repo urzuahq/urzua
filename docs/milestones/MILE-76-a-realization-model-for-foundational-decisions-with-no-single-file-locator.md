@@ -34,7 +34,13 @@ doesn't close the underlying gap: the next foundational decision will drift the 
 unless the model itself gains a way to represent this class of realization or explicitly declares it
 out of mechanical scope.
 
+## Done means
+
+`Embodiment` has a declared way for a decision realized by the codebase's overall structure rather than any one file (`ADR-1`, the Rust workspace) to compute a tier from evidence, so it is neither silently skipped nor hand-asserted: the locator form is decided in an ADR and `SPEC-2` documents it, `check` verifies it (a planted claim over a missing workspace is reported), and urzua's own `ADR-1` carries it.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

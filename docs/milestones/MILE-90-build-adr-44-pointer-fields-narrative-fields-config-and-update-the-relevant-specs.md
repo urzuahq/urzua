@@ -48,6 +48,10 @@ its own config change already shipped (corrected only when caught live). Scoping
 relevant specs" into this milestone's own `What`, not as an assumed follow-up, is meant to prevent
 exactly that recurrence.
 
+## Done means
+
+`RecordTypeConfig` has `pointer_fields` and `narrative_fields`, `pointer.resolution`, `header_pointer_field_clean` and `narrative-field.stale` read their scanned field lists from them per type with no hardcoded array (undeclared means zero fields of that kind examined, no default), the three validation checks of `RFC-23`/`ADR-44`'s amendment run at error severity, urzua's own config declares them (including `bug`'s `Implements`), and the relevant specs describe it.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -56,3 +60,4 @@ exactly that recurrence.
 > | 2026-09-09 | Scope widened per RFC-23/ADR-44's amendment: three new validation checks, and the concrete `bug`/`Implements` config declaration that motivated closing the review gaps. | **substantive** |
 > | 2026-09-09 | Shipped in full. `RecordTypeConfig` gained `pointer_fields`/`narrative_fields`; `pointer_resolution`/`header_pointer_field_clean`/`narrative_field_stale` (renamed from `blocked_on_stale`) read them per type via a shared `FieldKindSpec` capability table and `RelationKind` enum, replacing every hardcoded field-list array in `rules.rs`. All three new config-level rules built and tested. `urzua graph` gained `kind: RelationKind` on every edge, became config-driven, and now uses the same shared `build_normalized_index` helper -- closing `BUG-11` (a pre-existing normalization gap) and a separate pre-existing gap (`graph()` never included `Parent`) as a side effect of the same rewrite. All six types declare real `pointer_fields`/`narrative_fields` in `.urzua/config.toml`; `rfc`/`bug` gained `Implements` in `known_fields`. `SPEC-2`, `SPEC-13`, and all six type specs updated to match; README's `Feeds-into` example is now literally true, closing `BUG-8`. Two rule-id `const RULE_ID` extraction and `main.rs::run_check`'s two-hand-synced-lists collapse (folded in from the same codebase survey) also shipped. `cargo test`/`make ci` both pass against this repo's own corpus with zero new findings from the three new rules. `Status: Done`. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

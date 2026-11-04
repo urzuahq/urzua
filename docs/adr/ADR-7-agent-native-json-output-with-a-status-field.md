@@ -1,7 +1,7 @@
 ---
 Status: Superseded
 Embodiment: Implemented
-Realized-by: code:rust/crates/urzua-core/src/report.rs, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:81ca2e7df37e541da100a5797caa3c1367c05a2f78e19d095f4489f853ae3d53, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -57,3 +57,9 @@ Cheap to revise before v0 ships to any external user.
 - RFC-3 — the proposal this decides.
 - `docs/specs/SPEC-2-urzua-check.md` — the concrete output contract this ADR ratifies.
 - `rust/crates/urzua-core/src/report.rs` — the implementation.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Pinned `rust/crates/urzua-core/src/report.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified for a Superseded record: report.rs changes are the refs and citation.issue-exists additions; the status-field JSON output this record decided is unchanged. | **structural** |

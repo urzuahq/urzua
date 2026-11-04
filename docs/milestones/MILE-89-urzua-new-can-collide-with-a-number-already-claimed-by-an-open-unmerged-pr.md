@@ -28,6 +28,10 @@ before either branch was pushed. Silent if it hadn't been: two real RFCs with th
 discovered only once both merged and `filename.title-consistency`/numbering rules had no way to
 flag it either, since each branch in isolation looks perfectly valid.
 
+## Done means
+
+`urzua new` assigns no number already claimed on any local branch or remote-tracking ref (built, with a test in `new_integration.rs`), and a number claimed only on an open pull request whose branch was never fetched is either detected through a remote-aware path decided in an ADR (weighing the dependency on `gh` this tool has avoided) or reported by `urzua new` as a stated limit; a fixture with a number claimed on an unfetched branch shows which, and the duplicate-number outcome is not silent.
+
 ## References
 
 - RFC-13 -- "a vacated number is a record, not a gap": the aftermath half of this same failure
@@ -43,3 +47,4 @@ flag it either, since each branch in isolation looks perfectly valid.
 > | 2026-09-16 | Recurred, with a wider blast radius than the original finding. Filing one RFC and one bug against `main` with four PRs open, `urzua new` assigned `RFC-26` and `BUG-19` -- both already claimed on unmerged branches (`RFC-26`/`RFC-27` and `BUG-22`-`BUG-25` on two PRs, `BUG-19`-`BUG-21` on a third). Wrong on both record types, in the same session. Caught only by querying the remote branches by hand before writing -- the exact manual ritual this milestone exists to remove, and one an agent has no reason to perform unless it already knows about this failure. **Why:** the original entry was a single two-branch case caught by eye; this is evidence the failure scales with the number of open PRs and is now routine rather than incidental, which bears on how the two candidate fixes above get weighed -- the local-branch scan would have caught none of these, since the claiming branches existed only on the remote. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** `urzua new` skips numbers claimed on every local and remote-tracking ref (`new_record.rs`, `new_integration.rs`, merged in #135); a number claimed on a branch never fetched is still invisible and the remote-aware alternative the Done means weighs was not built. `Status` stays Planned. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

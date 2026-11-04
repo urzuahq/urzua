@@ -50,6 +50,10 @@ Note what this milestone is *not*: the rule is correct and its default of `Warni
 since drift is usually a signal to review. What is missing is any way for this repo to say that
 *this* rule, here, should block.
 
+## Done means
+
+A `rules` table in config declares each rule's `level` and that level replaces whatever the rule chose, every rule is opt-in, and an undeclared rule is reported `not-enabled` rather than omitted; `pointer.resolution` was split so one id carries one question; the rule list in `SPEC-2` is generated from the shipped set (`scripts/generate-rule-table.py`, `urzua rules`) and urzua's own `.urzua/config.yaml` declares every rule's level.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -59,3 +63,4 @@ since drift is usually a signal to review. What is missing is any way for this r
 > | 2026-09-17 | `Status: Planned` → `Done`. **Why:** the `rules` table ships, every rule is opt-in and carries a declared `level` that replaces whatever `rules.rs` chose, and an undeclared rule is reported `not-enabled` rather than omitted (`ADR-7`). `pointer.resolution` was split on the way: it emitted a finding for every reference that *resolved* -- 172 of 213 on this corpus -- and one rule id cannot carry two severities, so the dangling-reference error and the target-status policy could never be levelled apart. Measured after: 215 findings → 47. The findings-severity vs log-verbosity distinction this record insisted on keeping separate is untouched; `MILE-46` and the CLI verbosity question remain open. Presets are `MILE-95`. | **substantive** |
 > | 2026-09-17 | Recorded `BUG-38`: the `field.quality` flattening this change accepted is not acceptable. **Why:** `Blank` and `Placeholder` mean someone forgot; `Pending` means someone declared work unfinished. Two questions, one rule id, so no declared level is correct for both -- `error` blocks a deliberate marker and `warn` unblocks a genuinely empty required field. Same defect as `pointer.resolution`, which this change split; missed on the first pass because the grading read as one question's degrees until `Pending`'s own definition was checked. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
