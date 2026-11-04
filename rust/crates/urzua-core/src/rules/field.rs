@@ -15,6 +15,11 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
     let statuses = statuses_by_type(config);
     const RULE_ID: &str = RULE_FIELD_PENDING;
     let mut findings = Vec::new();
+    let pending_until_required = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.pending_until_required)
+        .unwrap_or(false);
 
     // Same population as `field.quality`: one declared slot per required field.
     let slots = field_slots(records, required_by_type);
@@ -30,6 +35,23 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
                 return Outcome::Unreadable;
             }
             let declared = statuses.get(&record.record_type);
+            // `MILE-169`: pending is a legitimate state until the record
+            // reaches a status that requires the field. The slot stays
+            // eligible and goes unexamined, so the gap is disclosed.
+            if pending_until_required
+                && declared.is_some_and(|d| {
+                    let status_field = relation_field_name(
+                        config,
+                        &record.record_type,
+                        crate::config::RelationRole::Status,
+                    );
+                    let status = record.header.get(status_field).unwrap_or_default();
+                    let named = d.require.iter().any(|r| r.fields.contains(field));
+                    named && !d.required_at(status).contains(&field.as_str())
+                })
+            {
+                return Outcome::Absent;
+            }
             if classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending {
                 let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
                 findings.push(Finding {
@@ -293,6 +315,62 @@ mod tests {
             findings.is_empty(),
             "the declared vocabulary replaces the token: {findings:?}"
         );
+    }
+
+    /// `MILE-169`: with `pending_until_required: true`, a pending value in a
+    /// field the type's `statuses.require` ties to certain statuses is not
+    /// reported until the record reaches one of them.
+    fn deferral_config(option: &str) -> Config {
+        let yaml = format!(
+            "schema_version: 2\nrules:\n  field.pending:\n    level: warn\n{option}record_types:\n  bug:\n    dir: docs/bugs\n    header_shape: yaml-frontmatter\n    required_fields: [Status, Regression-test, Owner]\n    statuses:\n      values: [Open, Fixed]\n      pending: [\"not yet written\", {{pattern: '(?i)^planned:'}}]\n      require:\n        - {{when: [Fixed], fields: [Regression-test]}}\n"
+        );
+        crate::config::parse(&yaml).expect("the fixture config loads")
+    }
+
+    fn bug(status: &str, test: &str, owner: &str) -> Record {
+        Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/bugs/BUG-1-x.md"),
+            "bug".to_string(),
+            &format!("---\nStatus: {status}\nRegression-test: \"{test}\"\nOwner: \"{owner}\"\n---\n# 1 - X\n"),
+            crate::header::HeaderShape::YamlFrontmatter,
+            "BUG".to_string(),
+        )
+    }
+
+    #[test]
+    fn pending_is_legitimate_until_the_required_status_observed_failing() {
+        let config = deferral_config("    pending_until_required: true\n");
+        let open = bug("Open", "planned: later", "not yet written");
+        let fixed = bug("Fixed", "planned: later", "real");
+        let (exec, findings) = field_pending(&[open, fixed], &config);
+        // Open: Regression-test deferred; Owner is named by no `require`, so it
+        // keeps today's behaviour. Fixed: Regression-test reported.
+        let msgs: Vec<_> = findings.iter().map(|f| f.message.clone()).collect();
+        assert_eq!(findings.len(), 2, "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.contains("'Owner'")), "{msgs:?}");
+        assert!(
+            msgs.iter().any(|m| m.contains("'Regression-test'")),
+            "{msgs:?}"
+        );
+        // The deferred slot stays eligible and is not examined.
+        let pop = exec.population.expect("population");
+        assert_eq!((pop.eligible(), pop.examined()), (6, 5));
+    }
+
+    #[test]
+    fn without_the_option_pending_is_reported_at_every_status() {
+        for option in ["", "    pending_until_required: false\n"] {
+            let config = deferral_config(option);
+            let (_, findings) = field_pending(&[bug("Open", "planned: later", "x")], &config);
+            assert_eq!(findings.len(), 1, "{findings:?}");
+        }
+    }
+
+    #[test]
+    fn the_option_is_refused_on_any_other_rule() {
+        let yaml = "schema_version: 2\nrules:\n  field.quality:\n    level: warn\n    pending_until_required: true\nrecord_types:\n  bug:\n    dir: docs/bugs\n    required_fields: [Status]\n";
+        let err = crate::config::parse(yaml).unwrap_err().to_string();
+        assert!(err.contains("pending_until_required"), "{err}");
     }
 
     #[test]

@@ -2,7 +2,7 @@
 Stable-Id: 01M2M6K1FPPSNSENWWZFRGG4T1
 Status: Fixed
 Found-in: 'closing out a merge queue -- six PRs merged to main, and the release PR they should have regenerated was still showing a six-day-old diff while every prepare-release run reported success'
-Regression-test: 'not yet written -- see Why nothing caught it; the honest gap is that no test exercises this workflow, and the fix is a workflow/config change a unit test cannot reach'
+Regression-test: 'none -- a CI workflow and release-tool configuration defect (a missing toolchain step, an `--offline` flag and a swallowed failure in `prepare-release.yml` and `knope.toml`); no test harness exercises that workflow and a unit test cannot reach it. Verified by running the knope command by hand (see The fix).'
 Realized-by: code:.github/workflows/prepare-release.yml, code:knope.toml
 ---
 # 27 — The release workflow reported success for six days while preparing nothing
@@ -76,3 +76,4 @@ converted every real failure into silence.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** found while closing out a six-PR merge queue -- the release PR should have regenerated on every merge and hadn't since it was opened. The diagnosis is worth keeping even though the fix is small: an untested workflow step, a flag whose precondition the job never satisfied, and an error-swallowing setting combined into six days of confident green. | **substantive** |
+> | 2026-11-04 | `Regression-test` filled in: the honest `none` form. `Status` is untouched. **Why:** `field.pending` now reads a `Regression-test` placeholder on a `Fixed` bug as a real gap (`MILE-169`), and the `Regression-test` field held a placeholder; it now states the repository's `none -- <reason>` form with the reason the record already gave, since no test can run this workflow. | **structural** |

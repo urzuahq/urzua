@@ -1,5 +1,5 @@
 ---
-Version: '0.56'
+Version: '0.57'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -242,7 +242,7 @@ which stays only for what genuinely isn't built yet.
 | `header.pointer-field-clean` | A type's `pointer_fields` entries are clean, comma-separated references only, format-enforced (MILE-90/ADR-44) — an empty entry between commas or freeform trailing prose is flagged. Never applies to `narrative_fields`, which tolerate prose. |
 | `narrative-field.stale` | A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44). `terminal_statuses` is declared per repository. |
 | `field.quality` | Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. |
-| `field.pending` | A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. |
+| `field.pending` | A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. The optional `pending_until_required` option (`MILE-169`), off unless declared `true`, treats a pending value as legitimate until the record reaches a status the type's `statuses.require` ties the field to: a deferred slot stays eligible and is counted unexamined, and a field no `require` entry names is judged as before. |
 | `claim.status-agreement` | A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared. |
 | `filename.title-consistency` | The filename's display number and the H1's display number agree (ADR-3). |
 | `revision-log.change-class-required` | Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`). |
@@ -520,3 +520,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.54`. `index.freshness` also compares declared-field placeholders (`{Status}`, `{Date}`) with the record's header and reports a differing or missing value. Rule table regenerated. **Why:** `MILE-164`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.55`. `section.required` and `section.shape` follow a required section's declared `aliases` and read a marked `y-statement` from the preamble when `preamble: true`; `check` adds an info notice per alias in use. Rule table regenerated. **Why:** `MILE-165`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.56`. `citation.resolution` takes the optional `skip_revision_log` option; the rule table is regenerated. **Why:** `MILE-156` -- append-only revision-log history cites ids as they were. | **substantive** |
+> | 2026-11-04 | Bumped to `0.57`. `field.pending` gains the optional `pending_until_required` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `MILE-169`; `SPEC-3` states the option. | **substantive** |
