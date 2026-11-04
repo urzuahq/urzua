@@ -98,6 +98,10 @@ record_types:
     dir: "docs/specs"
     # The directory index is not a spec (MILE-152).
     exclude_files: ["README.md"]
+    # A spec's title opens `SPEC-N`; the other types open with the bare
+    # number. The type declares which (BUG-123, RFC-44): `urzua new` writes
+    # the declared form and filename.title-consistency checks it.
+    identity: {from: filename, pattern: '^(?P<prefix>SPEC)-(?P<number>\d+)-(?P<slug>.+)$'}
     required_fields:
       - "Status"
       - "Date"

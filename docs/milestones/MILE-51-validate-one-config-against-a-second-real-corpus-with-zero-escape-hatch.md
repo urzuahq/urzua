@@ -1,9 +1,10 @@
 ---
-Status: InProgress
+Status: Done
 Stable-Id: 01M1YN87AP04NCFMXY4WBJK4EK
 Phase: '0'
 Track: corpus-corrections
 Blocked-on: —
+Realized-by: test:rust/crates/urzua-cli/tests/document_model_integration.rs, code:rust/crates/urzua-core/src/document_model.rs
 ---
 # 51 — Validate one config against a second real corpus with zero escape hatch
 
@@ -125,3 +126,4 @@ examined records and found them clean.
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Reopened: `Status` Done -> InProgress; `Realized-by` removed, evidence moved here. **Why:** the What sets as its success criterion that one config expresses a second corpus's real rules with no escape hatch or code change. The record's own Result sections say that criterion is not met (the claim failed on 2026-09-16 and again on 2026-09-17, five schema gaps measured) and that "re-running this validation is how it eventually closes"; closing on the strength of a verdict claimed an outcome the work did not reach. Evidence kept from the Done state, which was a partial delivery and not the milestone's outcome: `test:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/check_integration.rs`. A `Realized-by` under a not-done `Status` is a disagreement `status.delivery-agreement` (`MILE-183`) reports, so it is recorded in this row. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those this record's What asks for, and they are not met (see the previous row); `Status` is InProgress. | **structural** |
+> | 2026-11-04 | `Status` InProgress -> Done; `Realized-by` added. With `MILE-98` built, the corpus this record ran against passes `urzua check` under a hand-written config with 0 findings and no rule that ran on nothing: `fields: {from: prefix-lines}`, `required_fields: [Date]`, and `sections.required` of `Status`, `Context`, `Decision`, `Consequences`. Its bare `0001-slug.md` file names get no identity (`RFC-46` was rejected), so the config does not enable the `filename.*` identity rules. The committed evidence is a test on a corpus of the same shape (`document_model_integration.rs`), since the corpus itself is not vendored here. **Why:** maintainer ruling of 2026-11-04: filename identity rules are opt-in, so leaving them off is legitimate configuration and not the escape hatch the Done means forbids. | **substantive** |

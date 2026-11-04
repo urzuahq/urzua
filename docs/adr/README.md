@@ -79,5 +79,6 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Allowed status transitions are declared per type as a graph over the declared statuses](ADR-72-allowed-status-transitions-are-declared-per-type-as-a-graph-over-the-declared-statuses.md)
 - [A finding carries a structured suggested_action with a closed set of kinds](ADR-73-a-finding-carries-a-structured-suggested-action-with-a-closed-set-of-kinds.md)
 - [A pin can be scoped to one symbol or line range, in one locator grammar with the commit anchor](ADR-74-a-pin-can-be-scoped-to-one-symbol-or-line-range-in-one-locator-grammar-with-the-commit-anchor.md)
+- [A record declares the ids it names without citing as a reference, and citation.resolution does not resolve them](ADR-75-a-record-declares-the-ids-it-names-without-citing-as-a-reference-and-citation-resolution-does-not-resolve-them.md)
 - [An acyclic relation pair is a sequencing relation, checked by two sequence rules](ADR-76-an-acyclic-relation-pair-is-a-sequencing-relation-checked-by-two-sequence-rules.md)
 <!-- urzua:index:end -->
