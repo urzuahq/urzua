@@ -776,6 +776,26 @@ pub struct ExportedRecord {
     /// The file's complete text, unmodified, header included. No record type
     /// declares sections yet (`MILE-98`), so this is the one body field.
     pub raw_text: String,
+    /// The record's sections, for a type that declares `sections`; `null` (not
+    /// absent) for a type that declares none, so "no declaration" differs from
+    /// "declared, none present" (`[]`).
+    pub sections: Option<Vec<ExportedSectionEntry>>,
+    /// Text between the header and the first section; `null` as `sections`.
+    pub preamble: Option<String>,
+}
+
+/// One section in `urzua export --format json` (SPEC-1, "Export contract").
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExportedSectionEntry {
+    /// The declared section name; an alias resolves to the name it satisfies.
+    pub name: String,
+    /// The heading text as written.
+    pub heading: String,
+    /// 1-based file line of the heading.
+    pub line: usize,
+    pub end_line: usize,
+    /// The lines after the heading through `end_line`.
+    pub content: String,
 }
 
 /// How many records `export` emitted for one configured type; a type with
