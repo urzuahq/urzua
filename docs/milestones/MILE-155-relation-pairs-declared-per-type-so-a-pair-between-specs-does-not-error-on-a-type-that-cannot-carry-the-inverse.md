@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNT9WX2Y4PVJYEMKKZQ6X
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/relation.rs, test:rust/crates/urzua-cli/tests/scoped_pair_integration.rs
 ---
 # 155 — Relation pairs declared per type so a pair between specs does not error on a type that cannot carry the inverse
 
@@ -27,3 +28,4 @@ A pair can name its carrying types; a claim to an uncarrying type is judged by t
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Implemented: a relation pair may declare `types`; a claim to a type outside it is out of scope in `relation.pair-reciprocity`'s population. This repository scopes the `amendment` pair to `[rfc]`, and `scoped_pair_integration.rs` shows an RFC amending an ADR scoped out and the same claim erroring under a global pair. `Status` stays `Planned`. **Why:** the Done-when contract; status is a human decision. | **substantive** |
 > | 2026-11-04 | Follow-up: a claim to a type outside a pair's `types` is eligible and unexamined, not out of scope, so `config.scope-matches-nothing` does not warn on it (`SPEC-2` 0.42, `SPEC-3` 0.30). **Why:** a legitimate cross-type claim is not a configuration the tool cannot reach. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #196: a relation pair declares the `types` that carry it. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

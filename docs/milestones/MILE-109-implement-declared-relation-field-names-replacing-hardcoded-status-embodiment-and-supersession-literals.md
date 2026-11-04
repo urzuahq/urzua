@@ -5,6 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-42
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/relation_field_literals.rs
 ---
 # 109 — Implement declared relation field names replacing hardcoded status embodiment and supersession literals
 
@@ -41,3 +42,4 @@ making every finding message report the resolved field name instead of the pre-`
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and implemented in one round. **Why:** `RFC-42`/`ADR-61` decided the design the same day a round-18 review surfaced the recurring defect shape; scheduled and built together so the gap didn't sit open for a later release. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

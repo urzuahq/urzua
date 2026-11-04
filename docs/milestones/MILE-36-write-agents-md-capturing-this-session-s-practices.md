@@ -5,6 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: —
 Blocked-on: —
+Realized-by: code:AGENTS.md
 ---
 # 36 — Write AGENTS.md capturing this session's practices
 
@@ -25,3 +26,4 @@ something worth writing rather than letting it keep living nowhere.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial record: already complete at creation time. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

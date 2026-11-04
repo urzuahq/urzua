@@ -4,6 +4,7 @@ Stable-Id: 01M1YNNAAMTDJMEHET3W5XK1QE
 Phase: '0'
 Track: roadmap-tracking
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 58 — Build urzua doctor
 
@@ -20,3 +21,4 @@ A checker that's correct but never invoked is indistinguishable from no checker 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

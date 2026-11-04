@@ -1,9 +1,10 @@
 ---
 Stable-Id: 01M1ZK010SZ6Q9A8W8RKSR1J7V
-Status: Planned
+Status: Done
 Phase: '0'
 Track: header-format
 Blocked-on: a header rewriter, run as a one-off script in the adopter's switchover (MILE-102), like the filename rename
+Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-a/expectations/check-removed-bold-list-config-is-rejected.yaml
 ---
 # 85 — Full removal of blockquote and bold-list parsing
 
@@ -53,3 +54,4 @@ phase moves from 2 back to Phase 0, since the switchover is the Phase 0 exit.
 > | 2026-11-02 | Noted that this milestone's precondition, "once `yaml-frontmatter` is the only shape any real corpus still needs", is now contradicted: a real adopter corpus of several hundred records uses bold-list headers and bare zero-padded numeric filenames, so the precondition is not met; whether to keep, defer, or close this milestone is a maintainer decision, and `Status` and `Phase` are unchanged. **Why:** the adoption data `ADR-33` named as the gate has arrived and points the other way. | **substantive** |
 > | 2026-11-04 | Recorded the maintainer decision of full cleanup at switchover: the bold-list and blockquote header shapes are dropped, and the switchover rewrites the adopter's headers to the canonical shape through a one-off header rewriter. Phase changed from 2 to 0 and `Blocked-on` now names that rewriter; `Status` unchanged. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the switchover is the Phase 0 exit, and it removes the precondition (an adopter still needing the deprecated shapes) that kept this deferred. | **substantive** |
 > | 2026-11-04 | Removed the `Blockquote` and `BoldList` branches of `header::parse_with_shape`, the `HeaderLayout` enum and `header.layout-consistency`, plus `header.deprecated-shape` (which can no longer fire) and the `header_layout` option; `header_shape` now defaults to `yaml-frontmatter`. The unsupported forms fail loudly rather than silently: a config declaring `header_shape` or `fields.from` `blockquote`/`bold-list` fails to load naming the form, and a record still written in one is reported unreadable by `header.required-fields` with the form named. `Status` unchanged. **Why:** maintainer instruction of 2026-11-04 to carry out the full-cleanup decision above; this repository's own corpus and tests were already `yaml-frontmatter`, and the fixtures that exercised the removed forms were migrated or rewritten to assert the error. Specs `SPEC-2` 0.44, `SPEC-3` 0.32, `SPEC-5` 0.7, `SPEC-10` 0.6, `SPEC-12` 0.9. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #205: the blockquote and bold-list branches, `HeaderLayout` and `header.layout-consistency` are gone; a removed form fails loudly. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

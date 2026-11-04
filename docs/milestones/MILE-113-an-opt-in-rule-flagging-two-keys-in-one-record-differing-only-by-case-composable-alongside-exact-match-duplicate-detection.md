@@ -1,9 +1,10 @@
 ---
 Stable-Id: 01M36WECY7ZHHCHDCCZTJQ1TAT
-Status: Planned
+Status: Done
 Phase: '1'
 Track: header-format
 Implements: ADR-57
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs
 ---
 # 113 — an opt-in rule flagging two keys in one record differing only by case, composable alongside exact-match duplicate detection
 
@@ -43,3 +44,4 @@ same-record, no-declaration-required case.
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** the user proposed this as a genuinely separate, composable rule while working through `BUG-130` with me -- filed as its own milestone rather than bundled into that bug's correction, since it's new work, not a fix to a misdiagnosed one. | **substantive** |
 > | 2026-11-03 | Built: `header.case-variant-key` ships in `rules/header.rs`, registered in `rules/catalog.rs` and `check`, with `SPEC-2`'s generated rule table updated. Narrowest readings taken: the rule takes no options; "differing only by case" is Unicode `to_lowercase` equality over the keys a record wrote (so `CAFÉ`/`café` group, `Maße`/`Masse` do not); one finding per group of distinct spellings, never for an exact repeat of one spelling (that stays `header.required-fields`'s); the population is every loaded record (`header_shape: none` out of scope, unreadable headers unreadable). **Why:** this milestone's design left these open and `ADR-57` allows only an additive, non-merging signal. `Status` is untouched. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #157, #117: opt-in rule `header.case-variant-key` reports two keys differing only by case, beside the exact-match duplicate check. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

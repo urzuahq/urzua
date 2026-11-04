@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZXSNMN0AYVBVYEWRY95J
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
+Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md
 ---
 # 126 — Decide how a record gets an identity from a bare zero-padded numeric filename
 
@@ -45,3 +46,4 @@ when the decision is taken.
 > | 2026-11-02 | Filed. **Why:** A declared prefix does not give bare zero-padded numeric filenames an identity, so a real adopter's pointers all fail to resolve; filed as a decision. | **substantive** |
 > | 2026-11-02 | Decision recorded from `RFC-46`'s rejection. **Why:** The question this milestone asked is now answered. | **substantive** |
 > | 2026-11-04 | `MILE-98`'s declared `identity` pattern must capture the type prefix, so a bare zero-padded filename (`0001-a.md`) still gets no identity and the decision stands: such a corpus is renamed to `TYPE-NNNN-slug.md` (`ADR-36`), where `ADR-0173` resolves against `ADR-173` numerically. A pattern without a `(?P<prefix>...)` group fails the config load. **Why:** `RFC-46` was rejected; the declaration is not a back door to the bare-number identity it declined. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: the decision is recorded in the revision log (a bare zero-padded filename gets no identity; such a corpus is renamed to `TYPE-NNNN-slug.md`) and in the accepted `ADR-36`; `RFC-46` was rejected. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

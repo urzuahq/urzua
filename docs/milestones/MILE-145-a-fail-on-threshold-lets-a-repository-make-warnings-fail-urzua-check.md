@@ -4,6 +4,7 @@ Status: Done
 Phase: '0'
 Track: governance-process
 Implements: SPEC-3
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
 ---
 # 145 — A fail_on threshold lets a repository make warnings fail urzua check
 
@@ -35,3 +36,4 @@ run produced, fixed in the same change.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed and done. **Why:** keep this repository at zero warnings by making them fail its own CI. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

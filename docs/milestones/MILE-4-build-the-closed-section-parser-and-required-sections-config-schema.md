@@ -1,10 +1,11 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M1Y5JE63FXMT7PV7QJQN7BXV
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
 Blocked-on: MILE-98
+Realized-by: code:rust/crates/urzua-core/src/rules/section.rs, test:rust/crates/urzua-cli/tests/section_rules_integration.rs
 ---
 # 4 — Require sections per type, as a rule over the declared document model
 
@@ -102,3 +103,4 @@ declares what its records look like, and the corpus has been diverging from it a
 > | 2026-09-19 | Measurement added: 79 of 269 records are missing at least one of their type's template sections. **Why:** the case for this milestone had been an intuition. Counted while restoring `RFC-35`, which had been written by replacing its scaffold rather than filling it in -- the same mechanism, visible in records filed the same week. | **substantive** |
 > | 2026-11-02 | Unblocked: `RFC-33` was Accepted; maintainer decision 2026-11-02. `Blocked-on` now reads `MILE-98`; `Status` stays `Planned`. **Why:** `narrative-field.stale` flagged the reference once `RFC-33` reached a terminal status, and the maintainer decided the dependency no longer holds. `MILE-98` is still open and stays named. | **substantive** |
 > | 2026-11-04 | Built as the opt-in rule `section.required`, reading `required` under a type's declared `sections` (`SPEC-3`). `Status` stays `Planned`. **Why:** `MILE-98` merged the declared `sections` model and `section::parse_sections` and nothing read them. Matching is by exact `##` heading text, the population is one slot per `(record, required section)` so a missing section is counted rather than dropped, and a type that declares no `required` has nothing eligible. Run read-only against this repository's `adr` records with three sections required, 31 required sections were missing across 65 records. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #90: opt-in rule `section.required` reads the declared `sections.required`; the population counts one slot per record and required section. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

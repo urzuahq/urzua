@@ -5,6 +5,7 @@ Phase: '0'
 Track: embodiment-model
 Implements: ADR-15, ADR-19, ADR-20
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs
 ---
 # 61 — Build urzua fix detect and apply modes
 
@@ -21,3 +22,4 @@ Blocked-on: —
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

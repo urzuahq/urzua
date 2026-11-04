@@ -5,6 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-27
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
 ---
 # 60 — Build urzua new
 
@@ -21,3 +22,4 @@ Every other command validates or reports on records that already exist; nothing 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-06 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

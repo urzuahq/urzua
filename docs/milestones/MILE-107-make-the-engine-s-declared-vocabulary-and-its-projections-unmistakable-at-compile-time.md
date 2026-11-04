@@ -5,6 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-39
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/relation_field_literals.rs
 ---
 # 107 — Make the engine's declared vocabulary and its projections unmistakable at compile time
 
@@ -73,3 +74,4 @@ pinning present behaviour **before** the type is introduced.
 > | 2026-09-21 | Projection approach fixed to `&Config` per `RFC-39`'s decision, rather than left as two options. | **structural** |
 > | 2026-09-21 | Filed. **Why:** `RFC-39` was a `Draft` with no work item, and both halves of it caused a shipped defect during the `0.4.0` review on the day it was filed. Filed so the work is scheduled rather than left as a proposal, and so the evidence stays attached to it while it is fresh. | **substantive** |
 > | 2026-09-22 | `Status: Planned` → `Done`. **Why:** `ADR-59` decided the scope precisely (`FieldName` and `RecordId` built; the `&Config` convergence done for all ten signatures; `StatusValue` decided against, not deferred) and both were implemented and verified: full test suite, `make ci`, and a real-corpus `check` run reporting the same 70 findings before and after. `RecordTypeConfig`'s own fields stay `Vec<String>` -- narrower than this record's original "Values" section proposed, corrected in `ADR-59` before implementation once counting construction sites found over ninety of them, almost all test fixtures never implicated in a comparison bug. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

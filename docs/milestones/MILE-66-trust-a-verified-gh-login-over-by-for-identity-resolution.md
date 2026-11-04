@@ -5,6 +5,7 @@ Phase: '0'
 Track: accountability-identity
 Implements: ADR-31
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
 ---
 # 66 — Trust a verified gh login over --by for identity resolution
 
@@ -21,3 +22,4 @@ An unverified, typed name overriding a verified login is exactly backwards for a
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-06 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

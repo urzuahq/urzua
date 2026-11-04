@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNM82HMHR4D1TCD2B4WMG
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/back_pointer.rs, test:rust/crates/urzua-cli/tests/test_tier_integration.rs
 ---
 # 146 — A test-tier back-pointer so a record stating Verified is computed as Verified
 
@@ -26,3 +27,4 @@ A test file carrying a back-pointer to a record is read as test evidence; a reco
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Test-tier back-pointer (`SPEC-2` `0.30`, `SPEC-3` `0.16`): `Verifies:` in a file under the declared `test_paths` computes `Verified`; exercised by `purity.rs` citing `ADR-5` in this repository, plus a fixture citing one record at both tiers. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #198: `Verifies:` in a file under the declared `test_paths` computes `Verified`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

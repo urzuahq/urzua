@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNRESRV32NBGDRTQD3M1A
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/index.rs, code:rust/crates/urzua-cli/src/commands/index.rs, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs
 ---
 # 152 — Index checking for multi-line and link-list indexes, and index regeneration
 
@@ -26,3 +27,4 @@ A multi-line index entry shape is declared and checked; `{title}` can mean the H
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Built: `index.freshness` reads multi-line entry formats (lines separated by `\n`) and formats with `{file}` and no `{id}`; `{title}` excludes the record's own id as well as a leading number; and `urzua index [--apply]` regenerates the declared indexes deterministically (a second run reports every artifact `current`). Exercised in this repository's own `.urzua/config.yaml`: `docs/adr/README.md` (an id-less link list) and `docs/specs/README.md` (a two-line entry) are generated and checked. Documented in `SPEC-2` and `SPEC-3`. The command is a new subcommand rather than a `urzua fix` action because fix repairs a record's own fields. `Status` is untouched. **Why:** the Done-when asks for a declared multi-line shape, an id-less entry, a regeneration command that is a no-op on a second run, and own-repo exercise. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #203: multi-line and link-list index formats, and `urzua index [--apply]` regeneration. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

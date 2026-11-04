@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZVGSSA8BEM1D0QTQKFE5
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
+Realized-by: code:rust/crates/urzua-core/src/rules/shared.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 119 — One shared rule-population builder, so per-rule scope gating cannot be forgotten
 
@@ -41,3 +42,4 @@ states found in three rules was fixed once in the shared mechanism, not three ti
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `header_shape: none` gating has been fixed per rule five times and each fix covered only the rules a pass looked at; filed to fix the population mechanism once, with a test that covers every rule. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #136: every header-reading rule is gated through `scoped_census_records`, and a table-driven test iterates every shipped rule over a `header_shape: none` type. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

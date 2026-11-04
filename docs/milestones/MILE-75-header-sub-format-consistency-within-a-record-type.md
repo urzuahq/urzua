@@ -5,6 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-10, ADR-38
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 75 — Header sub-format consistency within a record type
 
@@ -35,3 +36,4 @@ implementation only checks required-field presence per a declared shape, not sub
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped (ADR-38): a `header_layout` config field (`one-per-line` \| `pipe-delimited`), declared per type, checked by a new `header.layout-consistency` rule. **Why:** two cheaper alternatives (majority-vote inference, deriving from the type's checked-in template) were considered and rejected -- majority-vote ratifies existing drift instead of catching it, and template-derivation is silently inert for `spec`, which has no template yet (MILE-74) and is exactly the type that motivated this. Declaring it explicitly works regardless of template state. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

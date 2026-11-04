@@ -126,7 +126,10 @@ record_types:
       values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
-      implementable: ["Planned", "InProgress"]
+      # Done is implementable: code that implements a delivered milestone keeps
+      # citing it (MILE-133), so a back-pointer to a Done milestone is not a
+      # change landing ahead of its decision.
+      implementable: ["Planned", "InProgress", "Done"]
       # Status is held to the evidence (MILE-177): the PR that delivers a
       # milestone sets Realized-by and Done together. Implemented or Verified
       # evidence under a not-done status is a disagreement `urzua fix --apply`
@@ -227,7 +230,10 @@ relation_pairs:
 rules:
   embodiment.requires-accepted-status:
     level: warn
-  status.delivery-agreement: warn
+  # A milestone's Status agrees with its delivery evidence (MILE-177): the PR
+  # that delivers a milestone sets Realized-by and Done itself, and this fails
+  # when they disagree.
+  status.delivery-agreement: error
   header.required-fields: error
   header.field-set-consistency: warn
   header.pointer-field-clean: warn

@@ -5,6 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-3, ADR-21
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 67 — Build urzua migrate ids
 
@@ -21,3 +22,4 @@ ADR-3's stable/display split only matters if every record actually has a stable 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

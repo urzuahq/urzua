@@ -5,6 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: ADR-39
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 81 — A field-set consistency rule: undeclared fields per type
 
@@ -37,3 +38,4 @@ check `spec` yet, the same additive-skip shape as every undeclared type.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped (ADR-39): a `known_fields` config field, additive to `required_fields`, checked by a new `header.field-set-consistency` rule. **Why:** majority-vote inference was rejected for the same reason ADR-38 rejected it for the layout axis -- it would ratify existing drift instead of catching it. Declared `known_fields` for `adr`/`rfc`/`milestone`/`bug`/`waiver`; `spec` deliberately left undeclared pending MILE-74. Verified against a planted violation in an isolated scratch corpus, not only unit tests. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

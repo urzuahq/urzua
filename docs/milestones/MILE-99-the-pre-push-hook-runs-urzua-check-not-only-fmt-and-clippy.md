@@ -1,10 +1,11 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M2VN4C5S5YSDEHK5P136XBAQ
 Phase: '0'
 Track: governance-process
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:.git-hooks/pre-push, code:Makefile
 ---
 # 99 — The pre-push hook runs `urzua check`, not only fmt and clippy
 
@@ -47,3 +48,4 @@ what level the rules are declared at.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s first success criterion names the pre-push hook alongside CI, and only CI was built. Surfaced by asking what Phase 0 actually exits on rather than reading the milestone list, which did not contain this. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #134: the pre-push hook runs `make records`, which runs `urzua check`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

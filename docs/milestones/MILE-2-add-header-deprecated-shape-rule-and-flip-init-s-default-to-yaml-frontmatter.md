@@ -5,6 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 2 — Add header.deprecated-shape rule and flip init's default to yaml-frontmatter
 
@@ -22,3 +23,4 @@ ADR-33 decided the deprecation; this is the mechanism that actually makes it vis
 > |---|---|---|
 > | 2026-09-07 | Cleared `Blocked-on` (was `BUG-3`, `Status: Fixed` for a while, caught by `blocked-on.stale` -- MILE-83 -- immediately after `Blocked-on` moved from prose into a checked header field). **Why:** the blocker had silently resolved and nobody had revisited this milestone since; found live during backlog triage, confirmed by the new rule firing on this exact case before this fix. | **substantive** |
 > | 2026-09-08 | `Status: Done`. Built `header.deprecated-shape` (config-level, one warning per non-yaml-frontmatter type) and `init`'s adopt-mode default (`header_shape = "yaml-frontmatter"` on every proposed type, regardless of the corpus's detected shape). Verified: the planted-violation tests in `rules.rs`, and `init_then_check_flags_a_pre_existing_blockquote_record` observing the real, ADR-33-accepted consequence of that default against a still-blockquote corpus. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

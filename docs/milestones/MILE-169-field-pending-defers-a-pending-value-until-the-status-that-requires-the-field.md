@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K1Y9EKS4A75KJWY8ZK18EM
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/field.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 169 — field.pending defers a pending value until the status that requires the field
 
@@ -27,3 +28,4 @@ The option is off by default. Making it the default would silently stop warning 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed and built: `field.pending` takes `pending_until_required` (`SPEC-2` 0.57, `SPEC-3` 0.45); refused on any other rule at load. Exercised by this repository's `bug` type. **Why:** the Done means above; `MILE-162` built the pattern entries this relies on. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #224: `field.pending` takes `pending_until_required`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
