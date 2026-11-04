@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1ZHBEPZ8S9XNM9WYRCA0JP3
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/type_scope.rs, test:rust/crates/urzua-core/src/rules/type_scope.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:f8fe5e070ddb8ef7a7a080a4ca9cbfed4fe099cfa2180210f870c472e9891cf4, code:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:e2c01a1981cd80051fe760308e8f5623d05543cfba41d185c6e3c591da42fdf2, test:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:e2c01a1981cd80051fe760308e8f5623d05543cfba41d185c6e3c591da42fdf2
 Date: 2026-09-08
 Author: beauwilliams
 Deciders: beauwilliams
@@ -81,3 +81,4 @@ either leaves every other rule and the existing schema untouched.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |

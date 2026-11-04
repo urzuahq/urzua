@@ -177,6 +177,7 @@ pub fn index_freshness(
                     line,
                     message,
                     waived: None,
+                    declared_severity: None,
                 });
             };
 

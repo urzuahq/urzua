@@ -3,7 +3,7 @@ Version: '0.6'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/export_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:1b6a076de8bdc7c3f534a819d821617b1d62fad313ccb108d3d70412634e76fd, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:288a08b371a85ebb981626b959f5acdce0319f2d2d38c0c06544d77d383a5b20, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:510343733f3f3e77da53d4d62d70ca2f422779fb19ff2f5421af862aa995ace8
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -270,3 +270,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-02 | `urzua export --format json` implemented (`MILE-115`); `Version` `0.4` → `0.5`. **Why:** `export` declared only `agdr` and was unimplemented, so `scripts/generate-dashboard.py` grew a second parser of the corpus that could disagree with `check` (the published dashboard once showed 3 bugs against roughly 145 in the corpus). Added the command section and an "Export contract" naming every JSON field, including that the body is a single `raw_text` string because no type declares sections (`MILE-98`), and `ExportReport` in the report list. `--format agdr` and the no-flag default are unchanged (not implemented; `MILE-21`). | **substantive** |
 > | 2026-11-02 | Export refuses a record symlinked outside the repository; `header_shape: none` records are `header_readable: true`. **Why:** review found `raw_text` could disclose an outside file, and headerless records were indistinguishable from malformed ones. | **substantive** |
 > | 2026-11-04 | Exit bar restated: Phase 0 has a single exit (urzua governs its own repository in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the second codebase, the full acceptance suite and the `new`-is-faster measurement move to the Phase 1 exit; `Version` `0.5` -> `0.6`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |

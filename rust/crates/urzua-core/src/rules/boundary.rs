@@ -82,6 +82,7 @@ pub fn published_path_reference(
                              repository can resolve, from inside the published path '{entry}'"
                     ),
                     waived: None,
+                    declared_severity: None,
                 });
             }
         }
@@ -103,6 +104,7 @@ pub fn published_path_reference(
                      checked; remove the entry or correct the path"
                 ),
                 waived: None,
+                declared_severity: None,
             });
         }
     }

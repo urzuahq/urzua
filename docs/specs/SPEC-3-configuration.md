@@ -1,5 +1,5 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -331,6 +331,27 @@ indistinguishable in the report from one that ran clean:
 - a rule name this build does not ship -- the error names the valid set
 - an option on a rule that does not take it
 
+### Severity per field (`MILE-140`)
+
+`field.quality`, `field.pending` and `status.required-field-missing` report one finding per field.
+Each takes an optional `field_levels` map from a field name to `warn` or `error`. Without it, the
+rule's `level` is every finding's severity, as before.
+
+```yaml
+rules:
+  status.required-field-missing:
+    level: warn                                      # the level for every field not listed
+    field_levels: {Deciders: error, Reviewers: warn} # a missing Deciders blocks; Reviewers only warns
+```
+
+- A finding for a listed field has that field's level; a finding for any other field has the rule's
+  `level`. The rule's `level` still decides whether the rule runs: `off` runs nothing, whatever
+  `field_levels` says.
+- A field name matches exactly. It must be a `required_fields` or `known_fields` entry of some
+  record type.
+- A level is `warn` or `error`. `off` is refused (a field is switched off by not declaring it), as
+  are an empty map, a field no type declares, and the option on any rule not named above.
+
 ### Evidence pins, a grace window and a claim age (`MILE-129`)
 
 `embodiment.consistency` takes two optional day-count options and reads one optional locator
@@ -380,4 +401,5 @@ option-on-a-rule-that-does-not-take-it load error.
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.8`. Documented the per-type `statuses` declaration: the status vocabulary, terminal success and failure statuses, fields required or forbidden at a status, and the type's own pending vocabulary. **Why:** `MILE-132` Phase 0: which statuses a type has is repository configuration, not engine policy (`BUG-59`), and the pending vocabulary (`BUG-65`) and finished-status lists (`BUG-178`) were compiled in or hand-copied. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. Documented the `drift_grace_days` and `claim_max_age_days` options of `embodiment.consistency` and the `@sha256:` locator pin. **Why:** `MILE-129` -- all three opt-in and off by default, so drift can be pinned to content, held back for a fresh change, and an old claim flagged. | **substantive** |
-> | 2026-11-04 | Bumped to `0.10`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.10`. Documented the `field_levels` option of `field.quality`, `field.pending` and `status.required-field-missing`. **Why:** `MILE-140` -- severity set per field within one rule, so a missing `Deciders` on an accepted record can be an error while a missing `Reviewers` is a warning. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.11`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |

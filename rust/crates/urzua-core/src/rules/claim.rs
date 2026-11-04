@@ -135,6 +135,7 @@ pub fn claim_status_agreement(
             file: PathBuf::from(path),
             line: Some(line),
             waived: None,
+            declared_severity: None,
             message: format!(
                 "claims to close {reference}, but {reference} has {status_field} {status}"
             ),
