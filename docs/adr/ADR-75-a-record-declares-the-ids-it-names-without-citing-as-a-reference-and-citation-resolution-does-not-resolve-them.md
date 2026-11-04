@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6MABN5K11J8512YBZH3M031
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -137,3 +138,10 @@ then be rewritten.
 - `BUG-186`: the same class, a declared input set aside on purpose being misreported.
 - `SPEC-2`, `SPEC-3`, `SPEC-16`, `SPEC-17`: where the option and field are documented on acceptance.
 - #256: removed the waivers.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Drafted as Proposed, then amended after independent review: only the one real citation is declared, the value grammar is exact ids, and the option covers history as well as illustration. | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04, after an independent review and re-review found no remaining blockers. | **substantive** |
