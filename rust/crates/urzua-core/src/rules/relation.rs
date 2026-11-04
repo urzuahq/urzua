@@ -216,6 +216,14 @@ impl PairSlot<'_> {
     }
 }
 
+/// Whether a record type carries a pair: every type does unless the pair
+/// declares `types` (`MILE-155`).
+fn pair_carried_by(pair: &crate::config::RelationPair, record_type: &str) -> bool {
+    pair.types
+        .as_ref()
+        .is_none_or(|types| types.iter().any(|t| t == record_type))
+}
+
 /// Every `(record, pair, side)` where the record's type declares the side's
 /// field, for the pairs `keep` selects. A type that does not declare a pair's
 /// field is not that pair's business, the same gate `ADR-60` gives `Status`.
@@ -228,6 +236,9 @@ fn pair_slots<'a>(
     let mut slots = Vec::new();
     for pair in config.relation_pairs.iter().filter(|p| keep(p)) {
         for record in records {
+            if !pair_carried_by(pair, &record.record_type) {
+                continue;
+            }
             let Some(declared) = declared_by_type.get(&record.record_type) else {
                 continue;
             };
@@ -352,6 +363,14 @@ pub fn relation_pair_reciprocity(
                     continue;
                 }
                 if !slot.pair.cross_type && target.record_type != record.record_type {
+                    excluded += 1;
+                    continue;
+                }
+                // A target of a type outside a scoped pair cannot hold the
+                // inverse field, so the claim cannot be echoed: judged by the
+                // scoping, disclosed as out of scope, not an unechoed claim
+                // (`MILE-155`).
+                if !pair_carried_by(slot.pair, &target.record_type) {
                     excluded += 1;
                     continue;
                 }
@@ -717,6 +736,7 @@ mod tests {
             reciprocity: crate::config::PairReciprocity::Required,
             cross_type,
             provisional: None,
+            types: None,
         }
     }
 
@@ -1043,6 +1063,67 @@ mod tests {
         let (_, findings) = run_pairs(&amend_config(), &[base, draft]);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert_eq!(findings[0].declared_severity, None);
+    }
+
+    fn scoped_config(types: Option<Vec<&str>>) -> Config {
+        let mut p = pair("amendment", "Amends", "Amended-by", true);
+        p.types = types.map(|t| t.into_iter().map(String::from).collect());
+        pair_config(
+            vec![("rfc", &["Amends", "Amended-by"]), ("adr", &["Title"])],
+            vec![p],
+        )
+    }
+
+    #[test]
+    fn a_claim_to_a_type_outside_a_scoped_pair_is_out_of_scope_not_an_error_observed_failing() {
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Title: x\n");
+        let records = [rfc, adr];
+        let (exec, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &records);
+        assert!(findings.is_empty(), "{findings:?}");
+        let pop = exec.population.unwrap();
+        assert_eq!(pop.out_of_scope(), 1, "{pop:?}");
+    }
+
+    #[test]
+    fn the_same_claim_in_a_global_pair_still_errors() {
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Title: x\n");
+        let records = [rfc, adr];
+        let (_, findings) = run_pairs(&scoped_config(None), &records);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_scoped_pair_still_judges_claims_between_its_own_types() {
+        let a = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-2\n");
+        let b = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let (_, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &[a, b]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_record_of_a_type_outside_a_scoped_pair_is_not_its_business() {
+        let config = pair_config(
+            vec![
+                ("rfc", &["Amends", "Amended-by"]),
+                ("adr", &["Amends", "Amended-by"]),
+            ],
+            vec![{
+                let mut p = pair("amendment", "Amends", "Amended-by", true);
+                p.types = Some(vec!["rfc".to_string()]);
+                p
+            }],
+        );
+        let adr = record("docs/adr/ADR-1-a.md", "adr", "> Amends: RFC-2\n");
+        let rfc = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let (exec, findings) = run_pairs(&config, &[adr, rfc]);
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(
+            exec.population.unwrap().eligible(),
+            2,
+            "only the rfc's two sides"
+        );
     }
 
     #[test]
