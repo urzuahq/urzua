@@ -149,15 +149,29 @@ directly, so `impl Trait for Name` does not match), and `spans: all` makes every
 `member` pattern then finds the item inside a span. `A::b` resolves as: (1) the container spans of `A`, at
 least one or the reason is "container not found"; (2) the `member` pattern for `b` inside every one of
 those spans; (3) the matches counted **across all spans together**: none is "member not found", more than
-one is **ambiguous** and reported, exactly one is the resolved span, to which `leading` applies. A type
+one is **ambiguous** and reported, exactly one is the resolved span, to which `leading` applies. A `member` declares its own start pattern and its own end kind, from the same closed set; a method is
+`brace_balanced`, and a `;`-terminated item (a constant, a trait-method declaration) uses an end kind
+`semicolon`, which ends at the first line that ends in `;` at the member's own depth. A member is matched
+only at the nesting depth directly inside the container's braces (or at the container's indent, for an
+`indent` container): the engine tracks depth, not the pattern, so a match deeper inside another member
+(a nested `fn`, a closure-local helper) is not a candidate. A member whose end its end kind cannot find is
+reported as "the end is not found". A type
 whose methods are split over several `impl` blocks is therefore addressable, and a method name repeated in
 two of them is reported, never first-match-wins. A container declared without `spans: all` must match
 exactly one span.
 
+*Namespace.* A container is matched by name across the whole file, not per module: the first build treats a
+file as one namespace, so two same-named types in different inline modules are merged into one candidate
+set, and a member of one can be reported ambiguous with the other. A resolver may anchor its container
+pattern at a given indent to exclude nested modules.
+
 *Trait impls.* A trait impl's members are addressed `A::<Trait>::b`. A resolver declares it with
 `trait_container`, a pattern with two placeholders, `{trait}` and `{symbol}`; for Rust it matches
 `impl<'de> Deserialize<'de> for RuleSetting {` for `RuleSetting::<Deserialize>`, ignoring generics on the
-trait name. It has the same `spans: all` and the same uniqueness across all matching spans, so several
+trait name, and allows an optional leading path before the trait (`impl std::fmt::Display for X {` matches
+`X::<Display>`), which the Rust template and its test vectors cover. `A::<Trait>` with no member means the
+whole impl block: its span or spans, under the same uniqueness rule, so a trait impl can be pinned as a
+unit; `<Trait>` is never the first segment. It has the same `spans: all` and the same uniqueness across all matching spans, so several
 impls of one generic trait (`From<A>` and `From<B>` for one type) make a member ambiguous, which is
 reported and not worked around in the first build. A resolver without `trait_container` reports the
 `::<Trait>::` form as unsupported for that file type. A member of a member (`A::b::c`) is not supported: one
@@ -238,6 +252,10 @@ scoped locator at file level, the state the corpus is in today.
   promises. A recorded alternative: when a pin exists, resolve ambiguity by content (pass if exactly one
   candidate hashes to the pin), tolerant of moves without being first-match-wins.
 - Whitespace-only edits inside a pinned item are drift (point 3).
+- A method's pin hashes only the method's lines. A change to the impl header (its generics or bounds) or to
+  its `where` clause is not drift. A reviewer who needs it pins `A::<Trait>` or the type.
+- Several impls of one generic trait cannot be pinned by member (`FieldName::<From>::from` is ambiguous when
+  `From<&str>` and `From<String>` are both implemented); the only way to pin one today is a line range.
 - Line-range pins on a file that grows above them go stale; they are the fallback (point 4).
 - A symbol rename is a finding the author fixes by hand; there is no rename tracking.
 - `--force` re-baselines every stale record under one `--reason`; with scoped pins that is smaller but still a
