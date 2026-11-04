@@ -240,7 +240,18 @@ pub(super) fn fields_with_capability(
 /// `NNNN-slug.md` shape (BUG-9): it was never a real shape any adopter's own
 /// corpus would independently use, only this repo's own pre-ADR-36 history,
 /// and that history no longer exists in the corpus either.
+///
+/// A type that declares an `identity` pattern (RFC-33, MILE-98) decides the
+/// number instead: `{type_prefix}-{number}` from the pattern's `number`
+/// capture, so a bare `0001-slug.md` is `ADR-0001` and a name the pattern
+/// does not match has no identifier.
 pub fn record_id(record: &Record) -> Option<String> {
+    if let Some(declared) = &record.identity {
+        return declared
+            .number
+            .as_ref()
+            .map(|n| format!("{}-{n}", record.type_prefix));
+    }
     let stem = record.path.file_stem()?.to_str()?;
     let type_prefix = record.type_prefix.clone();
 

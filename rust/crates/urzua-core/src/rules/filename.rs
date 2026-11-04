@@ -62,7 +62,13 @@ pub fn filename_title_consistency(
                         elided(h1.text)
                     ),
                 ),
-                Some(_) => {}
+                Some(_) => {
+                    if let Some(declared) = &record.identity {
+                        if let Some(problem) = title_form_problem(declared, h1.first_token) {
+                            push(Some(h1.line), problem);
+                        }
+                    }
+                }
             },
         }
             Outcome::Examined
@@ -94,6 +100,31 @@ fn filename_number(record: &Record) -> Option<String> {
     id.rsplit_once('-').map(|(_, number)| number.to_string())
 }
 
+/// A type that declares an `identity` pattern also declares its title form
+/// (RFC-44): `PREFIX-N` when the pattern captures a `prefix`, a bare `N`
+/// otherwise. `None` when the title's first word has that form. A trailing
+/// `.` or `:` is punctuation (`# 1. Title`), not part of the number.
+fn title_form_problem(
+    declared: &crate::document_model::DeclaredIdentity,
+    first_token: &str,
+) -> Option<String> {
+    let token = first_token.trim_end_matches(['.', ':']);
+    let (expected, number_part) = match &declared.title_prefix {
+        Some(prefix) => (
+            format!("'{prefix}-N'"),
+            token.strip_prefix(&format!("{prefix}-")),
+        ),
+        None => ("a bare number".to_string(), Some(token)),
+    };
+    if number_part.is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+        return None;
+    }
+    Some(format!(
+        "H1 title starts '{}', but this type declares its title form as {expected}",
+        elided(first_token)
+    ))
+}
+
 /// Whether an H1 exists and whether it carries a number are independent
 /// questions, so they stay independent `Option`s rather than collapsing into
 /// one absent value.
@@ -101,6 +132,8 @@ struct H1<'a> {
     /// 1-indexed, matching [`crate::header::Header::region`].
     line: usize,
     text: &'a str,
+    /// The first whitespace-separated word of the title.
+    first_token: &'a str,
     /// Compared by numeric value (BUG-0002), so padding never mismatches.
     number: Option<u64>,
 }
@@ -165,6 +198,7 @@ fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'
         return Some(H1 {
             line: lineno,
             text,
+            first_token: text.split_whitespace().next().unwrap_or_default(),
             number: digits.parse().ok(),
         });
     }
@@ -392,5 +426,59 @@ mod tests {
         let (exec, findings) = filename_title_consistency(&[r], &full_text);
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    fn declared_title(path: &str, pattern: &str, content: &str) -> Vec<Finding> {
+        let m = crate::document_model::RecordModel {
+            identity: Some(
+                crate::document_model::CompiledIdentity::compile(
+                    &crate::document_model::IdentityDecl {
+                        from: crate::document_model::IdentitySource::Filename,
+                        pattern: pattern.to_string(),
+                    },
+                )
+                .unwrap(),
+            ),
+            fields: None,
+        };
+        let r = Record::parse_with_model(
+            std::path::PathBuf::from(path),
+            "adr".to_string(),
+            content,
+            crate::header::HeaderShape::default(),
+            "ADR".to_string(),
+            &m,
+        );
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
+        filename_title_consistency(&[r], &full_text).1
+    }
+
+    const BARE: &str = r"^(?P<number>\d+)-.+$";
+    const PREFIXED: &str = r"^(?P<prefix>SPEC)-(?P<number>\d+)-.+$";
+
+    #[test]
+    fn a_declared_bare_number_title_form_is_accepted_and_a_prefixed_one_refused() {
+        assert!(declared_title("d/0098-x.md", BARE, "# 98 — X\n").is_empty());
+        assert!(declared_title("d/0098-x.md", BARE, "# 98. X\n").is_empty());
+        let f = declared_title("d/0098-x.md", BARE, "# ADR-98 — X\n");
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("bare number"), "{}", f[0].message);
+    }
+
+    #[test]
+    fn a_declared_prefix_title_form_is_required() {
+        assert!(declared_title("d/SPEC-3-x.md", PREFIXED, "# SPEC-3 — X\n").is_empty());
+        let f = declared_title("d/SPEC-3-x.md", PREFIXED, "# 3 — X\n");
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("'SPEC-N'"), "{}", f[0].message);
+    }
+
+    #[test]
+    fn an_undeclared_type_keeps_accepting_any_title_form() {
+        let r = record("docs/adr/ADR-98-x.md", "adr", "# ADR-98 — X\n");
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), "# ADR-98 — X\n".to_string());
+        assert!(filename_title_consistency(&[r], &full_text).1.is_empty());
     }
 }

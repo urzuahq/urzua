@@ -44,3 +44,4 @@ when the decision is taken.
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** A declared prefix does not give bare zero-padded numeric filenames an identity, so a real adopter's pointers all fail to resolve; filed as a decision. | **substantive** |
 > | 2026-11-02 | Decision recorded from `RFC-46`'s rejection. **Why:** The question this milestone asked is now answered. | **substantive** |
+> | 2026-11-04 | A declared `identity` pattern now gives a bare zero-padded filename (`0001-a.md`) the identifier `TYPE-0001`, which resolves against `TYPE-1` numerically; a type with no declaration is unchanged. **Why:** `MILE-98`'s second slice built the declared identity this milestone's question pointed at, so a corpus can state its filename shape in config until it is renamed to `TYPE-NNNN-slug.md` (`ADR-36`). | **substantive** |

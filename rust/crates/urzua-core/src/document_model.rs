@@ -1,8 +1,10 @@
 //! A record type's declared document model (RFC-33 layer 1, ADR-53,
 //! MILE-98): how its identity, fields and sections are found.
 //!
-//! This slice only parses and validates the declaration. Nothing in the
-//! engine reads it yet, so declaring it changes no finding.
+//! A declaration is validated at load. Slice 2 makes `identity` and `fields`
+//! drive record loading (`RecordModel`, `Record::parse_with_model`); a type
+//! that declares neither loads exactly as before. `sections` is still read by
+//! nothing.
 //!
 //! ```yaml
 //! record_types:
@@ -44,18 +46,125 @@ pub enum IdentitySource {
 #[serde(deny_unknown_fields)]
 pub struct IdentityDecl {
     pub from: IdentitySource,
-    /// A regular expression over the file name, stored as written. Only
-    /// checked to be non-blank here: compiling it needs a regex engine, which
-    /// `urzua-core`'s dependency allowlist does not yet admit.
+    /// A regular expression over the file name without its `.md` extension,
+    /// stored as written. Validated at load by [`CompiledIdentity::compile`].
     pub pattern: String,
+}
+
+/// An identity pattern, compiled. Its named groups: `number` (required, all
+/// ASCII digits), `slug` (optional, not read by the engine), and `prefix`
+/// (optional): a pattern that captures a `prefix` declares that the record's
+/// H1 title carries `PREFIX-N`, and one that does not declares a bare `N`
+/// (RFC-44, "declared per type").
+#[derive(Debug, Clone)]
+pub struct CompiledIdentity {
+    regex: regex::Regex,
+}
+
+/// What a declared identity pattern found in one record's file name.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DeclaredIdentity {
+    /// The `number` capture as written (padding kept), or `None` when the
+    /// file name does not match the pattern: the record has no identity.
+    pub number: Option<String>,
+    /// The `prefix` capture, when the pattern has one and matched.
+    pub title_prefix: Option<String>,
+}
+
+impl CompiledIdentity {
+    pub fn compile(decl: &IdentityDecl) -> Result<Self, String> {
+        let regex = regex::Regex::new(&decl.pattern)
+            .map_err(|e| format!("`pattern` is not a valid regular expression: {e}"))?;
+        if !regex.capture_names().flatten().any(|n| n == "number") {
+            return Err(
+                "`pattern` must capture the record number as a `(?P<number>...)` group".into(),
+            );
+        }
+        Ok(Self { regex })
+    }
+
+    /// Reads a file name (with or without `.md`). A name the pattern does not
+    /// match, or whose `number` is not all ASCII digits, has no number.
+    pub fn identify(&self, file_name: &str) -> DeclaredIdentity {
+        let stem = file_name.strip_suffix(".md").unwrap_or(file_name);
+        let Some(caps) = self.regex.captures(stem) else {
+            return DeclaredIdentity::default();
+        };
+        let number = caps
+            .name("number")
+            .map(|m| m.as_str())
+            .filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+            .map(str::to_string);
+        if number.is_none() {
+            return DeclaredIdentity::default();
+        }
+        DeclaredIdentity {
+            number,
+            title_prefix: caps.name("prefix").map(|m| m.as_str().to_string()),
+        }
+    }
+}
+
+/// A record type's declaration resolved for loading: the compiled identity
+/// pattern and the fields source. `RecordModel::default()` declares nothing,
+/// and loads exactly as before the declaration existed.
+#[derive(Debug, Clone, Default)]
+pub struct RecordModel {
+    pub identity: Option<CompiledIdentity>,
+    pub fields: Option<FieldsSource>,
+}
+
+impl DocumentModel {
+    pub fn resolve(&self) -> Result<RecordModel, String> {
+        Ok(RecordModel {
+            identity: self
+                .identity
+                .as_ref()
+                .map(CompiledIdentity::compile)
+                .transpose()?,
+            fields: self.fields.as_ref().map(|f| f.from),
+        })
+    }
+}
+
+/// The validated declaration of one record type, if it declares any part.
+/// The config was validated at load, so an error here means a caller built a
+/// `RecordTypeConfig` by hand.
+pub fn declared_model(
+    record_type: &str,
+    config: &RecordTypeConfig,
+) -> Result<Option<DocumentModel>, ConfigError> {
+    let one = BTreeMap::from([(record_type.to_string(), config.clone())]);
+    Ok(validate_declarations(&one)?.remove(record_type))
 }
 
 /// How a record's fields are found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FieldsSource {
+    /// Bare `Key: value` lines between the title and the first `##` heading.
     PrefixLines,
     YamlFrontmatter,
+    /// The existing `header_shape` values, as cases of `fields.from`
+    /// (RFC-33): a `> Key: value` blockquote block, a `- **Key:** value`
+    /// list, or no header at all.
+    Blockquote,
+    BoldList,
+    None,
+}
+
+impl FieldsSource {
+    /// The existing parser a source other than `prefix-lines` reads with.
+    pub fn header_shape(self) -> Option<crate::header::HeaderShape> {
+        use crate::header::HeaderShape;
+        match self {
+            FieldsSource::PrefixLines => Option::None,
+            FieldsSource::YamlFrontmatter => Some(HeaderShape::YamlFrontmatter),
+            FieldsSource::Blockquote => Some(HeaderShape::Blockquote),
+            FieldsSource::BoldList => Some(HeaderShape::BoldList),
+            FieldsSource::None => Some(HeaderShape::None),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -127,6 +236,7 @@ pub(crate) fn validate_declarations(
                     "`pattern` must not be blank".into(),
                 ));
             }
+            CompiledIdentity::compile(i).map_err(|reason| invalid(name, "identity", reason))?;
         }
         if identity.is_some() || fields.is_some() || sections.is_some() {
             models.insert(
@@ -243,7 +353,7 @@ mod tests {
 
     #[test]
     fn an_unknown_source_names_the_valid_ones() {
-        let e = invalid("    fields: {from: blockquote}\n");
+        let e = invalid("    fields: {from: markdown-table}\n");
         assert!(e.contains("adr") && e.contains("fields"), "{e}");
         assert!(
             e.contains("prefix-lines") && e.contains("yaml-frontmatter"),
@@ -309,6 +419,79 @@ mod tests {
         ] {
             let e = invalid(body);
             assert!(e.contains("adr"), "{body}: {e}");
+        }
+    }
+
+    fn identity(pattern: &str) -> CompiledIdentity {
+        CompiledIdentity::compile(&IdentityDecl {
+            from: IdentitySource::Filename,
+            pattern: pattern.to_string(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_bare_zero_padded_number_is_an_identity() {
+        let id =
+            identity(r"^(?P<number>\d+)-(?P<slug>.+)$").identify("0001-record-architecture.md");
+        assert_eq!(id.number.as_deref(), Some("0001"));
+        assert_eq!(id.title_prefix, None);
+    }
+
+    #[test]
+    fn a_name_the_pattern_does_not_match_has_no_number() {
+        let p = identity(r"^(?P<number>\d+)-(?P<slug>.+)$");
+        for name in ["README.md", "ADR-1-x.md", "notes-0001.md"] {
+            assert_eq!(p.identify(name), DeclaredIdentity::default(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_captured_prefix_is_the_declared_title_prefix() {
+        let id = identity(r"^(?P<prefix>SPEC)-(?P<number>\d+)-(?P<slug>.+)$")
+            .identify("SPEC-3-configuration.md");
+        assert_eq!(id.number.as_deref(), Some("3"));
+        assert_eq!(id.title_prefix.as_deref(), Some("SPEC"));
+        let bare = identity(r"^ADR-(?P<number>\d+)-.+$").identify("ADR-3-x.md");
+        assert_eq!(bare.title_prefix, None);
+    }
+
+    #[test]
+    fn a_number_capture_that_is_not_ascii_digits_is_no_number() {
+        let p = identity(r"^(?P<number>\w+)-x$");
+        assert_eq!(p.identify("abc-x.md").number, None);
+        assert_eq!(p.identify("\u{0663}-x.md").number, None);
+    }
+
+    #[test]
+    fn a_pattern_that_does_not_compile_or_has_no_number_group_fails_the_load() {
+        for bad in ["'('", "'^(?P<slug>.+)$'", "'^(\\d+)-.+$'"] {
+            let e = invalid(&format!(
+                "    identity: {{from: filename, pattern: {bad}}}\n"
+            ));
+            assert!(
+                e.contains("adr") && e.contains("identity") && e.contains("pattern"),
+                "{bad}: {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_existing_header_shape_is_a_fields_source() {
+        for (name, shape) in [
+            ("blockquote", crate::header::HeaderShape::Blockquote),
+            ("bold-list", crate::header::HeaderShape::BoldList),
+            (
+                "yaml-frontmatter",
+                crate::header::HeaderShape::YamlFrontmatter,
+            ),
+            ("none", crate::header::HeaderShape::None),
+        ] {
+            let m = split(&cfg(&format!("    fields: {{from: {name}}}\n"))).unwrap();
+            assert_eq!(
+                m["adr"].fields.as_ref().unwrap().from.header_shape(),
+                Some(shape)
+            );
         }
     }
 }

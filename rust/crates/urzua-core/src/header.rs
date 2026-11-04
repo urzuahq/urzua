@@ -250,6 +250,53 @@ pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
     }
 }
 
+/// Read a `fields: {from: prefix-lines}` header (RFC-33, MILE-98): bare
+/// `Key: value` lines between the title and the first `##` heading, as in a
+/// Nygard-style record (`Date: 2016-02-12`).
+///
+/// A key is an ASCII letter followed by letters, digits, `-` or `_`, and the
+/// colon must be followed by a space or end the line, so a URL or a sentence
+/// is not a field. Lines that are not field-shaped (the title, blanks, prose)
+/// are skipped, not region-ending. The scan stops at the first heading of
+/// depth two or more. The region spans the first to the last field line; no
+/// field line at all is `region: None`, reportable and never an empty header.
+pub fn parse_prefix_lines(content: &str) -> Header {
+    let mut fields = Vec::new();
+    for (idx, raw) in content.lines().enumerate() {
+        let line = raw.trim_end();
+        if line.starts_with("##") && line.trim_start_matches('#').starts_with([' ', '\t']) {
+            break;
+        }
+        if let Some(field) = prefix_line_field(line, idx + 1) {
+            fields.push(field);
+        }
+    }
+    let region = match (fields.first(), fields.last()) {
+        (Some(first), Some(last)) => Some((first.line, last.line)),
+        _ => None,
+    };
+    Header {
+        fields,
+        region,
+        parse_error: None,
+    }
+}
+
+fn prefix_line_field(line: &str, line_no: usize) -> Option<HeaderField> {
+    let (key, value) = line.split_once(':')?;
+    let mut chars = key.chars();
+    let valid_key = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !valid_key || !(value.is_empty() || value.starts_with(' ')) {
+        return None;
+    }
+    Some(HeaderField {
+        key: crate::values::FieldName::new(key),
+        value: value.trim().to_string(),
+        line: line_no,
+    })
+}
+
 /// Strip a leading `> ` (or bare `>`) blockquote marker. Returns `None` for a
 /// line that isn't blockquote-shaped at all -- the anchor this parser uses,
 /// since every observed shape in this corpus lives inside a leading
@@ -435,6 +482,42 @@ fn parse_key_value(segment: &str, line_no: usize) -> Option<HeaderField> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prefix_lines_reads_bare_key_value_lines_before_the_first_section() {
+        let doc = "# 1. Record architecture decisions\n\nDate: 2016-02-12\nStatus: Accepted\n\n## Context\n\nDecoy: not a header\n";
+        let h = parse_prefix_lines(doc);
+        assert_eq!(h.get("Date"), Some("2016-02-12"));
+        assert_eq!(h.get("Status"), Some("Accepted"));
+        assert_eq!(h.get("Decoy"), None);
+        assert_eq!(h.region, Some((3, 4)));
+    }
+
+    #[test]
+    fn prefix_lines_does_not_read_prose_or_urls_as_fields() {
+        let doc = "# T\n\nSee https://example.com for more.\nA sentence: with a colon.\nDate: 2020-01-01\n";
+        let h = parse_prefix_lines(doc);
+        assert_eq!(
+            h.fields.iter().map(|f| f.key.as_str()).collect::<Vec<_>>(),
+            ["Date"]
+        );
+    }
+
+    #[test]
+    fn prefix_lines_with_no_field_line_has_no_region_not_an_empty_header() {
+        let h = parse_prefix_lines("# T\n\nJust prose.\n\n## Status\n\nAccepted\n");
+        assert!(h.fields.is_empty());
+        assert_eq!(h.region, None);
+        assert!(h.is_unreadable());
+    }
+
+    #[test]
+    fn prefix_lines_keeps_an_empty_value_and_stops_at_a_deeper_heading_only_when_spaced() {
+        let h = parse_prefix_lines("# T\n\nDate:\n###\nStatus: x\n### Deep\nLate: y\n");
+        assert_eq!(h.get("Date"), Some(""));
+        assert_eq!(h.get("Status"), Some("x"));
+        assert_eq!(h.get("Late"), None);
+    }
 
     #[test]
     fn parses_blockquote_shape() {

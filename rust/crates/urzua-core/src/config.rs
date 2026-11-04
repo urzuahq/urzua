@@ -355,8 +355,17 @@ impl RelationFields {
 impl RecordTypeConfig {
     /// `ADR-50`: a `none`-shaped type has nowhere for a header field to be at
     /// all, the gate every `config.header-none-has-no-*` rule shares.
+    ///
+    /// A declared `fields: {from: none}` is the same statement (RFC-33: the
+    /// shape enum is one case of `fields.from`), so it gates identically.
     pub fn has_no_header(&self) -> bool {
         self.header_shape == HeaderShape::None
+            || self
+                .fields
+                .as_ref()
+                .and_then(|f| f.get("from"))
+                .and_then(yaml_serde::Value::as_str)
+                == Some("none")
     }
 
     /// Every field this type declares, `required_fields` **or** `known_fields`
@@ -748,6 +757,15 @@ mod tests {
         format!(
             "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n{type_body}"
         )
+    }
+
+    #[test]
+    fn declared_fields_none_is_a_type_with_no_header() {
+        let (c, _) = parse_with_document_models(&model_cfg("    fields: {from: none}\n")).unwrap();
+        assert!(c.record_types["adr"].has_no_header());
+        let (c, _) =
+            parse_with_document_models(&model_cfg("    fields: {from: prefix-lines}\n")).unwrap();
+        assert!(!c.record_types["adr"].has_no_header());
     }
 
     #[test]
