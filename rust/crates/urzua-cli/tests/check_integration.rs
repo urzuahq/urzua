@@ -1538,11 +1538,14 @@ fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
     // `audit` now has one rule that legitimately runs on this corpus, so
     // `BUG-99`'s "exits non-zero for no real reason" symptom is gone: a
     // thin-config corpus with nothing actually wrong is `ok`, per `ADR-53`.
+    // `MILE-120`: a bare-number filename is something wrong, and `audit` now
+    // says so with the expected name (a warning, so the exit stays 0).
     let audit_out = run_urzua(&dir, &["audit"]);
     let audit_stdout = String::from_utf8_lossy(&audit_out.stdout).to_string();
     assert!(
-        audit_stdout.contains("\"status\": \"ok\""),
-        "identity.collision runs regardless of prefix and finds nothing wrong: {audit_stdout}"
+        audit_stdout.contains("\"status\": \"findings-present\"")
+            && audit_stdout.contains("0001-x.md -> ADR-0001-x.md"),
+        "the bare filename is reported with its expected name: {audit_stdout}"
     );
     assert_eq!(
         audit_out.status.code(),
@@ -3053,6 +3056,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
         // Record-level but header-independent: filename and body text only.
         ("identity.collision", "reads the filename identifier only"),
         ("filename.title-consistency", "reads filename and H1 only"),
+        ("filename.identity-pattern", "reads the filename only"),
         ("revision-log.change-class-required", "reads body text only"),
         (
             "citation.resolution",
@@ -3286,6 +3290,95 @@ fn target_status_fields_naming_an_undeclared_field_is_a_config_error_observed_fa
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(text.contains("Implments"), "{text}");
+}
+
+fn filename_pattern_repo(name: &str, files: &[&str], rules: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules: {rules}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n"
+        ),
+    )
+    .unwrap();
+    for f in files {
+        std::fs::write(
+            dir.join("docs/adr").join(f),
+            "---\nStatus: Accepted\n---\n# 1 - X\n",
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+    dir
+}
+
+/// `MILE-120`: a bare-number corpus is one finding per type carrying every
+/// expected name, and the census says what was examined.
+#[test]
+fn a_bare_number_corpus_is_reported_once_per_type_with_rename_guidance() {
+    let dir = filename_pattern_repo(
+        "filename-bare",
+        &["0001-a.md", "0002-b.md"],
+        "{filename.identity-pattern: warn}",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let hits: Vec<_> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "filename.identity-pattern")
+        .collect();
+    assert_eq!(hits.len(), 1, "{parsed}");
+    let m = hits[0]["message"].as_str().unwrap();
+    assert!(m.contains("0001-a.md -> ADR-0001-a.md") && m.contains("0002-b.md -> ADR-0002-b.md"));
+    let exec = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "filename.identity-pattern")
+        .unwrap();
+    assert_eq!(exec["population"]["examined"], 2);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_filename_pattern_rule_is_opt_in() {
+    let dir = filename_pattern_repo(
+        "filename-optin",
+        &["0001-a.md", "ADR-2-b.md"],
+        "{header.required-fields: warn}",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|f| f["rule"] != "filename.identity-pattern"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn one_off_pattern_file_among_conforming_ones_is_reported_on_that_file() {
+    let dir = filename_pattern_repo(
+        "filename-one",
+        &["ADR-1-a.md", "draft.md"],
+        "{filename.identity-pattern: error}",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    assert_eq!(out.status.code(), Some(1), "an error-level finding blocks");
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let f = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == "filename.identity-pattern")
+        .unwrap();
+    assert_eq!(f["file"], "docs/adr/draft.md");
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `MILE-122`: a declared relation pair is checked end to end through `check`,

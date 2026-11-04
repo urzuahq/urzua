@@ -1,5 +1,5 @@
 ---
-Version: '0.15'
+Version: '0.16'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -226,7 +226,7 @@ which stays only for what genuinely isn't built yet.
 |---|---|
 | `header.required-fields` | Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here. |
 | `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
-| `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). |
+| `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
 | `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
@@ -263,6 +263,7 @@ which stays only for what genuinely isn't built yet.
 | `boundary.published-path-reference` | A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity. |
 | `diff.source-requires-record` | A `--base` diff changes a path under a declared `source_paths` prefix but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`). One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. |
 | `diff.source-and-records-mixed` | A `--base` diff changes both a governed record and a path under a declared `application_paths` prefix (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean. |
+| `filename.identity-pattern` | A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined. |
 <!-- rule-table:end -->
 
 ### Not yet built
@@ -278,10 +279,6 @@ Design language from this spec's original Phase B scope, with no shipped rule be
   detection: an author is not their own reviewer of record.
 - **Required sections** per profile, generalized beyond `change_class` on revision entries (the one
   instance that's actually built).
-- **Header closure's `x-` escape hatch** (RFC-10): a declared-and-justified extra key, distinct from
-  `header.field-set-consistency`'s per-type `known_fields` list. Not implemented — today an unlisted
-  field is either invisible (no `known_fields` declared for the type) or a finding (declared), with
-  no third "explicitly excused" state.
 - **Declared scope** (RFC-11 §6) and **boundaries** (RFC-11 §1) — neither is built; RFC-11's own
   open questions (nested-scope inheritance, glob-vs-subject width) are still unresolved.
 
@@ -452,4 +449,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | `git-diff` scope also treats as dependents the records covered by a changed or deleted waiver's old and new `Scope`; splits header values on commas when finding references; keeps `type.record-outside-declared-dir` findings for changed files; treats a symlinked configuration as changed by either path; an empty diff with no rule enabled is `not-run`. §Output `status` states the empty git-diff exception. **Why:** late review of `MILE-123` reproduced each as a case where `check --base` hid or mis-stated what a full check reports. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
-> | 2026-11-04 | Bumped to `0.15`. Adds `diff.source-requires-record` and `diff.source-and-records-mixed` to the generated rule table, a new `not-applicable` `RuleStatus` and `changed-path` population unit, and the `source_paths`, `application_paths` and `exclude_paths` rule options (`SPEC-3`'s path-option normalisation). **Why:** `MILE-124` and `MILE-142` -- two diff checks an adopter's hand-written linter makes, source change without a record change and a change mixing records with application source, need a declared home; they run only on `--base` and say so otherwise rather than passing. | **substantive** |
+> | 2026-11-04 | Bumped to `0.16`. Adds `diff.source-requires-record` and `diff.source-and-records-mixed` to the generated rule table, a new `not-applicable` `RuleStatus` and `changed-path` population unit, and the `source_paths`, `application_paths` and `exclude_paths` rule options (`SPEC-3`'s path-option normalisation). **Why:** `MILE-124` and `MILE-142` -- two diff checks an adopter's hand-written linter makes, source change without a record change and a change mixing records with application source, need a declared home; they run only on `--base` and say so otherwise rather than passing. | **substantive** |
+> | 2026-11-04 | Bumped to `0.15`. `header.field-set-consistency` gains the optional `allow_extension_prefix` option, off unless declared `true`: a header key beginning `x-` in any case is exempt from the rule, and an unprefixed undeclared key is still a finding. The option is declared per rule, not per type, so a type's `known_fields` still lists every field the rule judges by default; `pointer.resolution` and `narrative-field.stale` read only declared pointer and narrative fields, so a prefixed key is never one of them unless declared. The 'Not yet built' entry for the `x-` escape hatch is removed, and the rule-table row is regenerated from `RULE_METADATA`. **Why:** `MILE-141` -- the adopter's linter admits `x-` keys through its closed key set, so without an equivalent a repository either declares every local extension in config or loses typo detection on real keys. | **substantive** |
+> | 2026-11-04 | `filename.identity-pattern` added to the generated rule table: an opt-in rule reporting a file directly in a type's `dir` whose name yields no identity under the type's declared `identity.pattern` (or the `TYPE-NNNN-slug.md` convention when none is declared). When every file of a type is off-pattern it reports once on the directory with each file's expected name; `audit` runs it too. **Why:** `MILE-120` -- such a file was a loaded record every identity-reading rule skipped in silence, and `RFC-46` was rejected, so renaming is the supported route. | **substantive** |

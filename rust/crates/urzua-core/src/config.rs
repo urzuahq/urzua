@@ -88,6 +88,12 @@ pub struct RuleSetting {
     /// meaningful to `diff.source-and-records-mixed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_paths: Option<Vec<String>>,
+    /// Admit header keys beginning `x-` (case-insensitive) as extension keys
+    /// (`MILE-141`). Only meaningful to `header.field-set-consistency`, where
+    /// omitted means `false`: every undeclared key is a finding. A declared
+    /// `true` exempts prefixed keys from that rule and nothing else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_extension_prefix: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,6 +163,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             application_paths: Option<Vec<String>>,
             #[serde(default)]
             exclude_paths: Option<Vec<String>>,
+            #[serde(default)]
+            allow_extension_prefix: Option<bool>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -189,6 +197,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 source_paths: table.source_paths,
                 application_paths: table.application_paths,
                 exclude_paths: table.exclude_paths,
+                allow_extension_prefix: table.allow_extension_prefix,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -203,6 +212,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 source_paths: None,
                 application_paths: None,
                 exclude_paths: None,
+                allow_extension_prefix: None,
             })
         }
     }
@@ -799,6 +809,14 @@ pub fn parse_with_document_models(
                 });
             }
         }
+        if setting.allow_extension_prefix.is_some()
+            && name != crate::rules::RULE_HEADER_FIELD_SET_CONSISTENCY
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "allow_extension_prefix".to_string(),
+            });
+        }
 
         // An option-taking rule given no option does not fall back to a sane
         // default -- it inverts or goes inert, and both report success
@@ -1273,6 +1291,27 @@ rules:
         let err = parse(yaml).unwrap_err().to_string();
         assert!(err.contains("field.qualty"), "{err}");
         assert!(err.contains("field.quality"), "{err}");
+    }
+
+    /// `MILE-141`: the extension-prefix option is a `header.field-set-consistency`
+    /// option only, and is read as a bool, never a list.
+    #[test]
+    fn allow_extension_prefix_loads_on_field_set_consistency_only() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [\"Status\"]\nrules:\n";
+        let config = parse(&format!(
+            "{base}  header.field-set-consistency:\n    level: warn\n    allow_extension_prefix: true\n"
+        ))
+        .expect("the option loads on the rule that takes it");
+        let setting = &config.rules["header.field-set-consistency"];
+        assert_eq!(setting.allow_extension_prefix, Some(true));
+
+        let err = parse(&format!(
+            "{base}  header.required-fields:\n    level: warn\n    allow_extension_prefix: true\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("header.required-fields"), "{err}");
+        assert!(err.contains("allow_extension_prefix"), "{err}");
     }
 
     #[test]
