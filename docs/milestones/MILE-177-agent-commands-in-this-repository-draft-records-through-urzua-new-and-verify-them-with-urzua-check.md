@@ -29,3 +29,4 @@ Sibling to `MILE-103` (preference under choice) and `MILE-151` (`urzua new` foll
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's authoring commands have no counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Built `/rfc`, `/adr` and `/milestone` in `.claude/commands/`, their shared `scripts/draft-record.sh`, the `AGENTS.md` suggestion rule, the pull request template's decision prompt and a test that extracts and runs each command's shell steps (`drafting_commands_integration.rs`). Stays `Planned`: `Done` needs `Realized-by` evidence, and the `milestone` type declares no `Realized-by` field yet. **Why:** a milestone is closed on evidence the engine can read, not on this note. | **substantive** |
