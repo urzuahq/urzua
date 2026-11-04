@@ -150,3 +150,56 @@ fn an_external_id_under_no_declared_prefix_fails_the_config_load() {
     );
     assert!(all.contains("external_ids"), "{all}");
 }
+
+fn path_fixture(name: &str, body: &str, extra: &[(&str, &str)]) -> std::path::PathBuf {
+    let dir = fixture(
+        name,
+        "{ citation.path-exists: { level: warn, reference_sections: [\"References\"] } }",
+        &[("ADR-1-x.md", body)],
+    );
+    for (file, content) in extra {
+        let path = dir.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, content).unwrap();
+    }
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "--allow-empty", "-m", "more"]);
+    dir
+}
+
+#[test]
+fn a_cited_path_that_is_missing_warns_and_an_existing_file_or_directory_does_not() {
+    let body = "# 1 — X\n\n> Status: Accepted\n\n## References\n\n- `src/real.rs`, `src/`, `src/gone.rs`\n";
+    let dir = path_fixture("paths", body, &[("src/real.rs", "fn main() {}\n")]);
+    let (code, report) = check(&dir);
+    let found = findings_of(&report, "citation.path-exists");
+    assert_eq!(found.len(), 1, "{report}");
+    assert_eq!(found[0]["severity"], "warning", "{report}");
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("src/gone.rs"));
+    assert_eq!(
+        code, 0,
+        "a warning does not fail the default gate: {report}"
+    );
+    let pop = &execution(&report, "citation.path-exists")["population"];
+    assert_eq!(
+        (pop["unit"].as_str(), pop["examined"].as_u64()),
+        (Some("citation"), Some(3))
+    );
+}
+
+#[test]
+fn an_untracked_but_present_file_is_still_missing() {
+    let body = "# 1 — X\n\n> Status: Accepted\n\n## References\n\n- `src/local.rs`\n";
+    let dir = path_fixture("untracked", body, &[]);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/local.rs"), "x\n").unwrap();
+    let (_, report) = check(&dir);
+    assert_eq!(
+        findings_of(&report, "citation.path-exists").len(),
+        1,
+        "{report}"
+    );
+}

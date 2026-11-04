@@ -43,6 +43,7 @@ pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
 pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
+pub const RULE_CITATION_PATH_EXISTS: &str = "citation.path-exists";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 pub const RULE_SECTION_REQUIRED: &str = "section.required";
 pub const RULE_SECTION_SHAPE: &str = "section.shape";
@@ -97,6 +98,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_PAIR_RECIPROCITY,
     RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
+    RULE_CITATION_PATH_EXISTS,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     RULE_SECTION_REQUIRED,
     RULE_SECTION_SHAPE,
@@ -265,6 +267,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_CITATION_RESOLUTION,
         description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in. The optional `external_ids` option (`MILE-156`) lists ids that share a record prefix but are not records, each an exact id (`RFC-4122`) or an inclusive numeric range (`RFC-4000..4999`) under a declared prefix; a matching citation is counted out of scope, never resolved or reported, and an entry under no declared prefix is a config error. Its population counts the citations, so a run over none is distinguishable from a clean one, and external citations are visible as out of scope.",
+    },
+    RuleMeta {
+        id: RULE_CITATION_PATH_EXISTS,
+        description: "A repository path cited in backticks inside a `reference_sections` section (a `##` heading, matched exactly) exists in the working tree, tracked and on disk (`MILE-143`). A cited path is a code span with no whitespace, containing a `/` and ending in a file name with an extension or in `/`; a URL, a host-led path (`example.com/x`), an absolute or `~` path, a glob or placeholder (`*?<>{}$|`) and anything else is not a path and is not read. A trailing `:line` or `#anchor` is dropped, and `./` or `../` resolves from the record's directory. Fenced code blocks are not read. Needs `reference_sections`; a record without such a section is out of scope, and the population counts the paths cited. Offline and deterministic. Cited issue and pull request numbers are not checked here.",
     },
     RuleMeta {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
