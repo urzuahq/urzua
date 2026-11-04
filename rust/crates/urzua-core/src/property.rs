@@ -338,6 +338,7 @@ mod tests {
                 reciprocity: crate::config::PairReciprocity::Required,
                 cross_type: false,
                 provisional: None,
+            types: None,
             }],
             rules: std::collections::BTreeMap::new(),
             record_types: [(

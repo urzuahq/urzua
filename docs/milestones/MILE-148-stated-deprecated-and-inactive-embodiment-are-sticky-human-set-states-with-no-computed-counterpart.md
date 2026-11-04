@@ -25,4 +25,4 @@ A record stating `Deprecated` or `Inactive` produces no consistency finding on t
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
-> | 2026-11-04 | Sticky Embodiment states declared in configuration (`SPEC-2` `0.35`, `SPEC-3` `0.21`): this repository declares `sticky_states: [Deprecated, Inactive]` and `ADR-29`, superseded by `ADR-45`, now states `Deprecated`; a fixture covers sticky states beside a genuine drift. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |
+> | 2026-11-04 | Sticky Embodiment states declared in configuration (`SPEC-2` `0.36`, `SPEC-3` `0.22`): this repository declares `sticky_states: [Deprecated, Inactive]` and `ADR-29`, superseded by `ADR-45`, now states `Deprecated`; a fixture covers sticky states beside a genuine drift. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |

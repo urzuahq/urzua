@@ -155,7 +155,9 @@ relation_pairs:
     forward: "Amends"
     inverse: "Amended-by"
     reciprocity: required
-    cross_type: false
+    # Only RFCs carry the pair (MILE-155): an RFC that amends an ADR claims
+    # something the ADR cannot echo, since an ADR is amended by a dated section.
+    types: ["rfc"]
     provisional:
       statuses: ["Draft", "Discussion"]
       level: warn
