@@ -366,17 +366,44 @@ pub fn commit_for_line(
     path: &Path,
     line: usize,
 ) -> Result<Option<String>, String> {
-    let output = Command::new("git")
-        .args([
-            "blame",
-            "-L",
-            &format!("{line},{line}"),
-            "--porcelain",
-            "--",
-        ])
+    commit_for_line_in(repo_root, path, line, None)
+}
+
+/// As [`commit_for_line`], blaming `contents` (proposed text, not yet on
+/// disk) instead of the working-tree file when given. A line the proposal
+/// changes or adds is attributed to no commit: git reports an all-zero hash,
+/// which the caller reads as "touched now" (`MILE-159`).
+pub fn commit_for_line_in(
+    repo_root: &Path,
+    path: &Path,
+    line: usize,
+    contents: Option<&str>,
+) -> Result<Option<String>, String> {
+    use std::io::Write;
+    let mut cmd = Command::new("git");
+    cmd.args(["blame", "-L", &format!("{line},{line}"), "--porcelain"]);
+    if contents.is_some() {
+        cmd.args(["--contents", "-"]);
+    }
+    cmd.arg("--")
         .arg(path)
         .current_dir(repo_root)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .stdin(if contents.is_some() {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        });
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
+    if let (Some(text), Some(mut stdin)) = (contents, child.stdin.take()) {
+        // A broken pipe means git exited early (no history); its status says why.
+        let _ = stdin.write_all(text.as_bytes());
+    }
+    let output = child
+        .wait_with_output()
         .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
 
     if !output.status.success() {

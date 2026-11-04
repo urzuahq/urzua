@@ -144,6 +144,51 @@ pub(crate) fn load_records(
     Ok((records, full_text))
 }
 
+/// Parses `content` as the record at `rel_path` would be loaded, though the
+/// file need not exist: the type is the one whose directory holds the path,
+/// under the same filename rules `load_records` applies. For the proposed
+/// content `fix --stdin-path` judges (`MILE-159`).
+pub(crate) fn parse_prospective_record(
+    config: &Config,
+    rel_path: &Path,
+    content: &str,
+) -> Result<Record, String> {
+    let file_name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    for type_name in config.sorted_type_names() {
+        let type_config = &config.record_types[type_name];
+        if rel_path.parent() != Some(Path::new(&type_config.dir))
+            || !urzua_core::record::is_governed_record_filename(file_name)
+            || type_config.excludes(file_name)
+        {
+            continue;
+        }
+        let model = urzua_core::document_model::declared_model(type_name, type_config)
+            .map_err(|e| e.to_string())?
+            .map(|m| {
+                m.resolve()
+                    .map_err(|e| format!("record type '{type_name}': {e}"))
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let type_prefix = type_config
+            .prefix
+            .clone()
+            .unwrap_or_else(|| type_name.to_ascii_uppercase());
+        return Ok(Record::parse_with_model(
+            rel_path.to_path_buf(),
+            type_name.clone(),
+            content,
+            type_config.header_shape,
+            type_prefix,
+            &model,
+        ));
+    }
+    Err(format!(
+        "no record type governs {} (a record type governs the .md files directly in its `dir`, other than excluded and underscore-prefixed names)",
+        rel_path.display()
+    ))
+}
+
 /// Restrict discovered files to those under any of the requested paths,
 /// relative to `repo_root`. Empty `requested` means no restriction -- the
 /// existing "check everything" behavior when no path argument is given.
@@ -234,7 +279,25 @@ pub(crate) fn compute_drifted_records(
     records: &[Record],
     config: &Config,
 ) -> DriftedRecords {
-    compute_drifted_records_at(repo_root, records, config, urzua_io::now_unix())
+    compute_drifted_records_at(repo_root, records, config, urzua_io::now_unix(), None)
+}
+
+/// Drift for proposed content not yet on disk: `proposed` is blamed in place
+/// of the working-tree file, so an unchanged `Realized-by` line keeps its
+/// commit and an edited one counts as touched now (`MILE-159`).
+pub(crate) fn compute_drifted_records_for_content(
+    repo_root: &Path,
+    records: &[Record],
+    config: &Config,
+    proposed: &str,
+) -> DriftedRecords {
+    compute_drifted_records_at(
+        repo_root,
+        records,
+        config,
+        urzua_io::now_unix(),
+        Some(proposed),
+    )
 }
 
 /// The records whose locators drifted. `drifted` holds those with drift
@@ -300,11 +363,12 @@ pub(crate) fn drift_notices(shallow: bool, problems: &[String]) -> Vec<urzua_cor
 fn blame_lines_parallel(
     repo_root: &Path,
     work: &[(PathBuf, usize)],
+    proposed: Option<&str>,
 ) -> Vec<Result<Option<String>, String>> {
     if work.len() < 4 {
         return work
             .iter()
-            .map(|(p, l)| urzua_io::commit_for_line(repo_root, p, *l))
+            .map(|(p, l)| urzua_io::commit_for_line_in(repo_root, p, *l, proposed))
             .collect();
     }
     let threads = std::thread::available_parallelism()
@@ -317,7 +381,7 @@ fn blame_lines_parallel(
             .map(|part| {
                 scope.spawn(move || {
                     part.iter()
-                        .map(|(p, l)| urzua_io::commit_for_line(repo_root, p, *l))
+                        .map(|(p, l)| urzua_io::commit_for_line_in(repo_root, p, *l, proposed))
                         .collect::<Vec<_>>()
                 })
             })
@@ -342,6 +406,7 @@ pub(crate) fn compute_drifted_records_at(
     records: &[Record],
     config: &Config,
     now_unix: i64,
+    proposed: Option<&str>,
 ) -> DriftedRecords {
     let mut drifted = HashSet::new();
     let mut fresh_records = HashSet::new();
@@ -408,7 +473,7 @@ pub(crate) fn compute_drifted_records_at(
         .iter()
         .filter_map(|r| locator_line(r).map(|l| (r.path.clone(), l)))
         .collect();
-    let mut blames = blame_lines_parallel(repo_root, &work).into_iter();
+    let mut blames = blame_lines_parallel(repo_root, &work, proposed).into_iter();
 
     for record in records {
         let locator_field = rules::relation_field_name(
@@ -440,6 +505,11 @@ pub(crate) fn compute_drifted_records_at(
             }
             _ => continue,
         };
+        // An all-zero hash is a line the proposed content changed or added: it
+        // is touched now, so no locator can have moved since (`MILE-159`).
+        if reference_commit.bytes().all(|b| b == b'0') {
+            continue;
+        }
 
         for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
             let locator_path = PathBuf::from(&locator);

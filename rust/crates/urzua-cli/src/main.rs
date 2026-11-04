@@ -181,6 +181,12 @@ enum Command {
         /// directory holding records. A path that matches no record is
         /// reported as a failure. With none, the whole corpus.
         paths: Vec<PathBuf>,
+        /// Read proposed content for this one record path from stdin and
+        /// judge it without writing; the path need not exist yet. Drift is
+        /// computed for that record only. For an editor hook. Cannot be
+        /// combined with PATHS or any apply flag.
+        #[arg(long, value_name = "PATH")]
+        stdin_path: Option<PathBuf>,
         #[arg(long, default_value_t = 1)]
         tier: u8,
         /// Write the computed values back. Requires --ids or --force, and
@@ -299,12 +305,13 @@ fn main() -> ExitCode {
         Command::Index { apply } => commands::index::run(cli.config, apply),
         Command::Fix {
             paths,
+            stdin_path,
             tier,
             apply,
             ids,
             by,
             force,
-        } => commands::fix::run(cli.config, paths, tier, apply, ids, by, force),
+        } => commands::fix::run(cli.config, paths, stdin_path, tier, apply, ids, by, force),
     }
 }
 
