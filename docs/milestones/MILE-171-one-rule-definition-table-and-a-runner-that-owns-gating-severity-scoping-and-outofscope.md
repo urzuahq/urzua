@@ -1,0 +1,31 @@
+---
+Stable-Id: 01M6K40Q60VB9T17T4YHKBYRXZ
+Status: Planned
+Phase: '0'
+Track: schema-governance
+Implements: SPEC-22
+Blocked-on: —
+---
+# 171 — One rule definition table and a runner that owns gating, severity, scoping and OutOfScope
+
+## What
+
+Replace the hand-maintained rule registration with one rule definition table, and a runner that owns gating, severity override, scope filtering and `OutOfScope` classification.
+
+Each entry carries: id, description, scope (records, config, corpus or diff), the anchor its findings sit on (a record, the config, the corpus or a path), whether it reports outside the corpus, whether it needs the identity index, and a `run` function over one shared context built once (records, config, index, full text, drift). `ALL_RULES`, `RULE_METADATA`, `RULES_REPORTING_OUTSIDE_THE_CORPUS` and `IDENTITY_DEPENDENT_RULES` in `urzua-core/src/rules/catalog.rs`, the 51 `gated(...)` closures in `urzua-cli/src/commands/check.rs`, and the rule-id special cases in the post-hoc finding filter (`RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR`, `RULE_FILENAME_IDENTITY_PATTERN`) become derived from the table. This record also carries `MILE-119`'s population builder: `header_shape: none` classification is done once in the runner.
+
+## Why
+
+There is no `Rule` abstraction today. A rule is a free function with its own signature plus an id constant, an `ALL_RULES` entry, a `RULE_METADATA` entry, a closure in `check.rs`, possibly an entry in one or two parallel lists, and a config option table entry: six or more places. The existing test compares only two of them in order; an unwired rule is caught only by an integration test. Scope gating is re-derived inside each rule (`has_no_header`, `HeaderShape::None`, `OutOfScope` in `declaration.rs`, `header.rs`, `section.rs`, `field.rs`, `relation.rs`, `back_pointer.rs` and others), and finding scoping runs every rule over the whole corpus and filters afterward, with exceptions found one bug at a time (`BUG-67`, `BUG-86`, `BUG-121`, and `MILE-119`'s `BUG-98`, `BUG-124`, `BUG-137`, `BUG-142`, `BUG-147`). That is the same defect class fixed per instance, which `AGENTS.md` says to fix at the mechanism. It is the no-silent-no-op principle (`ADR-55`) and `SPEC-22`'s extract-on-second-occurrence rule applied to the registry: a property of a rule should live with the rule, so a rule that reports on a non-record path cannot be silently dropped under `check <path>` or `--base`. Evidence read at the foundation review of 2026-11-04.
+
+Ordering: this precedes `MILE-172`, `MILE-174` and `MILE-173`'s check-specific parts, which all edit the same code. It overlaps `MILE-119` (same mechanism) and `MILE-123` (scoping); neither is changed here, and `MILE-119`'s status stays a maintainer decision.
+
+## Done means
+
+Adding a rule is one table entry plus the rule function; no other list, closure or filter names a rule id. The `MILE-119` table-driven test iterates the table and asserts every rule is `OutOfScope` (or documents an exemption) for a `header_shape: none` type. A test fails if a rule is missing from the table. `--base` and `check <path>` scope findings by the declared anchor, not by id. Output of `urzua check` over this repository is unchanged before and after; the acceptance suite (`MILE-170`) passes unchanged; `SPEC-2` and `SPEC-22` carry revision rows.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
