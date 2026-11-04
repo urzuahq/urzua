@@ -71,37 +71,45 @@ corpus depends on.
 locator := category ":" path [ "#" scope ] [ "@" anchor ]
 scope   := range | symbol
 range   := "L" N [ "-L" M ]      N and M decimal, no leading zero, 1 <= N <= M
-symbol  := seg ( "::" seg )*     seg := [A-Za-z_] [A-Za-z0-9_.-]*
+symbol  := seg ( "::" ( seg | "<" seg ">" ) )*     seg := [A-Za-z_] [A-Za-z0-9_.-]*
 anchor  := "sha256:" 64 lowercase hex  |  7 to 64 lowercase hex (a commit)
 ```
 
-`category` is `spec`, `code` or `test` as today and alone decides the evidence tier. Text that matches
-`range` is always a range, and a symbol is never spelled to look like one (`L10` is a range). A symbol
-contains none of `/`, `@`, `#`, `,` or whitespace and does not start with a digit or `.`. Qualified names
-(`::`) are in the grammar from the first build, so the irreversible part is decided once. 64 hex is allowed
+`category` is `spec`, `code` or `test` as today and alone decides the evidence tier. A scope that
+begins with `L` followed by a digit is never a symbol: it is a range or it is malformed (`L10` is a range;
+`L10x`, `L0` and `L40-L10` are malformed), so the two never overlap. A symbol contains none of `/`, `@`,
+`#`, `,` or whitespace and does not start with a digit or `.`. Qualified names are in the grammar from the
+first build, so the irreversible part is decided once: `A::b` is member `b` of container `A`, and
+`A::<Trait>::b` is member `b` of the impl of `Trait` for `A` (point 5). A `<`...`>` segment holds one bare
+trait name, with no generics and no path. 64 hex is allowed
 for a commit because a repository using the SHA-256 object format has such commits; the `sha256:` prefix
 disambiguates.
 
 The parser takes, in order: (1) a trailing `@sha256:` plus exactly 64 lowercase hex, exactly as `ADR-67`
 does; (2) otherwise a trailing `@` plus 7 to 64 lowercase hex, which is the reserved commit anchor (point
 2); (3) in what remains, the text after the **last** `#`, as the scope only if it matches `scope`, and
-otherwise the whole text is the path. `L0`, `L010` and `L40-L10` do not match `range` and, being
-digit-leading or not symbols, are malformed. A locator carrying both anchors is malformed. A path ending in
+otherwise the whole text is the path. `L0`, `L010` and `L40-L10` do not match `range` and, beginning
+`L` and a digit, are malformed. A locator carrying both anchors is malformed. A path ending in
 `#word` that matches `symbol` therefore reads as a scope, and such a file cannot be cited even at file level;
 no escape syntax is given. The corpus has no `#` in any `Realized-by` value today, so nothing regresses, and a
 planted test covers it. A glob cannot carry a scope (`src/**#Foo` is malformed). A locator whose text
 contains `#` or `@sha256:` and fails this grammar is reported by `embodiment.locator-exists` as a malformed
 scope or pin naming the grammar, never as a path missing from the tree.
 
-Examples: `code:rust/crates/urzua-core/src/config.rs#RuleSetting@sha256:<hex>`,
-`code:.github/workflows/ci.yml#L10-L40@sha256:<hex>`, `code:rust/crates/urzua-core/src/config.rs#RuleSetting::default@sha256:<hex>`.
+Examples, each naming an item that exists in the current code:
+`code:rust/crates/urzua-core/src/config.rs#RuleSetting@sha256:<hex>` (a type),
+`code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::excludes@sha256:<hex>` (a method of a type
+with three inherent `impl` blocks, found in the first),
+`code:rust/crates/urzua-core/src/config.rs#RuleSetting::<Deserialize>::deserialize@sha256:<hex>` (a method
+of a trait impl) and `code:.github/workflows/ci.yml#L10-L40@sha256:<hex>`.
 
 **2. Where `MILE-84` fits.** The `sha256:` anchor is a content pin. The commit anchor (`@<commit>`) is
 reserved for `MILE-84`: it reads the scope as of that commit, a pointer to a site that survives a refactor,
 not a content hash. `MILE-84`'s candidate `path@<short-sha>:<line>` is therefore written
 `path#L<line>@<short-sha>`. This ADR binds the slot order (path, scope, anchor) and the anchor token shape
 (hex, 7 to 64), and nothing else; what a commit anchor verifies stays in `MILE-84`'s ADR. It builds only the
-content pin.
+content pin: in the first build a locator that parses with a commit anchor is reported by
+`embodiment.locator-exists` as "commit anchor not yet supported", never accepted as unpinned or ignored.
 
 **3. The hashed bytes.** The scope resolves to a contiguous span of whole lines. The pinned bytes are the
 span's lines, each with at most one trailing `\r` removed, joined by `\n`, with no trailing newline, read as
@@ -130,9 +138,32 @@ indented no deeper than the first), `heading` (until the next heading of equal o
 `blank_line` (until the next blank line). The start recogniser is a declared pattern in which the symbol is
 substituted after regular-expression escaping (the symbol arrives from record text). Optional parts: a
 `leading` pattern extends the span upward over contiguous matching lines (attributes, doc comments), and
-without it leading lines are not pinned; a `member` pattern supports one container level, so `A::b` finds
-`A` uniquely with `start` and then `b` uniquely with `member` inside A's span, which a repository needs to
-address methods and `impl` blocks. Exact key names are fixed in `SPEC-3` when this is built. Validation is
+without it leading lines are not pinned.
+
+*Members.* A method does not live inside its type's span: it lives in one or more `impl` blocks elsewhere
+in the file. So a qualified symbol is resolved in two steps over a **container**, which is declared
+separately from the plain `start`: `container` has its own start pattern (with the `{symbol}` placeholder),
+an end kind, and `spans: all`, declaring that the container may match several spans. For Rust the container
+pattern matches an inherent impl, `impl Name {` and `impl<T> Name<T> {` (the name must follow `impl`
+directly, so `impl Trait for Name` does not match), and `spans: all` makes every such block a candidate. A
+`member` pattern then finds the item inside a span. `A::b` resolves as: (1) the container spans of `A`, at
+least one or the reason is "container not found"; (2) the `member` pattern for `b` inside every one of
+those spans; (3) the matches counted **across all spans together**: none is "member not found", more than
+one is **ambiguous** and reported, exactly one is the resolved span, to which `leading` applies. A type
+whose methods are split over several `impl` blocks is therefore addressable, and a method name repeated in
+two of them is reported, never first-match-wins. A container declared without `spans: all` must match
+exactly one span.
+
+*Trait impls.* A trait impl's members are addressed `A::<Trait>::b`. A resolver declares it with
+`trait_container`, a pattern with two placeholders, `{trait}` and `{symbol}`; for Rust it matches
+`impl<'de> Deserialize<'de> for RuleSetting {` for `RuleSetting::<Deserialize>`, ignoring generics on the
+trait name. It has the same `spans: all` and the same uniqueness across all matching spans, so several
+impls of one generic trait (`From<A>` and `From<B>` for one type) make a member ambiguous, which is
+reported and not worked around in the first build. A resolver without `trait_container` reports the
+`::<Trait>::` form as unsupported for that file type. A member of a member (`A::b::c`) is not supported: one
+container level only, reported as unsupported.
+
+Exact key names are fixed in `SPEC-3` when this is built. Validation is
 at config load (`ADR-64` clause 5): two resolvers whose globs cover one file, a start pattern without the
 symbol placeholder, or a malformed pattern is a load error, never first-wins. A default set may be
 scaffolded by `urzua init` as ordinary config the repository then owns, never compiled in, only for file
@@ -142,7 +173,7 @@ types the corpus actually cites, each with test vectors (a planted ambiguous and
 enabled, as with a missing file today).** The rule reports, with the locator and the reason: the file is
 missing (as today); the file is not valid UTF-8; no resolver covers the file, so a symbol scope is
 unsupported for that file type (a line range always works); the symbol matches nothing (renamed, moved out
-of the file or deleted); the symbol matches more than once (ambiguous: never first-match-wins); the end is
+of the file or deleted); the symbol matches more than once (ambiguous: never first-match-wins); for a qualified symbol, the container or the member is not found, or the member is ambiguous across the container's spans; the `::<Trait>::` form or a member of a member is unsupported for that resolver; the locator carries a commit anchor ("commit anchor not yet supported"); the end is
 not found (never balanced before end of file); the range lies beyond the end of the file. A locator reported
 this way is not also evaluated for drift, so one cause produces one finding. `urzua fix --rebaseline`
 re-pins a scoped pin as it does a file-level one but refuses one that does not resolve and lists it as a
@@ -211,10 +242,10 @@ scoped locator at file level, the state the corpus is in today.
 - A symbol rename is a finding the author fixes by hand; there is no rename tracking.
 - `--force` re-baselines every stale record under one `--reason`; with scoped pins that is smaller but still a
   bulk attestation.
-- The bare form cannot name every item (the struct `RuleSetting` is followed by two `impl` blocks for the
-  same name, and `new` or `default` recur in every impl), which is why qualified names and the `member`
-  pattern are in the first build. If the maintainer prefers a smaller first build, `MILE-185`'s Done means is
-  amended to the items a bare name can address and `::` stays reserved.
+- The bare form cannot name every item: methods live in `impl` blocks outside the type's span, and names
+  such as `new` or `default` recur in every impl. That is why qualified names, `container`, `member` and
+  `trait_container` are in the first build; the maintainer chose to include methods. The cost is more
+  resolver config per language and more ways to be ambiguous (several impls of one generic trait).
 - Accepting this ADR sets housekeeping for the same change: a dated `## Amendment` to `ADR-67` (its pin
   syntax gains the scope slot), a revision row on `MILE-84` (the anchor slot is taken), `MILE-185` set to
   `Implements: ADR-74`, rows in `SPEC-2`, `SPEC-3` and `SPEC-8`, and a re-check of the five files `MILE-185`
@@ -226,8 +257,10 @@ scoped locator at file level, the state the corpus is in today.
 
 ### Questions answered in review, for the maintainer to confirm
 
-1. Qualified symbols: `::` is in the grammar now; the first build supports one container level through
-   `member`.
+1. Qualified symbols: the first build supports one container level. `A::b` finds `b` in every span
+   the container pattern matches (`spans: all`, so a type with several `impl` blocks works) and requires it to
+   be unique across them; `A::<Trait>::b` addresses a trait impl through a declared `trait_container`
+   pattern. Members of members are reported as unsupported.
 2. Whitespace: exact bytes with only the line-ending, BOM and final-newline normalisation of point 3.
 3. Default resolvers: scaffolded by `urzua init` as repository-owned config, only for file types the corpus
    cites, with test vectors.

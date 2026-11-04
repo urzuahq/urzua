@@ -46,7 +46,7 @@ going stale. The two should share one locator grammar, so this milestone's ADR m
 
 ## Done means
 
-A pin written as `code:<path>#<symbol>@sha256:<hex>` (and as `#L<a>-L<b>`) is accepted by the locator
+A pin written as `code:<path>#<symbol>@sha256:<hex>` (and as `#L<a>-L<b>`), where a symbol is a bare item, a member of a type (`Type::member`, found across all of the type's inherent `impl` blocks and unique across them) or a member of a trait impl (`Type::<Trait>::member`) as `ADR-74` specifies, is accepted by the locator
 grammar and drifts only when the hash of that item changes: an edit to another function in the same file
 is not drift, an edit to the named item is, and a symbol or range that no longer resolves in the file is
 reported by `embodiment.locator-exists` rather than passing silently. `urzua fix --rebaseline` lists,
@@ -66,3 +66,4 @@ Accepted.
 > | 2026-11-04 | Filed. **Why:** 14 pins set in #180 were stale within a working day and eleven of them needed only a re-pin, because file-level `@sha256:` pins on volatile files go stale on edits unrelated to the decision; a pin scoped to the cited symbol or line range would have stayed current. Proposed from the drift review of 2026-11-04; the locator syntax is not decided here. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared. **Why:** it named `ADR-67` as Proposed, and the maintainer accepted it on 2026-11-04. The scoped-pin syntax still needs its own deciding ADR, as the What says. | **structural** |
 > | 2026-11-04 | Deciding ADR drafted: `ADR-74` (Proposed) sets out the scoped-locator grammar, declared symbol resolvers, the shared slot for `MILE-84`'s commit anchor and the reporting of a scope that stops resolving, with six open questions. `Status` and `Blocked-on` unchanged. **Why:** the What says the syntax needs its own deciding ADR before this milestone is built; the maintainer accepts or amends it. | **substantive** |
+> | 2026-11-04 | Done means extended: a symbol may be a member of a type or of a trait impl, and a commit-anchored locator is reported as not yet supported. **Why:** the maintainer chose to include methods in the first build of `ADR-74` and its amendment specifies how a member is found across several `impl` blocks. `Status` unchanged. | **substantive** |
