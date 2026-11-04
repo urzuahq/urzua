@@ -67,3 +67,19 @@ fn a_real_value_that_merely_contains_the_word_is_not_reported() {
     let report = run_with_own_config("real", &adr("Unknown Soldier"));
     assert_eq!(missing(&report), 0, "{report}");
 }
+
+/// MILE-162: the declared pattern entry reads a placeholder family with a
+/// variable tail as pending, beside the whole values; a value matching no
+/// entry and no pattern is a real value.
+#[test]
+fn a_declared_pending_pattern_reads_a_placeholder_family_observed_failing() {
+    for v in ["TBD", "tbd -- awaiting the board", "To be decided by Q3"] {
+        let quoted = format!("'{v}'");
+        let report = run_with_own_config("pattern", &adr(&quoted));
+        assert_eq!(missing(&report), 1, "{v}: {report}");
+    }
+    for v in ["Tbdesign Group", "Ana"] {
+        let report = run_with_own_config("pattern-real", &adr(v));
+        assert_eq!(missing(&report), 0, "{v}: {report}");
+    }
+}
