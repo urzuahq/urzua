@@ -1,5 +1,5 @@
 ---
-Version: '0.12'
+Version: '0.13'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -136,7 +136,7 @@ the default sweep, and only a path naming one file precisely bypasses the tracke
 | `scope.source` | Meaning | `base` | Produced today |
 |---|---|---|---|
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
-| `git-diff` | changed against a base ref | the ref | no — the mode is not built |
+| `git-diff` | changed against a base ref | the ref | **yes** (`MILE-123`) |
 | `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
 | `none` | nothing selected | `null` | no |
 
@@ -144,6 +144,50 @@ The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of
 type produced them. Only variants the tool can actually emit exist on that enum; the rest of this
 table is the declared vocabulary those modes will use when built, and is marked so a consumer is not
 misled into branching on a value no run produces.
+
+`base` is always present in `scope`: the ref as the caller gave it for a `git-diff` run, `null` for
+every other source.
+
+**`git-diff` scope** (`MILE-123`) is selected by `urzua check --base <ref>`. It is a reporting scope,
+not a reading scope, exactly as a path argument is (`BUG-60`):
+
+- The changed set is every path that differs between the merge base of `<ref>` and `HEAD` and the
+  working tree, so a branch is not charged for what its base gained since the fork, and staged and
+  unstaged edits to tracked files count. Untracked files never do (the tracked-only guarantee
+  above). A rename is a deletion plus an addition, and a deleted path is simply not a record any
+  more.
+- The **examined set** is the changed records plus their dependents, and `files_examined`,
+  `records_read_by_any_rule` and the findings are limited to it. A dependent is an unchanged record
+  that (a) names a changed or deleted record's id in any header field (a pointer, narrative or
+  relation field), (b) shares a changed record's id, or (c) cites changed or deleted evidence in
+  its `Realized-by`, or (d) cites a normalised `Realized-by` locator that a changed or deleted
+  record also cites, so a cross-record finding such as `embodiment.locator-promotion-candidate`
+  lands on the same record a full check reports it on. Deleted records are read from the merge base, since they are no longer in the
+  tree; a rename is a deletion of the old id plus an addition. Without dependents a change
+  elsewhere that breaks an unchanged record -- a deleted target, a renamed id, a changed `Status`,
+  a reciprocal supersession, drifted or deleted evidence -- would be hidden, and a gate that hides
+  what a full check reports is not a narrower check but a wrong one. One hop only: a dependent's own
+  dependents are not pulled in.
+- Reference resolution and every other corpus-wide computation still index the whole tracked
+  corpus, so an unchanged target is never reported missing. A finding about the configuration, and
+  one from a rule that reports outside the corpus (`RULES_REPORTING_OUTSIDE_THE_CORPUS`), survive
+  the scope exactly as they survive a path argument (`BUG-86`, `BUG-121`).
+- A change to the configuration file the run loaded puts **every record** in scope (the rules
+  themselves changed), and `scope.whole_corpus_reason` says so.
+- `scope` carries the account of the examined set: `changed_paths` (every path git reports,
+  deletions included), `dependents` (the unchanged records pulled in) and `whole_corpus_reason`
+  (`null` unless the configuration changed). These fields appear only on `git-diff` runs.
+- Path arguments still apply and narrow the examined set further.
+- A diff with no changed record and no configuration change examines nothing and reports `ok`
+  (exit 0, `files_examined: 0`), not `not-run`: the question asked had the answer "nothing to
+  judge". It is told apart from a whole-corpus pass by an info `notice` and by `scope`
+  (`changed_paths` is empty, or holds no record), and a blocking finding that survives the scope
+  (about the configuration) still makes it `findings-present`. A ref that does not resolve, or
+  one with no merge base with `HEAD` (the error says "no merge base"), is a could-not-run (exit 2),
+  never an empty selection.
+- `--base` together with a directly-named file git does not track is refused (exit 2): the diff
+  lists tracked paths only, so the file could not be examined, and dropping it silently is the
+  failure `BUG-24` fixed.
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
@@ -258,7 +302,7 @@ but the JSON object below, so a consumer never has to find it inside prose.
       "status": "not-enabled"
     }
   ],
-  "scope": { "source": "tracked-sweep", "record_types": ["adr", "bug", "rfc"] },
+  "scope": { "source": "tracked-sweep", "base": null, "record_types": ["adr", "bug", "rfc"] },
   "blocking": false,
   "findings": [
     {
@@ -381,5 +425,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-03 | Adds `boundary.published-path-reference` to the rule table, with its required `published_paths` option, a list of path prefixes (never globs; a glob is treated literally), normalised at config load (leading `./`, trailing `/` and whitespace removed; an absolute entry, a `..` component or a backslash is a config error). An identifier split across lines is not detected. **Why:** `RFC-11` (decided in `ADR-9`) declares a set of paths that publish beyond the repository, and a record identifier cited from inside one is a violation (`MILE-125`). The rule's `level` is the boundary's severity; a declared path covering no tracked file is itself a finding (a prohibition fails closed), and a file that is not text is counted unreadable, never clean. | **substantive** |
 > | 2026-11-04 | Criterion 5 now reads "one adopter's codebase" and "that adopter's hand-written linter" in place of "one source codebase"; criterion 6 is marked as part of the Phase 1 exit, so "all five hold" is now the full Phase 0 set (`SPEC-1`, Exit bar); `Version` `0.11` -> `0.12`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `citation.resolution` added to the generated rule table: an opt-in rule reporting a decision ID cited in a record's prose that resolves to no record, with a population counted in citations (new `citation` population unit). **Why:** `MILE-136` -- `pointer.resolution` reads only declared header fields, so a dangling prose citation passed every rule. | **substantive** |
+> | 2026-11-03 | Bumped to `0.13`. `git-diff` marked produced: `urzua check --base <ref>` reports only on records changed since the merge base of the ref and `HEAD` (working tree included), `scope` gains an always-present `base` (`null` unless `git-diff`), and §Discovery states the mode's contract, including that it is refused alongside an untracked named file. **Why:** `MILE-123` -- a pull-request gate over a large corpus should not sweep every record, and the table had reserved the value while marking it unbuilt so no consumer would branch on it before a run could produce it. | **substantive** |
+> | 2026-11-04 | `git-diff` scope examines the changed records **plus their dependents**, not the changed files alone: unchanged records that name a changed or deleted record's id, share a changed id, cite changed or deleted `Realized-by` evidence, or share a normalised `Realized-by` locator with a changed or deleted record. A configuration change puts every record in scope; an empty diff is `ok` with an info notice rather than `not-run`; `scope` gains `changed_paths`, `dependents` and `whole_corpus_reason` on `git-diff` runs; a ref with no merge base names that in its error. `Version` `0.13` stays (the `--base` row above is the same unreleased change). **Why:** review of `MILE-123` reproduced a hole -- deleting a target left its referrer unexamined, so `check --base` reported nothing where a full check reported `pointer.resolution` -- and an empty diff that could not be told from a clean pass of the whole corpus. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

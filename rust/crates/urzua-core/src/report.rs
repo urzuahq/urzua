@@ -348,12 +348,39 @@ pub enum ScopeSource {
     /// Explicit paths on argv, read as given (`BUG-24`) -- distinct from
     /// `TrackedSweep` because a path git does not track is still examined.
     Argv,
+    /// Only the records changed against a base ref (`MILE-123`); the ref is
+    /// reported in [`ScopeInfo::base`].
+    GitDiff,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ScopeInfo {
     pub source: ScopeSource,
+    /// The ref a `git-diff` run compared against, as the caller gave it;
+    /// `null` for every other source -- a full sweep legitimately has none
+    /// (SPEC-2).
+    pub base: Option<String>,
     pub record_types: Vec<String>,
+    /// What a `git-diff` run examined and why; absent on every other source.
+    #[serde(flatten)]
+    pub diff: Option<DiffScope>,
+}
+
+/// The shape of a `git-diff` run's examined set (`MILE-123`, SPEC-2): the
+/// changed records plus every record that depends on a change. Reported so a
+/// run that examined nothing, a run that examined a few records and a run
+/// that examined the whole corpus can be told apart.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiffScope {
+    /// Every path git reports as differing from the merge base, deletions
+    /// included; empty exactly when nothing changed.
+    pub changed_paths: Vec<String>,
+    /// Records pulled in only because they refer to a changed or deleted
+    /// record, or cite changed or deleted evidence.
+    pub dependents: Vec<String>,
+    /// Why every record was examined, when one was (a configuration change);
+    /// `null` otherwise.
+    pub whole_corpus_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -760,7 +787,9 @@ mod tests {
             rules_executed: vec![],
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
+                base: None,
                 record_types: vec![],
+                diff: None,
             },
             blocking: false,
             findings: vec![],

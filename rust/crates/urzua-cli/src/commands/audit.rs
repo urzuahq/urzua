@@ -83,6 +83,8 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),
+            base: None,
+            diff: None,
             record_types: config.record_types.keys().cloned().collect(),
         },
         blocking,
