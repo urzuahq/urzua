@@ -754,6 +754,45 @@ impl Report for IndexReport {
     }
 }
 
+/// `urzua refs refresh`'s report (`MILE-143`): the snapshot of issue and pull
+/// request numbers it wrote. A refresh that could not fetch every page writes
+/// nothing and is a `CouldNotRun`, never a partial snapshot.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RefsRefreshReport {
+    pub status: ReportStatus,
+    pub snapshot: PathBuf,
+    pub repository: String,
+    pub generated_at: String,
+    pub outcome: RefsRefreshOutcome,
+    pub issues: usize,
+    pub pulls: usize,
+    /// The highest issue or pull request number recorded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newest: Option<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RefsRefreshOutcome {
+    /// There was no snapshot file; one was written.
+    Created,
+    /// The snapshot file changed.
+    Written,
+    /// The file already held exactly this content.
+    Current,
+}
+
+impl Report for RefsRefreshReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
 /// `urzua migrate schema --report`'s report (SPEC-0014) -- read-only preview,
 /// same `Ok`-only status axis as `ExplainReport`/`GraphReport`.
 #[derive(Debug, Clone, serde::Serialize)]

@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.10'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -48,7 +48,7 @@ only once a real case demands it, in increasing order of nerve required.
 the expected tier and reports a disagreement as a structured entry:
 
 ```json
-{ "record": "...", "field": "Embodiment", "currentValue": "...", "computedValue": "...", "tier": 1, "evidence": [...] }
+{ "record": "docs/adr/ADR-1-x.md", "field": "Embodiment", "line": 3, "current_value": "...", "computed_value": "...", "tier": 1, "evidence": "Realized-by: code:src/a.rs" }
 ```
 
 A record whose `Realized-by` locator changed since the `Realized-by` line was last touched (ADR-32)
@@ -66,6 +66,45 @@ Git trouble is never read as "no drift" (`MILE-159`). A shallow clone, detected 
 git call that fails while computing drift (a commit the repository does not have, say) are reported as
 `notices` with subject `embodiment-drift-git`, in `check` and in `fix` alike; the affected records are
 not judged for drift. The per-record `git blame` calls run on a few threads.
+
+### Scoping to paths
+
+`urzua fix [PATHS...]` examines, computes drift for and repairs only the records the paths select
+(`MILE-159`). A path is a record file or a directory; a record is selected when its repo-relative
+path equals the path or sits under it. Paths are relative to the working directory or absolute. The
+population counts the selected records only, and `git blame` and the drift computation run for those
+records alone, so a single-record run costs a fraction of a whole-corpus run. The corpus a
+back-pointer resolves against stays whole.
+
+A path that selects no record, or lies outside the repository, is reported in `failed` naming it
+(`partial-failure`, exit 1), never skipped. In apply mode `--ids` and `--force` select among the
+scoped repairs only, so an `--ids` entry outside the given paths matches no pending repair and fails
+as above.
+
+### Judging proposed content (`--stdin-path`)
+
+`urzua fix --stdin-path <path>` reads the proposed content of one record from stdin and judges it
+exactly as it would the file at `<path>`, without writing anything (`MILE-159`). It is the entry
+point for an editor hook that wants a verdict before the file is saved; an example script is
+`.git-hooks/examples/editor-fix-hook.sh`, which nothing installs.
+
+- **The path need not exist on disk.** A new record is judged from the proposal alone. The record
+  type is the one whose `dir` directly holds the path, under the same filename rules discovery
+  applies; a path no type governs is `not-run` (exit 2) with an `error` naming the reason, never an
+  empty `ok`.
+- **The proposal replaces the on-disk record** for this run. Nothing else is examined, and drift is
+  computed for this one record only: the `Realized-by` line is blamed against the proposed text, so
+  an unchanged line keeps its commit, and a line the proposal edits or adds counts as touched now
+  (no locator can have moved since). A path with no git history is not drifted.
+- **The output is the ordinary report**, and `repairs` is its stable machine-readable list for that
+  one path: each entry is `record`, `field`, `line` (the 1-based line of the stated field in the
+  proposed content), `current_value`, `computed_value`, `tier` and `evidence`. A hook reads
+  `status` (`repairs-available`, `ok`, or `not-run` when the record states no `Embodiment` to
+  judge) and `repairs`; `line` is the location to point at. `notices` carry git trouble as in the
+  whole-corpus run.
+- **It cannot be combined** with `PATHS`, `--apply`, `--ids`, `--by` or `--force`: judging proposed
+  content never writes, and the combination is `not-run` (exit 2) rather than a silently ignored
+  flag.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
@@ -141,3 +180,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-03 | Bumped to `0.6`. `fix` now computes `Drift detected` (ADR-32) from the same drifted-record set `check` uses, so it is detected and, on `--apply`, written like any other Tier 1 repair. **Why:** MILE-15 -- ADR-32 named this as separate follow-up work. | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. Noted that `fix` reads the same opt-in locator pins and grace window as `check` and never rewrites a pin. **Why:** `MILE-129` -- `fix` shares `check`'s drifted-record set, so a new drift input changes what it repairs. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. `fix` computes drift only when `embodiment.consistency` is enabled and reports git failures and shallow clones as `embodiment-drift-git` notices. **Why:** `MILE-159` -- drift ran unconditionally (about 1.1s on this corpus), and git errors read as a clean zero, which is how a shallow clone once produced a false zero. | **substantive** |
+> | 2026-11-04 | Bumped to `0.9`. `fix` takes `PATHS` that scope examination, drift and repair, and reports a path matching no record. **Why:** `MILE-159` -- an editor hook needs a quick single-file refresh, and the whole-corpus run is about 0.8s on this corpus against about 0.15s for one record. | **substantive** |
+> | 2026-11-04 | Bumped to `0.10`. `fix --stdin-path <path>` judges proposed content for one record without writing, for a path that need not exist yet, with drift computed for that record alone; each repair carries the 1-based `line` of the stated field; the detect-mode example now shows the real snake_case shape. **Why:** `MILE-159` -- an editor hook judges a file before it is saved and must find its own repair without parsing the whole list. | **substantive** |

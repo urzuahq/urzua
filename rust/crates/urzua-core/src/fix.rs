@@ -23,6 +23,10 @@ use crate::rules::{
 pub struct Repair {
     pub record: std::path::PathBuf,
     pub field: String,
+    /// The 1-based line of the stated field in the content examined (the file,
+    /// or the proposed content under `--stdin-path`), so an editor hook can
+    /// place the repair without parsing the record (`MILE-159`).
+    pub line: usize,
     pub current_value: String,
     pub computed_value: String,
     /// RFC-0008 §2's repair tiers. Only Tier 1 (recompute in place) exists
@@ -96,6 +100,12 @@ pub fn detect_repairs(
             repairs.push(Repair {
                 record: record.path.clone(),
                 field: state_field.to_string(),
+                line: record
+                    .header
+                    .fields
+                    .iter()
+                    .find(|f| f.key.as_str() == state_field)
+                    .map_or(0, |f| f.line),
                 current_value: stated.to_string(),
                 computed_value: computed.to_string(),
                 tier: 1,
@@ -368,6 +378,7 @@ mod tests {
         Repair {
             record: PathBuf::from("docs/adr/0001-x.md"),
             field: "Embodiment".to_string(),
+            line: 2,
             current_value: "Not started".to_string(),
             computed_value: "Verified".to_string(),
             tier: 1,
