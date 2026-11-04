@@ -1,5 +1,5 @@
 ---
-Version: '0.62'
+Version: '0.63'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -176,9 +176,11 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   what a full check reports is not a narrower check but a wrong one. One hop only: a dependent's own
   dependents are not pulled in.
 - Reference resolution and every other corpus-wide computation still index the whole tracked
-  corpus, so an unchanged target is never reported missing. A finding about the configuration, and
-  one from a rule whose table entry says it reports outside the corpus (`reports_outside_corpus`), survive
-  the scope exactly as they survive a path argument (`BUG-86`, `BUG-121`).
+  corpus, so an unchanged target is never reported missing. Whether a finding survives a path argument or `--base` is decided by the
+  anchor its rule declares in the rule table, never by rule id: a finding on the configuration, or on a
+  file no record-type `dir` covers (a claim file, a source file, an index artifact, a changed path),
+  survives every scope; one on a record follows the record; one on a tracked path or a type's directory
+  follows the changed paths (`BUG-86`, `BUG-121`).
 - A change to the configuration file the run loaded puts **every record** in scope (the rules
   themselves changed), and `scope.whole_corpus_reason` says so. A configuration that is a symlink
   counts as changed when either the link's own path or its target's path differs. A path argument
@@ -528,3 +530,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.60`. `citation.issue-exists` also reads the header fields named by the optional `issue_refs.fields` (a finding names the field and its line); the rule-table row is regenerated. Off unless declared. **Why:** `MILE-184` -- numbers in header fields such as a BUG's `Found-in` were unchecked. | **substantive** |
 > | 2026-11-04 | Bumped to `0.61`. The shipped rule set is `RULE_TABLE`, one entry per rule carrying its description and properties; `RULE_METADATA`, `RULES_REPORTING_OUTSIDE_THE_CORPUS`, `IDENTITY_DEPENDENT_RULES` and `RULES_REQUIRING_RELATION_PAIRS` are derived from it. No rule or output changes. **Why:** `MILE-171`: a rule's properties lived in parallel lists. | **structural** |
 > | 2026-11-04 | Bumped to `0.62`. The rule table, `urzua rules` and `rules_executed` list rules in one order: the order `check` runs them, with `config.scope-matches-nothing` and `waiver.matches-nothing` last. `check` output is unchanged. **Why:** `MILE-171` step 2: `check` now runs the table, so the table's order is its execution order. | **structural** |
+> | 2026-11-04 | Bumped to `0.63`. A path argument and `--base` keep or drop a finding by the anchor its rule's table entry declares (a record, the configuration, a file outside the corpus, a tracked path, a type's directory, or a record plus a file the rule's options declare), replacing the rule ids `check` named. No finding is kept or dropped differently. **Why:** `MILE-171` step 3: each new rule that reported on a non-record path had to be added to a list by hand or be silently dropped from a narrowed run. | **structural** |
