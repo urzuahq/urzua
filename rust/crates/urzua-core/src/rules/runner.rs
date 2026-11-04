@@ -1,0 +1,208 @@
+use super::*;
+use crate::waiver::Waiver;
+use std::path::Path;
+
+/// Source files a back-pointer rule scans, with the `back_pointer_paths` that
+/// select them and the declared test class (a subset of those paths).
+pub struct BackPointerSources {
+    pub files: Vec<PublishedFile>,
+    pub back_pointer_paths: Vec<String>,
+    pub test_paths: Vec<String>,
+}
+
+/// What a rule in a later [`Phase`] reads of the run so far. Empty while the
+/// `Main` rules run.
+pub struct RunState<'a> {
+    /// Every rule's execution so far.
+    pub executions: &'a [RuleExecution],
+    /// The findings left after scoping, before waivers apply.
+    pub findings: &'a [Finding],
+    pub waivers: &'a [Waiver],
+    /// The run covers the whole corpus: no path scope, no `--base`.
+    pub whole_corpus: bool,
+    /// Whether a path is inside what the run reports on.
+    pub reached: &'a dyn Fn(&Path) -> bool,
+    pub today: &'a str,
+}
+
+impl RunState<'_> {
+    pub fn empty() -> RunState<'static> {
+        RunState {
+            executions: &[],
+            findings: &[],
+            waivers: &[],
+            whole_corpus: false,
+            reached: &|_| true,
+            today: "",
+        }
+    }
+}
+
+/// Everything any rule reads, built once per run. A rule's table entry picks
+/// what it needs; nothing here is specific to one rule.
+pub struct RuleCtx<'a> {
+    pub config: &'a Config,
+    pub config_path: &'a Path,
+    pub records: &'a [Record],
+    pub full_text: &'a HashMap<PathBuf, String>,
+    /// Resolves a reference to a record; built once for every rule that resolves one.
+    pub index: &'a RecordIndex<'a>,
+    pub collisions: &'a [IdentifierCollision<'a>],
+    /// Claim files read from the declared `claim_paths`, as (path, text).
+    pub claims: &'a [(String, String)],
+    pub published_files: &'a [PublishedFile],
+    pub published_paths: &'a [String],
+    pub index_artifacts: &'a [IndexArtifact],
+    /// `None` when the rule is absent or off.
+    pub back_pointer_sources: Option<&'a BackPointerSources>,
+    pub decision_gate_sources: Option<&'a BackPointerSources>,
+    pub back_pointed: &'a BackPointerEvidence,
+    pub drifted: &'a HashSet<PathBuf>,
+    pub fresh: &'a HashSet<PathBuf>,
+    pub claim_ages: &'a HashMap<PathBuf, u64>,
+    /// `None` on a run with no `--base`.
+    pub changed_paths: Option<&'a [PathBuf]>,
+    pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
+    /// Every discovered path, staged deletions included.
+    pub tracked_paths: &'a [PathBuf],
+    /// Discovered paths less staged deletions.
+    pub live_paths: &'a [PathBuf],
+    /// False only on a definite absence: an unreadable path counts as present,
+    /// so a blocking finding is never raised on a guess.
+    pub may_exist: &'a dyn Fn(&Path) -> bool,
+    pub dir_exists: &'a dyn Fn(&str) -> bool,
+    pub run: RunState<'a>,
+}
+
+/// A rule the repository has not declared does not run at all -- it is not run
+/// and then filtered, because an opt-in rule that still costs its own
+/// execution is opt-in in name only. The declared `level` replaces whatever
+/// severity the rule body chose: the severity is the repository's call, not the
+/// rule's (`MILE-80`).
+///
+/// Shared rather than owned by `check`: `audit` ran two rules directly and so
+/// could not be declined by any configuration (`BUG-42`).
+pub fn gate_and_run(
+    config: &Config,
+    id: &str,
+    run: impl FnOnce() -> (RuleExecution, Vec<Finding>),
+) -> (RuleExecution, Vec<Finding>) {
+    use crate::config::RuleLevel;
+
+    match config.rules.get(id).map(|s| s.level) {
+        None | Some(RuleLevel::Off) => (
+            RuleExecution {
+                rule: id.to_string(),
+                population: None,
+                status: RuleStatus::NotEnabled,
+                examined_records: Vec::new(),
+            },
+            Vec::new(),
+        ),
+        Some(level) => {
+            let severity = match level {
+                RuleLevel::Error => FindingSeverity::Error,
+                RuleLevel::Warn => FindingSeverity::Warning,
+                RuleLevel::Off => unreachable!("handled above"),
+            };
+            let (exec, mut findings) = run();
+            for f in &mut findings {
+                // A level the rule declared for this finding's own field
+                // (`field_levels`, `MILE-140`) outranks the rule level; every
+                // other finding takes the rule level.
+                f.severity = f.declared_severity.unwrap_or(severity);
+            }
+            (exec, findings)
+        }
+    }
+}
+
+/// One rule through the gate.
+pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding>) {
+    gate_and_run(ctx.config, def.id, || (def.run)(ctx))
+}
+
+/// Every rule of `phase`, in table order.
+pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
+    RULE_TABLE
+        .iter()
+        .filter(|d| d.phase == phase)
+        .map(|d| run_rule(d, ctx))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn finding(declared: Option<FindingSeverity>) -> Finding {
+        Finding {
+            rule: "x".to_string(),
+            severity: FindingSeverity::Error,
+            file: PathBuf::from("a.md"),
+            line: None,
+            waived: None,
+            declared_severity: declared,
+            message: String::new(),
+        }
+    }
+
+    fn executed() -> RuleExecution {
+        RuleExecution {
+            rule: "header.required-fields".to_string(),
+            population: None,
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        }
+    }
+
+    fn config_with(rule_yaml: &str) -> Config {
+        crate::config::parse(&format!(
+            "schema_version: 2\nrecord_types: {{}}\nrules: {{{rule_yaml}}}\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_rule_the_repository_has_not_enabled_is_never_run() {
+        for config in [config_with(""), config_with("header.required-fields: off")] {
+            let (exec, findings) = gate_and_run(&config, "header.required-fields", || {
+                panic!("a rule that is not enabled must not run")
+            });
+            assert_eq!(exec.status, RuleStatus::NotEnabled);
+            assert!(findings.is_empty());
+        }
+    }
+
+    #[test]
+    fn the_declared_level_replaces_the_severity_the_rule_chose() {
+        let config = config_with("header.required-fields: warn");
+        let (_, findings) = gate_and_run(&config, "header.required-fields", || {
+            (executed(), vec![finding(None)])
+        });
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+    }
+
+    #[test]
+    fn a_level_declared_for_the_finding_outranks_the_rule_level() {
+        let config = config_with("header.required-fields: error");
+        let (_, findings) = gate_and_run(&config, "header.required-fields", || {
+            (executed(), vec![finding(Some(FindingSeverity::Warning))])
+        });
+        assert_eq!(findings[0].severity, FindingSeverity::Warning);
+    }
+
+    /// `rules_executed` lists rules in table order within a phase and phases
+    /// in order, so `urzua rules` lists them as `check` reports them.
+    #[test]
+    fn the_table_lists_phases_in_the_order_they_run() {
+        let phases: Vec<Phase> = RULE_TABLE.iter().map(|d| d.phase).collect();
+        let mut sorted = phases.clone();
+        sorted.sort_by_key(|p| match p {
+            Phase::Main => 0,
+            Phase::AfterRules => 1,
+            Phase::AfterScoping => 2,
+        });
+        assert_eq!(phases, sorted);
+    }
+}

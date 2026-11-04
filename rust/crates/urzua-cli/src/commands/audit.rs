@@ -37,7 +37,7 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, String> {
         || rules::supersession_reciprocity(&records, &config, &record_index),
     );
     let (exec3, findings3) = crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
-        rules::identity_collision(&records, identity_collisions)
+        rules::identity_collision(&records, &identity_collisions)
     });
     let (exec4, findings4) =
         crate::gate::gated(&config, rules::RULE_FILENAME_IDENTITY_PATTERN, || {

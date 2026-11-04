@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-23
 Status: Accepted
 Author: beauwilliams
@@ -186,7 +186,7 @@ would be unused structure.
 `urzua-core/src/rules/catalog.rs` holds `RULE_TABLE`, one `RuleDef` per shipped rule: its id, its
 adopter-facing description, the scope it looks at (records, config, files, diff or the run), whether
 its findings sit outside the loaded corpus, whether it resolves through the identity index, whether it
-needs `relation_pairs`, and how it meets a `header_shape: none` type. `ALL_RULES`, `urzua rules`,
+needs `relation_pairs`, and how it meets a `header_shape: none` type, the phase it runs in, and the function that runs it over the shared `RuleCtx`. The runner (`run_rule`, `run_phase`) owns the gate (a rule the repository has not enabled does not run) and the declared severity. `ALL_RULES`, `urzua rules`,
 `SPEC-2`'s generated rule table, config validation, `init`'s proposal and `check`'s scope filter are
 all derived from it. A property of a rule is a field of its entry, not a membership in a second list.
 
@@ -234,3 +234,4 @@ occurrence rule applied to the registry (`MILE-171`).
 > | 2026-09-23 | `Status: Draft` → `Accepted`. Tightened "Duplicated candidate-selection logic gets one shared function, not a copy per rule" (renamed to state the timing rule directly) from "extract after a real bug, not speculatively" to "extract on the second occurrence, not the third" — the same review cycle that produced this spec's own examples also found two more instances of the identical shape and left them unfixed rather than rushed (`BUG-133`, `BUG-134`), which is exactly the reactive rule failing to prevent its own next instance. Absorbed `RFC-7` §7 (the same principle, first named inside an unrelated, still-`Draft` proposal) rather than leaving the same fact stated in two places. **Why:** the user asked directly whether this recurring pattern needed an RFC or ADR of its own; it doesn't — it's a coding convention with no alternatives being weighed, and this spec already existed as its right home. | **substantive** |
 > | 2026-11-04 | Added the shared `Session::open` command preamble and the `emit_or_not_run` wrapper to the error-boundary convention. **Why:** nine commands each repeated the root, config, discovery and load sequence with four could-not-run arms apiece, so a change to discovery order or the not-run text was nine edits (`MILE-173`); `SPEC-22`'s own extract-on-second-occurrence rule applied. | **substantive** |
 > | 2026-11-04 | Bumped to `0.4`. Added "A rule is one entry in `RULE_TABLE`, and nothing else names a rule". **Why:** a rule was registered in six places by hand and its properties lived in parallel lists; `MILE-171` replaces them with one table, and the convention keeps the next rule from reintroducing a list. | **substantive** |
+> | 2026-11-04 | Bumped to `0.4`. The convention names the table's `phase` and `run` fields and the runner that owns gating and severity. **Why:** `MILE-171` step 2: the 51 hand-written gating closures in `check` become table entries, so a rule that is in the table cannot be left unwired. | **substantive** |
