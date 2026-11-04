@@ -30,13 +30,11 @@ pub struct Header {
     /// header-shaped region was found at all -- a reportable finding, never
     /// an empty result silently treated as "no fields."
     pub region: Option<(usize, usize)>,
-    /// Why `region` is `None`, when the reason is a real parse failure worth
-    /// surfacing verbatim (BUG-0012) -- currently only populated for
-    /// `yaml-frontmatter`, whose deserializer already carries a line/reason a
-    /// human or agent can act on directly, unlike "the anchor line never
-    /// matched" for the other two shapes. `None` whenever `region` is
-    /// `Some`, and `None` for the other two shapes' own "nothing matched"
-    /// case -- there's no comparably specific diagnosis to surface there.
+    /// Why `region` is `None`, when there is a specific reason worth
+    /// surfacing verbatim (BUG-0012): the YAML deserializer's own line and
+    /// reason, or the name of a removed header form the record is still
+    /// written in (MILE-85). `None` whenever `region` is `Some`, and `None`
+    /// for a plain "nothing header-shaped found".
     pub parse_error: Option<String>,
 }
 
@@ -114,140 +112,97 @@ impl Header {
         }
         dupes
     }
-
-    /// The header's line layout: `PipeDelimited` if any single line carries
-    /// more than one field, `OnePerLine` if every field has its own line.
-    /// `None` for a header with no fields to judge (an empty or missing
-    /// region) -- there's nothing to classify yet, not a third layout.
-    /// Bold-vs-plain labelling (the other axis RFC-0010 documents) isn't
-    /// tracked here; nothing has needed it yet (see MILE-0075).
-    pub fn layout(&self) -> Option<HeaderLayout> {
-        if self.fields.is_empty() {
-            return None;
-        }
-        let mut seen_lines = std::collections::HashSet::new();
-        for f in &self.fields {
-            if !seen_lines.insert(f.line) {
-                return Some(HeaderLayout::PipeDelimited);
-            }
-        }
-        Some(HeaderLayout::OnePerLine)
-    }
 }
 
-/// A header's line layout, independent of `HeaderShape`: only meaningful
-/// within `Blockquote` (RFC-0010's shapes 1 and 3), since `BoldList` and
-/// `YamlFrontmatter` don't have this ambiguity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HeaderLayout {
-    OnePerLine,
-    PipeDelimited,
-}
-
-/// Parse the header out of a document's full text.
+/// How a type's records carry their header (RFC-0010: declared per type, never
+/// sniffed).
 ///
-/// The header is the maximal contiguous run of metadata-shaped lines,
-/// anchored at the first such line. Three shapes are recognized, because
-/// three are observed in real corpora (RFC-0010's motivation):
-///
-/// 1. Blockquote, one field per line: `> Key: Value`
-/// 2. Blockquote, bold-labelled: `> **Key:** Value`
-/// 3. Pipe-delimited single line: `Key1: v1 | Key2: v2 | Key3: v3`
-///    (each segment may itself be bold-labelled)
-///
-/// A fourth shape is declared per profile rather than assumed (RFC-0010's
-/// open question on where a differently-shaped header fits): a bold-labelled
-/// markdown list with no blockquote wrapper at all, `- **Key:** Value`. Real
-/// corpora were found using this shape without ever wrapping it in a `>`
-/// block -- treating it as a blockquote-only variant would silently miss
-/// every field in such a corpus.
-///
-/// A blank line, a non-metadata-shaped line, or end of document ends the
-/// region. A document with no metadata-shaped line at all has `region: None`
-/// -- reportable, never treated as a header with zero fields.
+/// `yaml-frontmatter` is the one line-of-text shape: `---`-delimited YAML at
+/// the top of the document, deserialized structurally. The blockquote
+/// (`> Key: Value`) and bold-list (`- **Key:** Value`) shapes were removed
+/// (MILE-85, ADR-33): a config declaring either fails to load, and a record
+/// still written in one is reported by name (see [`legacy_header_form`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HeaderShape {
-    /// Blockquote-anchored: shapes 1-3 above. The long-standing default, so
-    /// existing configs and callers that never declare a shape keep their
-    /// current behavior unchanged.
+    /// `---`-delimited YAML at the top of the document (RFC-0016/ADR-0017).
     #[default]
-    Blockquote,
-    /// `- **Key:** Value`, anchored by a leading markdown list marker
-    /// instead of a blockquote.
-    BoldList,
-    /// `---`-delimited YAML at the top of the document (RFC-0016/ADR-0017),
-    /// deserialized structurally rather than recognized line by line. What
-    /// Urzua itself generates going forward; the other shapes remain what a
-    /// pre-existing, adopted corpus is read as.
     YamlFrontmatter,
     /// This type's records carry no header block at all (`ADR-50`): a
-    /// Nygard-style corpus whose metadata lives in prose, not a fourth
-    /// parseable shape. `header.required-fields` skips such a type rather
-    /// than reporting a missing region on every record.
+    /// Nygard-style corpus whose metadata lives in prose, not a parseable
+    /// shape. `header.required-fields` skips such a type rather than
+    /// reporting a missing region on every record.
     None,
 }
 
 pub fn parse(content: &str) -> Header {
-    parse_with_shape(content, HeaderShape::Blockquote)
+    parse_with_shape(content, HeaderShape::default())
 }
 
 /// Parse the header using an explicitly declared shape (RFC-0010: the shape
 /// is declared per profile, never sniffed).
 pub fn parse_with_shape(content: &str, shape: HeaderShape) -> Header {
-    if shape == HeaderShape::YamlFrontmatter {
-        return parse_yaml_frontmatter(content);
-    }
-    // A `none`-shaped type declares it has nowhere for a header to be
-    // (`ADR-50`): no region, no fields, no parse error -- there is nothing
-    // here to have failed to parse.
-    if shape == HeaderShape::None {
-        return Header {
+    match shape {
+        HeaderShape::YamlFrontmatter => parse_yaml_frontmatter(content),
+        // A `none`-shaped type declares it has nowhere for a header to be
+        // (`ADR-50`): no region, no fields, no parse error -- there is
+        // nothing here to have failed to parse.
+        HeaderShape::None => Header {
             fields: Vec::new(),
             region: None,
             parse_error: None,
-        };
+        },
     }
+}
 
-    let mut fields = Vec::new();
-    let mut region: Option<(usize, usize)> = None;
-
-    let line_body: fn(&str) -> Option<&str> = match shape {
-        HeaderShape::Blockquote => blockquote_body,
-        HeaderShape::BoldList => bold_list_body,
-        HeaderShape::YamlFrontmatter | HeaderShape::None => unreachable!("handled above"),
-    };
-
-    for (idx, raw_line) in content.lines().enumerate() {
-        let line_no = idx + 1;
-        let line = raw_line.trim_end();
-
-        let Some(body) = line_body(line) else {
-            if region.is_some() {
-                break;
-            }
-            continue;
-        };
-
-        let line_fields = parse_metadata_line(body, line_no);
-        if line_fields.is_empty() {
-            if region.is_some() {
-                break;
-            }
-            continue;
+/// The removed header form a document is still written in, when its top
+/// (before the first `##` heading) carries one: `> Key: value` or
+/// `> **Key:** value` blockquote lines, or `- **Key:** value` bold-list lines.
+/// The form with more such lines wins (a body Y-statement quote is one line
+/// beside a real header's several; an equal count goes to the earlier form),
+/// and `None` means neither appears, so a document with no header at all is
+/// not mislabelled. Used only to name the form in a diagnostic; nothing here
+/// reads a field (MILE-85).
+pub fn legacy_header_form(content: &str) -> Option<&'static str> {
+    let (mut quote, mut bold) = (0usize, 0usize);
+    let mut first_quote = usize::MAX;
+    let mut first_bold = usize::MAX;
+    for (idx, line) in content.lines().enumerate() {
+        let t = line.trim_start();
+        if t.starts_with("##") && t.trim_start_matches('#').starts_with([' ', '\t']) {
+            break;
         }
-
-        region = Some(match region {
-            Some((start, _)) => (start, line_no),
-            None => (line_no, line_no),
-        });
-        fields.extend(line_fields);
+        if let Some(rest) = t.strip_prefix('>') {
+            let rest = rest.trim_start();
+            if is_key_value(rest) || rest.starts_with("**") && rest.contains(":**") {
+                quote += 1;
+                first_quote = first_quote.min(idx);
+            }
+        } else if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+            if rest.starts_with("**") && rest.contains(":**") {
+                bold += 1;
+                first_bold = first_bold.min(idx);
+            }
+        }
     }
-
-    Header {
-        fields,
-        region,
-        parse_error: None,
+    match (quote, bold) {
+        (0, 0) => None,
+        (q, b) if q > b || (q == b && first_quote < first_bold) => Some("blockquote"),
+        _ => Some("bold-list"),
     }
+}
+
+/// `Key: value` with a plain key (letters, digits, space, `-`, `_`, `/`),
+/// the colon followed by a space or the end of the line.
+fn is_key_value(s: &str) -> bool {
+    let Some((key, value)) = s.split_once(':') else {
+        return false;
+    };
+    let key = key.trim();
+    key.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '-' | '_' | '/'))
+        && (value.is_empty() || value.starts_with(' '))
 }
 
 /// Read a `fields: {from: prefix-lines}` header (RFC-33, MILE-98): bare
@@ -297,27 +252,6 @@ fn prefix_line_field(line: &str, line_no: usize) -> Option<HeaderField> {
     })
 }
 
-/// Strip a leading `> ` (or bare `>`) blockquote marker. Returns `None` for a
-/// line that isn't blockquote-shaped at all -- the anchor this parser uses,
-/// since every observed shape in this corpus lives inside a leading
-/// blockquote block.
-fn blockquote_body(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    let rest = trimmed.strip_prefix('>')?;
-    Some(rest.strip_prefix(' ').unwrap_or(rest))
-}
-
-/// Strip a leading `- ` or `* ` markdown list marker. The bold-key body that
-/// follows (`**Key:** Value`) is parsed by the same `parse_key_value` every
-/// other shape uses -- only the anchor differs.
-fn bold_list_body(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    let rest = trimmed
-        .strip_prefix("- ")
-        .or_else(|| trimmed.strip_prefix("* "))?;
-    Some(rest)
-}
-
 /// Parse a `---`-delimited YAML frontmatter block (RFC-0016/ADR-0017).
 ///
 /// Unlike the line-recognizer shapes above, this goes through a real YAML
@@ -337,10 +271,17 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
         };
     };
     if first.trim_end() != "---" {
+        // A removed form is named, not mistaken for a record with no header
+        // (MILE-85): the rule reporting the unreadable header carries this.
         return Header {
             fields: Vec::new(),
             region: None,
-            parse_error: None,
+            parse_error: legacy_header_form(content).map(|form| {
+                format!(
+                    "the header is written as a {form} ({}), a form urzua no longer reads; rewrite it as YAML frontmatter (`---` ... `---` at the top of the file)",
+                    if form == "blockquote" { "`> Key: value`" } else { "`- **Key:** value`" }
+                )
+            }),
         };
     }
 
@@ -377,7 +318,8 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
                 fields: Vec::new(),
                 region: None,
                 parse_error: Some(
-                    "YAML frontmatter must be a mapping of key: value pairs".to_string(),
+                    "YAML parse error: frontmatter must be a mapping of key: value pairs"
+                        .to_string(),
                 ),
             };
         }
@@ -385,7 +327,7 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
             return Header {
                 fields: Vec::new(),
                 region: None,
-                parse_error: Some(e.to_string()),
+                parse_error: Some(format!("YAML parse error: {e}")),
             };
         }
     };
@@ -441,44 +383,6 @@ fn stringify_yaml_value(value: &yaml_serde::Value) -> String {
     }
 }
 
-/// Parse one blockquote line's body into zero or more fields: either a
-/// pipe-delimited run of `Key: Value` segments, or a single `Key: Value`
-/// (plain or bold-labelled) line.
-fn parse_metadata_line(body: &str, line_no: usize) -> Vec<HeaderField> {
-    if body.contains(" | ") {
-        return body
-            .split(" | ")
-            .filter_map(|segment| parse_key_value(segment, line_no))
-            .collect();
-    }
-    parse_key_value(body, line_no).into_iter().collect()
-}
-
-/// Parse a single `Key: Value` or `**Key:** Value` segment. Deliberately
-/// requires the colon to end the key -- `Supersedes / Superseded-by: —`
-/// parses as one field with a compound key, which is exactly how that field
-/// is declared in the RFC/ADR template, not a shape this parser needs to
-/// special-case.
-fn parse_key_value(segment: &str, line_no: usize) -> Option<HeaderField> {
-    let segment = segment.trim();
-    let segment = segment
-        .strip_prefix("**")
-        .and_then(|s| s.split_once(":**"))
-        .map(|(key, value)| format!("{key}:{value}"))
-        .unwrap_or_else(|| segment.to_string());
-
-    let (key, value) = segment.split_once(':')?;
-    let key = key.trim();
-    if key.is_empty() {
-        return None;
-    }
-    Some(HeaderField {
-        key: crate::values::FieldName::new(key),
-        value: value.trim().to_string(),
-        line: line_no,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -520,42 +424,13 @@ mod tests {
     }
 
     #[test]
-    fn parses_blockquote_shape() {
-        let doc = "# Title\n\n> Status: Draft\n> Date: 2026-08-11\n\n## Summary\n";
-        let h = parse(doc);
-        assert_eq!(h.get("Status"), Some("Draft"));
-        assert_eq!(h.get("Date"), Some("2026-08-11"));
-        assert_eq!(h.region, Some((3, 4)));
-    }
-
-    #[test]
-    fn parses_pipe_delimited_shape() {
-        let doc = "# Title\n\n> Version: 0.1 | Date: 2026-08-20 | Status: Draft\n> **Implements:** RFC-0001\n";
-        let h = parse(doc);
-        assert_eq!(h.get("Version"), Some("0.1"));
-        assert_eq!(h.get("Status"), Some("Draft"));
-        assert_eq!(h.get("Implements"), Some("RFC-0001"));
-    }
-
-    #[test]
-    fn a_field_shaped_body_bullet_is_never_the_header() {
-        // The exact bug class RFC-0010 documents: a body bullet in the
-        // header's own shape must not satisfy a header field, because it
-        // isn't in the header region at all (it's after a blank line/heading).
-        let doc = "# Title\n\n> Status: Draft\n\n## Body\n\n- **Status:** decoy, not the header\n";
-        let h = parse(doc);
-        assert_eq!(h.get("Status"), Some("Draft"));
-        assert_eq!(h.region, Some((3, 3)));
-    }
-
-    #[test]
     fn get_reserved_answers_for_a_differently_cased_key() {
         // The opposite of `get`, deliberately: Stable-Id is not adopter
         // vocabulary, there is exactly one field by that name, and a record
         // spelling it `stable-id` has made a typo -- migrate_ids assigning a
         // second id on top of it is BUG-97's shape reopened for a case
         // ADR-57's own reasoning never covered.
-        let h = parse("# T\n\n> stable-id: 01ABC\n");
+        let h = parse("---\nstable-id: 01ABC\n---\n# T\n");
         assert_eq!(h.get_reserved("Stable-Id"), Some("01ABC"));
         assert_eq!(h.get_reserved("STABLE-ID"), Some("01ABC"));
     }
@@ -565,7 +440,7 @@ mod tests {
         // ADR-57: the record wrote a different name, so the declared one is
         // absent. Answering here let header.required-fields read the field as
         // satisfied while header.field-set-consistency called it undeclared.
-        let h = parse("# T\n\n> status: Accepted\n");
+        let h = parse("---\nstatus: Accepted\n---\n# T\n");
         assert_eq!(h.get("status"), Some("Accepted"));
         assert_eq!(h.get("Status"), None);
         assert_eq!(h.get("STATUS"), None);
@@ -573,7 +448,7 @@ mod tests {
 
     #[test]
     fn two_spellings_of_one_word_are_two_keys_not_a_duplicate() {
-        let h = parse("# T\n\n> Status: A\n> status: B\n");
+        let h = parse("---\nStatus: A\nstatus: B\n---\n# T\n");
         assert!(
             h.duplicate_keys().is_empty(),
             "ADR-57 makes these two fields: {:?}",
@@ -585,8 +460,18 @@ mod tests {
 
     #[test]
     fn duplicate_keys_are_detected_not_first_wins() {
-        let doc = "> Status: Draft\n> Status: Accepted\n";
-        let h = parse(doc);
+        // A YAML mapping cannot carry a repeated key, so the header is built
+        // by hand: the closure check is still part of the contract.
+        let field = |value: &str, line| HeaderField {
+            key: crate::values::FieldName::new("Status"),
+            value: value.to_string(),
+            line,
+        };
+        let h = Header {
+            fields: vec![field("Draft", 2), field("Accepted", 3)],
+            region: Some((1, 4)),
+            parse_error: None,
+        };
         assert_eq!(h.duplicate_keys(), vec!["Status".to_string()]);
     }
 
@@ -599,31 +484,41 @@ mod tests {
     }
 
     #[test]
-    fn parses_bold_list_shape() {
-        let doc = "# Title\n\n> **Decision:** some prose.\n\n- **Status:** Accepted\n- **Date:** 2026-08-14\n- **Deciders:** A B\n\n## Context\n";
-        let h = parse_with_shape(doc, HeaderShape::BoldList);
-        assert_eq!(h.get("Status"), Some("Accepted"));
-        assert_eq!(h.get("Date"), Some("2026-08-14"));
-        assert_eq!(h.get("Deciders"), Some("A B"));
-        assert_eq!(h.region, Some((5, 7)));
-    }
-
-    #[test]
-    fn bold_list_shape_does_not_recognize_a_blockquote_header() {
-        // Observed failing before it's trusted (SPEC-0002's discipline for
-        // every rule): a corpus whose real header is blockquote-shaped must
-        // report no region under the bold-list shape, not silently find
-        // something else -- a misconfigured `header_shape` must be loud.
+    fn a_blockquote_header_is_named_as_an_unsupported_form_not_just_absent() {
+        // MILE-85: the shape is no longer read, and a record still written in
+        // it must say so rather than look like a record with no header.
         let doc = "# Title\n\n> Status: Draft\n> Date: 2026-08-11\n";
-        let h = parse_with_shape(doc, HeaderShape::BoldList);
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
         assert_eq!(h.region, None);
-        assert!(h.fields.is_empty());
+        let e = h.parse_error.expect("the legacy form is named");
+        assert!(
+            e.contains("blockquote") && e.contains("no longer read"),
+            "{e}"
+        );
     }
 
     #[test]
-    fn blockquote_shape_is_the_default_when_unspecified() {
-        let doc = "# Title\n\n> Status: Draft\n";
-        assert_eq!(parse(doc), parse_with_shape(doc, HeaderShape::Blockquote));
+    fn a_bold_list_header_is_named_as_an_unsupported_form() {
+        let doc = "# Title\n\n- **Status:** Accepted\n- **Date:** 2026-08-14\n\n## Context\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        let e = h.parse_error.expect("the legacy form is named");
+        assert!(
+            e.contains("bold-list") && e.contains("no longer read"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn a_body_quote_before_a_bold_list_header_does_not_hide_the_bold_list() {
+        let doc = "# T\n\n> **Decision:** In the context of a\n> facing b\n\n- **Status:** Accepted\n- **Date:** 2026-01-01\n";
+        assert_eq!(legacy_header_form(doc), Some("bold-list"));
+    }
+
+    #[test]
+    fn a_body_blockquote_or_bullet_after_the_first_section_is_not_a_legacy_header() {
+        let doc = "# Title\n\n## Context\n\n> Status: quoted\n\n- **Note:** bullet\n";
+        let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
+        assert_eq!(h.parse_error, None);
     }
 
     #[test]
@@ -649,7 +544,7 @@ mod tests {
 
     #[test]
     fn a_document_not_opening_with_frontmatter_has_no_yaml_region() {
-        let doc = "# Title\n\n> Status: Draft\n";
+        let doc = "# Title\n\nStatus: Draft\n";
         let h = parse_with_shape(doc, HeaderShape::YamlFrontmatter);
         assert_eq!(h.region, None);
     }

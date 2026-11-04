@@ -116,7 +116,13 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
             results.push(MigrateIdsResult {
                 record: r.path.clone(),
                 outcome: MigrateIdsOutcome::Skipped,
-                error: Some("no header-shaped region found".to_string()),
+                // A header written in a removed form carries its name here.
+                error: Some(
+                    r.header
+                        .parse_error
+                        .clone()
+                        .unwrap_or_else(|| "no header-shaped region found".to_string()),
+                ),
             });
             continue;
         };
@@ -132,8 +138,6 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
             .unwrap_or_default();
         let new_line = match header_shape {
             HeaderShape::YamlFrontmatter => format!("Stable-Id: {}", id.as_str()),
-            HeaderShape::BoldList => format!("- **Stable-Id:** {}", id.as_str()),
-            HeaderShape::Blockquote => format!("> Stable-Id: {}", id.as_str()),
             // `none` parses to `region: None` unconditionally (`ADR-50`), and
             // the `let Some(region) = ... else { Skipped }` guard above
             // already returned for exactly that case -- reaching here with
@@ -145,7 +149,7 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         };
         // region.0 is the 1-indexed first header line (the opening `---`
         // for yaml-frontmatter); inserting after it places the new field
-        // right below, valid for all three shapes. Every other byte of the
+        // right below, valid for the one shape with a header. Every other byte of the
         // file, line endings and trailing newline included, is left as is.
         let mut doc = urzua_core::line_edit::LineDoc::parse(content);
         doc.insert_after(region.0, new_line);

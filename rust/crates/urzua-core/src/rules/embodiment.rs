@@ -635,7 +635,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n---\n",
         );
         let ages: HashMap<PathBuf, u64> = [(r.path.clone(), 40)].into();
         let run = |config: &Config| {
@@ -679,7 +679,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Verified\nRealized-by: code:src/lib.rs\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -730,7 +730,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Realized-by: code:src/real.rs, code:src/gone.rs\n",
+            "---\nRealized-by: code:src/real.rs, code:src/gone.rs\n---\n",
         );
         let present = |p: &str| p == "src/real.rs";
 
@@ -751,7 +751,11 @@ mod tests {
 
         // An empty locator names nothing, and the repo root exists -- so it
         // passed a raw existence check while still computing to `Implemented`.
-        let empty = record("docs/adr/ADR-2-y.md", "adr", "> Realized-by: code:\n");
+        let empty = record(
+            "docs/adr/ADR-2-y.md",
+            "adr",
+            "---\nRealized-by: 'code:'\n---\n",
+        );
         let (_, findings) = embodiment_locator_exists(&[empty], &embodiment_config(), &all_there);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(
@@ -769,7 +773,7 @@ mod tests {
             let r = record(
                 "docs/adr/ADR-1-x.md",
                 "adr",
-                &format!("> Realized-by: code:{spelled}\n"),
+                &format!("---\nRealized-by: code:{spelled}\n---\n"),
             );
             let (_, findings) =
                 embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
@@ -797,7 +801,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Evidence: code:src/gone.rs\n",
+            "---\nEvidence: code:src/gone.rs\n---\n",
         );
         let present = |_: &str| false;
 
@@ -813,7 +817,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Verified\nRealized-by: code:src/lib.rs\n---\n",
         );
         let (exec, findings) = embodiment_consistency(
             &[r],
@@ -834,7 +838,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n---\n",
         );
         let (_, findings) = embodiment_consistency(
             &[r],
@@ -864,7 +868,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Phase: Verified\n> Evidence: code:src/lib.rs\n",
+            "---\nPhase: Verified\nEvidence: code:src/lib.rs\n---\n",
         );
         let (exec, findings) = embodiment_consistency(
             &[r],
@@ -903,7 +907,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Embodiment: Verified\n> Realized-by: code:src/lib.rs, test:tests/it.rs\n",
+            "---\nEmbodiment: Verified\nRealized-by: code:src/lib.rs, test:tests/it.rs\n---\n",
         );
         let mut drifted = HashSet::new();
         drifted.insert(r.path.clone());
@@ -921,7 +925,11 @@ mod tests {
 
     #[test]
     fn a_record_missing_half_the_pair_is_handed_to_the_rule_and_not_judged() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "---\nEmbodiment: Not started\n---\n",
+        );
         let (exec, findings) = embodiment_consistency(
             &[r],
             &embodiment_config(),
@@ -956,12 +964,12 @@ mod tests {
         let a = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Realized-by: code:src/shared.rs\n",
+            "---\nRealized-by: code:src/shared.rs\n---\n",
         );
         let b = record(
             "docs/adr/0002-y.md",
             "adr",
-            "> Realized-by: code:src/shared.rs\n",
+            "---\nRealized-by: code:src/shared.rs\n---\n",
         );
         let (exec, findings) =
             embodiment_locator_promotion_candidate(&[a, b], &embodiment_config());
@@ -979,7 +987,7 @@ mod tests {
         let a = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Realized-by: code:src/shared.rs, test:src/shared.rs\n",
+            "---\nRealized-by: code:src/shared.rs, test:src/shared.rs\n---\n",
         );
         let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
@@ -990,7 +998,7 @@ mod tests {
         let a = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Realized-by: code:src/a.rs\n",
+            "---\nRealized-by: code:src/a.rs\n---\n",
         );
         let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty());
@@ -1000,7 +1008,7 @@ mod tests {
         record(
             "docs/adr/0001-x.md",
             "adr",
-            &format!("> Embodiment: {embodiment}\n> Realized-by: {realized_by}\n"),
+            &format!("---\nEmbodiment: '{embodiment}'\nRealized-by: '{realized_by}'\n---\n"),
         )
     }
 
@@ -1104,7 +1112,7 @@ mod tests {
         record(
             "docs/adr/0001-x.md",
             "adr",
-            &format!("> Embodiment: {embodiment}\n"),
+            &format!("---\nEmbodiment: '{embodiment}'\n---\n"),
         )
     }
 
@@ -1228,7 +1236,7 @@ mod tests {
             let r = record(
                 "docs/adr/ADR-1-x.md",
                 "adr",
-                &format!("> Embodiment: {stated}\n> Realized-by: code:src/lib.rs\n"),
+                &format!("---\nEmbodiment: '{stated}'\nRealized-by: code:src/lib.rs\n---\n"),
             );
             embodiment_consistency(
                 &[r],
@@ -1272,7 +1280,7 @@ mod tests {
         record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            &format!("> Status: {status}\n> Embodiment: {embodiment}\n"),
+            &format!("---\nStatus: '{status}'\nEmbodiment: '{embodiment}'\n---\n"),
         )
     }
 

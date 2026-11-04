@@ -251,8 +251,12 @@ mod tests {
         // Replaces a_resolving_pointer_surfaces_target_status_without_judging_it,
         // whose name was the defect: surfacing a status without judging it
         // produced 172 of 213 findings on this repo's own corpus.
-        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
-        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "---\nStatus: Draft\n---\n");
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-0001\n---\n",
+        );
         let config = config_with_types(vec![
             (
                 "spec",
@@ -282,8 +286,12 @@ mod tests {
 
     #[test]
     fn a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing() {
-        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> State: Draft\n");
-        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-0001\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "---\nState: Draft\n---\n");
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-0001\n---\n",
+        );
         let config = config_with_types(vec![
             (
                 "spec",
@@ -313,7 +321,11 @@ mod tests {
 
     #[test]
     fn a_non_resolving_pointer_is_an_error() {
-        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-9999\n");
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-9999\n---\n",
+        );
         let config = config_with_types(vec![(
             "spec",
             type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
@@ -330,11 +342,15 @@ mod tests {
         // Every spec's `Parent: SPEC-N` pointer was completely unchecked
         // before Parent was added to this rule's scanned fields -- a typo'd
         // or dangling Parent would never have been caught.
-        let parent = record("docs/specs/SPEC-1-cli.md", "spec", "> Status: Draft\n");
+        let parent = record(
+            "docs/specs/SPEC-1-cli.md",
+            "spec",
+            "---\nStatus: Draft\n---\n",
+        );
         let child = record(
             "docs/specs/SPEC-2-urzua-check.md",
             "spec",
-            "> Parent: SPEC-1 (v0 CLI). Extra trailing prose that isn't a reference.\n",
+            "---\nParent: SPEC-1 (v0 CLI). Extra trailing prose that isn't a reference.\n---\n",
         );
         let config = config_with_types(vec![(
             "spec",
@@ -348,7 +364,11 @@ mod tests {
 
     #[test]
     fn a_dangling_parent_pointer_is_an_error() {
-        let child = record("docs/specs/SPEC-2-x.md", "spec", "> Parent: SPEC-9999\n");
+        let child = record(
+            "docs/specs/SPEC-2-x.md",
+            "spec",
+            "---\nParent: SPEC-9999\n---\n",
+        );
         let config = config_with_types(vec![(
             "spec",
             type_config_pointer(&[], None, Some(&["Parent"]), Some(&[])),
@@ -369,7 +389,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-38-x.md",
             "adr",
-            "> Status: Accepted\n> Derives-from: RFC-1 (Accepted)\n",
+            "---\nStatus: Accepted\nDerives-from: RFC-1 (Accepted)\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -403,7 +423,7 @@ mod tests {
         let r = record(
             "docs/specs/SPEC-2-x.md",
             "spec",
-            "> Status: Draft\n> Parent: SPEC-1 (v0 CLI). Cross-cutting rules stated there.\n",
+            "---\nStatus: Draft\nParent: SPEC-1 (v0 CLI). Cross-cutting rules stated there.\n---\n",
         );
         let config = config_with_types(vec![(
             "spec",
@@ -418,7 +438,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-10-x.md",
             "adr",
-            "> Status: Accepted\n> Derives-from: RFC-1\n> Parent: —\n",
+            "---\nStatus: Accepted\nDerives-from: RFC-1\nParent: —\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -438,7 +458,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-8-x.md",
             "adr",
-            "> Status: Accepted\n> Derives-from: RFC-8, ADR-15, ADR-19\n",
+            "---\nStatus: Accepted\nDerives-from: RFC-8, ADR-15, ADR-19\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -456,7 +476,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-11-x.md",
             "adr",
-            "> Status: Accepted\n> Derives-from: RFC-1,,ADR-2\n",
+            "---\nStatus: Accepted\nDerives-from: RFC-1,,ADR-2\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -471,7 +491,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-12-x.md",
             "adr",
-            "> Status: Accepted\n> Parent: —\n",
+            "---\nStatus: Accepted\nParent: —\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -491,7 +511,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-12-x.md",
             "adr",
-            "> Status: Accepted\n> Derives-from: RFC-1, —\n",
+            "---\nStatus: Accepted\nDerives-from: RFC-1, —\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -509,7 +529,7 @@ mod tests {
         let r = record(
             "docs/milestones/MILE-38-x.md",
             "milestone",
-            "> Status: Planned\n> Blocked-on: MILE-38 (staleness detection) -- sequenced first.\n",
+            "---\nStatus: Planned\nBlocked-on: MILE-38 (staleness detection) -- sequenced first.\n---\n",
         );
         let config = config_with_types(vec![(
             "milestone",

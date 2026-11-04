@@ -199,11 +199,11 @@ mod tests {
         );
         let sticky = record(
             "docs/adr/0001-x.md",
-            "> Embodiment: Deprecated\n> Realized-by: spec:docs/x.md\n",
+            "---\nEmbodiment: Deprecated\nRealized-by: spec:docs/x.md\n---\n",
         );
         let neighbour = record(
             "docs/adr/0002-y.md",
-            "> Embodiment: Verified\n> Realized-by: spec:docs/x.md\n",
+            "---\nEmbodiment: Verified\nRealized-by: spec:docs/x.md\n---\n",
         );
         let (population, repairs) = detect_repairs(
             &[sticky, neighbour],
@@ -221,7 +221,7 @@ mod tests {
     fn a_back_pointed_record_repairs_to_implemented_not_specified_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
-            "> Embodiment: Specified\n> Realized-by: spec:docs/x.md\n",
+            "---\nEmbodiment: Specified\nRealized-by: spec:docs/x.md\n---\n",
         );
         let cited: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
         let (_, repairs) = detect_repairs(
@@ -242,7 +242,7 @@ mod tests {
     fn a_mismatched_embodiment_is_a_tier_1_repair_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
-            "> Embodiment: Not started\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Not started\nRealized-by: code:src/lib.rs\n---\n",
         );
         let (population, repairs) = detect_repairs(
             &[r],
@@ -263,7 +263,7 @@ mod tests {
     fn a_drifted_record_is_repaired_to_drift_detected_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
-            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n---\n",
         );
         let drifted: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
         let (_, repairs) = detect_repairs(
@@ -281,7 +281,7 @@ mod tests {
     fn a_matching_embodiment_is_not_a_repair() {
         let r = record(
             "docs/adr/0001-x.md",
-            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n---\n",
         );
         let (population, repairs) = detect_repairs(
             &[r],
@@ -299,7 +299,7 @@ mod tests {
     {
         let r = record(
             "docs/adr/0001-x.md",
-            "> Phase: Not started\n> Evidence: code:src/lib.rs\n",
+            "---\nPhase: Not started\nEvidence: code:src/lib.rs\n---\n",
         );
         let config = Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
@@ -318,7 +318,6 @@ mod tests {
                     required_fields: vec![],
                     header_shape: crate::header::HeaderShape::default(),
                     prefix: None,
-                    header_layout: None,
                     known_fields: Some(vec!["Phase".to_string(), "Evidence".to_string()]),
                     pointer_fields: None,
                     narrative_fields: None,
@@ -351,7 +350,7 @@ mod tests {
         // Absent, not out of population: the record was handed to this
         // function and reached no verdict, which is what `eligible() > 0`
         // says and a bare examined-count could not.
-        let r = record("docs/adr/0001-x.md", "> Embodiment: Not started\n");
+        let r = record("docs/adr/0001-x.md", "---\nEmbodiment: Not started\n---\n");
         let (population, repairs) = detect_repairs(
             &[r],
             &no_relation_field_overrides(),
@@ -376,10 +375,10 @@ mod tests {
 
     #[test]
     fn apply_repair_edits_the_field_and_appends_a_revision_log_row_observed_failing() {
-        let content = "# 0001 — X\n\n> Embodiment: Not started\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
+        let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
         let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
-        assert!(result.contains("> Embodiment: Verified"));
-        assert!(!result.contains("> Embodiment: Not started"));
+        assert!(result.contains("Embodiment: Verified"));
+        assert!(!result.contains("Embodiment: Not started"));
         assert!(result.contains("Tool-authored (by beau)"));
         assert!(result.contains("**structural**"));
         // the original row survives untouched
@@ -388,7 +387,7 @@ mod tests {
 
     #[test]
     fn apply_repair_refuses_without_a_revision_log_section() {
-        let content = "# 0001 — X\n\n> Embodiment: Not started\n";
+        let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n";
         let err = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap_err();
         assert!(err.contains("Revision log"));
     }
@@ -399,14 +398,14 @@ mod tests {
         // RFC-0008 §4's re-verify-before-write requirement, exercised at the
         // level this pure function can enforce: it can't find what it was
         // told to replace.
-        let content = "# 0001 — X\n\n> Embodiment: Implemented\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
+        let content = "---\nEmbodiment: Implemented\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n";
         let err = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap_err();
         assert!(err.contains("could not find"));
     }
 
     #[test]
     fn apply_repair_appends_a_plain_table_row_inside_the_plain_table_observed_failing() {
-        let content = "# 0001 — X\n\n> Embodiment: Not started\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-08-20 | Initial. | **structural** |\n";
+        let content = "---\nEmbodiment: Not started\n---\n# 0001 — X\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-08-20 | Initial. | **structural** |\n";
         let result = apply_repair(content, &sample_repair(), "2026-09-05", "beau").unwrap();
         let last = result.lines().last().unwrap();
         assert!(last.starts_with("| 2026-09-05 |"), "{last}");
@@ -429,7 +428,7 @@ mod tests {
     fn fresh_drift_leaves_a_stated_drift_detected_alone_observed_failing() {
         let r = record(
             "docs/adr/0001-x.md",
-            "> Embodiment: Drift detected\n> Realized-by: code:src/lib.rs\n",
+            "---\nEmbodiment: Drift detected\nRealized-by: code:src/lib.rs\n---\n",
         );
         let fresh: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
         let (_, repairs) = detect_repairs(

@@ -1,0 +1,7 @@
+id: init-names-the-removed-bold-list-form
+corpus: corpus-a
+invocation: [init, --dry-run]
+expect_exit: 0
+expect_stdout_contains:
+  - "header_shape: yaml-frontmatter"
+  - "2 in the removed bold-list form"

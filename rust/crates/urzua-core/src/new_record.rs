@@ -279,57 +279,6 @@ impl NewRecordParams<'_> {
     }
 }
 
-/// Render from an existing `.urzua/templates/<type>.md` (blockquote/bold-list
-/// shapes, whatever this corpus already uses): substitutes the filename
-/// number and title into the H1, fills `Date`/`Author`, and inserts a
-/// `Stable-Id` line into the header -- everything else (Status choices,
-/// Deciders, Embodiment) stays the template's own placeholder text for a
-/// human to pick, same as it always has been.
-pub fn render_from_template(template: &str, params: &NewRecordParams) -> String {
-    let number = params.h1_number();
-    let mut lines: Vec<String> = template.lines().map(|l| l.to_string()).collect();
-
-    // Only the H1 names *this* record's number -- a template's own body can
-    // legitimately contain other "NNNN"-shaped placeholders (e.g.
-    // `Derives-from: RFC-NNNN (optional)`) that must stay untouched, not get
-    // overwritten with this record's own number.
-    if let Some(h1) = lines.first_mut() {
-        *h1 = h1.replacen("NNNN", &number, 1);
-        *h1 = h1.replacen("Title", params.title, 1);
-    }
-
-    // Fill Date and Author on their own template lines, wherever they are --
-    // don't assume a fixed line index, since blockquote and bold-list
-    // headers order fields differently.
-    for line in &mut lines {
-        let is_author_line = line.contains("Author:")
-            && (line.trim_start().starts_with('>') || line.trim_start().starts_with("- **"));
-        if line.contains("Date:") && line.contains("YYYY-MM-DD") {
-            *line = line.replace("YYYY-MM-DD", params.today);
-        } else if is_author_line {
-            *line = line.replacen("name", params.author, 1);
-        }
-    }
-
-    // Insert Stable-Id right after the first header line, matching
-    // `migrate ids`'s own insertion point.
-    let first_header_line = lines
-        .iter()
-        .position(|l| l.trim_start().starts_with('>') || l.trim_start().starts_with("- **"));
-    if let Some(idx) = first_header_line {
-        if let Some(stable_id) = params.stable_id {
-            let stable_id_line = if lines[idx].trim_start().starts_with('>') {
-                format!("> Stable-Id: {stable_id}")
-            } else {
-                format!("- **Stable-Id:** {stable_id}")
-            };
-            lines.insert(idx + 1, stable_id_line);
-        }
-    }
-
-    lines.join("\n") + "\n"
-}
-
 /// Render from scratch with no template: YAML frontmatter (ADR-0017's
 /// default for a record with no pre-existing convention to adopt), listing
 /// every configured required field as a field a human still has to fill in.
@@ -397,61 +346,6 @@ pub fn template_body(template: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn render_from_template_fills_number_title_date_author_and_stable_id() {
-        let template = "# NNNN — Title\n\n> Status: Proposed\n> Date: YYYY-MM-DD\n> Author: name\n";
-        let params = NewRecordParams {
-            h1_prefix: None,
-            initial_status: None,
-            status_field: "Status",
-            display_number: 42,
-            title: "Use a real title",
-            stable_id: Some("01ABC"),
-            author: "beau",
-            today: "2026-09-06",
-        };
-        let result = render_from_template(template, &params);
-        assert!(result.contains("# 42 — Use a real title"));
-        assert!(result.contains("> Date: 2026-09-06"));
-        assert!(result.contains("> Author: beau"));
-        assert!(result.contains("> Stable-Id: 01ABC"));
-    }
-
-    #[test]
-    fn render_from_template_does_not_touch_an_nnnn_placeholder_outside_the_h1() {
-        let template = "# NNNN — Title\n\n> Derives-from: RFC-NNNN (optional)\n> Author: name\n";
-        let params = NewRecordParams {
-            h1_prefix: None,
-            initial_status: None,
-            status_field: "Status",
-            display_number: 28,
-            title: "X",
-            stable_id: Some("01ABC"),
-            author: "beau",
-            today: "2026-09-06",
-        };
-        let result = render_from_template(template, &params);
-        assert!(result.contains("# 28 — X"));
-        assert!(result.contains("> Derives-from: RFC-NNNN (optional)"));
-    }
-
-    #[test]
-    fn render_from_template_preserves_status_choices_untouched() {
-        let template = "# NNNN — Title\n\n> Status: Proposed | Accepted | Rejected\n";
-        let params = NewRecordParams {
-            h1_prefix: None,
-            initial_status: None,
-            status_field: "Status",
-            display_number: 1,
-            title: "X",
-            stable_id: Some("01ABC"),
-            author: "beau",
-            today: "2026-09-06",
-        };
-        let result = render_from_template(template, &params);
-        assert!(result.contains("> Status: Proposed | Accepted | Rejected"));
-    }
 
     #[test]
     fn claims_on_other_refs_push_the_number_past_them() {
@@ -693,7 +587,7 @@ mod tests {
 
     #[test]
     fn template_body_starts_at_the_first_section_heading() {
-        let template = "# NNNN — Title\n\n> Status: Planned\n> Phase: 0\n\n## What\n\nDeliver X.\n\n## Why\n\nBecause Y.\n";
+        let template = "---\nStatus: Planned\nPhase: 0\n---\n# NNNN — Title\n\n## What\n\nDeliver X.\n\n## Why\n\nBecause Y.\n";
         let body = template_body(template).unwrap();
         assert!(body.starts_with("## What"));
         assert!(body.contains("## Why"));
@@ -702,7 +596,10 @@ mod tests {
 
     #[test]
     fn template_body_is_none_without_a_section_heading() {
-        assert_eq!(template_body("# NNNN — Title\n\n> Status: Planned\n"), None);
+        assert_eq!(
+            template_body("---\nStatus: Planned\n---\n# NNNN — Title\n"),
+            None
+        );
     }
 
     fn compiled(pattern: &str) -> crate::document_model::CompiledIdentity {

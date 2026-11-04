@@ -1,5 +1,5 @@
 ---
-Version: '0.27'
+Version: '0.28'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -52,7 +52,7 @@ record_type:
     dir: "docs/adr"
     filename: "{number}-{slug}.md"
     statuses: ['Proposed', 'Accepted', 'Rejected', 'Withdrawn', 'Superseded', 'Deprecated']
-    header_shape: "blockquote"
+    header_shape: "yaml-frontmatter"
     required_fields: {'always': ['Status', 'Date', 'Author', 'Deciders'], 'Accepted': ['Accepted']}
     roles: {'author_may_self_review': False}
 boundary:
@@ -83,10 +83,13 @@ Two details carry weight:
 - **The header shape is declared per record type, never auto-detected.** RFC-10 rejects sniffing a
   shape from content, for the same reason a rule can't be voted into existence by majority: a
   misconfigured shape must fail loud (`no header-shaped region found`) rather than silently matching
-  the wrong lines. `header_shape` defaults to `"blockquote"` when omitted, so an existing config
-  needs no change. `"yaml-frontmatter"` (RFC-16) is genuinely structured data, deserialized rather
-  than line-recognized, and is what a from-scratch record generates by default; the other shapes stay
-  what an adopted, pre-existing corpus is read as.
+  the wrong lines. `header_shape` defaults to `"yaml-frontmatter"` when omitted. `"yaml-frontmatter"`
+  (RFC-16) is genuinely structured data, deserialized rather than line-recognized, and is the one
+  shape with a reader, alongside `"none"` for a type with no header. The `"blockquote"` and
+  `"bold-list"` shapes were removed (`MILE-85`): a config declaring either fails to load with an
+  error naming the shape, and a record still written in one is reported as unreadable with the form
+  named, so neither is mistaken for a record with no header. `header_layout` and the
+  `header.layout-consistency` and `header.deprecated-shape` rules went with them.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -115,7 +118,7 @@ Two details carry weight:
     adr:
       dir: doc/adr
       identity: {from: filename, pattern: '^(?P<number>\d+)-(?P<slug>.+)$'}
-      fields:   {from: prefix-lines}      # or yaml-frontmatter, blockquote, bold-list, none
+      fields:   {from: prefix-lines}      # or yaml-frontmatter, none
       sections: {from: headings, depth: 2, items: true}
   ```
 
@@ -140,8 +143,9 @@ Two details carry weight:
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
     finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
     zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
-  - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`,
-    `blockquote`, `bold-list` and `none` are the existing shapes, and `prefix-lines` reads bare
+  - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`
+    and `none` are the existing shapes (`blockquote` and `bold-list` were removed and fail the load,
+    `MILE-85`), and `prefix-lines` reads bare
     `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
     letters, digits, `-` or `_`; the colon is followed by a space or ends the line). `none` gates as
     `header_shape: none` does (`RecordTypeConfig::has_no_header`).
@@ -670,3 +674,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |
 > | 2026-11-04 | Bumped to `0.27`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.28`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |

@@ -86,9 +86,9 @@ fn findings_of<'a>(report: &'a serde_json::Value, id: &str) -> Vec<&'a serde_jso
         .collect()
 }
 
-const GOOD: &str = "> Status: Accepted\n\n# 1 — Good\n\n## Context\n\nc\n\n## Options\n\n| Option | Pros |\n|---|---|\n| A | x |\n| B | y |\n\n## Decision\n\nTL;DR: In the context of a, facing b, we decided c, to achieve d, accepting e.\n";
-const BAD: &str = "> Status: Accepted\n\n# 2 — Bad\n\n## Options\n\n| Option | Pros |\n|---|---|\n| A | x |\n\n## Decision\n\nTL;DR: we decided c.\n";
-const WITHDRAWN: &str = "> Status: Withdrawn\n\n# 3 — Gone\n\nVacated.\n";
+const GOOD: &str = "---\nStatus: Accepted\n---\n\n# 1 — Good\n\n## Context\n\nc\n\n## Options\n\n| Option | Pros |\n|---|---|\n| A | x |\n| B | y |\n\n## Decision\n\nTL;DR: In the context of a, facing b, we decided c, to achieve d, accepting e.\n";
+const BAD: &str = "---\nStatus: Accepted\n---\n\n# 2 — Bad\n\n## Options\n\n| Option | Pros |\n|---|---|\n| A | x |\n\n## Decision\n\nTL;DR: we decided c.\n";
+const WITHDRAWN: &str = "---\nStatus: Withdrawn\n---\n\n# 3 — Gone\n\nVacated.\n";
 
 #[test]
 fn declared_rules_report_each_failure_and_count_slots() {

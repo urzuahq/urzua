@@ -1,0 +1,9 @@
+id: check-names-the-removed-bold-list-header
+corpus: corpus-a
+invocation: [--config, .urzua/declared-yaml.yaml, check, records/]
+expect_exit: 1
+expect_findings:
+  - {rule: header.required-fields, severity: error}
+expect_stdout_contains:
+  - "written as a bold-list"
+  - "no longer reads"

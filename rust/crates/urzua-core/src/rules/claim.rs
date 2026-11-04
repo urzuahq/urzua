@@ -164,7 +164,11 @@ mod tests {
     fn a_claim_against_a_declared_failure_terminal_is_not_an_error_observed_failing() {
         let yaml = "schema_version: 2\nrecord_types:\n  bug:\n    dir: docs/bugs\n    required_fields: [Status]\n    statuses:\n      values: [Open, Fixed, WontFix]\n      success: [Fixed]\n      failure: [WontFix]\n";
         let config = crate::config::parse(yaml).unwrap();
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: WontFix\n");
+        let bug = record(
+            "docs/bugs/BUG-36-x.md",
+            "bug",
+            "---\nStatus: WontFix\n---\n",
+        );
         let claims = vec![(
             ".changeset/x.md".to_string(),
             "which also closes BUG-36.".to_string(),
@@ -180,7 +184,7 @@ mod tests {
     /// announced it closed `BUG-36` while `BUG-36` said `Open`, and shipped.
     #[test]
     fn a_claim_to_close_an_open_record_is_an_error_observed_failing() {
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nStatus: Open\n---\n");
         let claims = vec![(
             ".changeset/x.md".to_string(),
             "rendered through a real serializer -- which also closes BUG-36, where a directory\nname escaped its value.\n".to_string(),
@@ -204,7 +208,7 @@ mod tests {
     /// configured closed status and pushed a blocking `Error` on every claim.
     #[test]
     fn a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing() {
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> status: Open\n");
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nstatus: Open\n---\n");
         let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36.".to_string())];
         let closed = vec!["Fixed".to_string()];
 
@@ -221,7 +225,7 @@ mod tests {
 
     #[test]
     fn claim_status_agreement_reads_a_custom_status_field_name_observed_failing() {
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> State: Open\n");
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nState: Open\n---\n");
         let claims = vec![(
             ".changeset/x.md".to_string(),
             "which also closes BUG-36.".to_string(),
@@ -253,7 +257,7 @@ mod tests {
     /// business, the same as any other undeclared field.
     #[test]
     fn a_claim_against_a_target_whose_type_never_declares_status_is_not_judged_observed_failing() {
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nStatus: Open\n---\n");
         let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36.".to_string())];
         let closed = vec!["Fixed".to_string()];
 
@@ -370,7 +374,7 @@ mod tests {
 
     #[test]
     fn a_claim_to_close_an_already_closed_record_is_silent() {
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Fixed\n");
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nStatus: Fixed\n---\n");
         let claims = vec![(".changeset/x.md".to_string(), "closes BUG-36\n".to_string())];
         let records = [bug];
         let index = build_normalized_index(&records);
@@ -383,7 +387,7 @@ mod tests {
     /// Mentioning a record is not claiming to close it.
     #[test]
     fn a_reference_without_a_closing_verb_is_not_a_claim() {
-        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: Open\n");
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nStatus: Open\n---\n");
         let claims = vec![(
             ".changeset/x.md".to_string(),
             "see BUG-36 for the four hardcoded paths\n".to_string(),

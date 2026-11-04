@@ -176,9 +176,7 @@ rules:
   embodiment.requires-accepted-status:
     level: warn
   header.required-fields: error
-  header.layout-consistency: warn
   header.field-set-consistency: warn
-  header.deprecated-shape: warn
   header.pointer-field-clean: warn
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn

@@ -668,9 +668,6 @@ pub fn run(
             rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
             || rules::embodiment_locator_promotion_candidate(&records, &config),
         ),
-        crate::gate::gated(&config, rules::RULE_HEADER_LAYOUT_CONSISTENCY, || {
-            rules::header_layout_consistency(&records, &config)
-        }),
         crate::gate::gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
             rules::header_field_set_consistency(&records, &config)
         }),
@@ -727,9 +724,6 @@ pub fn run(
         ),
         crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
             rules::type_no_declared_spec(&config, &config_path)
-        }),
-        crate::gate::gated(&config, rules::RULE_HEADER_DEPRECATED_SHAPE, || {
-            rules::header_deprecated_shape(&config, &config_path)
         }),
         crate::gate::gated(&config, rules::RULE_HEADER_POINTER_FIELD_CLEAN, || {
             rules::header_pointer_field_clean(&records, &config)

@@ -151,18 +151,30 @@ pub fn declared_model(
 }
 
 /// How a record's fields are found.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldsSource {
     /// Bare `Key: value` lines between the title and the first `##` heading.
     PrefixLines,
     YamlFrontmatter,
-    /// The existing `header_shape` values, as cases of `fields.from`
-    /// (RFC-33): a `> Key: value` blockquote block, a `- **Key:** value`
-    /// list, or no header at all.
-    Blockquote,
-    BoldList,
+    /// No header at all.
     None,
+}
+
+impl<'de> Deserialize<'de> for FieldsSource {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        match s.as_str() {
+            "prefix-lines" => Ok(FieldsSource::PrefixLines),
+            "yaml-frontmatter" => Ok(FieldsSource::YamlFrontmatter),
+            "none" => Ok(FieldsSource::None),
+            removed @ ("blockquote" | "bold-list") => Err(serde::de::Error::custom(
+                crate::config::removed_header_shape_message(removed),
+            )),
+            other => Err(serde::de::Error::custom(format!(
+                "unknown variant `{other}`, expected one of `prefix-lines`, `yaml-frontmatter`, `none`"
+            ))),
+        }
+    }
 }
 
 impl FieldsSource {
@@ -172,8 +184,6 @@ impl FieldsSource {
         match self {
             FieldsSource::PrefixLines => Option::None,
             FieldsSource::YamlFrontmatter => Some(HeaderShape::YamlFrontmatter),
-            FieldsSource::Blockquote => Some(HeaderShape::Blockquote),
-            FieldsSource::BoldList => Some(HeaderShape::BoldList),
             FieldsSource::None => Some(HeaderShape::None),
         }
     }
@@ -655,8 +665,6 @@ mod tests {
     #[test]
     fn every_existing_header_shape_is_a_fields_source() {
         for (name, shape) in [
-            ("blockquote", crate::header::HeaderShape::Blockquote),
-            ("bold-list", crate::header::HeaderShape::BoldList),
             (
                 "yaml-frontmatter",
                 crate::header::HeaderShape::YamlFrontmatter,
@@ -667,6 +675,17 @@ mod tests {
             assert_eq!(
                 m["adr"].fields.as_ref().unwrap().from.header_shape(),
                 Some(shape)
+            );
+        }
+    }
+
+    #[test]
+    fn a_removed_header_shape_as_a_fields_source_is_a_clear_error() {
+        for name in ["blockquote", "bold-list"] {
+            let e = invalid(&format!("    fields: {{from: {name}}}\n"));
+            assert!(
+                e.contains(name) && e.contains("no longer supported"),
+                "{name}: {e}"
             );
         }
     }

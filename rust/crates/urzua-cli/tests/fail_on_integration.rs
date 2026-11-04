@@ -4,8 +4,8 @@
 use std::path::Path;
 use std::process::Command;
 
-const WARN_ONLY: &str = "# ADR-1: First\n\n> Deciders: Ana\n> Reviewers:\n";
-const CLEAN: &str = "# ADR-1: First\n\n> Deciders: Ana\n> Reviewers: Bo\n";
+const WARN_ONLY: &str = "---\nDeciders: Ana\nReviewers:\n---\n# ADR-1: First\n";
+const CLEAN: &str = "---\nDeciders: Ana\nReviewers: Bo\n---\n# ADR-1: First\n";
 
 fn run_check(dir: &Path, extra: &[&str]) -> (i32, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_urzua"))

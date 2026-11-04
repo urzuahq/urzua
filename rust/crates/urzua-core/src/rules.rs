@@ -5,7 +5,6 @@
 
 use crate::config::Config;
 use crate::field_state::{classify, classify_with};
-use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{
     census, census_records, Finding, FindingSeverity, Notice, NoticeSeverity, Outcome, Population,
@@ -130,7 +129,6 @@ mod tests {
             required_fields: Vec::new(),
             header_shape: crate::header::HeaderShape::default(),
             prefix: None,
-            header_layout: None,
             known_fields: None,
             pointer_fields: None,
             narrative_fields: None,
@@ -180,25 +178,6 @@ mod tests {
         )
     }
 
-    /// A `Config` declaring `header_layout` per type (`ADR-59`).
-    pub(crate) fn config_for_layout(entries: Vec<(&str, crate::header::HeaderLayout)>) -> Config {
-        config_with_types(
-            entries
-                .into_iter()
-                .map(|(name, layout)| {
-                    (
-                        name,
-                        crate::config::RecordTypeConfig {
-                            exclude_files: Vec::new(),
-                            header_layout: Some(layout),
-                            ..type_config(None)
-                        },
-                    )
-                })
-                .collect(),
-        )
-    }
-
     pub(crate) fn type_config_with_shape(
         shape: crate::header::HeaderShape,
     ) -> crate::config::RecordTypeConfig {
@@ -212,7 +191,6 @@ mod tests {
             required_fields: Vec::new(),
             header_shape: shape,
             prefix: None,
-            header_layout: None,
             known_fields: None,
             pointer_fields: None,
             narrative_fields: None,
@@ -260,7 +238,6 @@ mod tests {
             required_fields: required_fields.iter().map(|s| s.to_string()).collect(),
             header_shape: crate::header::HeaderShape::default(),
             prefix: None,
-            header_layout: None,
             known_fields: known_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             pointer_fields: pointer_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             narrative_fields: narrative_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),

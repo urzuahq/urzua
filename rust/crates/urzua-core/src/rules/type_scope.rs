@@ -81,7 +81,7 @@ pub fn type_record_outside_declared_dir(
 /// spec" stays editorial (ADR-0041 rejected a mechanical formula for that);
 /// this only makes visible which configured types currently have no `spec`
 /// pointer declared at all, the same "declared, not voted" shape as
-/// `header_layout`/`known_fields`. A type with none declared is a real,
+/// `known_fields`. A type with none declared is a real,
 /// permanently valid state under ADR-0041 -- this is a signal to review,
 /// never a mandate to write one.
 /// A declared record type whose `dir` matches no record.

@@ -15,37 +15,22 @@ It's a record engine, not a record format: you declare what a record type looks 
 
 ## What a record looks like
 
-Two valid shapes for the same fact, because Urzua reads whatever a corpus already uses and writes something more structured going forward.
-
-**An existing corpus, unchanged.** Real `blockquote` shape from this repo:
-
-```markdown
-# 16 — A bold-list header shape, declared per profile
-
-> Status: Accepted
-> Embodiment: Verified
-> Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs
-> Derives-from: RFC-10 (Accepted)
-
-## Context
-...
-```
-
-**A record Urzua generates going forward.** Real YAML frontmatter, not text lines a regex pulls apart:
+A record's header is YAML frontmatter: real structured data, deserialized rather than a set of text lines a regex pulls apart.
 
 ```markdown
 ---
 Status: Accepted
 Embodiment: Verified
 Realized-by: "code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs"
+Derives-from: RFC-10 (Accepted)
 ---
-# 16 — A bold-list header shape, declared per profile
+# 16 — A header shape, declared per profile
 
 ## Context
 ...
 ```
 
-Same schema underneath: `check`, `fix`, and every rule read either shape identically. The difference is only how the header is stored: line-recognized for a corpus that already exists, or `serde`-deserialized for one Urzua writes itself. See [`docs/rfc/RFC-16-yaml-frontmatter-as-the-generated-record-header.md`](docs/rfc/RFC-16-yaml-frontmatter-as-the-generated-record-header.md) for why both need to exist. `Realized-by`'s own value is still a flat `type:locator` string under either shape today. [`docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md`](docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md) designs the fuller graph-shaped version this release deliberately ships a narrower first slice of.
+The older blockquote (`> Key: Value`) and bold-list (`- **Key:** Value`) header forms are no longer read. A config that declares either fails to load with an error naming the shape, and a record still written in one is reported by `check` as unreadable with the form named, so neither is mistaken for a record with no header. `init` counts those records when it proposes a config. See [`docs/rfc/RFC-16-yaml-frontmatter-as-the-generated-record-header.md`](docs/rfc/RFC-16-yaml-frontmatter-as-the-generated-record-header.md) for why YAML frontmatter is the header. `Realized-by`'s own value is still a flat `type:locator` string today. [`docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md`](docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md) designs the fuller graph-shaped version this release deliberately ships a narrower first slice of.
 
 ## Why now
 
@@ -157,7 +142,7 @@ A record type is whatever `.urzua/config.yaml` says it is. Urzua ships no hardco
 [record_types.adr]
 dir = "docs/adr"
 required_fields = ["Status", "Date", "Author", "Deciders"]
-header_shape = "blockquote"       # or "bold-list" / "yaml-frontmatter"
+header_shape = "yaml-frontmatter" # or "none" for a type with no header
 
 [record_types.incident-review]     # any record type your org actually uses
 dir = "docs/postmortems"
@@ -165,7 +150,7 @@ required_fields = ["Status", "Severity", "Owner"]
 header_shape = "yaml-frontmatter"
 ```
 
-Every existing header convention this project has encountered is a declared shape, not a guess: a blockquote (`> Key: Value`), a bold-labelled blockquote, a pipe-delimited single line, a bold markdown list with no blockquote at all, and YAML frontmatter. A misdeclared shape fails loud (`no header-shaped region found`), never a silent match on the wrong lines.
+The header shape is declared, not guessed: YAML frontmatter, or `none` for a type whose metadata lives in prose. A record that does not match fails loud (`no header-shaped region found`, naming a removed blockquote or bold-list form when that is what it is written in), never a silent match on the wrong lines.
 
 This repo's own `.urzua/config.yaml` declares `milestone` and `bug` alongside `adr`/`rfc`/`spec`: two record types added after the fact, with zero changes to `urzua-core`, to track this project's own backlog and defects using the same engine that validates its decisions.
 

@@ -105,7 +105,6 @@ mod tests {
                     required_fields: Vec::new(),
                     header_shape,
                     prefix: None,
-                    header_layout: None,
                     known_fields: None,
                     pointer_fields: None,
                     narrative_fields: None,
@@ -120,7 +119,7 @@ mod tests {
 
     #[test]
     fn a_record_missing_the_candidate_field_is_reported_observed_failing() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
+        let r = record("docs/adr/0001-x.md", "adr", "---\nStatus: Accepted\n---\n");
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
         let (population, report, notices) = schema_report(&[r], "Reviewers", &config);
         assert_eq!((population.eligible(), population.examined()), (1, 1));
@@ -134,7 +133,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> Reviewers: alice\n",
+            "---\nStatus: Accepted\nReviewers: alice\n---\n",
         );
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
         let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
@@ -203,7 +202,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> Reviewers: TBD\n",
+            "---\nStatus: Accepted\nReviewers: TBD\n---\n",
         );
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
         let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);

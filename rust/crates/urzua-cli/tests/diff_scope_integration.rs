@@ -62,10 +62,11 @@ rules:
 
 /// Writes `docs/adr/<file>` with a `Status` plus any extra header lines.
 fn adr(dir: &Path, file: &str, status: &str, extra: &[(&str, &str)]) {
-    let mut body = format!("# {file}\n\n> Status: {status}\n");
+    let mut body = format!("---\nStatus: '{status}'\n");
     for (k, v) in extra {
-        body.push_str(&format!("> {k}: {v}\n"));
+        body.push_str(&format!("{k}: '{}'\n", v.replace('\'', "''")));
     }
+    body.push_str(&format!("---\n# {file}\n"));
     std::fs::write(dir.join("docs/adr").join(file), body).unwrap();
 }
 
@@ -97,10 +98,11 @@ fn assert_full_and_diff_agree(dir: &Path, rule: &str, file: &str) {
 
 fn write_adr(dir: &Path, stem: &str, status: &str, implements: Option<&str>) {
     let number = &stem[..4];
-    let mut body = format!("# {number} — {}\n\n> Status: {status}\n", &stem[5..]);
+    let mut body = format!("---\nStatus: '{status}'\n");
     if let Some(target) = implements {
-        body.push_str(&format!("> Implements: {target}\n"));
+        body.push_str(&format!("Implements: '{target}'\n"));
     }
+    body.push_str(&format!("---\n# {number} — {}\n", &stem[5..]));
     std::fs::write(
         dir.join(format!(
             "docs/adr/ADR-{}-{}.md",
@@ -517,7 +519,7 @@ fn a_changed_path_with_spaces_is_examined() {
     let dir = fixture("spaces");
     std::fs::write(
         dir.join("docs/adr/ADR-4-has a space.md"),
-        "# 4 — has a space\n\n> Status: Accepted\n> Implements: RFC-9998\n",
+        "---\nStatus: Accepted\nImplements: RFC-9998\n---\n# 4 — has a space\n",
     )
     .unwrap();
     commit(&dir, "add a record with spaces");
@@ -680,7 +682,7 @@ fn write_waiver(dir: &Path, scope: &str) {
     std::fs::write(
         dir.join("docs/waiver/0001-w.md"),
         format!(
-            "# 0001 — Waive it\n\n> Rule: pointer.resolution\n> Scope: {scope}\n> Reason: tracked elsewhere\n"
+            "---\nRule: pointer.resolution\nScope: '{scope}'\nReason: tracked elsewhere\n---\n# 0001 — Waive it\n"
         ),
     )
     .unwrap();
@@ -746,7 +748,7 @@ fn a_changed_file_outside_its_declared_dir_keeps_its_finding() {
     std::fs::create_dir_all(dir.join("docs/adr/sub")).unwrap();
     std::fs::write(
         dir.join("docs/adr/sub/ADR-2-nested.md"),
-        "# nested\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# nested\n",
     )
     .unwrap();
     git(&dir, &["add", "-A"]);

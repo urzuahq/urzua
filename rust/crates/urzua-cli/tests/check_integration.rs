@@ -48,12 +48,12 @@ fn scope_source_is_the_declared_contract_value_not_a_debug_rendering() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -71,12 +71,12 @@ fn check_exits_0_on_a_clean_corpus() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -98,12 +98,12 @@ fn check_exits_1_on_a_missing_required_field() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Deciders\"]\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Deciders\"]\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -136,12 +136,12 @@ fn an_untracked_scratch_file_is_never_examined() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -165,7 +165,7 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\n\
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\n\
          record_types:\n\
          \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
          \x20   known_fields: [\"Implements\"]\n    pointer_fields: [\"Implements\"]\n    narrative_fields: []\n\
@@ -178,15 +178,17 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     // standing between this fixture and a clean exit.
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n> Implements: RFC-9999\n",
+        "---\nStatus: Accepted\nImplements: RFC-9999\n---\n# 0001 — X\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/waiver/0001-w.md"),
-        "# 0001 — Waive the dangling RFC-9999 reference on ADR-0001\n\n\
-         > Rule: pointer.resolution\n\
-         > Scope: docs/adr/0001-x.md\n\
-         > Reason: RFC-9999 is tracked externally, not yet in this corpus\n",
+        "---\n\
+         Rule: pointer.resolution\n\
+         Scope: docs/adr/0001-x.md\n\
+         Reason: RFC-9999 is tracked externally, not yet in this corpus\n\
+         ---\n\
+         # 0001 — Waive the dangling RFC-9999 reference on ADR-0001\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -278,7 +280,7 @@ fn doctor_emits_json_not_plain_text_lines() {
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -321,7 +323,7 @@ fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\n\
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\n\
          record_types:\n\
          \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n\
          \x20 rfc:\n    dir: \"docs/rfc\"\n    required_fields: []\n",
@@ -329,12 +331,12 @@ fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/rfc/0001-y.md"),
-        "# 0001 — Y\n\n> Status: Draft\n",
+        "---\nStatus: Draft\n---\n# 0001 — Y\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -362,17 +364,17 @@ fn audit_exits_0_on_reciprocated_supersession() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-1-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n> Supersedes / Superseded-by: ADR-0002\n",
+        "---\nStatus: Accepted\nSupersedes / Superseded-by: ADR-0002\n---\n# 0001 — X\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-2-y.md"),
-        "# 0002 — Y\n\n> Status: Superseded\n> Supersedes / Superseded-by: ADR-0001\n",
+        "---\nStatus: Superseded\nSupersedes / Superseded-by: ADR-0001\n---\n# 0002 — Y\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -394,19 +396,19 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields:\n      - \"Supersedes / Superseded-by\"\n",
     )
     .unwrap();
     // ADR-0001 claims to supersede ADR-0002, but ADR-0002 never points back --
     // exactly the reciprocity violation `audit` exists to catch.
     std::fs::write(
         dir.join("docs/adr/ADR-1-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n> Supersedes / Superseded-by: ADR-0002\n",
+        "---\nStatus: Accepted\nSupersedes / Superseded-by: ADR-0002\n---\n# 0001 — X\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-2-y.md"),
-        "# 0002 — Y\n\n> Status: Superseded\n",
+        "---\nStatus: Superseded\n---\n# 0002 — Y\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -434,8 +436,9 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
 /// declared level exactly as `check` does.
 #[test]
 fn audit_honours_the_declared_level_of_a_rule_instead_of_running_it_unconditionally() {
-    let violation = "# 0001 — X\n\n> Status: Accepted\n> Supersedes / Superseded-by: ADR-0002\n";
-    let target = "# 0002 — Y\n\n> Status: Superseded\n";
+    let violation =
+        "---\nStatus: Accepted\nSupersedes / Superseded-by: ADR-0002\n---\n# 0001 — X\n";
+    let target = "---\nStatus: Superseded\n---\n# 0002 — Y\n";
     let run = |name: &str, level: &str| {
         let dir = fixture_repo(name);
         std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -500,8 +503,12 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
         "schema_version: 2\nrules: {identity.collision: error, relation.supersession-reciprocity: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/DOC-1-a.md"),
+        "---\nStatus: Accepted\n---\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "---\nStatus: Draft\n---\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["audit"]);
@@ -513,10 +520,10 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
 }
 
 #[test]
-fn init_then_check_reads_a_pre_existing_blockquote_record_and_flags_its_shape() {
-    // BUG-151: adopt mode proposes the shape the corpus already uses, so this
-    // blockquote record is read; the migration steer is carried by
-    // `header.deprecated-shape`, not by a config that cannot read the corpus.
+fn init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form() {
+    // MILE-85: the blockquote shape is no longer read. Adopt mode proposes
+    // yaml-frontmatter, says how many records are in a removed form, and
+    // `check` names the form instead of reporting a record with no header.
     let dir = fixture_repo("bootstrap");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
@@ -532,19 +539,25 @@ fn init_then_check_reads_a_pre_existing_blockquote_record_and_flags_its_shape() 
         "stderr: {}",
         String::from_utf8_lossy(&init_output.stderr)
     );
+    let init_stdout = String::from_utf8_lossy(&init_output.stdout);
+    assert!(
+        init_stdout.contains("removed blockquote form"),
+        "init must name the removed form: {init_stdout}"
+    );
     assert!(dir.join(".urzua/config.yaml").exists());
 
+    let path = dir.join(".urzua/config.yaml");
+    let config = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        config.replace("required_fields: []", "required_fields: [Status]"),
+    )
+    .unwrap();
     let check_output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&check_output.stdout);
-    // Exit 0: `init` proposes every rule at `warn` (MILE-51).
-    assert_eq!(check_output.status.code(), Some(0), "stdout: {stdout}");
     assert!(
-        !stdout.contains("no header-shaped region found"),
-        "stdout: {stdout}"
-    );
-    assert!(
-        stdout.contains("header.deprecated-shape"),
-        "stdout: {stdout}"
+        stdout.contains("written as a blockquote") && stdout.contains("no longer reads"),
+        "check must name the unsupported form: {stdout}"
     );
 
     // Idempotence: a second init must refuse, not clobber.
@@ -591,7 +604,7 @@ fn fix_apply_on_an_empty_corpus_still_exits_0() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -651,8 +664,12 @@ fn graph_discloses_an_identity_collision_as_a_notice_observed_failing() {
         "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/DOC-1-a.md"),
+        "---\nStatus: Accepted\n---\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "---\nStatus: Draft\n---\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["graph"]);
@@ -683,8 +700,12 @@ fn check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
         "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/DOC-1-a.md"),
+        "---\nStatus: Accepted\n---\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "---\nStatus: Draft\n---\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["check"]);
@@ -710,8 +731,12 @@ fn audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
         "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"DOC\"\n    required_fields: []\n",
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/DOC-1-a.md"),
+        "---\nStatus: Accepted\n---\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "---\nStatus: Draft\n---\n").unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["audit"]);
@@ -791,7 +816,7 @@ fn init_dry_run_reports_the_proposed_config_as_structured_json() {
     let dir = fixture_repo("init-dry-run");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -823,7 +848,7 @@ fn init_real_write_omits_config_yaml_from_the_report() {
     let dir = fixture_repo("init-write");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -856,17 +881,17 @@ fn a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed
     std::fs::create_dir_all(dir.join("x-y")).unwrap();
     std::fs::write(
         dir.join("x/y/0001-a.md"),
-        "# 0001 — A\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — A\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("z/y/0001-b.md"),
-        "# 0001 — B\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — B\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("x-y/0001-c.md"),
-        "# 0001 — C\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — C\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -897,7 +922,7 @@ fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
     // No header-shaped region -- deliberately exercises the `skipped`
@@ -935,13 +960,13 @@ fn migrate_ids_exits_1_on_a_real_write_failure() {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
     )
     .unwrap();
-    // A real header-shaped region (a blockquote line) so the backfill
+    // A real header-shaped region (a frontmatter block) so the backfill
     // attempts a write, then made read-only so that write fails.
     let record_path = dir.join("docs/adr/0001-x.md");
-    std::fs::write(&record_path, "# 0001 — X\n\n> Status: Accepted\n").unwrap();
+    std::fs::write(&record_path, "---\nStatus: Accepted\n---\n# 0001 — X\n").unwrap();
     commit_all(&dir);
 
     #[cfg(unix)]
@@ -983,7 +1008,7 @@ fn an_undeclared_rule_is_reported_as_not_enabled_never_omitted() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -1041,7 +1066,11 @@ fn the_declared_level_overrides_the_rule_body_s_own_severity() {
         "schema_version: 2\nrules: {field.quality: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/0001-x.md"), "# 0001 — X\n\n> Status:\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "---\nStatus:\n---\n# 0001 — X\n",
+    )
+    .unwrap();
     commit_all(&dir);
 
     let output = run_urzua(&dir, &["check", "docs/"]);
@@ -1071,7 +1100,7 @@ fn a_locator_naming_a_staged_deletion_is_reported_observed_failing() {
     std::fs::write(dir.join("src.rs"), "fn main() {}\n").unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Status: Accepted\n> Realized-by: code:src.rs\n",
+        "---\nStatus: Accepted\nRealized-by: code:src.rs\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -1514,7 +1543,11 @@ fn a_run_in_which_no_rule_examined_anything_is_not_ok() {
 #[test]
 fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
     let dir = fixture_repo("init-prefixless-warns-about-audit");
-    std::fs::write(dir.join("docs/adr/0001-x.md"), "> Status: Accepted\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "---\nStatus: Accepted\n---\n",
+    )
+    .unwrap();
     commit_all(&dir);
 
     let out = run_urzua(&dir, &["init"]);
@@ -2047,29 +2080,6 @@ fn a_record_with_no_revision_log_is_absent_not_outside_the_population() {
 }
 
 #[test]
-fn a_type_declaring_no_layout_puts_its_records_outside_the_population() {
-    // Distinct from absence: the rule does not apply at all, which is the
-    // cold-start state and must read as eligible 0 rather than as a rule
-    // whose matcher is broken.
-    let dir = one_adr_repo(
-        "layout-not-declared",
-        "{header.layout-consistency: warn}",
-        "---\nStatus: Accepted\n---\n# 1 — X\n",
-    );
-    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
-    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let pop = parsed["rules_executed"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|r| r["rule"] == "header.layout-consistency")
-        .and_then(|r| r.get("population"))
-        .expect("the rule must carry a population");
-    assert_eq!(pop["eligible"], 0, "no type declares a layout: {stdout}");
-    assert_eq!(pop["examined"], 0, "{stdout}");
-}
-
-#[test]
 fn a_field_rule_counts_declared_slots_not_records() {
     // BUG-40: field.quality reported 1023 against a 309-record corpus and the
     // number was never wrong -- it was 100% of declared field slots under a
@@ -2189,7 +2199,7 @@ fn a_rule_handed_nothing_discloses_that_it_certified_nothing() {
     // examined when none were.
     let dir = one_adr_repo(
         "handed-nothing",
-        "{header.layout-consistency: warn}",
+        "{header.field-set-consistency: warn}",
         "---\nStatus: Accepted\n---\n# 1 — X\n",
     );
     std::fs::write(
@@ -2206,10 +2216,13 @@ fn a_rule_handed_nothing_discloses_that_it_certified_nothing() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|r| r["rule"] == "header.layout-consistency")
+        .find(|r| r["rule"] == "header.field-set-consistency")
         .and_then(|r| r.get("population"))
         .expect("the rule must carry a population");
-    assert_eq!(pop["eligible"], 0, "no type declares a layout: {stdout}");
+    assert_eq!(
+        pop["eligible"], 0,
+        "no type declares known_fields: {stdout}"
+    );
     assert_eq!(
         parsed["files_examined"], 2,
         "both records were read off disk: {stdout}"
@@ -2239,7 +2252,7 @@ fn a_blocking_finding_is_never_reported_as_a_run_that_did_not_happen() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-1-x.md"),
-        "# 1 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
     )
     .unwrap();
     std::fs::write(dir.join("docs/elsewhere/.keep"), "x\n").unwrap();
@@ -2280,7 +2293,7 @@ fn records_read_never_exceeds_files_examined() {
     for n in 1..=3 {
         std::fs::write(
             dir.join(format!("docs/adr/ADR-{n}-x.md")),
-            format!("# {n} — X\n\n> Status: Accepted\n"),
+            format!("---\nStatus: Accepted\n---\n# {n} — X\n"),
         )
         .unwrap();
     }
@@ -2355,7 +2368,7 @@ fn an_absent_claim_paths_directory_is_reported_not_fatal() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-1-x.md"),
-        "# 1 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2405,7 +2418,7 @@ fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-1-x.md"),
-        "# 1 — X\n\n> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2467,7 +2480,7 @@ fn drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_fai
     std::fs::write(dir.join("src.rs"), "fn main() {}\n").unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Phase: Implemented\n> Evidence: code:src.rs\n",
+        "---\nPhase: Implemented\nEvidence: code:src.rs\n---\n# 0001 — X\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2515,12 +2528,12 @@ fn two_records_citing_the_same_locator_are_both_detected_as_drifted() {
     std::fs::write(dir.join("shared.rs"), "fn shared() {}\n").unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "# 0001 — X\n\n> Embodiment: Implemented\n> Realized-by: code:shared.rs\n",
+        "---\nEmbodiment: Implemented\nRealized-by: code:shared.rs\n---\n# 0001 — X\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0002-y.md"),
-        "# 0002 — Y\n\n> Embodiment: Implemented\n> Realized-by: code:shared.rs\n",
+        "---\nEmbodiment: Implemented\nRealized-by: code:shared.rs\n---\n# 0002 — Y\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2642,7 +2655,7 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/archive/0001-x.md"),
-        "> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n",
     )
     .unwrap();
     // A live sibling, left in place: proves the filter drops only the staged
@@ -2650,7 +2663,7 @@ fn a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed
     // control CodeRabbit's review of round 21 asked for).
     std::fs::write(
         dir.join("docs/adr/archive/0002-y.md"),
-        "> Status: Accepted\n",
+        "---\nStatus: Accepted\n---\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2716,11 +2729,15 @@ fn a_same_type_identifier_collision_resolves_deterministically() {
          \x20 mile:\n    dir: \"docs/mile\"\n    prefix: \"M\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Status\", \"Derives-from\"]\n    pointer_fields: [\"Derives-from\"]\n    narrative_fields: []\n",
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-a.md"), "> Status: Accepted\n").unwrap();
-    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "> Status: Draft\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/DOC-1-a.md"),
+        "---\nStatus: Accepted\n---\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/DOC-1-b.md"), "---\nStatus: Draft\n---\n").unwrap();
     std::fs::write(
         dir.join("docs/mile/M-1-c.md"),
-        "> Status: Open\n> Derives-from: DOC-1\n",
+        "---\nStatus: Open\nDerives-from: DOC-1\n---\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2738,12 +2755,10 @@ fn a_same_type_identifier_collision_resolves_deterministically() {
     }
 }
 
-/// BUG-151: `init` wrote `header_shape: yaml-frontmatter` for every type, so
-/// an adopted corpus in another shape read as zero records on the first
-/// `check`, reported only as one warning per record.
+/// MILE-85: an adopted corpus in a removed shape is proposed the only shape
+/// with a reader, and `init` says how many records it will not read.
 #[test]
-fn init_on_a_bold_list_corpus_proposes_bold_list_and_the_first_check_reads_every_record_observed_failing(
-) {
+fn init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_form() {
     let dir = fixture_repo("init-bold-list");
     for n in 1..=3 {
         std::fs::write(
@@ -2761,43 +2776,29 @@ fn init_on_a_bold_list_corpus_proposes_bold_list_and_the_first_check_reads_every
     assert_eq!(init.status.code(), Some(0), "stdout: {init_stdout}");
     let parsed = assert_valid_json_object(&init_stdout);
     assert_eq!(
-        parsed["proposed"][0]["header_shape"], "bold-list",
+        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
+        "stdout: {init_stdout}"
+    );
+    let notices = parsed["notices"].as_array().expect("a notice names it");
+    assert!(
+        notices.iter().any(|n| {
+            let m = n["message"].as_str().unwrap_or("");
+            m.contains("docs/adr") && m.contains("3 in the removed bold-list form")
+        }),
         "stdout: {init_stdout}"
     );
     let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
-    assert!(config.contains("header_shape: bold-list"), "{config}");
     assert!(
-        config.contains("header.deprecated-shape"),
-        "the migration steer is carried by this rule, so init must propose it: {config}"
-    );
-
-    let check = run_urzua(&dir, &["check", "docs/"]);
-    let check_stdout = String::from_utf8_lossy(&check.stdout);
-    let checked = assert_valid_json_object(&check_stdout);
-    assert_eq!(checked["files_examined"], 3, "stdout: {check_stdout}");
-    // `records_read_by_any_rule` cannot carry this assertion: init proposes
-    // `required_fields: []` and no `known_fields`, so no rule has a declared
-    // field to read and the count is 0 for a yaml-frontmatter corpus too. The
-    // symptom BUG-151 produced was one unreadable-header warning per record.
-    assert_eq!(
-        check_stdout
-            .matches("no header-shaped region found")
-            .count(),
-        0,
-        "the config init wrote must read every record's header: {check_stdout}"
-    );
-    assert!(
-        check_stdout.contains("header.deprecated-shape"),
-        "a non-frontmatter shape is still steered toward migration: {check_stdout}"
+        config.contains("header_shape: yaml-frontmatter"),
+        "{config}"
     );
 
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// BUG-151: a type whose records disagree gets the majority shape and a
-/// notice naming the split, never a silent pick.
+/// MILE-85: records in both removed forms are each counted in the notice.
 #[test]
-fn init_on_a_mixed_shape_type_proposes_the_majority_shape_and_names_the_split() {
+fn init_on_a_mixed_removed_shape_type_counts_each_form() {
     let dir = fixture_repo("init-mixed-shape");
     for n in 1..=2 {
         std::fs::write(
@@ -2817,7 +2818,7 @@ fn init_on_a_mixed_shape_type_proposes_the_majority_shape_and_names_the_split() 
     let stdout = String::from_utf8_lossy(&out.stdout);
     let parsed = assert_valid_json_object(&stdout);
     assert_eq!(
-        parsed["proposed"][0]["header_shape"], "bold-list",
+        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
         "stdout: {stdout}"
     );
     let notices = parsed["notices"]
@@ -2826,7 +2827,9 @@ fn init_on_a_mixed_shape_type_proposes_the_majority_shape_and_names_the_split() 
     assert!(
         notices.iter().any(|n| {
             let m = n["message"].as_str().unwrap_or("");
-            m.contains("docs/adr") && m.contains("bold-list") && m.contains("blockquote")
+            m.contains("docs/adr")
+                && m.contains("2 in the removed bold-list form")
+                && m.contains("1 in the removed blockquote form")
         }),
         "stdout: {stdout}"
     );
@@ -2907,7 +2910,7 @@ fn init_prefers_leading_frontmatter_over_more_numerous_body_bullets() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-const EDIT_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
+const EDIT_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
 
 fn edit_fixture(name: &str, record: &str) -> std::path::PathBuf {
     let dir = fixture_repo(name);
@@ -2923,7 +2926,7 @@ fn edit_fixture(name: &str, record: &str) -> std::path::PathBuf {
 /// whole file to LF with a trailing newline.
 #[test]
 fn fix_apply_preserves_crlf_and_the_absent_trailing_newline() {
-    let original = "# ADR-1: First\r\n\r\n> Embodiment: Not started\r\n> Realized-by: code:src/a.rs\r\n\r\n> **Revision log**\r\n>\r\n> | Date | Change | Class |\r\n> |---|---|---|\r\n> | 2026-01-01 | Initial. | **structural** |";
+    let original = "---\r\nEmbodiment: Not started\r\nRealized-by: code:src/a.rs\r\n---\r\n# ADR-1: First\r\n\r\n> **Revision log**\r\n>\r\n> | Date | Change | Class |\r\n> |---|---|---|\r\n> | 2026-01-01 | Initial. | **structural** |";
     let dir = edit_fixture("fix-crlf", original);
 
     let output = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
@@ -2951,7 +2954,7 @@ fn fix_apply_preserves_crlf_and_the_absent_trailing_newline() {
 /// plain table row too, or it renders outside the table.
 #[test]
 fn fix_apply_appends_inside_a_plain_revision_log_table() {
-    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-01-01 | Initial. | **structural** |\n";
+    let original = "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: First\n\n**Revision log**\n\n| Date | Change | Class |\n|---|---|---|\n| 2026-01-01 | Initial. | **structural** |\n";
     let dir = edit_fixture("fix-plain-table", original);
 
     let output = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
@@ -2971,7 +2974,7 @@ fn fix_apply_appends_inside_a_plain_revision_log_table() {
 /// exactly one line and leaves every other byte alone.
 #[test]
 fn migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline() {
-    let original = "# ADR-1: First\r\n\r\n> Status: Draft\r\n> Date: 2026-01-01\r\n\r\nbody\r\nno trailing newline";
+    let original = "---\r\nStatus: Draft\r\nDate: 2026-01-01\r\n---\r\n# ADR-1: First\r\n\r\nbody\r\nno trailing newline";
     let dir = edit_fixture("migrate-crlf", original);
 
     let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
@@ -2992,7 +2995,7 @@ fn migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline() {
 /// naming the entry, not a clean `ok` with nothing written.
 #[test]
 fn fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector() {
-    let original = "# ADR-1: First\n\n> Embodiment: Not started\n> Realized-by: code:src/a.rs\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+    let original = "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: First\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
     let dir = edit_fixture("fix-ids-unmatched", original);
 
     for selector in ["NOPE", "ADR-1"] {
@@ -3042,7 +3045,6 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
         ("type.no-declared-spec", "config-level"),
         ("type.dir-matches-nothing", "config-level"),
         ("type.record-outside-declared-dir", "path-level"),
-        ("header.deprecated-shape", "config-level"),
         ("config.pointer-declaration-missing", "config-level"),
         ("config.pointer-field-not-known", "config-level"),
         ("config.pointer-narrative-overlap", "config-level"),
@@ -3157,7 +3159,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    statuses: {{values: [Open, Done], require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
+            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    statuses: {{values: [Open, Done], require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
             rules.join(", ")
         ),
     )
@@ -3208,50 +3210,6 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// BUG-151: a Y-statement blockquote in the body must not be mistaken for the
-/// header. The header is the region that carries the most parsed fields.
-#[test]
-fn init_prefers_the_shape_carrying_the_most_fields_over_an_earlier_body_blockquote_observed_failing(
-) {
-    let dir = fixture_repo("init-y-statement");
-    for n in 1..=2 {
-        std::fs::write(
-            dir.join(format!("docs/adr/{n:04}-record-{n}.md")),
-            format!(
-                "# {n} — Record {n}\n\n> **Decision (Y-statement):** In the context of a thing,\n> facing a concern, we decided to do it,\n> to achieve a goal, accepting a cost.\n\n- **Status:** Accepted\n- **Date:** 2026-01-0{n}\n- **Deciders:** someone\n\nBody.\n"
-            ),
-        )
-        .unwrap();
-    }
-    commit_all(&dir);
-
-    let init = run_urzua(&dir, &["init"]);
-    let init_stdout = String::from_utf8_lossy(&init.stdout);
-    let parsed = assert_valid_json_object(&init_stdout);
-    assert_eq!(
-        parsed["proposed"][0]["header_shape"], "bold-list",
-        "stdout: {init_stdout}"
-    );
-
-    let path = dir.join(".urzua/config.yaml");
-    let config = std::fs::read_to_string(&path).unwrap();
-    std::fs::write(
-        &path,
-        config.replace("required_fields: []", "required_fields: [Status]"),
-    )
-    .unwrap();
-
-    let check = run_urzua(&dir, &["check", "docs/"]);
-    let stdout = String::from_utf8_lossy(&check.stdout);
-    assert!(
-        !stdout.contains("missing required header field"),
-        "stdout: {stdout}"
-    );
-    assert_valid_json_object(&stdout);
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
 /// BUG-172: `pointer.target-status` applied one `not_in` list to every declared
 /// pointer field, so a lineage field (`Derives-from`) pointing at a Superseded
 /// record warned the same as a dependency field (`Implements`). The `fields`
@@ -3271,10 +3229,14 @@ fn target_status_fields_fixture(name: &str, option: &str) -> std::path::PathBuf 
         ),
     )
     .unwrap();
-    std::fs::write(dir.join("docs/adr/ADR-1-a.md"), "> Status: Superseded\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        "---\nStatus: Superseded\n---\n",
+    )
+    .unwrap();
     std::fs::write(
         dir.join("docs/mile/M-1-b.md"),
-        "> Status: Open\n> Derives-from: ADR-1\n> Implements: ADR-1\n",
+        "---\nStatus: Open\nDerives-from: ADR-1\nImplements: ADR-1\n---\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -3491,12 +3453,12 @@ fn check_reports_an_unechoed_claim_in_a_declared_cross_type_relation_pair() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-1-x.md"),
-        "# 1 — X\n\n> Resolves: BUG-7\n",
+        "---\nResolves: BUG-7\n---\n# 1 — X\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("docs/bug/BUG-7-y.md"),
-        "# 7 — Y\n\n> Resolved-by: —\n",
+        "---\nResolved-by: —\n---\n# 7 — Y\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -3509,7 +3471,7 @@ fn check_reports_an_unechoed_claim_in_a_declared_cross_type_relation_pair() {
 
     std::fs::write(
         dir.join("docs/bug/BUG-7-y.md"),
-        "# 7 — Y\n\n> Resolved-by: ADR-1\n",
+        "---\nResolved-by: ADR-1\n---\n# 7 — Y\n",
     )
     .unwrap();
     commit_all(&dir);

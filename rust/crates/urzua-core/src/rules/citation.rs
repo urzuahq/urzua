@@ -402,7 +402,10 @@ mod tests {
         citation_resolution(&records, &config, &full_text, &index)
     }
 
-    const TARGET: (&str, &str) = ("docs/adr/ADR-12-x.md", "> Status: Accepted\n\n# 12 — X\n");
+    const TARGET: (&str, &str) = (
+        "docs/adr/ADR-12-x.md",
+        "---\nStatus: Accepted\n---\n\n# 12 — X\n",
+    );
 
     #[test]
     fn a_citation_of_a_missing_record_is_an_error_naming_file_and_line_observed_failing() {
@@ -410,13 +413,13 @@ mod tests {
             TARGET,
             (
                 "docs/adr/ADR-1-y.md",
-                "> Status: Accepted\n\n# 1 — Y\n\nSee ADR-99 for why.\n",
+                "---\nStatus: Accepted\n---\n\n# 1 — Y\n\nSee ADR-99 for why.\n",
             ),
         ]);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].rule, RULE_CITATION_RESOLUTION);
         assert!(findings[0].file.ends_with("ADR-1-y.md"));
-        assert_eq!(findings[0].line, Some(5));
+        assert_eq!(findings[0].line, Some(7));
         assert!(findings[0].message.contains("ADR-99"));
         assert_eq!(examined(&exec), 1);
     }
@@ -425,7 +428,7 @@ mod tests {
     fn removing_the_citation_clears_the_finding() {
         let (exec, findings) = run(&[(
             "docs/adr/ADR-1-y.md",
-            "> Status: Accepted\n\n# 1 — Y\n\nNothing cited.\n",
+            "---\nStatus: Accepted\n---\n\n# 1 — Y\n\nNothing cited.\n",
         )]);
         assert!(findings.is_empty());
         assert_eq!(examined(&exec), 0);
@@ -514,7 +517,7 @@ mod tests {
     fn the_header_region_is_not_re_read() {
         let (_, findings) = run(&[(
             "docs/adr/ADR-1-y.md",
-            "# 1 — Y\n\n> Status: Accepted\n> Implements: ADR-99\n\nBody.\n",
+            "---\nStatus: Accepted\nImplements: ADR-99\n---\n# 1 — Y\n\nBody.\n",
         )]);
         assert!(findings.is_empty(), "{findings:?}");
     }
