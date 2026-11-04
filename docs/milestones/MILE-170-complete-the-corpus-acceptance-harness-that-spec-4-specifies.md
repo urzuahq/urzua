@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K40D4E9SWM11EVM5723VGM
-Status: Planned
+Status: InProgress
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-4
@@ -29,4 +29,4 @@ Every case `SPEC-4` names for the foundation surface is executable under `expect
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
-> | 2026-11-04 | `Status` unchanged (`Planned`). **Why:** the harness is built and merged with this row, but a milestone's `Realized-by` is not yet a declared field of the `milestone` type on `main`, so the evidence cannot be recorded without an undeclared header field; the `Status: Done` and `Realized-by` edit follows once the field lands. Delivered: mutation proof of every case, the uncovered-rules report (it lists the rules still without a case), the "Nth record type" case, the generative property in `acceptance_property.rs`, `corpus-d` to `corpus-f`, a corpus-zero case per rule family, and the `SPEC-4` 0.5 revision. Not delivered: a case for every `SPEC-4` table row, and the four rules the report names. | **structural** |
+> | 2026-11-04 | `Status` `Planned` -> `InProgress`; no `Realized-by`. **Why:** the harness machinery is built, but Done means every `SPEC-4` case for the foundation surface is executable and this change does not reach that: the "silent zeros" git-history cases, the drift-while-exiting-0 case and several table rows have no case, and four rules (the report names them) have none either. Delivered: mutation proof of every case, the uncovered-rules report, the "Nth record type" case, the generative property in `acceptance_property.rs`, `corpus-d` to `corpus-f`, a corpus-zero case per rule family, and the `SPEC-4` 0.5 revision. `Realized-by` waits for the PR that finishes the remaining cases. | **substantive** |
