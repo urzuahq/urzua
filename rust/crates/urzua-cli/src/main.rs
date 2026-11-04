@@ -81,9 +81,10 @@ enum Command {
     ///
     /// `--base <ref>` reports on only the records changed since the merge base of `<ref>` and
     /// HEAD (staged and unstaged edits included), and says so in `scope.source` and `scope.base`.
-    /// References still resolve against the whole tracked corpus.
+    /// Unchanged records that refer to a changed or deleted one are reported too, and references
+    /// still resolve against the whole tracked corpus.
     Check {
-        /// Report only on records changed against this ref.
+        /// Report on records changed against this ref, plus unchanged records that refer to them.
         #[arg(long)]
         base: Option<String>,
         paths: Vec<PathBuf>,
