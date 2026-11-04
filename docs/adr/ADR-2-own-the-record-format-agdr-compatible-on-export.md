@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Not started
+Embodiment: Implemented
 Date: 2026-07-29
 Author: beauwilliams
 Deciders: beauwilliams
@@ -94,3 +94,9 @@ low and bounded, while waiting blocks the schema work that everything else depen
 - `docs/rfc/RFC-1-unified-record-schema-core-and-profiles.md` — the core+profile schema this preserves; gains
   three fields as a result of this decision
 - AgDR — public open standard, CC BY 4.0
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed: `Not started` to `Implemented`, by hand with the row `urzua fix` would write. **Why:** the `urzua-agdr` crate cites this record with an `Implements:` back-pointer, and `embodiment.consistency` now judges a record with no `Realized-by` field that a back-pointer cites (`MILE-149`); the Decision is unchanged. | **structural** |

@@ -13,6 +13,7 @@ use crate::record::Record;
 use crate::report::{census, Outcome, Population, PopulationUnit};
 use crate::rules::{
     compute_embodiment, find_revision_log_entries, parse_realized_by, relation_field_name,
+    BackPointerEvidence,
 };
 
 /// One mechanically-detected disagreement between a record's stated value
@@ -53,7 +54,7 @@ pub fn detect_repairs(
     config: &Config,
     drifted: &HashSet<PathBuf>,
     fresh_drift: &HashSet<PathBuf>,
-    back_pointed: &HashSet<PathBuf>,
+    back_pointed: &BackPointerEvidence,
 ) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
 
@@ -65,17 +66,23 @@ pub fn detect_repairs(
         let Some(stated) = record.header.get(state_field) else {
             return Outcome::Absent;
         };
-        let Some(realized_by_value) = record.header.get(locator_field) else {
+        let cited_by_code = back_pointed.code.contains(&record.path);
+        let cited_by_test = back_pointed.test.contains(&record.path);
+        // No `Realized-by` is repaired only when a back-pointer cites the
+        // record, as `embodiment.consistency` judges it (`MILE-149`).
+        let realized_by_value = record.header.get(locator_field);
+        if realized_by_value.is_none() && !(cited_by_code || cited_by_test) {
             return Outcome::Absent;
-        };
+        }
 
         // Drift (ADR-32) is computed by the caller from git history and
         // handed in as plain data, the same shape `embodiment_consistency`
         // takes, so this function stays pure (MILE-15).
         let computed = compute_embodiment(
-            &parse_realized_by(realized_by_value),
+            &realized_by_value.map(parse_realized_by).unwrap_or_default(),
             drifted.contains(&record.path),
-            back_pointed.contains(&record.path),
+            cited_by_code,
+            cited_by_test,
         );
         let stated = stated.trim();
         // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
@@ -87,7 +94,13 @@ pub fn detect_repairs(
                 current_value: stated.to_string(),
                 computed_value: computed.to_string(),
                 tier: 1,
-                evidence: format!("{locator_field}: {realized_by_value}"),
+                evidence: match realized_by_value {
+                    Some(value) => format!("{locator_field}: {value}"),
+                    None => format!(
+                        "no {locator_field} field; cited by {} back-pointers",
+                        if cited_by_test { "test" } else { "source" }
+                    ),
+                },
             });
         }
         Outcome::Examined
@@ -184,7 +197,10 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &cited,
+            &BackPointerEvidence {
+                code: cited.clone(),
+                ..Default::default()
+            },
         );
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].computed_value, "Implemented");
@@ -201,7 +217,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1);
@@ -223,7 +239,7 @@ mod tests {
             &no_relation_field_overrides(),
             &drifted,
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].computed_value, "Drift detected");
@@ -240,7 +256,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(repairs.is_empty());
@@ -290,7 +306,7 @@ mod tests {
             &config,
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1, "{repairs:?}");
@@ -309,7 +325,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &HashSet::new(),
+            &Default::default(),
         );
         assert_eq!((population.eligible(), population.examined()), (1, 0));
         assert!(repairs.is_empty());
@@ -389,7 +405,7 @@ mod tests {
             &no_relation_field_overrides(),
             &HashSet::new(),
             &fresh,
-            &HashSet::new(),
+            &Default::default(),
         );
         assert!(repairs.is_empty(), "{repairs:?}");
     }

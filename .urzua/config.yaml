@@ -234,6 +234,14 @@ rules:
   embodiment.back-pointer-decision-accepted:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+  # Source comments are realization evidence (MILE-128): `Implements: ADR-12`
+  # is code tier, and `Verifies: ADR-12` in a file under `test_paths` is test
+  # tier (MILE-146), so a record is computed Verified from the tests that cite
+  # it rather than from a restated `test:` locator.
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/urzua-core/tests"]
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.

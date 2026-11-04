@@ -25,3 +25,4 @@ A test file carrying a back-pointer to a record is read as test evidence; a reco
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Test-tier back-pointer (`SPEC-2` `0.30`, `SPEC-3` `0.16`): `Verifies:` in a file under the declared `test_paths` computes `Verified`; exercised by `purity.rs` citing `ADR-5` in this repository, plus a fixture citing one record at both tiers. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |
