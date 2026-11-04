@@ -920,7 +920,27 @@ pub fn run(
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
     let waivers = urzua_core::waiver::load_waivers(&records);
-    urzua_core::waiver::apply_waivers(&mut findings, &waivers, &urzua_io::today());
+    let today = urzua_io::today();
+
+    // Judged against the findings as they stand before any waiver is applied,
+    // and after every scope filter: a waiver is stale only against a run that
+    // could have produced its finding (MILE-168).
+    let whole_corpus = requested_scopes.is_empty() && diff_scope.is_none();
+    let (waiver_exec, waiver_findings) =
+        crate::gate::gated(&config, rules::RULE_WAIVER_MATCHES_NOTHING, || {
+            rules::waiver_matches_nothing(
+                &waivers,
+                &findings,
+                &rules_executed,
+                whole_corpus,
+                |p| whole_corpus || in_scope.contains(p),
+                &today,
+            )
+        });
+    rules_executed.push(waiver_exec);
+    findings.extend(waiver_findings);
+
+    urzua_core::waiver::apply_waivers(&mut findings, &waivers, &today);
 
     let active_findings = || findings.iter().filter(|f| f.waived.is_none());
     let blocking =

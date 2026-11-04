@@ -36,6 +36,7 @@ mod section;
 mod shared;
 mod status;
 mod type_scope;
+mod waiver;
 
 pub use back_pointer::*;
 pub use boundary::*;
@@ -59,6 +60,7 @@ pub use section::*;
 pub use shared::*;
 pub use status::*;
 pub use type_scope::*;
+pub use waiver::*;
 
 /// Fixtures shared by every rule family's tests.
 #[cfg(test)]
