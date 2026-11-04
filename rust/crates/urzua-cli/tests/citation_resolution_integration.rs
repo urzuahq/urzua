@@ -107,7 +107,7 @@ fn an_undeclared_rule_does_not_run() {
 }
 
 #[test]
-fn a_declared_external_id_is_skipped_and_counted_out_of_scope_end_to_end() {
+fn a_declared_external_id_is_skipped_and_counted_eligible_not_out_of_scope_end_to_end() {
     let body = "# 1 — X\n\n> Status: Accepted\n\nSee ADR-4122 and ADR-99.\n";
     let dir = fixture(
         "external",
@@ -126,8 +126,41 @@ fn a_declared_external_id_is_skipped_and_counted_out_of_scope_end_to_end() {
             pop["examined"].as_u64(),
             pop["out_of_scope"].as_u64()
         ),
-        (Some(2), Some(1), Some(1))
+        (Some(2), Some(1), Some(0))
     );
+}
+
+#[test]
+fn a_declared_external_id_is_not_a_misconfiguration_end_to_end_observed_failing() {
+    let body = "# 1 — X\n\n> Status: Accepted\n\nSee ADR-4122.\n";
+    let dir = fixture(
+        "external-scope",
+        "{ config.scope-matches-nothing: warn, citation.resolution: { level: error, external_ids: [\"ADR-4122\"] } }",
+        &[("ADR-1-x.md", body)],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 0, "{report}");
+    assert!(
+        findings_of(&report, "config.scope-matches-nothing").is_empty(),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_declared_skip_table_hides_revision_log_paths_end_to_end_observed_failing() {
+    let body = "# 1 — X\n\n> Status: Accepted\n\n## References\n\n- `src/gone.rs`\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Named `src/old.rs`. | **substantive** |\n";
+    let dir = fixture(
+        "skip-table",
+        "{ citation.path-exists: { level: warn, reference_sections: [\"References\"], skip_tables: [\"**Revision log**\"] } }",
+        &[("ADR-1-x.md", body)],
+    );
+    let (_, report) = check(&dir);
+    let found = findings_of(&report, "citation.path-exists");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("src/gone.rs"));
 }
 
 #[test]
