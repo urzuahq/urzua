@@ -24,3 +24,4 @@ A cited path that does not exist and a cited issue number that does not exist ea
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter warns on cited paths and issue or PR numbers that do not exist, and urzua checks neither. | **substantive** |
+> | 2026-11-04 | Noted as a capability a real adopter corpus needs (parity gap, same class as `MILE-146` to `MILE-159`); no change to `Status`, `Phase` or scope. **Why:** a trial run of urzua over a real adopter corpus showed it checks cited paths and issue or PR numbers that urzua does not. | **substantive** |

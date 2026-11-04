@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M2W1994CH6D121YBRPAD620R
-Phase: '0'
+Phase: '1'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: MILE-98, MILE-126, MILE-132
@@ -74,3 +74,4 @@ warning, which the Phase 0 exit forbids.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s criterion 3, which that spec calls the real bar, had no milestone and was then deleted from the spec by the change meant to file its untracked criteria. Recovered from `main` and filed. | **substantive** |
 > | 2026-11-04 | Removed the block on `MILE-100`: `Blocked-on` now names `MILE-98`, `MILE-126` and `MILE-132`. Recorded that gaps in record numbers are consciously dropped, because renumbering is forbidden and a gap carries no defect. Added Done-means: findings of both linters diffed before deletion, the CI wiring to replicate, the pre-commit and editor hooks, and the one-off rename and header-rewrite scripts. `Status` and `Phase` unchanged. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); `MILE-100`'s second codebase is Phase 1, so the switchover cannot wait on it, and the exit needs the replacement proven against the adopter's own findings. | **substantive** |
+> | 2026-11-04 | `Phase` 0 -> 1; `Status` unchanged. **Why:** Maintainer decision, 2026-11-04: Phase 0 is bootstrapping and capability parity in urzua's own repository, and the adopter switchover follows it; `SPEC-1`'s exit bar now lists this as a Phase 1 criterion. | **substantive** |

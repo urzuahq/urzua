@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M2W199SQBR59QQ77A6FR11K5
-Phase: '0'
+Phase: '1'
 Track: governance-process
 Implements: SPEC-1
 Blocked-on: —
@@ -58,3 +58,4 @@ front of the tool.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s criterion 4 had no milestone and was deleted from the spec alongside criterion 3. It is about preference under choice, not availability -- `urzua new` exists and records in this corpus were still hand-written, two of them rejected for header shapes the command would have produced correctly. | **substantive** |
+> | 2026-11-04 | `Phase` 0 -> 1; `Status` unchanged. **Why:** Maintainer decision, 2026-11-04: `urzua new` being the faster path is a Phase 1 exit criterion, not part of the Phase 0 exit; `SPEC-1` already lists it under Phase 1. | **substantive** |
