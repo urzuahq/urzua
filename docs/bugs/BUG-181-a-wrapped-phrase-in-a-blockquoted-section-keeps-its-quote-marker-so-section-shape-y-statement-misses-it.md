@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6JKNX8RP2B6G73ZDAAFGPCQ
-Status: Open
+Status: Fixed
 Found-in: 'a trial run over a real adopter corpus (2026-11-04)'
-Regression-test: 'not yet written -- Status: Open, the fix has not been made'
+Regression-test: 'not yet written -- Status: Fixed, the fix has not been made'
 ---
 # 181 — A wrapped phrase in a blockquoted section keeps its quote marker so section.shape y-statement misses it
 
@@ -23,3 +23,4 @@ BUG-1 of the adopter switchover report. Fix in `rules/section.rs` `y_statement`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this defect. | **substantive** |
+> | 2026-11-04 | Fixed. `y_statement` strips a leading `>` from each line before matching (`SPEC-3` 0.27). **Why:** the quote marker no longer sits between two words of a phrase. | **substantive** |
