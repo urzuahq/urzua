@@ -1,5 +1,5 @@
 ---
-Version: '0.13'
+Version: '0.14'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -59,8 +59,8 @@ that is no longer drifted (the `Realized-by` line was touched again) is repaired
 tier-computed value. `fix` computes drift only when `embodiment.consistency` is enabled, as `check`
 does (`MILE-159`): with the rule off or undeclared there is no embodiment verdict to repair, so `fix`
 reports it could not run instead of computing a verdict from an empty drift set. It applies the same opt-in `@sha256:` locator pins and
-`drift_grace_days` window `check` does (`MILE-129`), so the two still never disagree; `fix` does not
-rewrite a pin, which stays a hand edit.
+`drift_grace_days` window `check` does (`MILE-129`), so the two still never disagree; `fix` repairs `Embodiment` only; a pin is re-set
+by `--rebaseline` (below), never by a Tier 1 repair.
 
 Git trouble is never read as "no drift" (`MILE-159`). A shallow clone, detected once per run, and any
 git call that fails while computing drift (a commit the repository does not have, say) are reported as
@@ -183,6 +183,34 @@ Every one of the following is a hard gate — none are optional, none are defaul
 Every applied write appends a `structural` revision-log entry naming the computation and the
 evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
 
+## Re-baselining pinned evidence (`--rebaseline`)
+
+`urzua fix --rebaseline` is the review-then-apply refresh `RFC-2` proposed, for the opt-in
+`@sha256:` pins of `MILE-129` (`MILE-181`). It replaces the Tier 1 repair for that run and takes
+the same `PATHS` scoping.
+
+- **Detect** (`--rebaseline`, read-only): `rebaselines` lists each record with a pinned locator whose
+  current content hash differs, as `record`, `field`, `line` and `pins`, each pin carrying `locator`,
+  `recorded_hash` and `current_hash`. Status is `repairs-available` while any is listed. A locator
+  whose file cannot be read is not a stale pin (`embodiment.locator-exists` reports it).
+- **Apply** (`--rebaseline --apply`): the gates of Tier 1 apply hold unchanged (`--ids` or `--force`,
+  never implied; an `--ids` entry matching nothing fails; identity as above; lock; re-read before
+  write; a missing revision log refuses that record). `--reason <text>` is required too: one line
+  without `|`, because an attestation with no reason is the rubber stamp `RFC-2` set out to prevent.
+- **What is written.** For each chosen record, every stale pin on the `Realized-by` line becomes the
+  current hash and nothing else on the line, in the file or in any other record, moves. One
+  `structural` revision row names who attested (`RFC-25`: attribution, not cryptographic
+  attestation), the old and new hash prefixes and the reason.
+- **The record is the selector.** All of a record's stale pins move together; per-locator selection
+  is not offered. A second run finds nothing to re-pin.
+- **Scope of the baseline.** Only pinned locators are re-baselined. Drift on an unpinned locator
+  compares against the commit that last touched the `Realized-by` line, which `fix` cannot move
+  without editing the line, so it is cleared by pinning the locator by hand (rewriting a pin touches
+  the line, which also resets the baseline of the record's unpinned locators once committed).
+  `--rebaseline` does not repair `Embodiment`: run a plain `urzua fix` afterwards for a stated
+  `Drift detected` that is no longer drifted.
+- It cannot be combined with `--stdin-path`, and `--reason` without `--rebaseline` is `not-run`.
+
 ## Purity boundary
 
 `urzua-core::fix::apply_repair` is a pure `&str -> Result<String, String>` transform. The CLI
@@ -226,3 +254,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.11`. Apply mode writes without a revision-log row for a type declaring `revision_log: {required: false}`; a required log (the default) still refuses a record with no section, now naming the identity looked for. **Why:** `MILE-159` -- an adopter's records have no revision log section, so `--apply` could never run on them. | **substantive** |
 > | 2026-11-04 | Bumped to `0.12`. `fix` proposes, and `--apply` writes, the declared success `Status` for a record whose evidence computes to a declared delivered tier while its `Status` is declared not done (`statuses.delivery`); a success `Status` with no evidence is reported as a notice and never downgraded; the revision row now names the computed value; `fix` runs when only `status.delivery-agreement` is enabled. **Why:** `MILE-183`. | **structural** |
 > | 2026-11-04 | Bumped to `0.13`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.14`. `fix --rebaseline` lists stale `@sha256:` pins and, on `--apply --ids`/`--force --by --reason`, re-pins the chosen records with an attributed revision row. **Why:** `MILE-181` -- a pin was a block with no sanctioned way to say "re-verified, still holds"; `RFC-2` proposed exactly this review-before-apply refresh. | **substantive** |
+

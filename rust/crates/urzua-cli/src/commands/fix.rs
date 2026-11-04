@@ -19,6 +19,8 @@ pub struct FixArgs {
     pub ids: Vec<String>,
     pub by: Option<String>,
     pub force: bool,
+    pub rebaseline: bool,
+    pub reason: Option<String>,
 }
 
 pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
@@ -30,6 +32,8 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         ids,
         by,
         force,
+        rebaseline,
+        reason,
     } = args;
     if tier != 1 {
         return emit(&CouldNotRun::from(
@@ -41,6 +45,30 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             "urzua fix --apply: pass --ids <record,...> or --force (never the default)",
         ));
     }
+
+    if rebaseline && stdin_path.is_some() {
+        return emit(&CouldNotRun::from(
+            "urzua fix --rebaseline works on files in the tree: it cannot be combined with --stdin-path",
+        ));
+    }
+    if !rebaseline && reason.is_some() {
+        return emit(&CouldNotRun::from(
+            "urzua fix --reason belongs to --rebaseline: a Tier 1 repair records its computation, not a reason",
+        ));
+    }
+    let reason = match (rebaseline && apply, reason.as_deref().map(str::trim)) {
+        (true, None | Some("")) => {
+            return emit(&CouldNotRun::from(
+                "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
+            ))
+        }
+        (_, Some(r)) if r.contains('|') || r.contains('\n') => {
+            return emit(&CouldNotRun::from(
+                "--reason must be one line without '|' (it is written into a revision-log table row)",
+            ))
+        }
+        (_, r) => r.unwrap_or_default().to_string(),
+    };
 
     if stdin_path.is_some()
         && (apply || force || !ids.is_empty() || by.is_some() || !paths.is_empty())
@@ -121,6 +149,11 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         return emit(&CouldNotRun::from(
             "urzua fix repairs the Embodiment field that embodiment.consistency judges and the Status that status.delivery-agreement judges, and both rules are off or undeclared in the configuration: nothing to repair",
         ));
+    }
+    if rebaseline {
+        return run_rebaseline(
+            &repo_root, &config, &records, &scoped, unmatched, apply, &ids, force, by, &reason,
+        );
     }
     let drift = if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY) {
         Default::default()
@@ -336,11 +369,31 @@ fn build_fix_report(
     ran_apply: bool,
     extra_notices: Vec<Notice>,
 ) -> FixReport {
+    build_report(
+        population,
+        repairs,
+        Vec::new(),
+        failed,
+        warning,
+        ran_apply,
+        extra_notices,
+    )
+}
+
+fn build_report(
+    population: urzua_core::report::Population,
+    repairs: Vec<urzua_core::fix::Repair>,
+    rebaselines: Vec<urzua_core::fix::Rebaseline>,
+    failed: Vec<(PathBuf, String)>,
+    warning: Option<String>,
+    ran_apply: bool,
+    extra_notices: Vec<Notice>,
+) -> FixReport {
     let status = if population.examined() == 0 && !ran_apply && failed.is_empty() {
         FixStatus::NotRun
     } else if !failed.is_empty() {
         FixStatus::PartialFailure
-    } else if repairs.is_empty() {
+    } else if repairs.is_empty() && rebaselines.is_empty() {
         FixStatus::Ok
     } else if ran_apply {
         FixStatus::Applied
@@ -352,6 +405,7 @@ fn build_fix_report(
         status,
         population,
         repairs,
+        rebaselines,
         failed: failed
             .into_iter()
             .map(|(record, error)| FixFailure { record, error })
@@ -366,4 +420,101 @@ fn build_fix_report(
             .chain(extra_notices)
             .collect(),
     }
+}
+
+/// `urzua fix --rebaseline` (`MILE-181`): detect lists the records whose
+/// pinned evidence changed; apply re-pins the chosen ones. Selection, identity,
+/// lock and re-read-before-write are exactly Tier 1 apply's, so the two modes
+/// share one set of gates. A record is the selector (`--ids` takes its
+/// repo-relative path), and all of its stale pins move together.
+#[allow(clippy::too_many_arguments)]
+fn run_rebaseline(
+    repo_root: &std::path::Path,
+    config: &urzua_core::config::Config,
+    records: &[urzua_core::record::Record],
+    scoped: &[urzua_core::record::Record],
+    unmatched: Vec<(PathBuf, String)>,
+    apply: bool,
+    ids: &[String],
+    force: bool,
+    by: Option<String>,
+    reason: &str,
+) -> ExitCode {
+    let hash = |locator: &str| urzua_io::sha256_hex_of_file(&repo_root.join(locator));
+    let (population, found) = urzua_core::fix::detect_rebaselines(scoped, config, &hash);
+    if !apply {
+        return emit(&build_report(
+            population,
+            Vec::new(),
+            found,
+            unmatched,
+            None,
+            false,
+            Vec::new(),
+        ));
+    }
+    let identity = match urzua_io::resolve_identity(by.as_deref(), repo_root) {
+        Ok(id) => id,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
+    let _lock = match urzua_io::FixLock::acquire(repo_root) {
+        Ok(lock) => lock,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
+    let today = urzua_io::today();
+    let mut failed = unmatched;
+    if !force {
+        for id in ids {
+            if !found.iter().any(|r| r.record.display().to_string() == *id) {
+                failed.push((
+                    PathBuf::from(id),
+                    format!(
+                        "--ids entry '{id}' matched no record with a stale @sha256: pin (an entry is a record's repo-relative path; only pinned locators are re-baselined)"
+                    ),
+                ));
+            }
+        }
+    }
+    let mut applied = Vec::new();
+    for rb in found
+        .into_iter()
+        .filter(|r| force || ids.contains(&r.record.display().to_string()))
+    {
+        let full_path = repo_root.join(&rb.record);
+        let fresh = match urzua_io::read_to_string(&full_path) {
+            Ok(c) => c,
+            Err(e) => {
+                failed.push((rb.record.clone(), format!("could not re-read: {e}")));
+                continue;
+            }
+        };
+        let log_id = records
+            .iter()
+            .find(|r| r.path == rb.record)
+            .map(|r| config.revision_log_id(&r.record_type))
+            .unwrap_or_default();
+        match urzua_core::fix::apply_rebaseline(
+            &fresh,
+            &rb,
+            &today,
+            &identity.name,
+            reason,
+            &log_id,
+        ) {
+            Ok(new) => match std::fs::write(&full_path, new) {
+                Ok(()) => applied.push(rb),
+                Err(e) => failed.push((rb.record.clone(), format!("could not write: {e}"))),
+            },
+            Err(e) => failed.push((rb.record.clone(), e)),
+        }
+    }
+    emit(&build_report(
+        population,
+        Vec::new(),
+        applied,
+        failed,
+        identity.warning,
+        true,
+        Vec::new(),
+    ))
 }

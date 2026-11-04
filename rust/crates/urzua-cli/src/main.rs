@@ -210,6 +210,17 @@ enum Command {
         /// default.
         #[arg(long)]
         force: bool,
+        /// Re-pin stale `@sha256:` evidence pins instead of repairing
+        /// Embodiment (`MILE-181`). Without --apply it lists each stale pin
+        /// with its recorded and current hash; with --apply and --ids (or
+        /// --force), --by and --reason it rewrites those records' pins and
+        /// appends an attributed revision row.
+        #[arg(long)]
+        rebaseline: bool,
+        /// Why the evidence still holds, recorded in the revision row.
+        /// Required by --rebaseline --apply.
+        #[arg(long)]
+        reason: Option<String>,
     },
 }
 
@@ -333,6 +344,8 @@ fn main() -> ExitCode {
             ids,
             by,
             force,
+            rebaseline,
+            reason,
         } => commands::fix::run(
             cli.config,
             commands::fix::FixArgs {
@@ -343,6 +356,8 @@ fn main() -> ExitCode {
                 ids,
                 by,
                 force,
+                rebaseline,
+                reason,
             },
         ),
     }
