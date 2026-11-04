@@ -58,6 +58,7 @@ pub fn citation_resolution(
                     file: c.record.path.clone(),
                     line: Some(c.line),
                     waived: None,
+                    declared_severity: None,
                     message: format!("{} is cited in prose but resolves to no record", c.token),
                 });
             }

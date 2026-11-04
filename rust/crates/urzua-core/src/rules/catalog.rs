@@ -55,6 +55,8 @@ pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-pr
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
+pub const RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS: &str = "embodiment.requires-accepted-status";
+pub const RULE_DATE_FIELD_VALID: &str = "date.field-valid";
 pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
@@ -106,6 +108,8 @@ pub const ALL_RULES: &[&str] = &[
     RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
     RULE_INDEX_FRESHNESS,
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
+    RULE_DATE_FIELD_VALID,
     RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
@@ -180,11 +184,11 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_FIELD_QUALITY,
-        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three.",
+        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_FIELD_PENDING,
-        description: "A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`.",
+        description: "A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_CLAIM_STATUS_AGREEMENT,
@@ -292,7 +296,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_STATUS_REQUIRED_FIELD_MISSING,
-        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined.",
+        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
@@ -305,6 +309,14 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
         description: "A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. Only whole-line comments are read; the marker is case-sensitive; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean.",
+    },
+    RuleMeta {
+        id: RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
+        description: "A record whose `Status` is not an accepted status states an `Embodiment` of `Implemented` or `Verified` (`MILE-138`): a decision not yet made cannot have been built. The accepted statuses are the type's declared `statuses.success`; a type declaring none uses the rule's `accepted_statuses` option, and with neither the type is not examined. `Specified`, `Not started`, `Inactive` and `Drift detected` are not flagged, and a record missing either field is left to the header rules. Opt-in; the population counts the records the rule could judge.",
+    },
+    RuleMeta {
+        id: RULE_DATE_FIELD_VALID,
+        description: "A value in a declared date field (`date_fields`) that is not a well-formed `YYYY-MM-DD` date, or is well-formed but not a real calendar date such as `2026-02-30`, is an error (`MILE-137`). A blank, placeholder or pending value is not a date value and is left to `field.quality` and `status.required-field-missing`. Needs `date_fields`. The population counts the date values examined.",
     },
     RuleMeta {
         id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,

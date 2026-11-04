@@ -37,6 +37,7 @@ pub fn section_required(
                     file: slot.record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!("required section `## {}` is missing", slot.required.name),
                 });
             }
@@ -78,6 +79,7 @@ pub fn section_shape(
                     file: slot.record.path.clone(),
                     line: Some(line),
                     waived: None,
+                    declared_severity: None,
                     message: format!("section `## {}`: {message}", slot.required.name),
                 });
             }

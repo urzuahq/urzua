@@ -119,6 +119,7 @@ fn uncovered_source_paths(
                  checked; remove the entry or correct the path"
             ),
             waived: None,
+            declared_severity: None,
         })
         .collect()
 }
@@ -159,6 +160,7 @@ pub fn embodiment_back_pointer_resolution(
                         pointer.id
                     ),
                     waived: None,
+                    declared_severity: None,
                 });
             }
         }
@@ -209,6 +211,7 @@ pub fn embodiment_back_pointer_decision_accepted(
             line: Some(pointer.line),
             message,
             waived: None,
+            declared_severity: None,
         });
     };
 

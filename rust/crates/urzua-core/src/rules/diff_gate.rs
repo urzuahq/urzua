@@ -46,6 +46,7 @@ fn finding(rule: &str, file: PathBuf, message: String) -> Finding {
         line: None,
         message,
         waived: None,
+        declared_severity: None,
     }
 }
 

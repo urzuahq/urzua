@@ -23,6 +23,7 @@ pub fn config_pointer_declaration_missing(
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
                     ),
@@ -59,6 +60,7 @@ pub fn config_known_fields_declaration_missing(
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
                     ),
@@ -83,6 +85,7 @@ fn undeclared_alias_finding(
         file: config_path.to_path_buf(),
         line: None,
         waived: None,
+        declared_severity: None,
         message,
     }
 }
@@ -186,6 +189,7 @@ pub fn config_pointer_narrative_overlap(
                         file: config_path.to_path_buf(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "record type '{type_name}' declares '{field}' in both pointer_fields and narrative_fields -- a field must be exactly one kind"
                         ),
@@ -232,6 +236,7 @@ pub fn config_header_none_has_no_required_fields(
                             file: config_path.to_path_buf(),
                             line: None,
                             waived: None,
+                            declared_severity: None,
                             message: format!(
                                 "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
                             ),

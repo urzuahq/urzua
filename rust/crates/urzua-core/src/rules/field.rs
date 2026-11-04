@@ -31,12 +31,14 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
             }
             let declared = statuses.get(&record.record_type);
             if classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending {
+                let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
+                    severity: declared_severity.unwrap_or(FindingSeverity::Warning),
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity,
                     message: format!(
                         "field '{field}' is marked pending -- work declared unfinished"
                     ),
@@ -94,6 +96,7 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "field '{field}' is {value:?} -- the surrounding whitespace is part of the value, so any exact comparison against '{}' fails",
                         value.trim()
@@ -169,6 +172,7 @@ pub fn field_leading_reserved_indicator(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "field '{field}' is {value:?} -- it needs quoting only because it starts with '{first}', a reserved YAML indicator character; confirm the character is meaningful, or drop it (BUG-18)"
                         ),
@@ -224,12 +228,14 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
             // mean someone forgot. One rule carries one declared level, so
             // keeping both here left no setting that was correct (BUG-38).
             if matches!(state, FieldState::Blank | FieldState::Placeholder) {
+                let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
+                    severity: declared_severity.unwrap_or(FindingSeverity::Error),
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity,
                     message: format!("field '{field}' is {state:?} -- not a real, present value"),
                 });
             }
@@ -633,5 +639,71 @@ mod tests {
             "{population:?}"
         );
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// `MILE-140`: one rule, two fields, two severities.
+    fn levelled(rule: &str, levels: &str) -> Config {
+        crate::config::parse(&format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Deciders, Reviewers]\nrules:\n  {rule}:\n    level: warn\n    field_levels: {levels}\n"
+        ))
+        .expect("config loads")
+    }
+
+    #[test]
+    fn field_quality_reports_each_field_at_its_own_declared_level_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Deciders:\n> Reviewers:\n");
+        let config = levelled("field.quality", "{Deciders: error, Reviewers: warn}");
+        let (_, findings) = field_quality(&[r], &config);
+        let by = |f: &str| {
+            findings
+                .iter()
+                .find(|x| x.message.contains(&format!("'{f}'")))
+                .unwrap_or_else(|| panic!("no finding for {f}: {findings:?}"))
+                .declared_severity
+        };
+        assert_eq!(by("Deciders"), Some(FindingSeverity::Error));
+        assert_eq!(by("Reviewers"), Some(FindingSeverity::Warning));
+    }
+
+    #[test]
+    fn an_unlisted_field_declares_no_severity_of_its_own_observed_failing() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Deciders:\n> Reviewers:\n");
+        let config = levelled("field.quality", "{Deciders: error}");
+        let (_, findings) = field_quality(&[r], &config);
+        let reviewers = findings
+            .iter()
+            .find(|x| x.message.contains("'Reviewers'"))
+            .unwrap();
+        assert_eq!(reviewers.declared_severity, None, "the rule level applies");
+    }
+
+    #[test]
+    fn without_the_option_no_finding_declares_a_severity() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Deciders:\n> Reviewers:\n");
+        let config = config_for_required(vec![("adr", vec!["Deciders", "Reviewers"])]);
+        let (_, findings) = field_quality(&[r], &config);
+        assert_eq!(findings.len(), 2);
+        assert!(findings.iter().all(|f| f.declared_severity.is_none()));
+    }
+
+    #[test]
+    fn field_pending_reports_each_field_at_its_own_declared_level_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Deciders: Pending\n> Reviewers: Pending\n",
+        );
+        let config = levelled("field.pending", "{Deciders: error}");
+        let (_, findings) = field_pending(&[r], &config);
+        let d = findings
+            .iter()
+            .find(|x| x.message.contains("'Deciders'"))
+            .unwrap();
+        let rv = findings
+            .iter()
+            .find(|x| x.message.contains("'Reviewers'"))
+            .unwrap();
+        assert_eq!(d.declared_severity, Some(FindingSeverity::Error));
+        assert_eq!(rv.declared_severity, None);
     }
 }
