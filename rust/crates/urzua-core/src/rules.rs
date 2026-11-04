@@ -46,7 +46,6 @@ pub use boundary::*;
 pub use catalog::*;
 pub use citation::*;
 pub use claim::*;
-
 pub use companion::*;
 pub use dates::*;
 pub use declaration::*;

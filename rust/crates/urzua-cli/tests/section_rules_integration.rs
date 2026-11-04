@@ -186,3 +186,75 @@ fn an_exempted_record_does_not_trigger_scope_matches_nothing_observed_failing() 
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+const NESTED: &str = "    sections:
+      from: headings
+      depth: 2
+      required:
+        - {name: Proposal}
+        - {name: Alternatives considered, level: 3, under: Proposal}
+";
+
+#[test]
+fn a_required_h3_under_its_h2_is_checked_end_to_end() {
+    let with = "---\nStatus: Accepted\n---\n\n# 1 — With\n\n## Proposal\n\np\n\n### Alternatives considered\n\na\n";
+    let without = "---\nStatus: Accepted\n---\n\n# 2 — Without\n\n## Proposal\n\np\n";
+    let elsewhere = "---\nStatus: Accepted\n---\n\n# 3 — Elsewhere\n\n## Proposal\n\np\n\n## Other\n\n### Alternatives considered\n";
+    let dir = fixture(
+        "nested",
+        "{ section.required: error }",
+        NESTED,
+        &[
+            ("ADR-1-with.md", with),
+            ("ADR-2-without.md", without),
+            ("ADR-3-elsewhere.md", elsewhere),
+        ],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 1, "{report}");
+    let found = findings_of(&report, "section.required");
+    let files: Vec<&str> = found.iter().map(|f| f["file"].as_str().unwrap()).collect();
+    assert_eq!(found.len(), 2, "{report}");
+    assert!(files.iter().any(|f| f.ends_with("ADR-2-without.md")));
+    assert!(files.iter().any(|f| f.ends_with("ADR-3-elsewhere.md")));
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("### Alternatives considered"));
+    let pop = &execution(&report, "section.required")["population"];
+    assert_eq!(pop["eligible"].as_u64(), Some(6), "{report}");
+}
+
+#[test]
+fn this_repositorys_own_h3_headings_are_visible_to_the_section_rules() {
+    let rfc = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../docs/rfc")
+        .read_dir()
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("RFC-46-"))
+        })
+        .expect("RFC-46 is in this repository");
+    let text = std::fs::read_to_string(rfc).unwrap();
+    let dir = fixture(
+        "own-h3",
+        "{ section.required: error }",
+        NESTED,
+        &[("ADR-1-rfc46.md", &text.replacen("# 46", "# 1", 1))],
+    );
+    let (_, report) = check(&dir);
+    assert!(
+        findings_of(&report, "section.required").is_empty(),
+        "RFC-46's `### Alternatives considered` sits under `## Proposal`: {report}"
+    );
+    let pop = &execution(&report, "section.required")["population"];
+    assert_eq!(
+        (pop["eligible"].as_u64(), pop["examined"].as_u64()),
+        (Some(2), Some(2)),
+        "{report}"
+    );
+}

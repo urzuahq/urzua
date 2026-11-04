@@ -58,7 +58,7 @@ record_types:
     # to record the write in; `required: false` would apply without a row
     # (MILE-159).
     revision_log: {marker: "**Revision log**", required: true}
-    # A record carries Embodiment and Realized-by together or neither (BUG-41).
+    # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
       - [embodiment_state, embodiment_locator]
     pointer_fields:
@@ -101,6 +101,10 @@ record_types:
     dir: "docs/specs"
     # The directory index is not a spec (MILE-152).
     exclude_files: ["README.md"]
+    # A spec's title opens `SPEC-N`; the other types open with the bare
+    # number. The type declares which (BUG-123, RFC-44): `urzua new` writes
+    # the declared form and filename.title-consistency checks it.
+    identity: {from: filename, pattern: '^(?P<prefix>SPEC)-(?P<number>\d+)-(?P<slug>.+)$'}
     required_fields:
       - "Status"
       - "Date"
@@ -121,7 +125,7 @@ record_types:
       success: ["Accepted"]
       implementable: ["Accepted"]
     spec: "SPEC-18"
-    # A record carries Embodiment and Realized-by together or neither (BUG-41).
+    # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
       - [embodiment_state, embodiment_locator]
     pointer_fields:
