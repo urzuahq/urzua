@@ -150,6 +150,12 @@ pub struct RuleSetting {
     /// success statuses needs no fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
+    /// Prefixed ids that are not records of this repository (`MILE-156`): an
+    /// exact id (`RFC-4122`) or an inclusive numeric range (`RFC-4000..4999`)
+    /// under a declared record prefix, for a public standard number sharing a
+    /// record prefix. Only meaningful to `citation.resolution`; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_ids: Option<Vec<String>>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -258,6 +264,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
+            #[serde(default)]
+            external_ids: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -298,6 +306,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 date_fields: table.date_fields,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
+                external_ids: table.external_ids,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -320,6 +329,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 date_fields: None,
                 field_levels: None,
                 accepted_statuses: None,
+                external_ids: None,
             })
         }
     }
@@ -681,6 +691,12 @@ pub enum ConfigError {
         path: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
+    InvalidExternalId {
+        rule: String,
+        entry: String,
+        reason: String,
+    },
     #[error("record type '{record_type}' declares an invalid `{key}`: {reason}")]
     InvalidDocumentModel {
         record_type: String,
@@ -832,6 +848,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: true,
     },
     RuleOption {
+        name: "external_ids",
+        owners: &[crate::rules::RULE_CITATION_RESOLUTION],
+        consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
+        optional: true,
+    },
+    RuleOption {
         name: "fields",
         owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "checks every declared field",
@@ -865,6 +887,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "application_paths" => setting.application_paths.as_ref(),
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
+        "external_ids" => setting.external_ids.as_ref(),
         _ => None,
     }
 }
@@ -1185,6 +1208,26 @@ pub fn parse_with_document_models(
                     }
                 }
                 *entry = normalised;
+            }
+        }
+    }
+    // `external_ids` entries must parse and sit under a declared record prefix:
+    // an entry that can never match a citation is a rule option that is a
+    // silent no-op.
+    {
+        let prefixes = crate::rules::declared_prefixes(&config);
+        for (name, setting) in &config.rules {
+            if setting.level == RuleLevel::Off {
+                continue;
+            }
+            for entry in setting.external_ids.iter().flatten() {
+                if let Err(reason) = crate::rules::parse_external_id(entry, &prefixes) {
+                    return Err(ConfigError::InvalidExternalId {
+                        rule: name.clone(),
+                        entry: entry.clone(),
+                        reason,
+                    });
+                }
             }
         }
     }
@@ -1618,6 +1661,38 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'back_pointer_paths'"));
+    }
+
+    #[test]
+    fn external_ids_belongs_to_citation_resolution_and_must_be_well_formed() {
+        let base = "schema_version: 2\nrecord_types:\n  rfc:\n    dir: \"docs/rfc\"\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  citation.resolution:\n    level: error\n    external_ids: [\"RFC-4122\", \"RFC-4000..4999\"]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["citation.resolution"]
+                .external_ids
+                .as_ref()
+                .map(Vec::len),
+            Some(2)
+        );
+        // Still optional.
+        assert!(parse(&format!("{base}  citation.resolution: error\n")).is_ok());
+        for bad in ["\"FOO-1\"", "\"RFC-x\"", "\"RFC-9..1\"", "\"\"", "\" \""] {
+            let err = parse(&format!(
+                "{base}  citation.resolution:\n    level: error\n    external_ids: [{bad}]\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("external_ids"), "{bad}: {err}");
+        }
+        let elsewhere =
+            format!("{base}  field.quality:\n    level: error\n    external_ids: [\"RFC-1\"]\n");
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'external_ids'"));
     }
 
     #[test]
