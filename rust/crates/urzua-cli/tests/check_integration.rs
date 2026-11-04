@@ -3006,6 +3006,11 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "claim.status-agreement",
             "population is claims, not records",
         ),
+        // File-level: judges the text of files under a published path.
+        (
+            "boundary.published-path-reference",
+            "population is published files, not records",
+        ),
     ];
 
     for (id, _) in EXEMPT {
@@ -3029,6 +3034,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
                 format!("{id}: {{level: error, terminal_statuses: [\"Done\"]}}")
             }
             "pointer.target-status" => format!("{id}: {{level: error, not_in: [\"Done\"]}}"),
+            "boundary.published-path-reference" => {
+                format!("{id}: {{level: error, published_paths: [\"docs/claims\"]}}")
+            }
             _ => format!("{id}: error"),
         })
         .collect();

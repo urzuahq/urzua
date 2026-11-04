@@ -124,6 +124,9 @@ pub enum PopulationUnit {
     /// One other rule's execution. The unit of a rule that judges the run
     /// rather than the corpus.
     Rule,
+    /// One tracked file under a declared published path, read as text. The
+    /// file is not a record: the rule judges what it cites.
+    File,
 }
 
 /// What a rule decided about one candidate it was handed.

@@ -7,7 +7,7 @@ Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-23
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-core/src/config.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/narrative.rs, code:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-core/src/rules/pointer.rs, test:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-core/src/config.rs
 ---
 # 44 — Pointer and narrative fields are config-declared per type, not hardcoded
 
@@ -130,3 +130,9 @@ as originally decided rather than silently edited — shipped as `narrative_fiel
   names an org declares" -- this decision is what makes that literally true.
 - MILE-90 -- the milestone that builds this decision, including the three checks this amendment
   adds.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs
 Date: 2026-09-05
 Author: beauwilliams
@@ -67,3 +67,10 @@ existing caller needs to change.
 - RFC-10 — the open question this ADR resolves for the bold-list case only.
 - `urzuahq/urzua#1` — the real foreign-corpus evidence for both shapes.
 - `rust/crates/urzua-core/src/header.rs` — the implementation.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

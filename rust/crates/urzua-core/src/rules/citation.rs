@@ -24,19 +24,7 @@ pub fn citation_resolution(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_CITATION_RESOLUTION;
 
-    // Longest first is not needed for correctness (the boundary test rejects a
-    // match inside a longer prefix) but keeps the order of work stable.
-    let mut prefixes: Vec<String> = config
-        .record_types
-        .iter()
-        .map(|(name, cfg)| {
-            cfg.prefix
-                .clone()
-                .unwrap_or_else(|| name.to_ascii_uppercase())
-        })
-        .collect();
-    prefixes.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-    prefixes.dedup();
+    let prefixes = declared_prefixes(config);
 
     struct Citation<'a> {
         record: &'a Record,
@@ -48,7 +36,7 @@ pub fn citation_resolution(
         let Some(text) = full_text.get(&record.path) else {
             continue;
         };
-        for (line, token) in cited_identifiers(text, record.header.region, &prefixes) {
+        for (line, token) in cited_prose_identifiers(text, record.header.region, &prefixes) {
             candidates.push(Citation {
                 record,
                 line,
@@ -90,7 +78,7 @@ pub fn citation_resolution(
 
 /// Every `(line, identifier)` in `text` outside the header region and outside
 /// fenced code blocks. Lines are 1-indexed, matching `Header::region`.
-fn cited_identifiers(
+fn cited_prose_identifiers(
     text: &str,
     header_region: Option<(usize, usize)>,
     prefixes: &[String],
@@ -131,43 +119,11 @@ fn cited_identifiers(
         if header_region.is_some_and(|(start, end)| (start..=end).contains(&number)) {
             continue;
         }
-        for token in identifiers_in_line(line, prefixes) {
+        for token in cited_identifiers(line, prefixes) {
             out.push((number, token));
         }
     }
     out
-}
-
-/// Identifiers standing alone in `line`: not preceded by a letter, digit, `-`,
-/// `/`, `_` or `.` (so a path, a filename or a longer token is not a
-/// citation), and not followed by an alphanumeric (`ADR-12x`).
-fn identifiers_in_line(line: &str, prefixes: &[String]) -> Vec<String> {
-    let mut found: Vec<(usize, String)> = Vec::new();
-    for prefix in prefixes {
-        let needle = format!("{prefix}-");
-        for (start, _) in line.match_indices(&needle) {
-            let before = line[..start].chars().next_back();
-            if before.is_some_and(|c| c.is_alphanumeric() || matches!(c, '-' | '/' | '_' | '.')) {
-                continue;
-            }
-            let digits = &line[start + needle.len()..];
-            let n = digits.chars().take_while(|c| c.is_ascii_digit()).count();
-            if n == 0 {
-                continue;
-            }
-            if digits[n..]
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_alphanumeric())
-            {
-                continue;
-            }
-            found.push((start, line[start..start + needle.len() + n].to_string()));
-        }
-    }
-    found.sort();
-    found.dedup();
-    found.into_iter().map(|(_, t)| t).collect()
 }
 
 #[cfg(test)]

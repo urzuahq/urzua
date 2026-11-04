@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-id/src/lib.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-id/src/lib.rs
+Realized-by: code:rust/crates/urzua-id/src/lib.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs, test:rust/crates/urzua-id/src/lib.rs
 Date: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -54,3 +54,9 @@ numbers, unchanged by this ADR) — so this is the cheapest point at which to ha
 
 - ADR-3 — the separation this ADR picks a concrete encoding for.
 - `rust/crates/urzua-id/src/lib.rs` — where `StableId` already lives, encoding left open until now.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M25Z27VBE63ABNE2QRSQSXGR
 Status: Accepted
-Embodiment: Implemented
+Embodiment: Drift detected
 Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-10
 Author: beauwilliams
@@ -168,3 +168,10 @@ Also recorded: `prepare-release` now fails on every `no-changeset` merge, becaus
 nothing-to-release as an error (`BUG-33`). That is the cost of `BUG-27` removing
 `continue-on-error`, and the right trade — but a workflow that goes red on routine merges is a gate
 nobody reads.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Implemented`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |

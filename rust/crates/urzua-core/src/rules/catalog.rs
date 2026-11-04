@@ -41,6 +41,7 @@ pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
 pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
+pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -77,6 +78,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_FIELD_LEADING_RESERVED_INDICATOR,
     RULE_HEADER_CASE_VARIANT_KEY,
     RULE_CITATION_RESOLUTION,
+    RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -223,6 +225,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_CITATION_RESOLUTION,
         description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in and option-free; its population counts the citations examined, so a run over none is distinguishable from a clean one.",
+    },
+    RuleMeta {
+        id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
     },
 ];
 

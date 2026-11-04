@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M286A8CHGVMQ2WTSPVX8G3CK
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/report.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Date: 2026-09-11
 Author: beauwilliams
@@ -125,3 +125,10 @@ named for this exact contract.
 - `rust/crates/urzua-core/src/report.rs` -- `Report`, `Notice`, `NoticeSeverity`, `CouldNotRun`, and
   every concrete report type.
 - `rust/crates/urzua-cli/src/main.rs` -- `emit()`, the panic hook, `try_parse()`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/report.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

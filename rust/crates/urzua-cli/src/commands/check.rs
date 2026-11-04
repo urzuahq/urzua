@@ -190,6 +190,63 @@ fn read_claim_files(
     Ok(out)
 }
 
+/// Reads every tracked file under a declared published path, for
+/// `boundary.published-path-reference`. Kept in the CLI because `urzua-core` is
+/// pure (ADR-5).
+///
+/// Nothing is skipped silently. A file that is not valid UTF-8, a symlink or
+/// anything else that is not a regular file is handed over with no content, so
+/// the rule counts it as unreadable instead of clean. A tracked file that is
+/// gone from disk (a staged deletion, or one deleted and not yet staged) is
+/// not published and is left out. Any other I/O failure aborts the run: a file
+/// the rule could not read is a file it did not check.
+fn read_published_files(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    published: &[String],
+) -> Result<Vec<rules::PublishedFile>, String> {
+    let mut out = Vec::new();
+    for path in &discovered.paths {
+        if discovered.staged_deletions.contains(path)
+            || !published
+                .iter()
+                .any(|entry| rules::path_is_published(path, entry))
+        {
+            continue;
+        }
+        let full = repo_root.join(path);
+        let meta = match std::fs::symlink_metadata(&full) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                return Err(format!(
+                    "boundary.published-path-reference: could not stat {}: {e}",
+                    full.display()
+                ))
+            }
+        };
+        let content = if meta.is_file() {
+            match urzua_io::read_to_string(&full) {
+                Ok(text) => Some(text),
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => None,
+                Err(e) => {
+                    return Err(format!(
+                        "boundary.published-path-reference: could not read {}: {e}",
+                        full.display()
+                    ))
+                }
+            }
+        } else {
+            None
+        };
+        out.push(rules::PublishedFile {
+            path: path.clone(),
+            content,
+        });
+    }
+    Ok(out)
+}
+
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
@@ -330,6 +387,17 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             Ok(c) => c,
             Err(e) => return emit(&CouldNotRun::from(e)),
         }
+    };
+
+    let published_paths: Vec<String> = config
+        .rules
+        .get(rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+        .and_then(|s| s.published_paths.clone())
+        .unwrap_or_default();
+    let published_files = match read_published_files(&repo_root, &discovered, &published_paths) {
+        Ok(files) => files,
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     // `compute_drifted_records` spawns several `git` subprocesses per
@@ -527,6 +595,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
         }),
+        crate::gate::gated(
+            &config,
+            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+            || rules::published_path_reference(&published_files, &published_paths, &config),
+        ),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());

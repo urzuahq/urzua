@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/new_record.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/new_record.rs
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs, code:rust/crates/urzua-cli/src/commands/new.rs, test:rust/crates/urzua-core/src/new_record.rs
 Date: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -61,3 +61,9 @@ Additive: a new pure module (`new_record.rs`, following the same pure-render/imp
 - ADR-3/21 — the stable-ID model `new` assigns from on creation, same as `migrate ids` backfills
   onto existing records.
 - `rust/crates/urzua-core/src/fix.rs` — the pure-render/impure-caller split this module mirrors.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
