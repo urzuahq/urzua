@@ -2,6 +2,7 @@
 Stable-Id: 01M2P88HFRZDB9R8K03GBVBAGE
 Status: Accepted
 Date: 2026-09-16
+Accepted-on: 2026-09-17
 Author: beauwilliams
 ---
 # 31 — A record type must be able to declare that its metadata is not in a header
@@ -99,3 +100,4 @@ matching how `header.layout-consistency` (`rules.rs:97-108`) and `header.field-s
 > |---|---|---|
 > | 2026-09-16 | `Draft` -> `Accepted`, decided by `ADR-50`. **Why:** decided before building, rather than patching around the gap -- the open questions this proposal listed are answered in the decision, including one it did not anticipate. | **substantive** |
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** measured, not predicted -- nine errors against nine valid records, and the obvious workaround (`required_fields = []`) is already asserted *not* to work by an existing integration test whose comment explains why. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 2de0e51f2. | **structural** |

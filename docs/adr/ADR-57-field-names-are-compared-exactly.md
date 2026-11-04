@@ -2,6 +2,7 @@
 Stable-Id: 01M317SJDB5EK301M3JKSCSNYH
 Status: Accepted
 Date: 2026-09-21
+Accepted-on: 2026-09-21
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -123,3 +124,4 @@ a reversal cannot be silent.
 > | 2026-09-21 | Initial decision, `Status: Accepted`. **Why:** `BUG-97` was filed expecting a one-line swap to a better case-insensitive comparison. The property suite found that no such comparison is correct in both directions, and measuring the corpus showed this one had never matched anything exact comparison would not have. Deleting it rather than improving it closes the bug and removes the surface it lived on. | **substantive** |
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit ce6048953. | **structural** |

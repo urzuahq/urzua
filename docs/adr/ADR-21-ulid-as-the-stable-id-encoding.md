@@ -3,6 +3,7 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-id/src/lib.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs, test:rust/crates/urzua-id/src/lib.rs
 Date: 2026-09-05
+Accepted-on: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -60,3 +61,4 @@ numbers, unchanged by this ADR) — so this is the cheapest point at which to ha
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c63eebe25. | **structural** |

@@ -2,6 +2,7 @@
 Stable-Id: 01M21GQHRW1JGSVYTVMRD0R7HB
 Status: Accepted
 Date: 2026-09-08
+Accepted-on: 2026-09-09
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -137,3 +138,4 @@ as originally decided rather than silently edited — shipped as `narrative_fiel
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c922db8ee. | **structural** |

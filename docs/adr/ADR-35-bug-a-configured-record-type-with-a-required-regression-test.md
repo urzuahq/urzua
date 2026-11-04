@@ -3,6 +3,7 @@ Status: Accepted
 Embodiment: Verified
 Realized-by: code:.urzua/config.yaml@sha256:e185c4da7b1fd776db8d9803b9684ae32592dadda023a2426b1e9e5a39d5798e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:288a08b371a85ebb981626b959f5acdce0319f2d2d38c0c06544d77d383a5b20
 Date: 2026-09-07
+Accepted-on: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -73,3 +74,4 @@ Fully additive: one config entry, one template, one new directory.
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 784fa758e. | **structural** |

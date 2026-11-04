@@ -1,5 +1,5 @@
 ---
-Version: '0.27'
+Version: '0.28'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -170,7 +170,8 @@ Two details carry weight:
       set is fixed, not declarable). With a `marker`, the block starts at the first line of the
       section containing it and runs to the next blank line or list item; a section without the
       marker, and a marker with no block after it, are each their own finding. With no `marker`,
-      the block is the section's first paragraph. Phrases outside the block never count.
+      the block is the section's first paragraph. A leading `>` blockquote marker on a line is not part of
+      the block, so a phrase that wraps across quoted lines still matches. Phrases outside the block never count.
     - `table-min-rows` requires a table with at least `min_rows` (an integer of 1 or more) data rows;
       a data row with every cell empty does not count, the largest table in the section decides, and
       a table inside a fenced code block is not read.
@@ -708,4 +709,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
 > | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.26`. Documented the opt-in `date.field-order` rule and its `date_order` option (`Earlier <= Later`). **Why:** `MILE-157` -- a record accepted before it was written passed, since no rule compared two date fields; `date.field-valid` still owns well-formedness. | **substantive** |
-> | 2026-11-04 | Bumped to `0.27`. Documented the `indexes` entry shape of `index.freshness`: multi-line `format`, `{file}` in place of `{id}`, `{title}` without the id, and regeneration with `urzua index`. **Why:** `MILE-152` -- a YAML or link-list index could not be declared, and nothing regenerated one. | **substantive** |
+> | 2026-11-04 | Bumped to `0.27`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.28`. Documented the `indexes` entry shape of `index.freshness`: multi-line `format`, `{file}` in place of `{id}`, `{title}` without the id, and regeneration with `urzua index`. **Why:** `MILE-152` -- a YAML or link-list index could not be declared, and nothing regenerated one. | **substantive** |

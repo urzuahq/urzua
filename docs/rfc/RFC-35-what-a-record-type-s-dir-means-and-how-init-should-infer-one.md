@@ -2,6 +2,7 @@
 Stable-Id: 01M2W610G6NZXPRWHDZHG1HDPH
 Status: Accepted
 Date: 2026-09-19
+Accepted-on: 2026-09-19
 Author: beauwilliams
 Supersedes / Superseded-by: —
 ---
@@ -97,3 +98,4 @@ heuristics rather than carry them into the new model.
 > | 2026-09-19 | Filed, `Status: Draft`. **Why:** four heuristics have accreted inside `init` and `check` to guess which records belong to a type, each patching the last one's edge case, and the question underneath them -- whether `dir` means a directory or a subtree -- has never been decided. Raised while asking why `init` proposed `docs/` as a type when the config named `docs/adr`. | **substantive** |
 > | 2026-09-19 | Restored to the `rfc` template's section set. **Why:** this record was written by replacing the scaffold `urzua new` produced, which deleted `Motivation`, `Proposal`, `Open questions` and `Non-goals` and substituted invented headings -- changing the RFC format for this corpus in a single record. `RFC-34`, filed the day before, keeps the template exactly. Measured while fixing it: **79 of 269 records are missing at least one of their type's template sections**, and no rule examines sections at all, so `check` has been green throughout. | **structural** |
 > | 2026-09-19 | `Status: Draft` → `Accepted`, and implemented. **Why:** a fourth review round found the third heuristic re-entering `BUG-43`'s own failure -- `docs/adr` holding three records plus two record-bearing subdirectories proposed only the subdirectories, and the three records matched no `dir` prefix, so `check` reported success over them. Three consecutive rounds each produced a fresh HIGH in `detect_record_types`, which is the evidence that the question underneath had to be decided rather than patched around. `dir` now means this directory; `init` proposes one type per directory holding records. Verified: this repository's six types have identical direct and recursive counts, so strict matching costs it nothing. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit adc0a54c5. | **structural** |

@@ -4,6 +4,7 @@ Stable-Id: 01M1YTZ48KK60554GSFTN46E5F
 Embodiment: Drift detected
 Realized-by: code:scripts/generate-dashboard.py
 Date: 2026-09-07
+Accepted-on: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -86,3 +87,4 @@ above as out of scope, not left to happen by accretion.
 > |---|---|---|
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:scripts/generate-dashboard.py` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 340919acc. | **structural** |
