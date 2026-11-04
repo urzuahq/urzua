@@ -42,6 +42,43 @@ pub fn normalize_locator(raw: &str) -> String {
     parts.join("/")
 }
 
+const PIN_MARKER: &str = "@sha256:";
+
+/// Splits an optional content-hash pin off a locator (`MILE-129`):
+/// `src/a.rs@sha256:<64 lowercase hex>` is the path `src/a.rs` pinned to that
+/// digest. Anything else after the marker -- wrong length, uppercase, non-hex
+/// -- is not a pin and stays part of the path, so a malformed pin surfaces as
+/// a locator naming nothing (`embodiment.locator-exists`), never as a silently
+/// unpinned one.
+fn split_pin(locator: &str) -> (&str, Option<&str>) {
+    let locator = locator.trim();
+    match locator.rsplit_once(PIN_MARKER) {
+        Some((path, hash))
+            if hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>
+        {
+            (path, Some(hash))
+        }
+        _ => (locator, None),
+    }
+}
+
+/// Every locator with its optional pinned digest (`MILE-129`), in the order
+/// written. The path is normalised exactly as [`parse_realized_by`] does.
+pub fn realized_by_pinned_locators(value: &str) -> Vec<(String, Option<String>)> {
+    let mut out = Vec::new();
+    for segment in value.split(',') {
+        let Some((prefix, locator)) = segment.trim().split_once(':') else {
+            continue;
+        };
+        if !matches!(prefix.trim(), "spec" | "code" | "test") {
+            continue;
+        }
+        let (path, pin) = split_pin(locator);
+        out.push((normalize_locator(path), pin.map(str::to_string)));
+    }
+    out
+}
+
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
     for segment in value.split(',') {
@@ -49,7 +86,7 @@ pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
         let Some((prefix, locator)) = segment.split_once(':') else {
             continue;
         };
-        let locator = normalize_locator(locator);
+        let locator = normalize_locator(split_pin(locator).0);
         match prefix.trim() {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
@@ -209,15 +246,20 @@ pub fn embodiment_locator_exists(
 /// precomputed by the caller (git history is I/O, this function isn't --
 /// same shape as `full_text` elsewhere in this module); so is `back_pointed`,
 /// the records a source comment cites (`MILE-128`), from
-/// [`back_pointer_evidence`].
+/// [`back_pointer_evidence`]. `claim_age_days` (`MILE-129`) is each record's
+/// days since its `Realized-by` line was last touched, computed by the caller
+/// and read only while `claim_max_age_days` is set: a claim older than that
+/// draws a warning in addition to any disagreement.
 pub fn embodiment_consistency(
     records: &[Record],
     config: &Config,
     drifted: &HashSet<PathBuf>,
     back_pointed: &HashSet<PathBuf>,
+    claim_age_days: &HashMap<PathBuf, u64>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
+    let max_age = config.rules.get(RULE_ID).and_then(|s| s.claim_max_age_days);
 
     // The candidate is the *pair*: the rule needs both fields, so a record
     // carrying only one of them is handed to the rule and reaches no verdict.
@@ -273,6 +315,20 @@ pub fn embodiment_consistency(
                     stated.trim()
                 ),
                 });
+            }
+            if let (Some(max), Some(age)) = (max_age, claim_age_days.get(&record.path)) {
+                if *age > u64::from(max) {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        message: format!(
+                            "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
+                        ),
+                    });
+                }
             }
             Outcome::Examined
         },
@@ -387,6 +443,61 @@ mod tests {
     use crate::rules::tests::*;
 
     #[test]
+    fn a_sha256_pin_is_split_off_the_locator_and_malformed_pins_are_not() {
+        let h = "a".repeat(64);
+        let value = format!("code:./src/a.rs@sha256:{h}, test:t.rs, spec:s.md@sha256:ABC");
+        assert_eq!(
+            realized_by_pinned_locators(&value),
+            vec![
+                ("src/a.rs".to_string(), Some(h.clone())),
+                ("t.rs".to_string(), None),
+                ("s.md@sha256:ABC".to_string(), None),
+            ]
+        );
+        // Every other reader sees the bare path.
+        assert_eq!(parse_realized_by(&value).code, vec!["src/a.rs".to_string()]);
+        assert!(realized_by_locator_paths(&value).contains(&"src/a.rs".to_string()));
+    }
+
+    #[test]
+    fn a_claim_older_than_claim_max_age_days_warns_and_only_when_declared() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
+        );
+        let ages: HashMap<PathBuf, u64> = [(r.path.clone(), 40)].into();
+        let run = |config: &Config| {
+            embodiment_consistency(
+                std::slice::from_ref(&r),
+                config,
+                &HashSet::new(),
+                &HashSet::new(),
+                &ages,
+            )
+            .1
+        };
+        assert!(run(&embodiment_config()).is_empty());
+        let with_max = |days: u32| {
+            let mut config = embodiment_config();
+            let setting: crate::config::RuleSetting =
+                yaml_serde::from_str(&format!("{{level: warn, claim_max_age_days: {days}}}"))
+                    .unwrap();
+            config
+                .rules
+                .insert(RULE_EMBODIMENT_CONSISTENCY.to_string(), setting);
+            config
+        };
+        let findings = run(&with_max(30));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("40 days"), "{findings:?}");
+        assert!(
+            run(&with_max(40)).is_empty(),
+            "exactly at the limit is not over it"
+        );
+    }
+
+    #[test]
     fn a_slot_declared_only_as_required_is_still_a_declared_slot() {
         // `known_fields` is documented as the fields a type carries *beyond*
         // `required_fields`, so a type that requires `Realized-by` declares it
@@ -403,8 +514,13 @@ mod tests {
             type_config_pointer(&["Embodiment", "Realized-by"], None, None, None),
         )]);
 
-        let (exec, findings) =
-            embodiment_consistency(&[r], &config, &HashSet::new(), &HashSet::new());
+        let (exec, findings) = embodiment_consistency(
+            &[r],
+            &config,
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -525,8 +641,13 @@ mod tests {
             "adr",
             "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
         );
-        let (exec, findings) =
-            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
+        let (exec, findings) = embodiment_consistency(
+            &[r],
+            &embodiment_config(),
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Verified"));
@@ -540,8 +661,13 @@ mod tests {
             "adr",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (_, findings) =
-            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
+        let (_, findings) = embodiment_consistency(
+            &[r],
+            &embodiment_config(),
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -563,8 +689,13 @@ mod tests {
             "adr",
             "> Phase: Verified\n> Evidence: code:src/lib.rs\n",
         );
-        let (exec, findings) =
-            embodiment_consistency(&[r], &config, &HashSet::new(), &HashSet::new());
+        let (exec, findings) = embodiment_consistency(
+            &[r],
+            &config,
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Phase"));
@@ -592,8 +723,13 @@ mod tests {
         );
         let mut drifted = HashSet::new();
         drifted.insert(r.path.clone());
-        let (_, findings) =
-            embodiment_consistency(&[r], &embodiment_config(), &drifted, &HashSet::new());
+        let (_, findings) = embodiment_consistency(
+            &[r],
+            &embodiment_config(),
+            &drifted,
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Drift detected"));
     }
@@ -601,8 +737,13 @@ mod tests {
     #[test]
     fn a_record_missing_half_the_pair_is_handed_to_the_rule_and_not_judged() {
         let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
-        let (exec, findings) =
-            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
+        let (exec, findings) = embodiment_consistency(
+            &[r],
+            &embodiment_config(),
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -681,16 +822,26 @@ mod tests {
     fn a_back_pointer_lifts_a_specified_record_to_implemented_observed_failing() {
         let r = back_pointer_record("Implemented", "spec:docs/x.md");
         let cited = HashSet::from([r.path.clone()]);
-        let (_, findings) =
-            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &cited);
+        let (_, findings) = embodiment_consistency(
+            &[r],
+            &embodiment_config(),
+            &HashSet::new(),
+            &cited,
+            &HashMap::new(),
+        );
         assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
     fn without_a_back_pointer_the_same_record_still_computes_specified() {
         let r = back_pointer_record("Implemented", "spec:docs/x.md");
-        let (_, findings) =
-            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
+        let (_, findings) = embodiment_consistency(
+            &[r],
+            &embodiment_config(),
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashMap::new(),
+        );
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Specified"));
     }

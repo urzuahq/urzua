@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -324,6 +324,34 @@ indistinguishable in the report from one that ran clean:
 - a rule name this build does not ship -- the error names the valid set
 - an option on a rule that does not take it
 
+### Evidence pins, a grace window and a claim age (`MILE-129`)
+
+`embodiment.consistency` takes two optional day-count options and reads one optional locator
+suffix. Each is off until written, and a repository that writes none sees no change.
+
+```yaml
+rules:
+  embodiment.consistency:
+    level: warn
+    drift_grace_days: 7      # a locator changed fewer than 7 days ago is not yet drift
+    claim_max_age_days: 180  # warn when the Realized-by line was last touched over 180 days ago
+```
+
+- `drift_grace_days` (whole days, `0` or more): drift is not reported while the cited file's last
+  commit is newer than the window, so a code change can land before its record catches up. Once the
+  window passes the drift reports.
+- `claim_max_age_days` (whole days): a warning when the commit that last touched the record's
+  `Realized-by` line is older than the limit, whether or not the evidence changed. It reports in
+  addition to any disagreement, and a record whose line git cannot date is not warned.
+- A locator written `code:path/to/file.rs@sha256:<64 lowercase hex>` is pinned to that content hash
+  (`sha256sum path/to/file.rs`). A pinned locator drifts exactly when the file's current hash
+  differs, and git history is not consulted for it, so an unrelated commit never reports and a
+  change made after the record was written does. Any other suffix is not a pin and stays part of the
+  path. Re-pinning is a hand edit of the hash on the `Realized-by` line.
+
+Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
+option-on-a-rule-that-does-not-take-it load error.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -344,3 +372,4 @@ indistinguishable in the report from one that ran clean:
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.8`. Documented the per-type `statuses` declaration: the status vocabulary, terminal success and failure statuses, fields required or forbidden at a status, and the type's own pending vocabulary. **Why:** `MILE-132` Phase 0: which statuses a type has is repository configuration, not engine policy (`BUG-59`), and the pending vocabulary (`BUG-65`) and finished-status lists (`BUG-178`) were compiled in or hand-copied. | **substantive** |
+> | 2026-11-04 | Bumped to `0.9`. Documented the `drift_grace_days` and `claim_max_age_days` options of `embodiment.consistency` and the `@sha256:` locator pin. **Why:** `MILE-129` -- all three opt-in and off by default, so drift can be pinned to content, held back for a fresh change, and an old claim flagged. | **substantive** |

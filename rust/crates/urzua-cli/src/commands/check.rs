@@ -481,6 +481,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         std::collections::HashSet::new()
     };
 
+    let claim_ages = if config
+        .rules
+        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
+    {
+        crate::discovery::compute_claim_ages(&repo_root, &records, &config, urzua_io::now_unix())
+    } else {
+        std::collections::HashMap::new()
+    };
+
     // Each rule's (RuleExecution, Vec<Finding>) collected into one list --
     // rules_executed/findings both derive from it below, so there's no
     // second hand-written list that has to be kept in sync by hand.
@@ -561,7 +571,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             || rules::revision_log_change_class(&records, &full_text),
         ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
-            rules::embodiment_consistency(&records, &config, &drifted, &back_pointed)
+            rules::embodiment_consistency(&records, &config, &drifted, &back_pointed, &claim_ages)
         }),
         crate::gate::gated(
             &config,

@@ -423,6 +423,36 @@ pub fn commit_strictly_before(repo_root: &Path, ancestor: &str, descendant: &str
         .unwrap_or(false)
 }
 
+/// Committer time of `commit`, in seconds since the epoch (`MILE-129`).
+/// `None` when git cannot say, so a grace window or claim age never fires on
+/// a commit it could not date.
+pub fn commit_unix_time(repo_root: &Path, commit: &str) -> Option<i64> {
+    let output = Command::new("git")
+        .args(["show", "-s", "--format=%ct", commit])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout).trim().parse().ok()
+}
+
+/// Seconds since the epoch, now (`MILE-129`).
+pub fn now_unix() -> i64 {
+    chrono::Utc::now().timestamp()
+}
+
+/// Lowercase hex SHA-256 of the file's bytes (`MILE-129`), or `None` when it
+/// cannot be read (a missing locator is `embodiment.locator-exists`' finding,
+/// not a hash mismatch).
+pub fn sha256_hex_of_file(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path).ok()?;
+    let digest = Sha256::digest(bytes);
+    Some(digest.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 fn run_git(dir: &Path, args: &[&str]) -> Result<String, DiscoveryError> {
     let args_str = args.join(" ");
     let output = Command::new("git")

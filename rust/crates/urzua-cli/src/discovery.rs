@@ -232,7 +232,41 @@ pub(crate) fn compute_drifted_records(
     records: &[Record],
     config: &Config,
 ) -> HashSet<PathBuf> {
+    compute_drifted_records_at(repo_root, records, config, urzua_io::now_unix())
+}
+
+/// The seconds in one day, for the `MILE-129` day-denominated options.
+const DAY_SECS: i64 = 86_400;
+
+/// [`compute_drifted_records`] with the clock supplied. Two opt-in refinements
+/// (`MILE-129`), both off unless declared: a locator carrying a `@sha256:` pin
+/// drifts when its current content hash differs (and only then, whatever git
+/// history says), and `drift_grace_days` holds back a locator whose last
+/// commit is newer than the window.
+pub(crate) fn compute_drifted_records_at(
+    repo_root: &Path,
+    records: &[Record],
+    config: &Config,
+    now_unix: i64,
+) -> HashSet<PathBuf> {
     let mut drifted = HashSet::new();
+    let grace_secs = config
+        .rules
+        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
+        .and_then(|s| s.drift_grace_days)
+        .map(|d| i64::from(d) * DAY_SECS);
+    let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
+    // Inside the window, so not yet drift. An undatable commit is never held
+    // back: the window only ever suppresses what it can prove is fresh.
+    let mut within_grace = |commit: &str| -> bool {
+        let Some(grace) = grace_secs else {
+            return false;
+        };
+        let time = *commit_times
+            .entry(commit.to_string())
+            .or_insert_with(|| urzua_io::commit_unix_time(repo_root, commit));
+        time.is_some_and(|t| now_unix - t < grace)
+    };
 
     // A locator cited by several records (a shared implementation module, a
     // shared test file) would otherwise re-run the same `git log`/`merge-base`
@@ -264,8 +298,26 @@ pub(crate) fn compute_drifted_records(
             continue;
         };
 
-        for locator in rules::realized_by_locator_paths(realized_by_value) {
+        for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
             let locator_path = PathBuf::from(&locator);
+            if let Some(pinned) = pin {
+                // A pin replaces the git-history heuristic for this locator.
+                let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
+                let changed = current.is_some_and(|c| c != pinned);
+                let fresh = changed
+                    && last_commit_for_path
+                        .entry(locator_path.clone())
+                        .or_insert_with(|| {
+                            urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or(None)
+                        })
+                        .as_deref()
+                        .is_some_and(&mut within_grace);
+                if changed && !fresh {
+                    drifted.insert(record.path.clone());
+                    break;
+                }
+                continue;
+            }
             let Some(locator_commit) = last_commit_for_path
                 .entry(locator_path.clone())
                 .or_insert_with(|| {
@@ -279,7 +331,7 @@ pub(crate) fn compute_drifted_records(
                 .or_insert_with(|| {
                     urzua_io::commit_strictly_before(repo_root, &reference_commit, locator_commit)
                 });
-            if drifted_pair {
+            if drifted_pair && !within_grace(locator_commit) {
                 drifted.insert(record.path.clone());
                 break;
             }
@@ -287,6 +339,53 @@ pub(crate) fn compute_drifted_records(
     }
 
     drifted
+}
+
+/// Whole days since each record's `Realized-by` line was last touched
+/// (`MILE-129`), for `claim_max_age_days`. Empty unless that option is set,
+/// so a repository that never opted in pays for no extra `git blame`.
+pub(crate) fn compute_claim_ages(
+    repo_root: &Path,
+    records: &[Record],
+    config: &Config,
+    now_unix: i64,
+) -> HashMap<PathBuf, u64> {
+    let mut ages = HashMap::new();
+    if config
+        .rules
+        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
+        .and_then(|s| s.claim_max_age_days)
+        .is_none()
+    {
+        return ages;
+    }
+    for record in records {
+        let locator_field = rules::relation_field_name(
+            config,
+            &record.record_type,
+            urzua_core::config::RelationRole::EmbodimentLocator,
+        );
+        let Some(field) = record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.as_str() == locator_field)
+        else {
+            continue;
+        };
+        let Ok(Some(commit)) = urzua_io::commit_for_line(repo_root, &record.path, field.line)
+        else {
+            continue;
+        };
+        let Some(time) = urzua_io::commit_unix_time(repo_root, &commit) else {
+            continue;
+        };
+        ages.insert(
+            record.path.clone(),
+            u64::try_from((now_unix - time) / DAY_SECS).unwrap_or(0),
+        );
+    }
+    ages
 }
 
 /// Reads every tracked file under one of the declared path prefixes, for the
