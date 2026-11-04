@@ -76,4 +76,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A record edit is judged by urzua before it is written, and the harness hook only relays the verdict](ADR-69-a-record-edit-is-judged-by-urzua-before-it-is-written-and-the-harness-hook-only-relays-the-verdict.md)
 - [Drafting commands scaffold through urzua new and carry no schema knowledge of their own](ADR-70-drafting-commands-scaffold-through-urzua-new-and-carry-no-schema-knowledge-of-their-own.md)
 - [One gate runs at the editor, the commit, the push and CI, and only CI is relied on as the guarantee](ADR-71-one-gate-runs-at-the-editor-the-commit-the-push-and-ci-and-only-ci-is-relied-on-as-the-guarantee.md)
+- [A finding carries a structured suggested_action with a closed set of kinds](ADR-73-a-finding-carries-a-structured-suggested-action-with-a-closed-set-of-kinds.md)
 <!-- urzua:index:end -->
