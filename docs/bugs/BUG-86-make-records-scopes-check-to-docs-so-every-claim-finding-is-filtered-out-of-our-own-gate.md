@@ -2,7 +2,7 @@
 Stable-Id: 01M2YQ9308YAYTQT4S7FWMY295
 Status: Fixed
 Found-in: "Consolidating the release changesets, when a deliberately-planted false claim did not fail the gate"
-Regression-test: "not yet written -- a false claim in a claim_paths file must fail `make records`"
+Regression-test: '`a_scoped_invocation_still_reports_a_claim_finding_observed_failing` in `rust/crates/urzua-cli/tests/check_integration.rs` (BUG-121, which closed the general defect this record named)'
 ---
 # 86 — make records scopes check to docs so every claim finding is filtered out of our own gate
 
@@ -52,3 +52,4 @@ reaching a verdict that was then discarded. The count was honest; the finding ne
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | `BUG-121` filed and fixed: the general defect this record named ("the same blindness applies to any rule whose findings name a file outside `docs/`") is now closed in `check.rs`'s filter itself, not only worked around at this repository's own Makefile caller. | **substantive** |
+> | 2026-11-04 | `Regression-test` filled in: the real value. `Status` is untouched. **Why:** `field.pending` now reads a `Regression-test` placeholder on a `Fixed` bug as a real gap (`MILE-169`), and the `Regression-test` field named a test that was not yet written; it now names the integration test that plants a false claim outside the scoped directory. | **structural** |

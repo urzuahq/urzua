@@ -120,6 +120,12 @@ pub struct RuleSetting {
     /// `true` exempts prefixed keys from that rule and nothing else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_extension_prefix: Option<bool>,
+    /// Treat a pending value as legitimate until the record reaches a status
+    /// that requires the field (`MILE-169`). Only meaningful to `field.pending`,
+    /// where omitted means `false`: a pending value is reported at every status.
+    /// A field no `statuses.require` entry names is unaffected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_until_required: Option<bool>,
     /// Path prefixes of the source files scanned for `Implements:` comment
     /// back-pointers (`MILE-128`). Only meaningful to
     /// `embodiment.back-pointer-resolution`.
@@ -299,6 +305,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             allow_extension_prefix: Option<bool>,
             #[serde(default)]
+            pending_until_required: Option<bool>,
+            #[serde(default)]
             back_pointer_paths: Option<Vec<String>>,
             #[serde(default)]
             test_paths: Option<Vec<String>>,
@@ -357,6 +365,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 application_paths: table.application_paths,
                 exclude_paths: table.exclude_paths,
                 allow_extension_prefix: table.allow_extension_prefix,
+                pending_until_required: table.pending_until_required,
                 back_pointer_paths: table.back_pointer_paths,
                 test_paths: table.test_paths,
                 drift_grace_days: table.drift_grace_days,
@@ -386,6 +395,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 application_paths: None,
                 exclude_paths: None,
                 allow_extension_prefix: None,
+                pending_until_required: None,
                 back_pointer_paths: None,
                 test_paths: None,
                 drift_grace_days: None,
@@ -1368,6 +1378,13 @@ pub fn parse_with_document_models(
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
                 option: "allow_extension_prefix".to_string(),
+            });
+        }
+
+        if setting.pending_until_required.is_some() && name != crate::rules::RULE_FIELD_PENDING {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "pending_until_required".to_string(),
             });
         }
 

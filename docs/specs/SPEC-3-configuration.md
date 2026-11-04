@@ -1,5 +1,5 @@
 ---
-Version: '0.44'
+Version: '0.45'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -274,7 +274,11 @@ Two details carry weight:
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
     case-insensitive) equals one of the whole-value entries or matches one of the pattern entries. It **replaces** the compiled-in match, which treats
     any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
-    real value. A type that omits `pending` keeps the compiled-in match.
+    real value. A type that omits `pending` keeps the compiled-in match. The rule's optional
+    boolean `pending_until_required` (`MILE-169`, `false` by default) defers a pending value in a
+    field some `statuses.require` entry names, until the record's status is one that requires it:
+    the slot stays eligible and is counted unexamined. A field no `require` entry names is judged
+    as before, and the option is refused on any other rule at load.
   - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
     `statuses`, `success` and `failure` together are the finished statuses, in place of the rule's
     `terminal_statuses` / `closed_statuses` list, which stays the vocabulary for every target whose
@@ -813,3 +817,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.42`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |
 > | 2026-11-04 | Bumped to `0.43`. `sections.required` entries take `aliases` (other headings satisfying the requirement, disclosed as an info notice per alias) and `preamble: true` (a `y-statement` with a `marker` read from the text before the first `##` when its section is absent). **Why:** `MILE-165` -- adopter records name a section differently or carry the Y-statement in the preamble. | **substantive** |
 > | 2026-11-04 | Bumped to `0.44`. `citation.resolution` takes the optional `skip_revision_log` option, with the meaning it has for `citation.path-exists`. **Why:** `MILE-156` -- revision logs are append-only history, so an id they cite as it was must not be reported or rewritten. | **substantive** |
+> | 2026-11-04 | Bumped to `0.45`. `field.pending` takes the optional `pending_until_required` option, off unless declared `true`: a pending value in a field the type's `statuses.require` ties to certain statuses is not reported before the record reaches one of them, and the skipped slot stays eligible and unexamined. **Why:** `MILE-169` -- a placeholder `Regression-test` is legitimate on an `Open` bug and a gap on a `Fixed` one; `status.required-field-missing` already judges the latter. | **substantive** |
