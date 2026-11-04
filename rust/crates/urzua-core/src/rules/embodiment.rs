@@ -110,6 +110,17 @@ pub fn realized_by_locator_paths(value: &str) -> Vec<String> {
         .collect()
 }
 
+/// Every value [`compute_embodiment`] can return. A state outside this set is
+/// one no evidence reproduces; `embodiment.consistency` can only hold a record
+/// to the set above, so a declared `sticky_states` entry may not name one.
+pub const COMPUTED_EMBODIMENT_STATES: [&str; 5] = [
+    "Drift detected",
+    "Verified",
+    "Implemented",
+    "Specified",
+    "Not started",
+];
+
 /// ADR-0018's tier computation: the highest tier with a non-empty category.
 /// `test` outranks `code` outranks `spec` -- a claim verified by a test is
 /// stronger evidence than a claim only pointed at by a spec. `drifted`
@@ -270,6 +281,7 @@ pub fn embodiment_consistency(
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
     let max_age = config.rules.get(RULE_ID).and_then(|s| s.claim_max_age_days);
+    let sticky = sticky_states(config);
 
     // The candidate is the *pair*: the rule needs both fields, so a record
     // carrying only one of them is handed to the rule and reaches no verdict.
@@ -303,6 +315,11 @@ pub fn embodiment_consistency(
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
+            // A sticky state is a human's, and no evidence can reproduce it
+            // (`MILE-148`): examined, and neither disagreement nor age applies.
+            if sticky.contains(stated.trim()) {
+                return Outcome::Examined;
+            }
             let cited_by_code = back_pointed.code.contains(&record.path);
             let cited_by_test = back_pointed.test.contains(&record.path);
             // A missing `Realized-by` is judged only when a back-pointer cites
@@ -371,6 +388,20 @@ pub fn embodiment_consistency(
         },
         findings,
     )
+}
+
+/// The `Embodiment` values the repository declares as set by a human and not
+/// computable (`MILE-148`): `sticky_states` of `embodiment.consistency`. Empty
+/// when the rule or the option is absent, so every stated value is judged.
+pub fn sticky_states(config: &Config) -> HashSet<&str> {
+    config
+        .rules
+        .get(RULE_EMBODIMENT_CONSISTENCY)
+        .and_then(|s| s.sticky_states.as_deref())
+        .unwrap_or_default()
+        .iter()
+        .map(|s| s.trim())
+        .collect()
 }
 
 /// What a consistency finding says its computation read: the `Realized-by`
@@ -971,6 +1002,78 @@ mod tests {
             "adr",
             &format!("> Embodiment: {embodiment}\n> Realized-by: {realized_by}\n"),
         )
+    }
+
+    fn sticky_config(states: &str) -> Config {
+        let mut config = embodiment_config();
+        let setting: crate::config::RuleSetting = yaml_serde::from_str(&format!(
+            "{{level: warn, claim_max_age_days: 10, sticky_states: {states}}}"
+        ))
+        .unwrap();
+        config
+            .rules
+            .insert(RULE_EMBODIMENT_CONSISTENCY.to_string(), setting);
+        config
+    }
+
+    fn sticky_findings(config: &Config, records: &[Record], age: u64) -> (usize, Vec<Finding>) {
+        let ages: HashMap<PathBuf, u64> = records.iter().map(|r| (r.path.clone(), age)).collect();
+        let (exec, findings) = embodiment_consistency(
+            records,
+            config,
+            &HashSet::new(),
+            &HashSet::new(),
+            &Default::default(),
+            &ages,
+        );
+        (exec.population.unwrap().examined(), findings)
+    }
+
+    #[test]
+    fn a_declared_sticky_state_is_not_drift_and_a_neighbour_still_is_observed_failing() {
+        let mut deprecated = back_pointer_record("Deprecated", "code:src/x.rs");
+        deprecated.path = PathBuf::from("docs/adr/0001-a.md");
+        let mut inactive = back_pointer_record("Inactive", "spec:docs/x.md");
+        inactive.path = PathBuf::from("docs/adr/0002-b.md");
+        let mut neighbour = back_pointer_record("Verified", "spec:docs/x.md");
+        neighbour.path = PathBuf::from("docs/adr/0003-c.md");
+        let records = [deprecated, inactive, neighbour];
+        let (examined, findings) =
+            sticky_findings(&sticky_config("[Deprecated, Inactive]"), &records, 5);
+        assert_eq!(examined, 3, "a sticky record is examined, not skipped");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].file.ends_with("0003-c.md"), "{findings:?}");
+    }
+
+    #[test]
+    fn with_no_sticky_states_declared_deprecated_is_drift_as_before() {
+        let records = [back_pointer_record("Deprecated", "code:src/x.rs")];
+        let (_, findings) = sticky_findings(&embodiment_config(), &records, 5);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn only_the_declared_states_are_sticky() {
+        let records = [back_pointer_record("Inactive", "code:src/x.rs")];
+        let (_, findings) = sticky_findings(&sticky_config("[Deprecated]"), &records, 5);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_sticky_state_is_not_a_verification_claim_so_it_draws_no_age_warning() {
+        let records = [back_pointer_record("Deprecated", "code:src/x.rs")];
+        let (_, findings) = sticky_findings(&sticky_config("[Deprecated]"), &records, 400);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_sticky_state_with_no_realized_by_is_examined_and_clean() {
+        let (examined, findings) = sticky_findings(
+            &sticky_config("[Deprecated]"),
+            &[no_locators("Deprecated")],
+            5,
+        );
+        assert_eq!((examined, findings.len()), (1, 0));
     }
 
     fn consistency(r: Record, code: bool, test: bool) -> Vec<Finding> {
