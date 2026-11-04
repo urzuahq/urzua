@@ -1,5 +1,5 @@
 ---
-Version: '0.16'
+Version: '0.17'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -236,6 +236,29 @@ rules:
   visible in the report and never hidden. An id the list does not name is still resolved against the
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
+
+## Cited paths: `citation.path-exists`
+
+`citation.path-exists` (`MILE-143`) checks that a repository path cited in a record's references
+exists. Where to look is configuration, not engine knowledge, so the rule requires
+`reference_sections`:
+
+```yaml
+rules:
+  citation.path-exists:
+    level: warn
+    reference_sections: ["References"]
+```
+
+- `reference_sections` lists `##` heading texts, matched exactly after trimming. Only backtick-quoted
+  code spans inside those sections are read; a record with no such section is out of scope.
+- A span is read as a path only when it is plainly one: no whitespace, a `/` present, ending in a
+  file name with an extension or in `/`, not a URL or host-led path, not absolute, and no glob or
+  placeholder character. A bare file name without a directory (`Makefile`) is not read. A trailing
+  `:line` or `#anchor` is dropped; `./` and `../` resolve from the record's directory.
+- A file exists when git tracks it and it is on disk; a directory exists when a tracked file is below
+  it. The check is offline and deterministic. Cited issue and pull request numbers are not covered by
+  this rule.
 
 ## Scope declaration
 
@@ -491,3 +514,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documented the top-level `fail_on` key (`error` or `warning`, default `error`) and `urzua check --fail-on`. **Why:** `MILE-145` -- warnings could never fail a build, so a repository at zero warnings had nothing to keep it there. | **substantive** |
 > | 2026-11-04 | Bumped to `0.16`. Documented the optional `external_ids` option of `citation.resolution`: exact ids or inclusive numeric ranges under a declared record prefix that are skipped (counted out of scope) instead of resolved. **Why:** `MILE-156` -- a public standard number such as `RFC-4122` shares a record prefix and was reported as a dangling citation, with no way to say it is not ours. | **substantive** |
+> | 2026-11-04 | Bumped to `0.17`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |

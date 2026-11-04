@@ -191,7 +191,7 @@ fn exempt(record: &Record, decl: &SectionsDecl, config: &Config) -> Result<bool,
 
 /// The record's `##` sections with file-relative line numbers, read from
 /// after the header region.
-fn record_sections(record: &Record, text: &str) -> Vec<Section> {
+pub(super) fn record_sections(record: &Record, text: &str) -> Vec<Section> {
     let skip = record.header.region.map_or(0, |(_, end)| end);
     let body: String = text
         .split_inclusive('\n')
@@ -222,7 +222,7 @@ const Y_PHRASES: [&str; 5] = [
 ];
 
 /// The section body's lines with file-relative numbers, outside fenced code.
-fn prose_lines(section: &Section) -> Vec<(usize, &str)> {
+pub(super) fn prose_lines(section: &Section) -> Vec<(usize, &str)> {
     let mut out = Vec::new();
     let mut fence: Option<char> = None;
     for (i, line) in section.body.lines().enumerate() {

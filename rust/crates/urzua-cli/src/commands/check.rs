@@ -765,6 +765,28 @@ pub fn run(
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
         }),
+        crate::gate::gated(&config, rules::RULE_CITATION_PATH_EXISTS, || {
+            // A file is present when tracked and on disk (as for
+            // `embodiment.locator-exists`); a directory when a tracked file
+            // sits below it.
+            let tracked: std::collections::HashSet<&std::path::Path> =
+                discovered.paths.iter().map(|p| p.as_path()).collect();
+            let directories: std::collections::HashSet<&std::path::Path> = discovered
+                .paths
+                .iter()
+                .flat_map(|p| p.ancestors().skip(1))
+                .filter(|a| !a.as_os_str().is_empty())
+                .collect();
+            let present = |p: &str| {
+                let path = std::path::Path::new(p);
+                if directories.contains(path) {
+                    return true;
+                }
+                // Only a definite absence counts, as for `embodiment.locator-exists`.
+                tracked.contains(path) && repo_root.join(path).try_exists().unwrap_or(true)
+            };
+            rules::citation_path_exists(&records, &config, &full_text, &present)
+        }),
         crate::gate::gated(
             &config,
             rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
