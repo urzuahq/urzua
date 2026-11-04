@@ -20,6 +20,12 @@ jobs:
     name: rust (fmt, clippy, test, build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # The gate's one updating comment on a pull request. A caller must grant
+      # at least this; a token that cannot write (a fork) only loses the
+      # comment, never the verdict.
+      pull-requests: write
     defaults:
       run:
         working-directory: rust
@@ -47,19 +53,17 @@ jobs:
         run: cargo build --workspace --release --locked
       - name: cargo test
         run: cargo test --workspace --locked
-      - name: urzua check (SPEC-0002 Phase A exit criterion -- self-hosting)
-        working-directory: .
-        run: rust/target/release/urzua check
-      # The diff-aware gate (MILE-123/124): on a PR, report only on what the PR
-      # changed against its base, and enforce the diff.* rules, which have
-      # nothing to judge on a whole-repo run. fetch-depth: 0 above brings the
-      # history; the explicit fetch guarantees the base branch ref exists.
-      # Only the `ci` workflow's pull_request trigger sets base_ref.
-      - name: urzua check --base (diff gate, pull requests only)
-        if: github.event_name == 'pull_request'
-        working-directory: .
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-          rust/target/release/urzua check --base "origin/${BASE_REF}"
+      # The records gate is the reusable unit other repositories adopt
+      # (MILE-180), run here against the binary just built: `urzua check`, and
+      # on a pull request `urzua check --base` against the PR base, reported as
+      # annotations and one updating comment. The unit also verifies that the
+      # history it needs is present (fetch-depth: 0 above), so a shallow
+      # checkout fails with a reason instead of reading clean (ADR-71).
+      # base-ref is empty outside pull requests (publish-release calls this
+      # workflow on a tag), where only the whole-tree check runs.
+      - name: urzua gate (SPEC-0002 Phase A exit criterion -- self-hosting)
+        uses: ./.github/actions/urzua-gate
+        with:
+          binary: rust/target/release/urzua
+          base-ref: ${{ github.base_ref }}
+          pr-number: ${{ github.event.pull_request.number }}

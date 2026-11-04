@@ -122,6 +122,26 @@ $ urzua fix --apply --ids docs/adr/ADR-42-example.md --by beau
 
 Every applied write touches only the one field's line, byte-for-byte preserving the rest of the record; requires a resolved identity (`--by`, or `gh api user`, or `git config user.name`); and appends a structural entry to the record's own revision log. It refuses outright, per-record, if that log doesn't exist, rather than writing somewhere it can't be audited. Rationale, alternatives, and every hand-authored sentence stay permanently off-limits: this is a cache of a computation, never an editor.
 
+## Run the gate in CI
+
+This repository ships a composite action that installs a pinned release (checksum and build provenance verified), checks the checkout has the history drift reads, runs `urzua check` and, on a pull request, `urzua check --base`, and reports the findings as inline annotations and one pull request comment that is updated in place:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write # for the comment; without it the comment is skipped with a warning
+steps:
+  - uses: actions/checkout@<sha>
+    with:
+      fetch-depth: 0 # drift reads history; a shallow checkout fails with that reason
+  - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
+    with:
+      version: v0.3.0 # an exact release tag
+      base-ref: ${{ github.base_ref }} # empty outside pull requests
+```
+
+A run that could not run fails the job and is shown as NOT RUN; it is never a pass. Published builds are x86_64 Linux and arm64 and x86_64 macOS.
+
 ## Adopt without a rewrite
 
 ```sh

@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants hooks-install \
+.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants gate-action-test hooks-install \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint rust-clean
 
 help: ## Show available commands
@@ -29,8 +29,11 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint rust-build test records rule-table-check release-guard release-invariants ## Run exactly what CI runs, locally
+ci: fmt-check lint rust-build test records rule-table-check release-guard release-invariants gate-action-test ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
+
+gate-action-test: ## Test the reusable CI gate action's scripts (recorded fixtures, no network)
+	.github/actions/urzua-gate/test.sh
 
 hooks-install: ## Install the opt-in git hooks: pre-commit (urzua check --base HEAD), pre-push (fmt + clippy + urzua check)
 	@cp .git-hooks/pre-commit .git/hooks/pre-commit

@@ -29,6 +29,9 @@ jobs:
   # (ADR-0047).
   rust:
     uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read
+      pull-requests: write
 
   changeset:
     name: changeset required
@@ -118,9 +121,51 @@ jobs:
           .github/scripts/release-invariants.sh \
             .changeset rust/Cargo.toml "$(git tag --sort=-v:refname | head -1)"
 
+  # The gate action's own tests: recorded-fixture rendering, update-in-place
+  # commenting, the history precondition and the installer's refusals.
+  gate-action:
+    name: gate action tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/actions/urzua-gate/test.sh
+
+  # The pinned release, installed through the same unit an adopter uses
+  # (checksum and attestation verified), run over this repository's corpus as
+  # of that release. The current corpus cannot be the subject: a release older
+  # than the config.yaml format reads only config.toml and reports not-run on
+  # it. Bump version, sha256 and ref together when a release is cut.
+  gate-released:
+    name: gate (pinned release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: v0.3.0
+          path: corpus
+      - uses: ./.github/actions/urzua-gate
+        with:
+          version: v0.3.0
+          sha256: 0e3c7aad394144b921e4f4040b19d3ebc2ff33d503bbf73cf5531ffe02e3989e
+          working-directory: corpus
+          annotate: "false"
+          comment: "false"
+
   ci:
     name: ci
-    needs: [rust, changeset, release-invariants]
+    needs: [rust, changeset, release-invariants, gate-action, gate-released]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     if: always()
