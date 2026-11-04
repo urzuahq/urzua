@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/check_integration.rs
 Date: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -66,3 +66,9 @@ Fully additive: one config entry, one template, one new directory.
 - `rust/crates/urzua-cli/src/main.rs` — `scope_to_requested_paths`, the fix.
 - `rust/crates/urzua-cli/tests/check_integration.rs` —
   `check_scopes_to_the_requested_path_not_the_whole_corpus`, the regression test.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

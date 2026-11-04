@@ -894,4 +894,24 @@ mod tests {
         let (_, findings) = run_pairs(&amend_config(), &records);
         assert!(findings.is_empty(), "{findings:?}");
     }
+
+    #[test]
+    fn a_claim_naming_several_targets_is_judged_per_target() {
+        let one = record("docs/rfc/RFC-1-a.md", "rfc", "> Amended-by: RFC-3\n");
+        let two = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let three = record("docs/rfc/RFC-3-c.md", "rfc", "> Amends: RFC-1, RFC-2\n");
+        let records = [one, two, three];
+        let (exec, findings) = run_pairs(&amend_config(), &records);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("RFC-2's"), "{findings:?}");
+        assert_eq!(findings[0].file, records[2].path);
+        assert_eq!(examined(&exec), 3);
+    }
+
+    #[test]
+    fn a_self_referencing_claim_is_judged_like_any_other() {
+        let lone = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-1\n");
+        let (_, findings) = run_pairs(&amend_config(), &[lone]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
 }

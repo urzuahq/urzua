@@ -5,7 +5,6 @@ Date: 2026-09-21
 Author: beauwilliams
 Supersedes / Superseded-by: —
 Implements: SPEC-3
-Realized-by: spec:docs/milestones/MILE-107-make-the-engine-s-declared-vocabulary-and-its-projections-unmistakable-at-compile-time.md
 ---
 # 39 — Domain values the adopter declares need types whose equality is their comparison rule
 
@@ -241,3 +240,4 @@ current callers wants a test pinning its present behaviour **before** the type i
 > | 2026-09-21 | Widened to cover projections of the configuration, not only declared values. **Why:** a Major defect shipped and was caught the same day from the same root -- `field.untrimmed-value` was wired to `known_fields_by_type` where it needed `declared_fields_by_type`, two parameters of identical type with opposite absence semantics, so the rule silently skipped every type declaring only `required_fields`. Six further parameters share a type, two of them adjacent arguments of one function that would compile if swapped. Fifteen rules already take `&Config` and cannot be called wrongly, so the safe pattern is present and applied to a minority. | **substantive** |
 > | 2026-09-21 | Filed. **Why:** `ADR-57` took three passes to implement because the comparison it decided lives at six call sites, and between the first pass and the last two rules disagreed about one field on one record. `normalize_id` is the same shape with thirteen hand-applied calls and is load-bearing today. Filed while the evidence was in front of us rather than after the release, and deliberately not implemented in `0.4.0`. | **substantive** |
 > | 2026-09-22 | `Status: Draft` → `Accepted`; decided by `ADR-59`. **Why:** `RFC-40`/`ADR-58` landed in between and independently confirmed the same defect family (`BUG-100`, `BUG-101`), and answered this RFC's open question about `StatusValue` with evidence rather than leaving it open a second time -- `ADR-59` decides against building it. `FieldName` and `RecordId` are built; the `&Config` convergence proceeds as this RFC already decided. Implemented in `0.4.0`, reversing the prior entry's deferral, because the evidence for it kept arriving rather than going stale. | **substantive** |
+> | 2026-11-04 | Removed `Realized-by`; the evidence now lives on `ADR-59`, which decided this RFC. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

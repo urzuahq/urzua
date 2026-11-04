@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/graph.rs
+Realized-by: code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/commands/explain.rs, code:rust/crates/urzua-cli/src/commands/graph.rs, test:rust/crates/urzua-core/src/graph.rs
 Date: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -57,3 +57,9 @@ how any existing field is parsed.
 - `rust/crates/urzua-core/src/rules.rs` — `record_id`, `extract_references`, reused rather than
   reimplemented.
 - ADR-23 — the stdout-JSON-always contract both commands follow.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

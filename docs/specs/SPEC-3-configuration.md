@@ -2,7 +2,7 @@
 Version: '0.6'
 Date: 2026-08-20
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -243,3 +243,5 @@ indistinguishable in the report from one that ran clean:
 > | 2026-09-18 | Criterion 3 corrected. **Why:** it still read *"not yet true today, since no per-rule enable/disable or severity config exists yet"* on the day after `MILE-80` shipped exactly that — and this record was marked `Accepted`/`Verified` in the same change, which is `BUG-26`'s own defect committed while fixing `BUG-26`. Caught by review. The `doctor` half is genuinely still unbuilt and now says so rather than being swept up with the half that shipped. | **substantive** |
 > | 2026-11-03 | Bumped to `0.5`. Documented the per-type document model declaration (`identity`, `fields`, `sections`) as parsed and validated but read by no rule yet. **Why:** first slice of `MILE-98` (`RFC-33` layer 1): a record type can now declare how its parts are found, and a malformed declaration fails the load instead of being ignored. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. Documented the top-level `relation_pairs` declaration and the narrowest reading of each question `RFC-47` leaves open (global field names, no combined key, no `advisory`, fixed role set unchanged). **Why:** `MILE-122` -- reciprocity was hardcoded to one combined key, so a pair a repository declares itself, including across record types, could not be checked. | **substantive** |
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

@@ -5,6 +5,7 @@ Date: 2026-09-22
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-39
+Realized-by: spec:docs/milestones/MILE-107-make-the-engine-s-declared-vocabulary-and-its-projections-unmistakable-at-compile-time.md
 ---
 # 59 — domain values the adopter declares are types not bare strings
 
@@ -132,3 +133,4 @@ who wonders why should read this record rather than assume it was missed.
 > |---|---|---|
 > | 2026-09-22 | Decided. **Why:** `RFC-39` was filed as Draft with three open questions; this project's own subsequent work (`RFC-40`/`ADR-58`, and `field.untrimmed-value` before it) answered two of them with evidence rather than assertion, which is why `StatusValue` is decided against here rather than deferred again. | **substantive** |
 > | 2026-09-22 | Narrowed `FieldName`'s scope before implementation: `RecordTypeConfig`'s stored fields stay `Vec<String>`; only the comparison sites and the projections consumed from them become `FieldName`-typed. **Why:** counting construction sites before writing code found over ninety `RecordTypeConfig` literals, nearly all test fixtures that were never a comparison bug; typing the stored field would touch all of them for no additional safety once `declared_fields()` already centralizes the projection. | **substantive** |
+> | 2026-11-04 | Added `Realized-by`, moved from `RFC-39`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
