@@ -40,7 +40,12 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
             // eligible and goes unexamined, so the gap is disclosed.
             if pending_until_required
                 && declared.is_some_and(|d| {
-                    let status = record.header.get("Status").unwrap_or_default();
+                    let status_field = relation_field_name(
+                        config,
+                        &record.record_type,
+                        crate::config::RelationRole::Status,
+                    );
+                    let status = record.header.get(status_field).unwrap_or_default();
                     let named = d.require.iter().any(|r| r.fields.contains(field));
                     named && !d.required_at(status).contains(&field.as_str())
                 })
