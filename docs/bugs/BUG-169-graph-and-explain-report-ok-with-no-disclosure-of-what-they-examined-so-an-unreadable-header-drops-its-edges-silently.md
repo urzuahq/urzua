@@ -49,3 +49,4 @@ There it was a selector that matched nothing; here it is a corpus, or a header, 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture. Left `Status: Open` -- the fix needs a decision, not a quick edit. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. With `Derives-from: ADR-1` changed to `Derives-from: ADR-1: bad: yaml`, `urzua graph` returns `{"status":"ok","edges":[]}`, exit 0, and `urzua explain src/nonexistent.rs` returns `ok` with `governing_records: []`, neither with a population or a notice. **Why:** the decision (a population plus notices, or `not-run`, or a partial status) is the one the record lists. | **substantive** |

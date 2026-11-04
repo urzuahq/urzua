@@ -44,3 +44,4 @@ dir). No ADR decides what two types over one directory should mean.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture. Left `Status: Open` -- the fix needs a decision, not a quick edit. | **substantive** |
+> | 2026-11-04 | Triage: half fixed, half still real; `Status` stays `Open`. The overlap half is fixed in #259 (`MILE-130`): two types declaring one `dir` is a config error (`record types 'adr' and 'rfc' both own directory 'docs/adr'`, exit 2, `ConfigError::SharedDir`). The `./` half reproduces on main: with `adr: {dir: ./docs/adr}` in a repository holding three ADRs, `urzua check` reports `status: not-run`, `files_examined: 0` and no reason. **Why:** what is left is the decision this record already names (normalise `./docs/adr` at parse time, or refuse it as `InvalidDir`). | **substantive** |
