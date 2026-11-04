@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M368EHQFV7N8SBF13G98EE93
-Status: Draft
+Status: Accepted
 Date: 2026-09-23
 Author: beauwilliams
 ---
@@ -112,8 +112,13 @@ inventing its own check.
 - `BUG-38`, `BUG-41`, `BUG-50` — the recurring "one hardcoded comparison per field" shape this RFC
   replaces with one declared, typed mechanism.
 
+## Decision (2026-11-04)
+
+**Accepted by the maintainer, with the outcome "declared per type".** Each record type declares its title form in config through `MILE-98`'s identity pattern. This repository declares the `SPEC-` prefix for specs and the bare number for every other type, so no existing file changes.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed as `Draft`. **Why:** started as a narrow H1-title-format fix (`BUG-123`); the user correctly pushed back that the real gap is the document model having no field type system at all, of which H1 identity is one instance among several (enums, dates, ULIDs) already named as unbuilt elsewhere (`SPEC-2`). Reframed before implementation started, not after. | **substantive** |
+> | 2026-11-04 | `Draft` -> `Accepted`, with the outcome "declared per type": each record type declares its title form in config through `MILE-98`'s identity pattern; this repository declares the `SPEC-` prefix for specs and the bare number for every other type. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

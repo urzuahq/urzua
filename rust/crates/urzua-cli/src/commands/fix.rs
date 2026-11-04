@@ -55,7 +55,8 @@ pub fn run(
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let (population, repairs) = urzua_core::fix::detect_repairs(&records, &config);
+    let drifted = crate::discovery::compute_drifted_records(&repo_root, &records, &config);
+    let (population, repairs) = urzua_core::fix::detect_repairs(&records, &config, &drifted);
 
     if !apply {
         return emit(&build_fix_report(

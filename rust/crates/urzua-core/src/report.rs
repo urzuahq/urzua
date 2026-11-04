@@ -500,6 +500,68 @@ impl Report for GraphReport {
     }
 }
 
+/// One header field of an exported record, in file order. A list entry, not a
+/// map entry: a repeated key is a defect `check` reports, and a map would
+/// hide it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExportedField {
+    pub name: String,
+    pub value: String,
+    pub line: usize,
+}
+
+/// One record in `urzua export --format json` (SPEC-1, "Output contract").
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExportedRecord {
+    /// The configured type name (e.g. `milestone`).
+    #[serde(rename = "type")]
+    pub record_type: String,
+    pub path: PathBuf,
+    /// The display identifier from the filename (e.g. `MILE-115`); `null` when
+    /// the filename carries none under the type's prefix.
+    pub id: Option<String>,
+    /// The `Stable-Id` header value; `null` when the record has none.
+    pub stable_id: Option<String>,
+    /// `false` when the header could not be parsed, so an empty `header` means
+    /// "unreadable", not "no fields".
+    pub header_readable: bool,
+    pub header: Vec<ExportedField>,
+    /// The file's complete text, unmodified, header included. No record type
+    /// declares sections yet (`MILE-98`), so this is the one body field.
+    pub raw_text: String,
+}
+
+/// How many records `export` emitted for one configured type; a type with
+/// none is listed with `0`, so "empty" and "not configured" differ.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExportTypeCount {
+    #[serde(rename = "type")]
+    pub record_type: String,
+    pub dir: String,
+    pub records: usize,
+}
+
+/// `urzua export --format json`'s report (SPEC-1): read-only, `Ok`-only
+/// status axis like `GraphReport`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExportReport {
+    pub status: ReportStatus,
+    pub record_count: usize,
+    pub types: Vec<ExportTypeCount>,
+    pub records: Vec<ExportedRecord>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+impl Report for ExportReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
 /// `urzua new`'s report (SPEC-0012).
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct NewReport {

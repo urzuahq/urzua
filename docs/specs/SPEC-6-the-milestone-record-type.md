@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -64,7 +64,7 @@ phase means the same thing on every record:
 
 | Phase | Meaning |
 |---|---|
-| `0` | Bootstrap: required for the tool to validate and build itself further, plus urgent bugs and the first adopter replacement (`MILE-102`). |
+| `0` | Bootstrap: required for the tool to validate and build itself further, plus urgent bugs and the single Phase 0 exit (`SPEC-1`, Exit bar): governing this repository in CI with zero standing warnings, and replacing one adopter's hand-written linter (`MILE-102`). |
 | `1` | Worth installing. |
 | `2` | Agent-facing. |
 | `3` | Differentiated. |
@@ -119,3 +119,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-09-09 | Declared `pointer_fields = ["Implements"]`/`narrative_fields = ["Blocked-on"]` in config (MILE-90/ADR-44), replacing the two rules' prior hardcoded field list; `blocked-on.stale` renamed `narrative-field.stale`. **Why:** `BUG-8` named this exact type's schema as an example of the genericity `pointer.resolution` claimed but didn't have. | **substantive** |
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
 > | 2026-11-02 | Added the "Phase vocabulary" section defining `0` bootstrap, `1` worth installing, `2` agent-facing, `3` differentiated, `4` scale; bumped to `0.8`. **Why:** `Phase` was documented only as "a plain tag (`0`, `1`, ...)", so the same number meant different things across records and nothing said where adopter-blocking work belongs; `0` now has a stated meaning, which `MILE-35` and the first-adopter milestones rely on. | **substantive** |
+> | 2026-11-04 | Phase vocabulary: the `0` row now states the single Phase 0 exit (`SPEC-1`, Exit bar) instead of only "the first adopter replacement"; `Version` `0.8` -> `0.9`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
