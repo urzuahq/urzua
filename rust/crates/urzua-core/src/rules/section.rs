@@ -13,8 +13,8 @@ use crate::section::{parse_sections, Section};
 /// missing a section is counted rather than silently out of the denominator.
 ///
 /// A record whose status is in the declaration's `exempt_statuses` made no
-/// decision (`MILE-7`) and is counted out of scope: no edit to its body makes
-/// the rule apply. A record with no readable status is never exempt.
+/// decision (`MILE-7`) and is counted eligible and unexamined: set aside by a
+/// declaration, so the configuration did reach it (`BUG-187`). A record with no readable status is never exempt.
 ///
 /// Presence and shape are all either rule can know; neither judges whether a
 /// section says anything true.
@@ -148,7 +148,11 @@ fn run_slots(
         |slot| slot.record.path.clone(),
         |slot| {
             match exempt(slot.record, slot.decl, config) {
-                Ok(true) => return Outcome::OutOfScope,
+                // A declared exemption sets the record aside on purpose: eligible
+                // and unexamined, not out of scope, which
+                // `config.scope-matches-nothing` reads as a configuration that
+                // reaches nothing (`BUG-187`, as `BUG-186`).
+                Ok(true) => return Outcome::Absent,
                 Ok(false) => {}
                 Err(outcome) => return outcome,
             }
@@ -501,11 +505,17 @@ mod tests {
     }
 
     #[test]
-    fn a_decisionless_status_is_exempt_and_counted_out_of_scope_not_examined() {
+    fn a_decisionless_status_is_exempt_and_counted_eligible_and_unexamined_observed_failing() {
         let (e, f) = run(section_required, REQ, &doc("Withdrawn", "## Other\n"));
         assert!(f.is_empty(), "{f:?}");
         let p = e.population.as_ref().unwrap();
-        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (2, 0, 2));
+        // Set aside on purpose, so not out of scope (`BUG-187`).
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (2, 0, 0));
+        let (_, scope) = crate::rules::config_scope_matches_nothing(
+            &[e],
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(scope.is_empty(), "{scope:?}");
         let (_, f) = run(section_required, REQ, &doc("Accepted", "## Other\n"));
         assert_eq!(f.len(), 2, "the same body under a live status is flagged");
     }
@@ -651,7 +661,8 @@ mod tests {
         let body = "## Decision\n\nnothing\n";
         let (e, f) = run(section_shape, Y_DECL, &doc("Withdrawn", body));
         assert!(f.is_empty(), "{f:?}");
-        assert_eq!(e.population.as_ref().unwrap().out_of_scope(), 1);
+        let p = e.population.as_ref().unwrap();
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (1, 0, 0));
     }
 
     const T_DECL: &str =

@@ -1,5 +1,5 @@
 ---
-Version: '0.35'
+Version: '0.36'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -199,7 +199,8 @@ Two details carry weight:
       a data row with every cell empty does not count, the largest table in the section decides, and
       a table inside a fenced code block is not read.
     - `exempt_statuses` lists statuses of a record that made no decision (`MILE-7`). Such a record is
-      counted out of scope by both rules, not asked for the sections. It is matched exactly against
+      counted eligible and unexamined by both rules, not asked for the sections: set aside on purpose,
+      so `config.scope-matches-nothing` does not report it (`BUG-187`). It is matched exactly against
       the type's declared status field. A record whose header cannot be read is counted unreadable,
       never assumed exempt, and a record with no status is not exempt. Declaring it without
       `required`, a blank status, a duplicate section name, an unknown `shape`, `min_rows` missing
@@ -759,4 +760,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
-> | 2026-11-04 | Bumped to `0.35`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |
+> | 2026-11-04 | Bumped to `0.35`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
+> | 2026-11-04 | Bumped to `0.36`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |

@@ -114,14 +114,15 @@ fn declared_rules_report_each_failure_and_count_slots() {
     assert!(required[0]["message"].as_str().unwrap().contains("Context"));
     let pop = &execution(&report, "section.required")["population"];
     assert_eq!(pop["unit"], "section");
-    // 3 records x 3 required sections; the withdrawn record is out of scope.
+    // 3 records x 3 required sections; the withdrawn record is set aside on purpose, so
+    // eligible and unexamined, not out of scope (`BUG-187`).
     assert_eq!(
         (
             pop["eligible"].as_u64(),
             pop["examined"].as_u64(),
             pop["out_of_scope"].as_u64()
         ),
-        (Some(9), Some(6), Some(3))
+        (Some(9), Some(6), Some(0))
     );
 
     let shape = findings_of(&report, "section.shape");
@@ -137,7 +138,7 @@ fn declared_rules_report_each_failure_and_count_slots() {
             pop["examined"].as_u64(),
             pop["out_of_scope"].as_u64()
         ),
-        (Some(6), Some(4), Some(2))
+        (Some(6), Some(4), Some(0))
     );
 }
 
@@ -165,4 +166,23 @@ fn a_type_without_the_declaration_has_nothing_eligible() {
         assert_eq!(pop["eligible"], 0, "{id}: {report}");
         assert!(findings_of(&report, id).is_empty());
     }
+}
+
+/// `BUG-187`: an exempted record is a declared input, not a configuration that
+/// reaches nothing, so `config.scope-matches-nothing` stays silent.
+#[test]
+fn an_exempted_record_does_not_trigger_scope_matches_nothing_observed_failing() {
+    let dir = fixture(
+        "exempt-scope",
+        "{ section.required: error, config.scope-matches-nothing: warn }",
+        SECTIONS,
+        &[("ADR-1-good.md", GOOD), ("ADR-3-gone.md", WITHDRAWN)],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 0, "{report}");
+    assert!(
+        findings_of(&report, "config.scope-matches-nothing").is_empty(),
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }
