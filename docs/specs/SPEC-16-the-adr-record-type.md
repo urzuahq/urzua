@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-08
 Status: Accepted
 Author: beauwilliams
@@ -33,7 +33,7 @@ record_types:
 
 | Field | Values | Notes |
 |---|---|---|
-| `Status` | `Proposed` \| `Accepted` \| `Rejected` \| `Superseded` | Terminal once `Accepted`/`Rejected`/`Superseded` — the decision text itself is then frozen; further evolution is a dated `## Amendment` section, never a silent edit (ADR-14). |
+| `Status` | `Proposed` \| `Accepted` \| `Rejected` \| `Superseded` \| `Retired` | `Retired`: an accepted decision whose mechanism was removed with no successor (declared a `failure` and `claim_retained` status, like `Superseded`, so its `Realized-by` evidence stays as history). Terminal once `Accepted`/`Rejected`/`Superseded`/`Retired` — the decision text itself is then frozen; further evolution is a dated `## Amendment` section, never a silent edit (ADR-14). |
 | `Date` | `YYYY-MM-DD` | When decided, not when last touched. |
 | `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new` (`resolve_identity()`), same tiering `fix --apply` uses (RFC-2 §2). Written without a decorative `@` prefix: nothing in any crate reads, strips, or validates one, and `@` is a reserved YAML indicator, so a prefixed value is invalid as a plain scalar and has to be quoted to parse at all (BUG-18). The value itself is whatever tier resolved — a `gh` login, a `git config user.name`, or an explicit `--by` — and is free text, so a value needing quoting for its own reasons (a colon, a comma) is still quoted; `render_synthetic_yaml` handles that. |
 | `Deciders` | one or more real identities, no `@` prefix | Free text today — not yet tool-resolved (MILE-18, rescoped to note `Author` already is). Same no-`@` form as `Author`, for the same reason (BUG-18). |
@@ -85,3 +85,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-09 | Declared `pointer_fields = ["Derives-from"]`/`narrative_fields = []` in config (MILE-90/ADR-44), replacing `pointer.resolution`'s prior hardcoded field list. Noted `Supersedes / Superseded-by`'s `urzua graph` `kind: pointer` labeling stays a separate, unchanged mechanism outside this axis. | **substantive** |
 > | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`/`Deciders` now state the no-`@` form explicitly (BUG-18). The `@` prefix nearly every hand-typed value in this corpus carried was decorative -- nothing in any crate read, stripped, or validated it -- while being a reserved YAML indicator, so it forced the quoting its own presence necessitated, and disagreed with what `resolve_identity()` emits at every tier. 132 of the corpus's 134 `Author`/`Deciders` values were backfilled to match in the same change; the other two (ADR-37's) were already unprefixed. | **substantive** |
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
+> | 2026-11-04 | Bumped to `0.8`. Added `Retired` to the `Status` vocabulary, declared in `statuses.values`, `failure` and `claim_retained`, and to the `adr` template. **Why:** maintainer decision of 2026-11-04 for `ADR-38`, whose mechanism was deleted with no successor; `Superseded` needs a successor record and does not fit. `Retired` is `claim_retained` because a retired decision's `Realized-by` evidence stays true history. Setting `Retired` on a record is the maintainer's act. The allowed move `Accepted` to `Retired` is not yet declared: no type declares `transitions` in this repository's config. | **substantive** |
