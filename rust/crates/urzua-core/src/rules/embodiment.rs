@@ -251,11 +251,14 @@ pub fn embodiment_locator_exists(
 /// [`back_pointer_evidence`]. `claim_age_days` (`MILE-129`) is each record's
 /// days since its `Realized-by` line was last touched, computed by the caller
 /// and read only while `claim_max_age_days` is set: a claim older than that
-/// draws a warning in addition to any disagreement.
+/// draws a warning in addition to any disagreement. `fresh_drift` (`MILE-129`)
+/// holds the records whose only drift is inside `drift_grace_days`: they
+/// compute to their tier, and a stated `Drift detected` is accepted too.
 pub fn embodiment_consistency(
     records: &[Record],
     config: &Config,
     drifted: &HashSet<PathBuf>,
+    fresh_drift: &HashSet<PathBuf>,
     back_pointed: &HashSet<PathBuf>,
     claim_age_days: &HashMap<PathBuf, u64>,
 ) -> (RuleExecution, Vec<Finding>) {
@@ -305,7 +308,11 @@ pub fn embodiment_consistency(
                 drifted.contains(&record.path),
                 back_pointed.contains(&record.path),
             );
-            if stated.trim() != computed {
+            // Fresh drift (`drift_grace_days`) only holds back reporting: a
+            // record that already says `Drift detected` is right, not wrong.
+            let agrees_with_fresh_drift =
+                fresh_drift.contains(&record.path) && stated.trim() == "Drift detected";
+            if stated.trim() != computed && !agrees_with_fresh_drift {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
@@ -564,6 +571,7 @@ mod tests {
                 config,
                 &HashSet::new(),
                 &HashSet::new(),
+                &HashSet::new(),
                 &ages,
             )
             .1
@@ -608,6 +616,7 @@ mod tests {
         let (exec, findings) = embodiment_consistency(
             &[r],
             &config,
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
             &HashMap::new(),
@@ -737,6 +746,7 @@ mod tests {
             &embodiment_config(),
             &HashSet::new(),
             &HashSet::new(),
+            &HashSet::new(),
             &HashMap::new(),
         );
         assert_eq!(examined(&exec), 1);
@@ -755,6 +765,7 @@ mod tests {
         let (_, findings) = embodiment_consistency(
             &[r],
             &embodiment_config(),
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
             &HashMap::new(),
@@ -783,6 +794,7 @@ mod tests {
         let (exec, findings) = embodiment_consistency(
             &[r],
             &config,
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
             &HashMap::new(),
@@ -819,6 +831,7 @@ mod tests {
             &embodiment_config(),
             &drifted,
             &HashSet::new(),
+            &HashSet::new(),
             &HashMap::new(),
         );
         assert_eq!(findings.len(), 1);
@@ -831,6 +844,7 @@ mod tests {
         let (exec, findings) = embodiment_consistency(
             &[r],
             &embodiment_config(),
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
             &HashMap::new(),
@@ -917,6 +931,7 @@ mod tests {
             &[r],
             &embodiment_config(),
             &HashSet::new(),
+            &HashSet::new(),
             &cited,
             &HashMap::new(),
         );
@@ -929,6 +944,7 @@ mod tests {
         let (_, findings) = embodiment_consistency(
             &[r],
             &embodiment_config(),
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
             &HashMap::new(),
@@ -947,6 +963,32 @@ mod tests {
         };
         assert_eq!(compute_embodiment(&verified, false, true), "Verified");
         assert_eq!(compute_embodiment(&none, true, true), "Drift detected");
+    }
+
+    #[test]
+    fn fresh_drift_accepts_either_the_tier_or_drift_detected_observed_failing() {
+        let fresh: HashSet<PathBuf> = [PathBuf::from("docs/adr/ADR-1-x.md")].into();
+        let run = |stated: &str, fresh: &HashSet<PathBuf>| {
+            let r = record(
+                "docs/adr/ADR-1-x.md",
+                "adr",
+                &format!("> Embodiment: {stated}\n> Realized-by: code:src/lib.rs\n"),
+            );
+            embodiment_consistency(
+                &[r],
+                &embodiment_config(),
+                &HashSet::new(),
+                fresh,
+                &HashSet::new(),
+                &HashMap::new(),
+            )
+            .1
+        };
+        assert!(run("Drift detected", &fresh).is_empty());
+        assert!(run("Implemented", &fresh).is_empty());
+        assert_eq!(run("Verified", &fresh).len(), 1);
+        // Without the fresh marker a stated `Drift detected` still disagrees.
+        assert_eq!(run("Drift detected", &HashSet::new()).len(), 1);
     }
 
     // ---- embodiment.requires-accepted-status (MILE-138)

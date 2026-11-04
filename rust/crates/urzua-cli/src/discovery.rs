@@ -231,8 +231,18 @@ pub(crate) fn compute_drifted_records(
     repo_root: &Path,
     records: &[Record],
     config: &Config,
-) -> HashSet<PathBuf> {
+) -> DriftedRecords {
     compute_drifted_records_at(repo_root, records, config, urzua_io::now_unix())
+}
+
+/// The records whose locators drifted. `drifted` holds those with drift
+/// outside `drift_grace_days`; `fresh` holds those whose only drift is inside
+/// the window, which the rules treat as not drifted yet still never
+/// contradict (`MILE-129`). The two sets are disjoint.
+#[derive(Default)]
+pub(crate) struct DriftedRecords {
+    pub(crate) drifted: HashSet<PathBuf>,
+    pub(crate) fresh: HashSet<PathBuf>,
 }
 
 /// The seconds in one day, for the `MILE-129` day-denominated options.
@@ -248,8 +258,9 @@ pub(crate) fn compute_drifted_records_at(
     records: &[Record],
     config: &Config,
     now_unix: i64,
-) -> HashSet<PathBuf> {
+) -> DriftedRecords {
     let mut drifted = HashSet::new();
+    let mut fresh_records = HashSet::new();
     let grace_secs = config
         .rules
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
@@ -316,6 +327,9 @@ pub(crate) fn compute_drifted_records_at(
                     drifted.insert(record.path.clone());
                     break;
                 }
+                if fresh {
+                    fresh_records.insert(record.path.clone());
+                }
                 continue;
             }
             let Some(locator_commit) = last_commit_for_path
@@ -331,14 +345,23 @@ pub(crate) fn compute_drifted_records_at(
                 .or_insert_with(|| {
                     urzua_io::commit_strictly_before(repo_root, &reference_commit, locator_commit)
                 });
-            if drifted_pair && !within_grace(locator_commit) {
-                drifted.insert(record.path.clone());
-                break;
+            if drifted_pair {
+                if within_grace(locator_commit) {
+                    fresh_records.insert(record.path.clone());
+                } else {
+                    drifted.insert(record.path.clone());
+                    break;
+                }
             }
         }
     }
 
-    drifted
+    // Confirmed drift outranks fresh drift on the same record.
+    fresh_records.retain(|path| !drifted.contains(path));
+    DriftedRecords {
+        drifted,
+        fresh: fresh_records,
+    }
 }
 
 /// Whole days since each record's `Realized-by` line was last touched

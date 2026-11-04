@@ -52,6 +52,7 @@ pub fn detect_repairs(
     records: &[Record],
     config: &Config,
     drifted: &HashSet<PathBuf>,
+    fresh_drift: &HashSet<PathBuf>,
     back_pointed: &HashSet<PathBuf>,
 ) -> (Population, Vec<Repair>) {
     let mut repairs = Vec::new();
@@ -77,7 +78,9 @@ pub fn detect_repairs(
             back_pointed.contains(&record.path),
         );
         let stated = stated.trim();
-        if stated != computed {
+        // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
+        let keeps_stated_drift = fresh_drift.contains(&record.path) && stated == "Drift detected";
+        if stated != computed && !keeps_stated_drift {
             repairs.push(Repair {
                 record: record.path.clone(),
                 field: state_field.to_string(),
@@ -179,6 +182,7 @@ mod tests {
             &[r],
             &no_relation_field_overrides(),
             &HashSet::new(),
+            &HashSet::new(),
             &cited,
         );
         assert_eq!(repairs.len(), 1);
@@ -194,6 +198,7 @@ mod tests {
         let (population, repairs) = detect_repairs(
             &[r],
             &no_relation_field_overrides(),
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
         );
@@ -217,6 +222,7 @@ mod tests {
             &no_relation_field_overrides(),
             &drifted,
             &HashSet::new(),
+            &HashSet::new(),
         );
         assert_eq!(repairs.len(), 1);
         assert_eq!(repairs[0].computed_value, "Drift detected");
@@ -231,6 +237,7 @@ mod tests {
         let (population, repairs) = detect_repairs(
             &[r],
             &no_relation_field_overrides(),
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
         );
@@ -275,7 +282,13 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        let (population, repairs) = detect_repairs(&[r], &config, &HashSet::new(), &HashSet::new());
+        let (population, repairs) = detect_repairs(
+            &[r],
+            &config,
+            &HashSet::new(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(repairs.len(), 1, "{repairs:?}");
         assert_eq!(repairs[0].field, "Phase");
@@ -291,6 +304,7 @@ mod tests {
         let (population, repairs) = detect_repairs(
             &[r],
             &no_relation_field_overrides(),
+            &HashSet::new(),
             &HashSet::new(),
             &HashSet::new(),
         );
@@ -358,5 +372,22 @@ mod tests {
         assert!(!result.replace("\r\n", "").contains('\n'), "bare LF");
         assert!(!result.ends_with('\n'), "trailing newline was added");
         assert_eq!(result.lines().count(), content.lines().count() + 1);
+    }
+
+    #[test]
+    fn fresh_drift_leaves_a_stated_drift_detected_alone_observed_failing() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "> Embodiment: Drift detected\n> Realized-by: code:src/lib.rs\n",
+        );
+        let fresh: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
+        let (_, repairs) = detect_repairs(
+            &[r],
+            &no_relation_field_overrides(),
+            &HashSet::new(),
+            &fresh,
+            &HashSet::new(),
+        );
+        assert!(repairs.is_empty(), "{repairs:?}");
     }
 }
