@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZET544KZ3KCXNVXP39XS
-Status: Planned
+Status: Done
 Phase: '0'
 Track: roadmap-tracking
+Realized-by: code:rust/crates/urzua-cli/src/commands/export.rs, test:rust/crates/urzua-cli/tests/export_integration.rs
 ---
 # 115 — urzua export emits every record as plain JSON data, so tooling reads records through urzua instead of a second parser
 
@@ -35,3 +36,4 @@ against every team hand-writing its own linter, applied to this repository's own
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `export` declared only `agdr` and was unimplemented, so the dashboard script grew a second parser that already produced a wrong published count; filed so tooling reads records through `urzua`. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #137: `urzua export --format json` emits every record of every configured type as plain JSON. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
