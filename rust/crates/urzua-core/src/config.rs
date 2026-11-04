@@ -76,6 +76,10 @@ pub struct RuleSetting {
     /// `level` is the boundary's severity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub published_paths: Option<Vec<String>>,
+    /// The generated index artifacts `index.freshness` compares against the
+    /// records (`MILE-139`). Only meaningful to that rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub indexes: Option<Vec<IndexSpec>>,
     /// Path prefixes of source code that must change with a governed record.
     /// Only meaningful to `diff.source-requires-record` (`MILE-124`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -94,6 +98,30 @@ pub struct RuleSetting {
     /// `true` exempts prefixed keys from that rule and nothing else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_extension_prefix: Option<bool>,
+}
+
+/// One generated index artifact a repository commits: a file listing the
+/// records of one type, one entry per line, in a declared line format. The
+/// engine regenerates nothing and writes nothing; it compares the committed
+/// entries with the records (`MILE-139`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IndexSpec {
+    /// The artifact, relative to the repository root.
+    pub path: String,
+    /// The declared record type whose records the artifact lists.
+    #[serde(rename = "type")]
+    pub record_type: String,
+    /// One entry's line, with `{id}` (required), `{file}` and `{title}`
+    /// placeholders, e.g. `- [{id}]({file}): {title}`.
+    pub format: String,
+    /// Marker lines delimiting the generated list inside a larger file (a
+    /// README). Both or neither: with neither, every non-blank line of the
+    /// file is an entry.
+    #[serde(default)]
+    pub begin: Option<String>,
+    #[serde(default)]
+    pub end: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +186,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             published_paths: Option<Vec<String>>,
             #[serde(default)]
+            indexes: Option<Vec<IndexSpec>>,
+            #[serde(default)]
             source_paths: Option<Vec<String>>,
             #[serde(default)]
             application_paths: Option<Vec<String>>,
@@ -194,6 +224,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 terminal_statuses: table.terminal_statuses,
                 fields: table.fields,
                 published_paths: table.published_paths,
+                indexes: table.indexes,
                 source_paths: table.source_paths,
                 application_paths: table.application_paths,
                 exclude_paths: table.exclude_paths,
@@ -209,6 +240,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 terminal_statuses: None,
                 fields: None,
                 published_paths: None,
+                indexes: None,
                 source_paths: None,
                 application_paths: None,
                 exclude_paths: None,
@@ -538,6 +570,12 @@ pub enum ConfigError {
         entry: String,
         reason: &'static str,
     },
+    #[error("rule '{rule}' option 'indexes' entry '{path}' {reason}")]
+    InvalidIndex {
+        rule: String,
+        path: String,
+        reason: String,
+    },
     #[error("record type '{record_type}' declares an invalid `{key}`: {reason}")]
     InvalidDocumentModel {
         record_type: String,
@@ -693,7 +731,41 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    RULE_OPTIONS.iter().any(|o| o.owner == rule)
+    rule == crate::rules::RULE_INDEX_FRESHNESS || RULE_OPTIONS.iter().any(|o| o.owner == rule)
+}
+
+/// Why an `indexes` entry cannot be compared, or `None` when it can. Every
+/// reason is a config error: an entry that cannot be matched would be a rule
+/// that never reports.
+fn index_problem(spec: &IndexSpec, config: &Config) -> Option<String> {
+    let path = spec.path.trim();
+    if path.is_empty() {
+        return Some("has an empty path".to_string());
+    }
+    if let Some(reason) = published_path_problem(path) {
+        return Some(format!("path {reason}"));
+    }
+    if !config.record_types.contains_key(&spec.record_type) {
+        return Some(format!(
+            "names the type '{}', which is not a declared record type",
+            spec.record_type
+        ));
+    }
+    if let Err(reason) = crate::rules::parse_index_format(&spec.format) {
+        return Some(format!("has an invalid format: {reason}"));
+    }
+    match (&spec.begin, &spec.end) {
+        (None, None) => None,
+        (Some(b), Some(e)) if !b.trim().is_empty() && !e.trim().is_empty() => {
+            if b.trim() == e.trim() {
+                Some("declares the same begin and end marker".to_string())
+            } else {
+                None
+            }
+        }
+        (Some(_), Some(_)) => Some("declares a blank marker".to_string()),
+        _ => Some("declares only one of begin and end; give both or neither".to_string()),
+    }
 }
 
 /// A `published_paths` entry in the one form the rule compares: whitespace
@@ -794,6 +866,36 @@ pub fn parse_with_document_models(
                 found: name.clone(),
                 known,
             });
+        }
+    }
+    // `indexes` is the one structured option, so it is validated apart from
+    // the list-of-strings table below.
+    for (name, setting) in &config.rules {
+        let owner = name == crate::rules::RULE_INDEX_FRESHNESS;
+        if setting.indexes.is_some() && !owner {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "indexes".to_string(),
+            });
+        }
+        if !owner || setting.level == RuleLevel::Off {
+            continue;
+        }
+        let Some(indexes) = setting.indexes.as_ref().filter(|v| !v.is_empty()) else {
+            return Err(ConfigError::OptionRequired {
+                rule: name.clone(),
+                option: "indexes".to_string(),
+                consequence: "compares no artifact and can never report",
+            });
+        };
+        for spec in indexes {
+            if let Some(reason) = index_problem(spec, &config) {
+                return Err(ConfigError::InvalidIndex {
+                    rule: name.clone(),
+                    path: spec.path.clone(),
+                    reason,
+                });
+            }
         }
     }
     // A list of blanks is an empty list wearing a value.
@@ -1712,5 +1814,34 @@ record_types:
             );
             assert!(err.to_string().contains("published_paths"), "{err}");
         }
+    }
+
+    fn index_config(indexes: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  index.freshness:\n    level: error\n    indexes: {indexes}\n"
+        )
+    }
+
+    #[test]
+    fn indexes_is_required_by_the_index_rule_and_by_no_other() {
+        let good = "[{path: docs/adr/README.md, type: adr, format: \"{id}: {title}\"}]";
+        assert!(parse(&index_config(good)).is_ok());
+        for bad in [
+            "[]",
+            "[{path: docs/adr/README.md, type: nope, format: \"{id}\"}]",
+            "[{path: docs/adr/README.md, type: adr, format: \"{title}\"}]",
+            "[{path: /abs/README.md, type: adr, format: \"{id}\"}]",
+            "[{path: docs/adr/README.md, type: adr, format: \"{id}\", end: \"<!-- e -->\"}]",
+        ] {
+            let err = parse(&index_config(bad)).unwrap_err().to_string();
+            assert!(err.contains("indexes"), "{bad}: {err}");
+        }
+        let other = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  field.quality:\n    level: error\n    indexes: []\n";
+        assert!(parse(other)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'indexes'"));
+        let off = index_config("[]").replace("level: error", "level: off");
+        assert!(parse(&off).is_ok());
     }
 }

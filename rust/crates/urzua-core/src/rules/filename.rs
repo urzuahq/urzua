@@ -125,12 +125,12 @@ fn title_form_problem(
 /// Whether an H1 exists and whether it carries a number are independent
 /// questions, so they stay independent `Option`s rather than collapsing into
 /// one absent value.
-struct H1<'a> {
+pub(super) struct H1<'a> {
     /// 1-indexed, matching [`crate::header::Header::region`].
     line: usize,
-    text: &'a str,
+    pub(super) text: &'a str,
     /// The first whitespace-separated word of the title.
-    first_token: &'a str,
+    pub(super) first_token: &'a str,
     /// Compared by numeric value (BUG-0002), so padding never mismatches.
     number: Option<u64>,
 }
@@ -139,7 +139,7 @@ struct H1<'a> {
 /// `# ` and would otherwise read as the title. Only a region opening at line
 /// 1 is frontmatter -- blockquote and bold-list headers sit *after* the H1,
 /// where skipping past them would skip the title itself.
-fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'_>> {
+pub(super) fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'_>> {
     let skip_through = header_region
         .filter(|&(start, _)| start == 1)
         .map(|(_, end)| end);
