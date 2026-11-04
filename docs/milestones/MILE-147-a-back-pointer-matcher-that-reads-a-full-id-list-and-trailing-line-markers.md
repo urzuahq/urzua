@@ -25,3 +25,4 @@ An id list with a parenthetical note between ids yields every id; a marker after
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Matcher widened (`SPEC-2` `0.29`): a note between ids no longer ends the list, a trailing comment after code is read, `embodiment.back-pointer-decision-accepted` judges the same set; exercised by this repository's own back-pointers. **Why:** the Done-when asks for exactly this. Status unchanged; the maintainer closes. | **substantive** |
