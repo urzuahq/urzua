@@ -380,7 +380,18 @@ pub fn commit_for_line(
         .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
 
     if !output.status.success() {
-        return Ok(None);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // No history for the file or line (untracked, staged-new, unborn
+        // HEAD) is the ordinary "nothing to date" answer; anything else is a
+        // git failure the caller must be able to report (`MILE-159`).
+        if is_no_history_stderr(&stderr) {
+            return Ok(None);
+        }
+        return Err(format!(
+            "git blame on {} failed: {}",
+            path.display(),
+            stderr.trim()
+        ));
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(stdout
@@ -401,26 +412,76 @@ pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<Stri
         .map_err(|e| format!("could not run git log on {}: {e}", path.display()))?;
 
     if !output.status.success() {
-        return Ok(None);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if is_no_history_stderr(&stderr) {
+            return Ok(None);
+        }
+        return Err(format!(
+            "git log on {} failed: {}",
+            path.display(),
+            stderr.trim()
+        ));
     }
     let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(if sha.is_empty() { None } else { Some(sha) })
 }
 
 /// True if `ancestor` came strictly before `descendant` in history.
-/// `false` (never an error) whenever history can't establish an order --
-/// missing commits, unrelated history -- an ambiguous shape reads as "no
-/// drift," never a false positive (ADR-0032).
-pub fn commit_strictly_before(repo_root: &Path, ancestor: &str, descendant: &str) -> bool {
+/// `Ok(false)` when git says it is not an ancestor (exit 1) or the commits
+/// are the same. Any other git outcome (a commit the repository does not
+/// have, as in a shallow clone) is an `Err`, never a quiet "no drift"
+/// (`MILE-159`).
+pub fn commit_strictly_before(
+    repo_root: &Path,
+    ancestor: &str,
+    descendant: &str,
+) -> Result<bool, String> {
     if ancestor == descendant {
-        return false;
+        return Ok(false);
     }
-    Command::new("git")
+    let output = Command::new("git")
         .args(["merge-base", "--is-ancestor", ancestor, descendant])
         .current_dir(repo_root)
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .output()
+        .map_err(|e| format!("could not run git merge-base: {e}"))?;
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(format!(
+            "git merge-base --is-ancestor {} {} failed: {}",
+            &ancestor[..ancestor.len().min(12)],
+            &descendant[..descendant.len().min(12)],
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+    }
+}
+
+/// Whether the repository is a shallow clone, which hides the history the
+/// drift computation reads (`MILE-159`). `Err` when git cannot say.
+pub fn is_shallow_repository(repo_root: &Path) -> Result<bool, String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--is-shallow-repository"])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git rev-parse: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git rev-parse --is-shallow-repository failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim() == "true")
+}
+
+/// git's wording for "this path or ref has no history here", which is an
+/// answer, not a failure.
+fn is_no_history_stderr(stderr: &str) -> bool {
+    let s = stderr.to_ascii_lowercase();
+    s.contains("no such path")
+        || s.contains("does not have any commits")
+        || s.contains("unknown revision")
+        || s.contains("bad revision")
+        || s.contains("ambiguous argument 'head'")
 }
 
 /// Committer time of `commit`, in seconds since the epoch (`MILE-129`).
@@ -786,17 +847,25 @@ mod tests {
         let second = commit_all(&tmp, "second");
 
         assert!(
-            commit_strictly_before(&tmp, &first, &second),
+            commit_strictly_before(&tmp, &first, &second).unwrap(),
             "first really did happen before second"
         );
         assert!(
-            !commit_strictly_before(&tmp, &second, &first),
+            !commit_strictly_before(&tmp, &second, &first).unwrap(),
             "second did not happen before first"
         );
         assert!(
-            !commit_strictly_before(&tmp, &first, &first),
+            !commit_strictly_before(&tmp, &first, &first).unwrap(),
             "a commit is never strictly before itself"
         );
+        // A commit the repository does not have is a git failure, not
+        // "no drift" (`MILE-159`).
+        let missing = "0123456789abcdef0123456789abcdef01234567";
+        assert!(
+            commit_strictly_before(&tmp, missing, &second).is_err(),
+            "an unknown commit must surface as an error"
+        );
+        assert!(!is_shallow_repository(&tmp).unwrap());
 
         fs::remove_dir_all(&tmp).ok();
     }

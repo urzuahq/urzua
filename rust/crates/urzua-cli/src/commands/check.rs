@@ -482,7 +482,7 @@ pub fn run(
     // `Realized-by`-carrying record; skip that work entirely when its only
     // consumer, `embodiment.consistency`, won't read the result (`BUG-115`),
     // matching the `claim_paths` gate just above.
-    let drift = if config
+    let mut drift = if config
         .rules
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
         .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
@@ -497,10 +497,25 @@ pub fn run(
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
         .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
     {
-        crate::discovery::compute_claim_ages(&repo_root, &records, &config, urzua_io::now_unix())
+        let (ages, problems) = crate::discovery::compute_claim_ages(
+            &repo_root,
+            &records,
+            &config,
+            urzua_io::now_unix(),
+        );
+        for problem in problems {
+            if !drift.git_problems.contains(&problem) {
+                drift.git_problems.push(problem);
+            }
+        }
+        ages
     } else {
         std::collections::HashMap::new()
     };
+    notices.extend(crate::discovery::drift_notices(
+        drift.shallow,
+        &drift.git_problems,
+    ));
 
     // Each rule's (RuleExecution, Vec<Finding>) collected into one list --
     // rules_executed/findings both derive from it below, so there's no

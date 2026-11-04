@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -56,10 +56,16 @@ computes to `Drift detected` regardless of the locators' tier, exactly as `check
 `embodiment.consistency` does: `fix` reads the same drifted-record set `check` computes, so the two
 never disagree. The repair is written like any other Tier 1 repair, and a stated `Drift detected`
 that is no longer drifted (the `Realized-by` line was touched again) is repaired back to the
-tier-computed value. `fix` computes drift whenever it runs, whatever `check`'s
-`embodiment.consistency` level is. It applies the same opt-in `@sha256:` locator pins and
+tier-computed value. `fix` computes drift only when `embodiment.consistency` is enabled, as `check`
+does (`MILE-159`): with the rule off or undeclared there is no embodiment verdict to repair, so `fix`
+reports it could not run instead of computing a verdict from an empty drift set. It applies the same opt-in `@sha256:` locator pins and
 `drift_grace_days` window `check` does (`MILE-129`), so the two still never disagree; `fix` does not
 rewrite a pin, which stays a hand edit.
+
+Git trouble is never read as "no drift" (`MILE-159`). A shallow clone, detected once per run, and any
+git call that fails while computing drift (a commit the repository does not have, say) are reported as
+`notices` with subject `embodiment-drift-git`, in `check` and in `fix` alike; the affected records are
+not judged for drift. The per-record `git blame` calls run on a few threads.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
@@ -134,3 +140,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-02 | Bumped to `0.5`. Apply mode now fails an `--ids` entry that matches no repair, and keeps CRLF endings, the absent trailing newline and a plain-table log's row prefix. **Why:** round 29 found each as a silent no-op or a whole-file rewrite (`BUG-164`, `BUG-165`, `BUG-166`). | **substantive** |
 > | 2026-11-03 | Bumped to `0.6`. `fix` now computes `Drift detected` (ADR-32) from the same drifted-record set `check` uses, so it is detected and, on `--apply`, written like any other Tier 1 repair. **Why:** MILE-15 -- ADR-32 named this as separate follow-up work. | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. Noted that `fix` reads the same opt-in locator pins and grace window as `check` and never rewrites a pin. **Why:** `MILE-129` -- `fix` shares `check`'s drifted-record set, so a new drift input changes what it repairs. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. `fix` computes drift only when `embodiment.consistency` is enabled and reports git failures and shallow clones as `embodiment-drift-git` notices. **Why:** `MILE-159` -- drift ran unconditionally (about 1.1s on this corpus), and git errors read as a clean zero, which is how a shallow clone once produced a false zero. | **substantive** |
