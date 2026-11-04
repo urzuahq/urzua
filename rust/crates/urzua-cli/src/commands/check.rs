@@ -22,19 +22,6 @@ fn path_is_inside_repo(repo_canonical: &std::path::Path, resolved: &std::path::P
     resolved.starts_with(repo_canonical)
 }
 
-/// `claim.status-agreement`'s own setting, only when the rule is actually
-/// enabled -- the one place that decides "on", shared by the pre-flight
-/// `claim_paths` validation and the read step, so the two cannot disagree
-/// about whether the rule is running.
-fn claim_status_agreement_setting(
-    config: &urzua_core::config::Config,
-) -> Option<&urzua_core::config::RuleSetting> {
-    config
-        .rules
-        .get(rules::RULE_CLAIM_STATUS_AGREEMENT)
-        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
-}
-
 /// Canonicalizes `candidate` and confirms it stays inside `repo_canonical` --
 /// the one check `claim_paths`' directory and file branches both need, so a
 /// future change to the symlink/containment policy has one place to land
@@ -336,7 +323,12 @@ pub fn run(
     // visible and never moves the exit code (ADR-46), so absence is reported
     // and a path that is actively wrong still aborts.
     let mut notices: Vec<Notice> = Vec::new();
-    if let Some(setting) = claim_status_agreement_setting(&config) {
+    // `claim.status-agreement`'s options, only when the rule is enabled -- the one
+    // read, shared by the pre-flight `claim_paths` validation and the read step
+    // below, so the two cannot disagree about whether the rule is running.
+    let claim_opts =
+        config.enabled_rule_opts::<rules::ClaimOpts>(rules::RULE_CLAIM_STATUS_AGREEMENT);
+    if let Some(setting) = &claim_opts {
         // Both sides canonicalised: the repo root may itself reach through
         // a link (macOS `/tmp`), and comparing a resolved path against an
         // unresolved root reports every entry as outside. Computed once,
@@ -345,7 +337,7 @@ pub fn run(
         let root = repo_root
             .canonicalize()
             .unwrap_or_else(|_| repo_root.clone());
-        for prefix in setting.claim_paths.iter().flatten() {
+        for prefix in &setting.claim_paths {
             // A root symlinked to an ancestor escaped the declared prefix
             // entirely (BUG-69). Rejecting every symlink also rejected a
             // link to a legitimate directory, with a message saying it was
@@ -403,9 +395,7 @@ pub fn run(
     }
 
     let claims = {
-        let paths = claim_status_agreement_setting(&config)
-            .and_then(|s| s.claim_paths.clone())
-            .unwrap_or_default();
+        let paths = claim_opts.map_or_else(Vec::new, |o| o.claim_paths);
         match read_claim_files(&repo_root, &paths) {
             Ok(c) => c,
             Err(e) => return emit(&CouldNotRun::from(e)),
@@ -413,11 +403,10 @@ pub fn run(
     };
 
     let published_paths: Vec<String> = config
-        .rules
-        .get(rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
-        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
-        .and_then(|s| s.published_paths.clone())
-        .unwrap_or_default();
+        .enabled_rule_opts::<rules::PublishedPathOpts>(
+            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        )
+        .map_or_else(Vec::new, |o| o.published_paths);
     let published_files = match crate::discovery::read_files_under(
         &repo_root,
         &discovered,
@@ -429,11 +418,8 @@ pub fn run(
     };
 
     let index_specs: Vec<urzua_core::config::IndexSpec> = config
-        .rules
-        .get(rules::RULE_INDEX_FRESHNESS)
-        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
-        .and_then(|s| s.indexes.clone())
-        .unwrap_or_default();
+        .enabled_rule_opts::<rules::IndexOpts>(rules::RULE_INDEX_FRESHNESS)
+        .map_or_else(Vec::new, |o| o.indexes);
     let index_artifacts = match read_index_artifacts(&repo_root, &index_specs) {
         Ok(artifacts) => artifacts,
         Err(e) => return emit(&CouldNotRun::from(e)),
