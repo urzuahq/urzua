@@ -1,5 +1,6 @@
 ---
 Version: '0.27'
+Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
