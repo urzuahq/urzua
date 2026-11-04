@@ -215,11 +215,18 @@ pub fn embodiment_back_pointer_decision_accepted(
         });
     };
 
-    let population = census(PopulationUnit::File, files.iter().collect(), |file| {
+    // The diff narrows what is handed to the rule; it is not the configuration
+    // failing to reach a file, so an unchanged file is left out of the
+    // candidates rather than counted `OutOfScope` (which would make
+    // `config.scope-matches-nothing` warn on every `--base` run).
+    let candidates: Vec<&SourceFile> = files
+        .iter()
+        .filter(|f| changed.is_none_or(|c| c.contains(&f.path)))
+        .collect();
+    let population = census(PopulationUnit::File, candidates, |file| {
         if !source_paths
             .iter()
             .any(|e| path_is_published(&file.path, e))
-            || changed.is_some_and(|c| !c.contains(&file.path))
         {
             return Outcome::OutOfScope;
         }
@@ -534,6 +541,30 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].file, PathBuf::from("src/b.rs"));
         assert_eq!(exec.population.unwrap().examined(), 1);
+    }
+
+    #[test]
+    fn a_file_the_diff_did_not_change_is_not_out_of_scope_observed_failing() {
+        // Narrowing to the diff is not the configuration failing to reach a
+        // file: reporting it as out of scope made `config.scope-matches-nothing`
+        // warn on every `--base` run that touched a source file.
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Accepted")];
+        let files = vec![
+            file("src/a.rs", "// Implements: ADR-1\n"),
+            file("src/b.rs", "// Implements: ADR-1\n"),
+        ];
+        let changed = vec![PathBuf::from("src/b.rs")];
+        let (exec, _) = gate(&records, &files, &[], Some(&changed), &declared_config());
+        assert_eq!(exec.population.unwrap().out_of_scope(), 0);
+    }
+
+    #[test]
+    fn a_changed_file_outside_the_declared_paths_is_still_out_of_scope() {
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Accepted")];
+        let files = vec![file("elsewhere/a.rs", "// Implements: ADR-1\n")];
+        let changed = vec![PathBuf::from("elsewhere/a.rs")];
+        let (exec, _) = gate(&records, &files, &[], Some(&changed), &declared_config());
+        assert_eq!(exec.population.unwrap().out_of_scope(), 1);
     }
 
     fn config_with_vocab(vocab: &str) -> Config {

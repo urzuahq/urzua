@@ -27,7 +27,8 @@ every other behaviour (`ADR-53`), with a flag for a one-off stricter or laxer ru
 
 `fail_on: warning` makes a run with an unwaived warning exit 1 with unchanged stdout; a waived
 warning does not; a clean run still exits 0; `--fail-on` overrides the key in both directions; any
-other value is refused (a config error exits 2). Documented in `SPEC-3` and `SPEC-2`.
+other value is refused (a config error exits 2). Documented in `SPEC-3` and `SPEC-2`. Turning it on exposed `BUG-180`, a false warning every `--base`
+run produced, fixed in the same change.
 
 > **Revision log**
 >
