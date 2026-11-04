@@ -71,6 +71,7 @@ pub fn date_field_valid(records: &[Record], config: &Config) -> (RuleExecution, 
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!("{field} '{}' {problem}", value.trim()),
                 });
             }
@@ -170,6 +171,7 @@ pub fn date_acceptance_by_status(
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message,
                 });
             }

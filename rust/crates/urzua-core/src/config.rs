@@ -121,8 +121,16 @@ pub struct RuleSetting {
     /// meaningful to `date.acceptance-by-status`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acceptance_field: Option<String>,
-    /// Accepted-type statuses for a type that declares no `statuses.success`
-    /// (`MILE-137`). Only meaningful to `date.acceptance-by-status`.
+    /// Severity per field, within one rule (`MILE-140`): a field named here
+    /// reports at its own level (`warn` or `error`), every other field at the
+    /// rule's `level`. Only meaningful to the rules that report per field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_levels: Option<BTreeMap<String, RuleLevel>>,
+    /// Statuses that count as accepted for a record whose type declares no
+    /// `statuses.success` (`MILE-133`, `MILE-137`). Only meaningful to
+    /// `embodiment.back-pointer-decision-accepted` and
+    /// `date.acceptance-by-status`; optional, because a type that declares its
+    /// success statuses needs no fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
 }
@@ -233,6 +241,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             acceptance_field: Option<String>,
             #[serde(default)]
+            field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
         }
 
@@ -273,6 +282,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_max_age_days: table.claim_max_age_days,
                 date_fields: table.date_fields,
                 acceptance_field: table.acceptance_field,
+                field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
             })
         } else {
@@ -295,6 +305,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 claim_max_age_days: None,
                 date_fields: None,
                 acceptance_field: None,
+                field_levels: None,
                 accepted_statuses: None,
             })
         }
@@ -602,6 +613,8 @@ pub enum ConfigError {
     OptionNotApplicable { rule: String, option: String },
     #[error("rule '{rule}' option 'fields' names '{field}', which is not a declared pointer_fields or narrative_fields entry of any record type")]
     UndeclaredRuleField { rule: String, field: String },
+    #[error("rule '{rule}' option 'field_levels' {reason}")]
+    InvalidFieldLevels { rule: String, reason: String },
     #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
     OptionRequired {
         rule: String,
@@ -707,7 +720,7 @@ fn dir_escapes_repo(dir: &str) -> bool {
 /// that could drift from each other.
 struct RuleOption {
     name: &'static str,
-    owner: &'static str,
+    owners: &'static [&'static str],
     consequence_if_missing: &'static str,
     /// An optional option may be omitted, but a declared one is still
     /// validated (non-empty, no blanks) so it cannot be a silent no-op.
@@ -717,76 +730,91 @@ struct RuleOption {
 const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "not_in",
-        owner: crate::rules::RULE_POINTER_TARGET_STATUS,
+        owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
     RuleOption {
         name: "claim_paths",
-        owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+        owners: &[crate::rules::RULE_CLAIM_STATUS_AGREEMENT],
         consequence_if_missing: "scans nothing and can never report",
         optional: false,
     },
     RuleOption {
         name: "closed_statuses",
-        owner: crate::rules::RULE_CLAIM_STATUS_AGREEMENT,
+        owners: &[crate::rules::RULE_CLAIM_STATUS_AGREEMENT],
         consequence_if_missing: "treats every claim as a violation, including correct ones",
         optional: false,
     },
     RuleOption {
         name: "terminal_statuses",
-        owner: crate::rules::RULE_NARRATIVE_FIELD_STALE,
+        owners: &[crate::rules::RULE_NARRATIVE_FIELD_STALE],
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
     RuleOption {
         name: "published_paths",
-        owner: crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        owners: &[crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE],
         consequence_if_missing: "declares no boundary and can never report",
         optional: false,
     },
     RuleOption {
         name: "source_paths",
-        owner: crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
+        owners: &[crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD],
         consequence_if_missing: "declares no source and can never report",
         optional: false,
     },
     RuleOption {
         name: "application_paths",
-        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
         consequence_if_missing: "declares no application source and can never report",
         optional: false,
     },
     RuleOption {
         name: "exclude_paths",
-        owner: crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
         consequence_if_missing: "excludes nothing from the application source",
         optional: true,
     },
     RuleOption {
         name: "back_pointer_paths",
-        owner: crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        owners: &[
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+        ],
         consequence_if_missing: "scans no source file and can never report",
         optional: false,
     },
     RuleOption {
         name: "date_fields",
-        owner: crate::rules::RULE_DATE_FIELD_VALID,
+        owners: &[crate::rules::RULE_DATE_FIELD_VALID],
         consequence_if_missing: "names no date field and can never report",
         optional: false,
     },
     RuleOption {
         name: "accepted_statuses",
-        owner: crate::rules::RULE_DATE_ACCEPTANCE_BY_STATUS,
-        consequence_if_missing: "uses only each type's declared success statuses",
+        owners: &[
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+            crate::rules::RULE_DATE_ACCEPTANCE_BY_STATUS,
+        ],
+        consequence_if_missing: "leaves a type with no declared success statuses unjudged",
         optional: true,
     },
     RuleOption {
         name: "fields",
-        owner: crate::rules::RULE_POINTER_TARGET_STATUS,
+        owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "checks every declared field",
         optional: true,
     },
+];
+
+/// The rules that report one finding per field and so take `field_levels`
+/// (`MILE-140`). A rule absent here is refused the option at load: a level
+/// for a field the rule never reports would be a silent no-op.
+const FIELD_LEVEL_RULES: &[&str] = &[
+    crate::rules::RULE_FIELD_QUALITY,
+    crate::rules::RULE_FIELD_PENDING,
+    crate::rules::RULE_STATUS_REQUIRED_FIELD_MISSING,
 ];
 
 /// `RULE_OPTIONS`'s field, by name -- the one place that knows which
@@ -813,7 +841,8 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    rule == crate::rules::RULE_INDEX_FRESHNESS || RULE_OPTIONS.iter().any(|o| o.owner == rule)
+    rule == crate::rules::RULE_INDEX_FRESHNESS
+        || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
 }
 
 /// Why an `indexes` entry cannot be compared, or `None` when it can. Every
@@ -987,7 +1016,7 @@ pub fn parse_with_document_models(
     for (name, setting) in &config.rules {
         for opt in RULE_OPTIONS {
             let present = option_field(opt.name, setting).is_some();
-            if present && name != opt.owner {
+            if present && !opt.owners.contains(&name.as_str()) {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: opt.name.to_string(),
@@ -1001,6 +1030,43 @@ pub fn parse_with_document_models(
                 rule: name.clone(),
                 option: "allow_extension_prefix".to_string(),
             });
+        }
+
+        if let Some(levels) = &setting.field_levels {
+            if !FIELD_LEVEL_RULES.contains(&name.as_str()) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: "field_levels".to_string(),
+                });
+            }
+            if levels.is_empty() {
+                return Err(ConfigError::InvalidFieldLevels {
+                    rule: name.clone(),
+                    reason: "is empty; name a field or remove the option".to_string(),
+                });
+            }
+            for (field, level) in levels {
+                if *level == RuleLevel::Off {
+                    return Err(ConfigError::InvalidFieldLevels {
+                        rule: name.clone(),
+                        reason: format!(
+                            "gives '{field}' the level 'off'; use 'warn' or 'error' (a field is switched off by not declaring it)"
+                        ),
+                    });
+                }
+                let declared = config
+                    .record_types
+                    .values()
+                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+                if !declared {
+                    return Err(ConfigError::InvalidFieldLevels {
+                        rule: name.clone(),
+                        reason: format!(
+                            "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                        ),
+                    });
+                }
+            }
         }
 
         for (option, present) in [
@@ -1047,7 +1113,10 @@ pub fn parse_with_document_models(
         if setting.level == RuleLevel::Off {
             continue;
         }
-        for opt in RULE_OPTIONS.iter().filter(|o| o.owner == name) {
+        for opt in RULE_OPTIONS
+            .iter()
+            .filter(|o| o.owners.contains(&name.as_str()))
+        {
             // Non-empty *and* no blank entries, not merely present: an empty
             // list is the harm each consequence describes, and a list of
             // blanks is the same list wearing a value.
@@ -1992,5 +2061,41 @@ record_types:
             .contains("does not take the option 'indexes'"));
         let off = index_config("[]").replace("level: error", "level: off");
         assert!(parse(&off).is_ok());
+    }
+
+    /// `MILE-140`: `field_levels` loads on the rules that report per field and
+    /// is refused everywhere else, with `off`, empty, or an undeclared field.
+    #[test]
+    fn field_levels_loads_on_per_field_rules_and_is_refused_elsewhere_observed_failing() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Deciders\", \"Reviewers\"]\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  field.quality:\n    level: warn\n    field_levels: {{Deciders: error, Reviewers: warn}}\n"
+        ))
+        .expect("loads on field.quality");
+        let levels = ok.rules["field.quality"].field_levels.as_ref().unwrap();
+        assert_eq!(levels["Deciders"], RuleLevel::Error);
+        assert_eq!(levels["Reviewers"], RuleLevel::Warn);
+
+        for (bad, needle) in [
+            (
+                "  pointer.resolution:\n    level: warn\n    field_levels: {Deciders: error}\n",
+                "does not take",
+            ),
+            (
+                "  field.quality:\n    level: warn\n    field_levels: {Deciders: off}\n",
+                "off",
+            ),
+            (
+                "  field.quality:\n    level: warn\n    field_levels: {}\n",
+                "field_levels",
+            ),
+            (
+                "  field.quality:\n    level: warn\n    field_levels: {Nope: error}\n",
+                "Nope",
+            ),
+        ] {
+            let err = parse(&format!("{base}{bad}")).unwrap_err().to_string();
+            assert!(err.contains(needle), "{bad}: {err}");
+        }
     }
 }

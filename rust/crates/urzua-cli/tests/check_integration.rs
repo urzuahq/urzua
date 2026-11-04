@@ -3081,6 +3081,10 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "embodiment.back-pointer-resolution",
             "population is source files, not records",
         ),
+        (
+            "embodiment.back-pointer-decision-accepted",
+            "population is source files, not records",
+        ),
         // File-level: judges committed index artifacts against the records.
         (
             "index.freshness",
@@ -3130,7 +3134,8 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "diff.source-and-records-mixed" => {
                 format!("{id}: {{level: error, application_paths: [\"src\"]}}")
             }
-            "embodiment.back-pointer-resolution" => {
+            "embodiment.back-pointer-resolution"
+            | "embodiment.back-pointer-decision-accepted" => {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),

@@ -27,6 +27,12 @@ pub struct Finding {
     /// `blocking`/`status`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waived: Option<String>,
+    /// The severity this finding's own field was declared at (`MILE-140`),
+    /// for a rule that takes `field_levels`. `None` means the rule declared
+    /// nothing for it and the gate applies the rule-level severity. Never
+    /// serialized: the finding's `severity` already carries the outcome.
+    #[serde(skip)]
+    pub declared_severity: Option<FindingSeverity>,
 }
 
 /// One rule's execution record: not just "did it run" but what it was handed

@@ -57,6 +57,8 @@ pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
 pub const RULE_DATE_FIELD_VALID: &str = "date.field-valid";
 pub const RULE_DATE_ACCEPTANCE_BY_STATUS: &str = "date.acceptance-by-status";
+pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
+    "embodiment.back-pointer-decision-accepted";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -108,6 +110,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
     RULE_DATE_FIELD_VALID,
     RULE_DATE_ACCEPTANCE_BY_STATUS,
+    RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -181,11 +184,11 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_FIELD_QUALITY,
-        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three.",
+        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_FIELD_PENDING,
-        description: "A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`.",
+        description: "A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_CLAIM_STATUS_AGREEMENT,
@@ -293,7 +296,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_STATUS_REQUIRED_FIELD_MISSING,
-        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined.",
+        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
     },
     RuleMeta {
         id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
@@ -314,6 +317,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_DATE_ACCEPTANCE_BY_STATUS,
         description: "The acceptance date (`acceptance_field`) is required on a record whose `Status` is accepted-type and forbidden on every other status, with a blank or placeholder tolerated on the forbidden side (`MILE-137`). Accepted-type statuses are the type's declared `statuses.success`, or the rule's `accepted_statuses` for a type declaring none. Only a type declaring the acceptance field is examined. Needs `acceptance_field`. The population counts the records examined; the date's shape is `date.field-valid`'s.",
+    },
+    RuleMeta {
+        id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+        description: "A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not an accepted one is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Accepted means the cited type's declared `statuses.success`; a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision.",
     },
 ];
 
@@ -342,6 +349,7 @@ pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[
     // A dangling back-pointer is reported on the source file that holds it,
     // which no record-type `dir` scope covers.
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
 ];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with

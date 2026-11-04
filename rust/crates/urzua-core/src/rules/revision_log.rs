@@ -45,6 +45,7 @@ pub fn revision_log_change_class(
                     file: record.path.clone(),
                     line: Some(entry.line),
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "revision log entry dated {} has no real change_class (found {:?}) -- expected \"substantive\" or \"structural\"",
                         entry.date, entry.change_class

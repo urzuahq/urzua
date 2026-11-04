@@ -108,6 +108,7 @@ mod tests {
             line: None,
             message: "x".to_string(),
             waived: None,
+            declared_severity: None,
         }
     }
 

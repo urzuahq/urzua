@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/graph.rs, code:rust/crates/urzua-cli/src/commands/explain.rs, code:rust/crates/urzua-cli/src/commands/graph.rs, test:rust/crates/urzua-core/src/graph.rs
+Realized-by: code:rust/crates/urzua-core/src/graph.rs@sha256:1638485fe98c800c7494d800ea27219c2df5afe525df75d7a0688a66947b702b, code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:b08e0b32fa62fec151a02bebcc6761706881e0fe2b928007d2afc5e64c08682e, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:86de33bf27bc82f3da6783c3d2840c1937d82f6a420586f9d34dabfca28dc851, test:rust/crates/urzua-core/src/graph.rs@sha256:1638485fe98c800c7494d800ea27219c2df5afe525df75d7a0688a66947b702b
 Date: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -63,3 +63,4 @@ how any existing field is parsed.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
