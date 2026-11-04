@@ -1,0 +1,15 @@
+id: pointer-resolves-across-the-types-directories
+corpus: corpus-i
+invocation: [check]
+expect_exit: 1
+# ADR-3 points at ADR-2 in the other directory of its type and resolves; only
+# ADR-4's pointer at ADR-99 dangles. Without the type's second directory ADR-2
+# is not a record and ADR-3 dangles too.
+expect_findings:
+  - rule: pointer.resolution
+    file: decisions/ADR-4-dangling.md
+    severity: error
+    message_contains: "ADR-99"
+expect_no_findings:
+  - rule: pointer.resolution
+    file: decisions/ADR-3-reads-the-archive.md

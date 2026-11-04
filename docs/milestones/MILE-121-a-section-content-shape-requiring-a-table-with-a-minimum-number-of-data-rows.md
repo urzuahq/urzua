@@ -23,6 +23,10 @@ section does not show that. Replacing a hand-written linter outright (`MILE-102`
 row-count minimum among them, need declared equivalents. The rule checks shape (row count), never
 whether the options are real, per `AGENTS.md` ("Structural presence is not content-scope correctness").
 
+## Done means
+
+A required section can declare the shape `table-min-rows` with `min_rows`, counting the data rows of the largest table in the section, and `section.shape` reports a section with fewer, with no table, or with only a header row; a fixture covers each; `SPEC-3` documents it.
+
 ## References
 
 - `RFC-17` -- composable section-content checks; names `table-min-rows` and leaves it undesigned.
@@ -36,3 +40,4 @@ whether the options are real, per `AGENTS.md` ("Structural presence is not conte
 > | 2026-11-02 | Filed. **Why:** `RFC-17` names `table-min-rows` as a plausible second shape; a hand-written linter's row-count check needs a declared equivalent, so it is now planned. | **substantive** |
 > | 2026-11-04 | Built as shape `table-min-rows` on a required section, with `min_rows` declared per section (`SPEC-3`), checked by `section.shape`. `Status` stays `Planned`. **Why:** a considered-options table with one row has considered no alternative. The shape counts data rows of the largest table in the section, ignoring fenced code and rows whose every cell is empty; it checks row count only, never whether the options are real. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: shape `table-min-rows` with `min_rows` declared per section, checked by `section.shape`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

@@ -82,14 +82,13 @@ pub(crate) fn load_records(
             })
             .transpose()?
             .unwrap_or_default();
-        let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
             // This directory, not this subtree (RFC-35). Prefix matching let
             // two types claim one record whenever their dirs nested, which no
             // schema rule resolved -- and four heuristics accreted in `init`
             // guessing what an adopter meant by the overlap. A directory is a
             // type; `docs/rfc` holds RFCs.
-            if rel_path.parent() != Some(type_dir.as_path()) {
+            if !type_config.owns_dir(rel_path.parent()) {
                 continue;
             }
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
@@ -156,7 +155,7 @@ pub(crate) fn parse_prospective_record(
     let file_name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     for type_name in config.sorted_type_names() {
         let type_config = &config.record_types[type_name];
-        if rel_path.parent() != Some(Path::new(&type_config.dir))
+        if !type_config.owns_dir(rel_path.parent())
             || !urzua_core::record::is_governed_record_filename(file_name)
             || type_config.excludes(file_name)
         {
@@ -434,6 +433,7 @@ pub(crate) fn compute_drifted_records_at(
         .and_then(|s| s.drift_audit_field.as_deref())
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
+    // Implements: ADR-67 (the grace window)
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
     let mut within_grace = |commit: &str| -> bool {
@@ -484,6 +484,7 @@ pub(crate) fn compute_drifted_records_at(
         let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
+        // Implements: ADR-67 (the audit anchor)
         // A declared, well-formed last-audit date replaces the cited file's
         // last change as where the window counts from; a malformed one is
         // reported by the rule and falls back to the file (`MILE-166`).
@@ -514,6 +515,7 @@ pub(crate) fn compute_drifted_records_at(
         for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
             let locator_path = PathBuf::from(&locator);
             if let Some(pinned) = pin {
+                // Implements: ADR-67 (a pin drifts on its content hash)
                 // A pin replaces the git-history heuristic for this locator.
                 let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
                 let changed = current.is_some_and(|c| c != pinned);
@@ -741,4 +743,222 @@ fn read_sources_for_rule(
         back_pointer_paths: source_paths,
         test_paths,
     }))
+}
+
+// ---- Claim and index readers (the filesystem side of claim.status-agreement and index.freshness) ----
+
+/// Whether an already-resolved (canonicalized) path stays inside the
+/// repository -- the one containment test every `claim_paths` check needs,
+/// so a future change to the policy (e.g. `BUG-117`'s reflexive-`starts_with`
+/// case) has one place to land. Both `resolve_inside_repo`, below, and the
+/// pre-flight `claim_paths` validation in `run` call this rather than each
+/// inlining `starts_with`.
+pub(crate) fn path_is_inside_repo(
+    repo_canonical: &std::path::Path,
+    resolved: &std::path::Path,
+) -> bool {
+    resolved.starts_with(repo_canonical)
+}
+
+/// Canonicalizes `candidate` and confirms it stays inside `repo_canonical` --
+/// the one check `claim_paths`' directory and file branches both need, so a
+/// future change to the symlink/containment policy has one place to land
+/// rather than two that can drift apart.
+pub(crate) fn resolve_inside_repo(
+    repo_canonical: &std::path::Path,
+    candidate: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    let resolved = candidate.canonicalize().map_err(|e| {
+        format!(
+            "claim_paths: could not resolve {}: {e}",
+            candidate.display()
+        )
+    })?;
+    if !path_is_inside_repo(repo_canonical, &resolved) {
+        return Err(format!(
+            "claim_paths: {} resolves outside the repository",
+            candidate.display()
+        ));
+    }
+    Ok(resolved)
+}
+
+/// Reads the files a repository pointed `claim.status-agreement` at. Kept in
+/// the CLI because `urzua-core` is pure (ADR-5) -- the rule is given file
+/// contents, never a path to open.
+pub(crate) fn read_claim_files(
+    repo_root: &std::path::Path,
+    prefixes: &[String],
+) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::new();
+    let repo_canonical = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    for prefix in prefixes {
+        let dir = repo_root.join(prefix);
+        // An absent prefix is not an unreadable one. Git keeps no empty
+        // directory, so a declared `.changeset` ceases to exist the moment a
+        // release consumes the last fragment, and treating that as an I/O
+        // failure took the whole command down. The caller reports the absence
+        // as a `Notice`; there is simply nothing here to read.
+        //
+        // `try_exists`, not `exists`: the latter swallows every error into
+        // `false`, including a permission failure on an ancestor, which would
+        // silently read this claim path as absent rather than unreadable --
+        // the caller's guard makes the same distinction for the same reason.
+        match dir.try_exists() {
+            Ok(false) => continue,
+            Ok(true) => {}
+            Err(e) => {
+                return Err(format!(
+                    "claim_paths: could not check {}: {e}",
+                    dir.display()
+                ))
+            }
+        }
+        // `claim_paths` is a path *prefix*, so the claims may sit any depth
+        // below it: reading one level deep made a nested layout report a clean
+        // run over an empty claim list (BUG-63).
+        //
+        // Nothing here is skipped on error. A claim the rule could not read is
+        // a claim it did not check, and continuing past it reports agreement
+        // over an incomplete corpus -- the failure this whole rule exists to
+        // prevent, arrived at from the inside.
+        let mut paths = Vec::new();
+        // A link may point anywhere inside the repository -- declaring
+        // `claims/x -> shared` is the author saying claims also live there,
+        // the same thing the declared root already does (BUG-85). What it may
+        // not do is point at an *ancestor* of the prefix: that sweeps the whole
+        // tree, so files never declared as claims produced blocking findings
+        // under paths that do not exist (BUG-88).
+        let prefix_canonical = dir.canonicalize().unwrap_or_else(|_| dir.clone());
+        let mut visited: std::collections::HashSet<std::path::PathBuf> =
+            std::collections::HashSet::new();
+        visited.insert(prefix_canonical.clone());
+        let mut pending = vec![dir.clone()];
+        while let Some(current) = pending.pop() {
+            let entries = std::fs::read_dir(&current)
+                .map_err(|e| format!("claim_paths: could not read {}: {e}", current.display()))?;
+            for entry in entries {
+                let path = entry
+                    .map_err(|e| {
+                        format!(
+                            "claim_paths: could not read an entry of {}: {e}",
+                            current.display()
+                        )
+                    })?
+                    .path();
+                // `symlink_metadata`: a link is never descended into. A link to
+                // an ancestor gives an unbounded walk that leaves the declared
+                // prefix entirely -- measured at 904 files read, from other
+                // repositories on disk (BUG-69).
+                // A link is never *descended* into -- a link to an ancestor
+                // gives an unbounded walk outside the declared prefix (BUG-69)
+                // -- but a linked file is still read. `symlink_metadata`'s
+                // `is_file()` is false for a link whatever it points at, so
+                // testing it alone dropped a symlinked claim in silence, in a
+                // walk that aborts on every other failure (BUG-75).
+                // `symlink_metadata` first, so a dangling link is a named
+                // error rather than a silent skip.
+                std::fs::symlink_metadata(&path)
+                    .map_err(|e| format!("claim_paths: could not stat {}: {e}", path.display()))?;
+                let target = std::fs::metadata(&path).map_err(|e| {
+                    format!("claim_paths: could not resolve {}: {e}", path.display())
+                })?;
+                if target.is_dir() {
+                    // Followed only where it stays inside the repository, which
+                    // is the same test the declared root gets: rejecting every
+                    // link made the two paths disagree about one symlink
+                    // (BUG-85). `visited` is what actually stops the unbounded
+                    // walk a link to an ancestor produces (BUG-69).
+                    let resolved = resolve_inside_repo(&repo_canonical, &path)?;
+                    // `starts_with` is reflexive (`BUG-117`): a link resolving
+                    // to exactly the prefix root, not a genuine ancestor,
+                    // causes no unbounded walk -- `visited` (seeded with the
+                    // prefix root before this loop starts) already dedupes it
+                    // silently below.
+                    if resolved != prefix_canonical && prefix_canonical.starts_with(&resolved) {
+                        return Err(format!(
+                            "claim_paths: {} resolves to an ancestor of the declared prefix, which would read the whole tree",
+                            path.display()
+                        ));
+                    }
+                    if visited.insert(resolved) {
+                        pending.push(path);
+                    }
+                } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
+                    // A linked file is read, so its *target* must also stay
+                    // inside the repository: a symlink named `.md` otherwise
+                    // feeds an arbitrary file on the machine to the claim
+                    // scanner, and its contents steer the findings.
+                    resolve_inside_repo(&repo_canonical, &path)?;
+                    paths.push(path);
+                }
+            }
+        }
+        // Sorted so a finding's order does not depend on the filesystem.
+        paths.sort();
+        for path in paths {
+            let content = urzua_io::read_to_string(&path)
+                .map_err(|e| format!("claim_paths: could not read {}: {e}", path.display()))?;
+            let shown = path
+                .strip_prefix(repo_root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
+            out.push((shown, content));
+        }
+    }
+    Ok(out)
+}
+
+/// Reads the index artifacts `index.freshness` compares (`MILE-139`), in the
+/// CLI because `urzua-core` is pure (`ADR-5`). A missing file and one that is
+/// not text are handed over as such, never as empty. A path that resolves
+/// outside the repository, or any other I/O failure, aborts: an artifact the
+/// rule could not read is one it did not compare.
+pub(crate) fn read_index_artifacts(
+    repo_root: &std::path::Path,
+    specs: &[urzua_core::config::IndexSpec],
+) -> Result<Vec<rules::IndexArtifact>, String> {
+    let repo_canonical = repo_root
+        .canonicalize()
+        .map_err(|e| format!("index.freshness: could not resolve the repository root: {e}"))?;
+    let mut out = Vec::new();
+    for spec in specs {
+        let full = repo_root.join(&spec.path);
+        let content = match full.canonicalize() {
+            Ok(resolved) if !path_is_inside_repo(&repo_canonical, &resolved) => {
+                return Err(format!(
+                    "index.freshness: {} resolves outside the repository",
+                    spec.path
+                ))
+            }
+            Ok(resolved) => match urzua_io::read_to_string(&resolved) {
+                Ok(text) => rules::IndexContent::Text(text),
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                    rules::IndexContent::NotText
+                }
+                Err(_) if resolved.is_dir() => rules::IndexContent::NotText,
+                Err(e) => {
+                    return Err(format!(
+                        "index.freshness: could not read {}: {e}",
+                        spec.path
+                    ))
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => rules::IndexContent::Missing,
+            Err(e) => {
+                return Err(format!(
+                    "index.freshness: could not resolve {}: {e}",
+                    spec.path
+                ))
+            }
+        };
+        out.push(rules::IndexArtifact {
+            spec: spec.clone(),
+            content,
+        });
+    }
+    Ok(out)
 }

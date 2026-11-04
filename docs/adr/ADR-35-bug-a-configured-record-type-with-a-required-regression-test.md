@@ -61,6 +61,15 @@ Fully additive: one config entry, one template, one new directory.
   `docs/bugs/0001-*.md` names this exact defect, required-field-complete, as the first real
   instance of the type.
 
+## Amendment (2026-11-04): the `bug` type declares five statuses
+
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+The Decision gives `Status` as `Open | Fixed | WontFix`. The `bug` type in `.urzua/config.yaml` now
+declares five: `Open`, `Fixed`, `WontFix`, `Not a bug` and `Rejected`. The required fields
+(`Status`, `Found-in`, `Regression-test`) and the rest of the Decision are unchanged. The declared
+list in the config is the authority; this text does not enumerate it again.
+
 ## References
 
 - ADR-34 — the `milestone` type this is a sibling of, and the reasoning this ADR follows.
@@ -76,3 +85,5 @@ Fully additive: one config entry, one template, one new directory.
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 784fa758e. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `.urzua/config.yaml` e185c4da7b1f -> 8bc61e85bdcc, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a. Reason: Re-verified: the bug type still requires Status, Found-in and Regression-test; config.yaml growth is unrelated rule options and types. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Amendment added: the `bug` type declares five statuses, not the three the Decision lists. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

@@ -144,6 +144,15 @@ record_types:
         unevidenced_tiers: ["Not started"]
         not_done: ["Planned", "InProgress", "Blocked"]
         set_status: "Done"
+    # Every milestone, open or closed, states its Done means (maintainer
+    # decision of 2026-11-04): a Done milestone is judged against it and not
+    # against its What. A WontDo milestone is set aside on purpose, as a
+    # Rejected ADR is: it will never be done, so it has no criteria to meet.
+    sections:
+      from: headings
+      required:
+        - {name: "Done means"}
+      exempt_statuses: ["WontDo"]
     spec: "SPEC-6"
     pointer_fields:
       - "Implements"

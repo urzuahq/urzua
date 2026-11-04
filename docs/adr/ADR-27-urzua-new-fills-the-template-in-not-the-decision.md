@@ -56,6 +56,27 @@ Additive: a new pure module (`new_record.rs`, following the same pure-render/imp
 - The identity-resolution reuse means `new` and `fix --apply` share one failure mode and one
   precedent: no `--by`, no `gh`, no `git config user.name` — refuse, don't guess an author.
 
+## Amendment (2026-11-04): the shapes it names are gone, author tiering is `gh` first, numbering skips every claimed ref
+
+*Status of this amendment: accepted 2026-11-04 by the maintainer (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+Three statements in the Decision no longer match the code. The decision that `urzua new` fills in the
+template and leaves `Status`, `Deciders` and `Embodiment` to the author is unchanged.
+
+- **Header shapes.** The Decision refuses when a type with no template has a `blockquote` or
+  `bold-list` shape. Those shapes no longer exist: `MILE-85` (#205) removed blockquote and bold-list
+  parsing, so every record is YAML frontmatter and a type with no template always gets the
+  synthesized header. The refusal branch is gone with them.
+- **Author tiering.** The Decision resolves `Author` "explicit, then `gh api user`, then `git config
+  user.name`". `urzua_io::resolve_identity` now tries `gh api user` first, then an explicit `--by`,
+  then `git config user.name`, then an error; this is the order `ADR-31`'s amendment of 2026-09-10
+  decided, and `ADR-20`'s amendment of 2026-11-04 records the same change for `fix`.
+- **Numbering.** The Decision takes the highest numeric prefix in the type's directory plus one. `new`
+  now also skips any number already claimed on a local or remote-tracking git ref and says which ref
+  claimed it (`MILE-89`'s revision row of 2026-11-04, #135); a number claimed on a branch that was
+  never fetched is still invisible. The declared `identity` pattern also decides the width of the
+  number in the file name and the H1, and `Stable-Id` is always written (`MILE-151`, `BUG-188`).
+
 ## References
 
 - SPEC-1 — `new`'s one-line contract this ADR fills in the mechanism for.
@@ -70,3 +91,5 @@ Additive: a new pure module (`new_record.rs`, following the same pure-render/imp
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 4bc0874fc. | **structural** |
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/new_record.rs`, `rust/crates/urzua-cli/src/commands/new.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: urzua new still fills the template and leaves the decision to the author; changes since are the declared identity pattern, padded H1, an always-written Stable-Id and the removal of the blockquote shapes. The Decision text on those shapes and author tiering is stale and is left for an amendment. | **structural** |
+> | 2026-11-04 | Amendment added: the blockquote and bold-list refusal no longer applies (`MILE-85`), `Author` resolves `gh api user` first (`ADR-31`), and numbering skips numbers claimed on other refs and follows the declared identity pattern (`MILE-89`, `MILE-151`, `BUG-188`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |

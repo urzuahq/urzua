@@ -217,6 +217,7 @@ mod tests {
                     RecordTypeConfig {
                         exclude_files: Vec::new(),
                         dir: "docs/notes".to_string(),
+                        extra_dirs: Vec::new(),
                         identity: None,
                         fields: None,
                         sections: None,
@@ -347,6 +348,7 @@ mod tests {
                 RecordTypeConfig {
                     exclude_files: Vec::new(),
                     dir: "docs/notes".to_string(),
+                    extra_dirs: Vec::new(),
                     identity: None,
                     fields: None,
                     sections: None,
@@ -541,6 +543,7 @@ mod tests {
                     RecordTypeConfig {
                         exclude_files: Vec::new(),
                         dir: dir.clone(),
+                        extra_dirs: Vec::new(),
                         identity: None,
                         fields: None,
                         sections: None,

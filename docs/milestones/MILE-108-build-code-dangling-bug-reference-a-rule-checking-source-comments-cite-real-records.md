@@ -28,9 +28,14 @@ hand after a `/code-review` pass separately flagged one of the two instances for
 distinguishing "dangling" from "superseded," whether non-record `.md` prose is in scope) that this
 milestone's implementation has to resolve, in an ADR, before shipping the rule.
 
+## Done means
+
+The rule `code.dangling-bug-reference` reads tracked source files whose extensions config declares and reports a comment citing a record id (`BUG-\d+`, `ADR-\d+`, `RFC-\d+` per the type prefixes) whose record does not exist under that type's declared `dir`; the extensions and prefixes come from config, a fixture covers a dangling and a live citation, the rule is declared in urzua's own `.urzua/config.yaml`, and it reports nothing unwaived on this repository's `rust/` and `scripts/`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed at Phase 0. **Why:** the incident that motivated `RFC-41` happened during this same review round, and this project's own precedent (`MILE-107`'s filing after `RFC-40`/`RFC-39`) is to schedule the work while the evidence is fresh rather than leave the RFC as an unscheduled proposal. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

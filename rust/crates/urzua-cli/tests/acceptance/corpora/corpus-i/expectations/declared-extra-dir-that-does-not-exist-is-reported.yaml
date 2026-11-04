@@ -1,0 +1,10 @@
+id: declared-extra-dir-that-does-not-exist-is-reported
+corpus: corpus-i
+invocation: [--config, .urzua/missing-extra-dir.yaml, check]
+expect_exit: 1
+# The type still matches records through `decisions` and `archive`, so the
+# missing directory is visible only through its own entry.
+expect_findings:
+  - rule: type.dir-matches-nothing
+    severity: error
+    message_contains: "vanished"

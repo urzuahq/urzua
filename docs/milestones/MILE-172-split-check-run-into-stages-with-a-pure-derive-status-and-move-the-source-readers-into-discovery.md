@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K40QR3PB1ZRMH7B9G6S3R2
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-cli/src/gate.rs, code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 172 — Split check run into stages with a pure derive_status and move the source readers into discovery
 
@@ -28,3 +29,4 @@ Ordering: after `MILE-171`, which removes the 51 closures this function holds; d
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
 > | 2026-11-04 | `Blocked-on` cleared. **Why:** `MILE-171` is `Done` and `narrative-field.stale` flagged the leftover. `Status` unchanged; this milestone can start. | **substantive** |
+> | 2026-11-04 | `Status` Planned -> Done, `Realized-by` added. `check::run` is a composition of `open_session`, `narrow`, `load_context`, `run_rules`, `scope_findings`, `run_after_scoping` and a report build, none over 100 lines; `derive_status` is pure in `gate.rs` with a table test for each branch; `read_claim_files`, `resolve_inside_repo`, `path_is_inside_repo` and `read_index_artifacts` live in `discovery.rs`. **Why:** checked against this record's Done means: `urzua check` output over this repository (full, path-scoped, `--base HEAD~1/8/30`) and every acceptance corpus is byte-identical before and after; the acceptance suite passes. The symlink-policy cases (`BUG-69`, `BUG-75`, `BUG-85`, `BUG-117`) are end-to-end tests in `check_integration.rs` that exercise the readers through the command, so they stay where they are and still cover the moved code; there are no unit tests in the old location to move. | **structural** |

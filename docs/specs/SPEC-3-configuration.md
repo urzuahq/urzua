@@ -1,5 +1,5 @@
 ---
-Version: '0.51'
+Version: '0.53'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -133,6 +133,28 @@ Two details carry weight:
   names no file directly in the type's `dir` is reported by `type.dir-matches-nothing` as a warning
   naming the type and the entry, so a stale exclusion is visible. Omitted or empty, the type loads
   as it always did.
+- **A record type may own several directories: `extra_dirs`** (`MILE-130`). A list of directories
+  beside `dir`, each a directory in the same sense as `dir` (its `.md` files, not its subtree,
+  `RFC-35`):
+
+  ```yaml
+  record_types:
+    adr:
+      dir: docs/adr
+      extra_dirs: [docs/adr-archive, packages/web/adr]
+      prefix: ADR
+  ```
+
+  `dir` and every `extra_dirs` entry are one identity namespace. Records in any of them are the
+  type's records; ids, pointers, `identity.collision` and `filename.identity-pattern` see one
+  population, so `ADR-7` in `docs/adr-archive` resolves from a pointer in `docs/adr` and collides with an
+  `ADR-7` in `docs/adr`. `urzua new` writes to `dir` and numbers past the highest id in any of the
+  directories, and past a number claimed in any of them on another local or remote-tracking ref. An
+  entry is validated like `dir` (it names a directory below the repository root); a directory listed
+  twice, and a directory owned by two types, are load errors; an `extra_dirs` entry that does not
+  exist is reported by `type.dir-matches-nothing`, and `urzua new` numbers without it and says so on
+  stderr. `exclude_files` names files in any of the directories. Two types sharing a prefix remain
+  refused: the namespace is one type's.
 - **A record type may declare its document model: `identity`, `fields` and `sections`**
   (`RFC-33` layer 1, `MILE-98`). Three optional keys under a record type, each a mapping with a
   required `from`:
@@ -908,3 +930,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.49`. `citation.issue-exists`'s `issue_refs` takes the optional `fields` list of header field names to read for citations, off unless declared, validated against the types' declared fields. **Why:** `MILE-184` -- a wrong number in a header field such as a BUG's `Found-in` went unchecked. | **substantive** |
 > | 2026-11-04 | Bumped to `0.50`. `relation_fields` takes `date` and `author`, the fields `urzua new` fills with today's date and the author, defaulting to `Date` and `Author`. **Why:** `MILE-176` -- `new` named them by literal, so a type calling them `Created` and `Owner` got `null`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.51`. A field named under `relation_fields.date` or `relation_fields.author` must be in the type's `required_fields` or `known_fields`, reported by `config.relation-field-not-known` as the four relation roles already were. Which rules accept which options is declared on the rule's table entry, not in a list of owners in the config loader; the load errors are unchanged. **Why:** `MILE-176` left the two new fields unchecked, and `MILE-171` moved option ownership to the rule table. | **substantive** |
+> | 2026-11-04 | Bumped to `0.52`. No change to the option reference. The `RuleSetting` option set is one definition (`accepted_statuses` now carries the `serde(default)` its siblings did), and a rule reads its options as a typed value. An option that is declared in the option tables but not accepted by the struct, or the reverse, fails a test. **Why:** `MILE-174` -- the set was defined four times, so a new option could be silently ignored. | **structural** |
+> | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |

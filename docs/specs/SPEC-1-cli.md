@@ -1,5 +1,5 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -31,6 +31,8 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | Spec | Covers | Status |
 > |---|---|---|
 > | **SPEC-2** | `urzua check` — discovery, rules, output contract | **the Phase 0 deliverable** |
+> | **SPEC-2** | `urzua rules` — the rule table `check` runs, in execution order | the Phase 0 deliverable |
+> | **SPEC-2**, **SPEC-3** | `urzua index` — regenerates the committed record indexes `index.freshness` checks (`indexes` in the config) | Accepted |
 > | **SPEC-3** | `.urzua/config.yaml` | needed by SPEC-2 |
 > | **SPEC-4** | the corpus acceptance suite | needed by SPEC-2 criterion 3 |
 > | **SPEC-5** | `urzua init` — type selection, `.urzua/` layout, the adopt path | the bootstrap surface |
@@ -305,3 +307,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-04 | Bumped to `0.9`. Added `urzua refs refresh`, which rewrites the committed snapshot of issue and pull request numbers from the GitHub REST API (token from `GITHUB_TOKEN` or `GH_TOKEN`, `curl` transport, deterministic sorted output, exit `2` and no write on any failure); it is the only command that touches the network. **Why:** `MILE-143` -- the issue and pull request half of the cited-reference check needs a snapshot that `check` can read offline. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. A panic exits 2, the documented code for could not run, after printing its `not-run` result (Rust's default is 101); a closed stdout pipe ends the run without a panic. **Why:** `MILE-176` -- the hook's JSON contract and the process exit code disagreed, and `urzua check | head -1` panicked. | **substantive** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a, `rust/crates/urzua-cli/tests/export_integration.rs` 510343733f3f -> e1ad4b495f5b. Reason: Re-verified: spec revision log is current through v0.10; main.rs and test changes add index, refs, fix flags, --fail-on and panic exit 2, all specified. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Bumped to `0.11`. Added rows for `urzua rules` and `urzua index` to the child-spec table; both commands are specified in `SPEC-2` (the rule table, `index.freshness`) and `SPEC-3` (`indexes`). No behaviour changes. **Why:** drift review of 2026-11-04: the table named neither command, so a reader could not tell where they are specified. | **structural** |

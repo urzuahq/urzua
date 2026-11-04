@@ -24,6 +24,10 @@ reverse direction. Needed for `MILE-102`.
 
 Since `RFC-46` was rejected, renaming is the only supported route for a corpus in another filename shape, so this rule is also how the engine says so: when every file in a type's directory is off-pattern (a whole bare-number corpus), `urzua init` and `urzua audit` report the mismatch once per type, with an expected name for each file that conforms to the type's declared identity pattern (`TYPE-NNNN-slug.md` in this repository), instead of silently running the identity rules on zero records. That covers the bare-filename case of `BUG-99`, and the acceptance suite's bare-filename known gap becomes an assertion of this guidance.
 
+## Done means
+
+The opt-in rule `filename.identity-pattern` reports a file in a type's declared directory whose name does not match the type's declared identity pattern (or the default `TYPE-NNNN-slug.md` when none is declared), a whole off-pattern type is one finding listing each file's expected name, it runs under `check` and `audit`, and a fixture covers an off-pattern, a pattern-matching and a legacy file.
+
 ## References
 
 - `type.record-outside-declared-dir` -- the existing reverse-direction rule.
@@ -40,3 +44,4 @@ Since `RFC-46` was rejected, renaming is the only supported route for a corpus i
 > | 2026-11-02 | Expected name follows the declared pattern. **Why:** A type may declare a pattern other than `TYPE-NNNN-slug.md`; files matching it are not off-pattern. | **substantive** |
 > | 2026-11-04 | Built as the opt-in rule `filename.identity-pattern` (`SPEC-2`), run by `check` and `audit`; a whole off-pattern type is one finding on its directory listing each file's expected name, and the acceptance suite's bare-filename known gap is now an assertion of that guidance. `init` does not report it itself; it proposes the rule at `warn`, so the first `audit` does. **Why:** the milestone's rule and rename guidance are shipped; closing it is a human decision. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #166: opt-in rule `filename.identity-pattern` reports a file in a type directory whose name does not match the declared pattern. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
