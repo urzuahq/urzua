@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -87,6 +87,28 @@ Two details carry weight:
   needs no change. `"yaml-frontmatter"` (RFC-16) is genuinely structured data, deserialized rather
   than line-recognized, and is what a from-scratch record generates by default; the other shapes stay
   what an adopted, pre-existing corpus is read as.
+- **A record type may declare its document model: `identity`, `fields` and `sections`**
+  (`RFC-33` layer 1, `MILE-98`). Three optional keys under a record type, each a mapping with a
+  required `from`:
+
+  ```yaml
+  record_types:
+    adr:
+      dir: doc/adr
+      identity: {from: filename, pattern: '^(?P<number>\d+)-(?P<slug>.+)$'}
+      fields:   {from: prefix-lines}      # or yaml-frontmatter
+      sections: {from: headings, depth: 2, items: true}
+  ```
+
+  `identity.pattern` is a non-blank string. `sections.depth` counts heading levels from `##`
+  (1 is `##` only, 2 adds `###`, up to 5) and defaults to 1; `items` defaults to `false`. An unknown
+  `from`, an unknown key, an out-of-range `depth`, a non-boolean `items`, a blank `pattern` or a key
+  present with no value is a load-time error naming the record type and key. The declaration is
+  parsed and validated and available through `config::parse_with_document_models`, but **no rule
+  reads it yet**, so declaring it changes no finding. `identity.pattern` is not yet compiled, so a
+  pattern that is not a valid regular expression is not yet rejected. `section::parse_sections`
+  (`section.rs`) splits a record body into its `##` sections with line numbers; it is not yet driven
+  by `sections.depth`.
 
 ## Scope declaration
 
@@ -171,3 +193,4 @@ indistinguishable in the report from one that ran clean:
 > | 2026-09-17 | Documented the `rules` table: per-rule `level`, opt-in, and the two load-time errors. **Why:** `SPEC-1` listed "which checks are errors vs. warnings" as a v0 configuration surface and it was never built -- severity lived as 34 hardcoded literals in `rules.rs` with no config key at all (`MILE-80`). | **substantive** |
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command reads `.urzua/config.yaml` on every invocation, and this spec was revised again today to document the `rules` table `MILE-80` shipped. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 > | 2026-09-18 | Criterion 3 corrected. **Why:** it still read *"not yet true today, since no per-rule enable/disable or severity config exists yet"* on the day after `MILE-80` shipped exactly that — and this record was marked `Accepted`/`Verified` in the same change, which is `BUG-26`'s own defect committed while fixing `BUG-26`. Caught by review. The `doctor` half is genuinely still unbuilt and now says so rather than being swept up with the half that shipped. | **substantive** |
+> | 2026-11-03 | Bumped to `0.5`. Documented the per-type document model declaration (`identity`, `fields`, `sections`) as parsed and validated but read by no rule yet. **Why:** first slice of `MILE-98` (`RFC-33` layer 1): a record type can now declare how its parts are found, and a malformed declaration fails the load instead of being ignored. | **substantive** |
