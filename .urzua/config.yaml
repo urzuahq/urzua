@@ -164,7 +164,11 @@ rules:
   narrative-field.stale:
     level: warn
     terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Done", "WontDo"]
-  embodiment.consistency: warn
+  # Maintainer decision 2026-11-04: a 14-day grace window, so a code change can
+  # land before its record catches up without breaking a zero-warning build (MILE-129).
+  embodiment.consistency:
+    level: warn
+    drift_grace_days: 14
   embodiment.locator-exists: error
   # Off: an advisory suggestion, and several ADRs citing one rule module is
   # expected now that the rule engine is split into modules (MILE-131).

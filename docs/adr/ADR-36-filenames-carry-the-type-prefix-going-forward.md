@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-core/src/rules/filename.rs, test:rust/crates/urzua-core/src/new_record.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:d1dfa0bf32674ae81f112c1f434bab41e938f3bd501aa6dbd7f952c668d5e70a, code:rust/crates/urzua-core/src/new_record.rs@sha256:5473850e4d7d100599f1014472fa3a3594459d0ef753bad9d7df245e6cda6342, test:rust/crates/urzua-core/src/rules/filename.rs@sha256:d1dfa0bf32674ae81f112c1f434bab41e938f3bd501aa6dbd7f952c668d5e70a, test:rust/crates/urzua-core/src/new_record.rs@sha256:5473850e4d7d100599f1014472fa3a3594459d0ef753bad9d7df245e6cda6342
 Date: 2026-09-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -120,3 +120,4 @@ the unedited Decision/Consequences sections and this amendment's own text.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
