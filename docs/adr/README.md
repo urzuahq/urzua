@@ -73,4 +73,7 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A source comment citing a decision counts as realization evidence](ADR-66-a-source-comment-citing-a-decision-counts-as-realization-evidence.md)
 - [Evidence pins, a drift grace window and a claim age are opt-in refinements of git-history drift](ADR-67-evidence-pins-a-drift-grace-window-and-a-claim-age-are-opt-in-refinements-of-git-history-drift.md)
 - [Implementation-permitted statuses are declared per type](ADR-68-implementation-permitted-statuses-are-declared-per-type.md)
+- [A record edit is judged by urzua before it is written, and the harness hook only relays the verdict](ADR-69-a-record-edit-is-judged-by-urzua-before-it-is-written-and-the-harness-hook-only-relays-the-verdict.md)
+- [Drafting commands scaffold through urzua new and carry no schema knowledge of their own](ADR-70-drafting-commands-scaffold-through-urzua-new-and-carry-no-schema-knowledge-of-their-own.md)
+- [One gate runs at the editor, the commit, the push and CI, and only CI is relied on as the guarantee](ADR-71-one-gate-runs-at-the-editor-the-commit-the-push-and-ci-and-only-ci-is-relied-on-as-the-guarantee.md)
 <!-- urzua:index:end -->
