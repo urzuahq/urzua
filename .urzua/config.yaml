@@ -62,6 +62,7 @@ record_types:
       - "Supersedes / Superseded-by"
       - "Amends"
       - "Amended-by"
+      - "Amended-by-pending"
       - "Implements"
     statuses:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
@@ -182,6 +183,9 @@ relation_pairs:
     provisional:
       statuses: ["Draft", "Discussion"]
       level: warn
+      # The amended RFC may acknowledge a pending amendment in its own field
+      # (MILE-163) without asserting the amendment before it is accepted.
+      acknowledged_by: "Amended-by-pending"
 
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather

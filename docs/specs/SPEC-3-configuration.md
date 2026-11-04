@@ -1,5 +1,5 @@
 ---
-Version: '0.35'
+Version: '0.36'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -426,6 +426,7 @@ relation_pairs:
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
       level: warn             # warn (default) | error
+      acknowledged_by: "Amended-by-pending"   # optional (MILE-163), a field on the peer
 ```
 
 A claim `A.forward = B` is echoed by `B.inverse = A`, and `A.inverse = B` by `B.forward = A`.
@@ -441,7 +442,11 @@ whose status is listed in `provisional.statuses` and that the peer does not echo
 keeps the rule's own level, so it is an error once the claimant is accepted. A claim already echoed
 by the peer's inverse field is settled and is not reported at either level. A claim echoed only in a
 differently named, unpaired field (a pending field) is not an echo, so it is held to the provisional
-level; the engine does not read that field. A status listed that no record type declares in
+level, unless the pair declares `provisional.acknowledged_by` (`MILE-163`): then a provisional claim
+whose peer names the claimant in that field is settled by the peer's own declaration and is not
+reported. The field is read only for a provisional claim; a claim from any other status still needs the
+inverse relation. It must be a non-blank field in the `required_fields` or `known_fields` of a type the
+pair carries, and not itself a pair field, or the load is refused. A status listed that no record type declares in
 `statuses.values`, a blank or duplicated status, an empty list, or a `level` other than `warn` and
 `error` is refused at load, so the split cannot silently apply to nothing.
 
@@ -756,3 +761,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
 > | 2026-11-04 | Bumped to `0.35`. A record exempted by `sections.exempt_statuses` is counted eligible and unexamined, not out of scope. **Why:** `BUG-187` -- the exemption is a declared input, and `config.scope-matches-nothing` warned that the rule could not reach it. | **substantive** |
+> | 2026-11-04 | Bumped to `0.36`. A pair's `provisional` takes an optional `acknowledged_by` field: a provisional claim whose peer names the claimant in it is settled. **Why:** `MILE-163` -- a peer records the acknowledgement of a pending claim under a field of its own naming. | **substantive** |

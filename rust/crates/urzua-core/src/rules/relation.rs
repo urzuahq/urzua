@@ -307,6 +307,25 @@ fn provisional_severity(
         })
 }
 
+/// Whether `target` names `claimant` in the pair's declared
+/// `provisional.acknowledged_by` field (`MILE-163`). False when none is declared.
+fn acknowledges(
+    pair: &crate::config::RelationPair,
+    target: &Record,
+    claimant: &crate::values::RecordId,
+) -> bool {
+    let Some(field) = pair
+        .provisional
+        .as_ref()
+        .and_then(|p| p.acknowledged_by.as_deref())
+    else {
+        return false;
+    };
+    extract_references(target.header.get(field).unwrap_or(""))
+        .iter()
+        .any(|r| crate::values::RecordId::new(r) == *claimant)
+}
+
 /// Rule (`RFC-47`, `MILE-122`): reciprocity over every declared relation pair.
 /// A claim `A.forward = B` needs `B.inverse` to name `A`, and `A.inverse = B`
 /// needs `B.forward` to name `A`; direction is the field name, so two records
@@ -386,6 +405,14 @@ pub fn relation_pair_reciprocity(
                     // provisional (`MILE-154`): the pair's own level applies
                     // instead of the rule's. Anything else keeps the rule's.
                     let declared_severity = provisional_severity(slot.pair, record, config);
+                    // A provisional claim the peer acknowledges in its declared
+                    // acknowledgement field is settled by the peer's own word
+                    // (`MILE-163`); a claim from any other status is not.
+                    if declared_severity.is_some()
+                        && acknowledges(slot.pair, target, &normalized_id)
+                    {
+                        continue;
+                    }
                     let note = if declared_severity.is_some() {
                         format!(
                             " (provisional: {} is '{}')",
@@ -1037,6 +1064,7 @@ Resolves: BUG-7
         p.provisional = Some(crate::config::ProvisionalClaim {
             statuses: vec!["Draft".to_string()],
             level: crate::config::ProvisionalLevel::Warn,
+            acknowledged_by: None,
         });
         pair_config(
             vec![(
@@ -1067,6 +1095,63 @@ Resolves: BUG-7
             Some(FindingSeverity::Warning)
         );
         assert!(findings[0].message.contains("provisional"), "{findings:?}");
+    }
+
+    fn acknowledging_config() -> Config {
+        let mut cfg = provisional_config();
+        cfg.relation_pairs[0]
+            .provisional
+            .as_mut()
+            .unwrap()
+            .acknowledged_by = Some("Amended-by-pending".to_string());
+        cfg
+    }
+
+    #[test]
+    fn a_provisional_claim_the_peer_acknowledges_is_not_reported_observed_failing() {
+        let acknowledging = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "---\nStatus: Accepted\nAmended-by: —\nAmended-by-pending: RFC-2\n---\n",
+        );
+        let silent = record(
+            "docs/rfc/RFC-3-c.md",
+            "rfc",
+            "---\nStatus: Accepted\nAmended-by: —\n---\n",
+        );
+        let draft = |n: &str, target: &str| {
+            record(
+                &format!("docs/rfc/RFC-{n}-b.md"),
+                "rfc",
+                &format!("---\nStatus: Draft\nAmends: {target}\n---\n"),
+            )
+        };
+        let (_, findings) = run_pairs(&acknowledging_config(), &[acknowledging.clone(), draft("2", "RFC-1")]);
+        assert!(findings.is_empty(), "{findings:?}");
+        // A peer without the acknowledgement still reports it.
+        let (_, findings) = run_pairs(&acknowledging_config(), &[silent, draft("4", "RFC-3")]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("provisional"), "{findings:?}");
+        // The acknowledgement names a different record: not this claimant's.
+        let (_, findings) = run_pairs(&acknowledging_config(), &[acknowledging, draft("9", "RFC-1")]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn an_accepted_claim_is_not_settled_by_an_acknowledgement_observed_failing() {
+        let base = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "---\nStatus: Accepted\nAmended-by: —\nAmended-by-pending: RFC-2\n---\n",
+        );
+        let accepted = record(
+            "docs/rfc/RFC-2-b.md",
+            "rfc",
+            "---\nStatus: Accepted\nAmends: RFC-1\n---\n",
+        );
+        let (_, findings) = run_pairs(&acknowledging_config(), &[base, accepted]);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
 
     #[test]
