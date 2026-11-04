@@ -1,5 +1,5 @@
 ---
-Version: '0.23'
+Version: '0.24'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -138,7 +138,8 @@ Two details carry weight:
     pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
     The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
-    finding.
+    finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
+    zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
   - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`,
     `blockquote`, `bold-list` and `none` are the existing shapes, and `prefix-lines` reads bare
     `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
@@ -620,4 +621,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |
-> | 2026-11-04 | Bumped to `0.23`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
+> | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
+> | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
