@@ -1126,14 +1126,20 @@ Resolves: BUG-7
                 &format!("---\nStatus: Draft\nAmends: {target}\n---\n"),
             )
         };
-        let (_, findings) = run_pairs(&acknowledging_config(), &[acknowledging.clone(), draft("2", "RFC-1")]);
+        let (_, findings) = run_pairs(
+            &acknowledging_config(),
+            &[acknowledging.clone(), draft("2", "RFC-1")],
+        );
         assert!(findings.is_empty(), "{findings:?}");
         // A peer without the acknowledgement still reports it.
         let (_, findings) = run_pairs(&acknowledging_config(), &[silent, draft("4", "RFC-3")]);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("provisional"), "{findings:?}");
         // The acknowledgement names a different record: not this claimant's.
-        let (_, findings) = run_pairs(&acknowledging_config(), &[acknowledging, draft("9", "RFC-1")]);
+        let (_, findings) = run_pairs(
+            &acknowledging_config(),
+            &[acknowledging, draft("9", "RFC-1")],
+        );
         assert_eq!(findings.len(), 1, "{findings:?}");
     }
 
