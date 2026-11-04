@@ -95,6 +95,9 @@ mod tests {
                 record_type.to_string(),
                 crate::config::RecordTypeConfig {
                     dir: format!("docs/{record_type}"),
+                    identity: None,
+                    fields: None,
+                    sections: None,
                     required_fields: Vec::new(),
                     header_shape,
                     prefix: None,

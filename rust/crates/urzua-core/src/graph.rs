@@ -171,6 +171,9 @@ mod tests {
                 record_type.to_string(),
                 crate::config::RecordTypeConfig {
                     dir: "docs/x".to_string(),
+                    identity: None,
+                    fields: None,
+                    sections: None,
                     required_fields: vec![],
                     header_shape: crate::header::HeaderShape::default(),
                     prefix: None,

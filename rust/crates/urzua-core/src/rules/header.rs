@@ -396,6 +396,87 @@ pub fn header_field_case_mismatch(
     )
 }
 
+/// One record's header writing two keys that differ only by case (`MILE-113`).
+///
+/// Additive and declaration-free: `ADR-57` keeps every field-name comparison
+/// exact, so `Status` and `status` are two fields and nothing here merges
+/// them, picks a winner, or touches `duplicate_keys()` (an exact repeat of one
+/// spelling stays `header.required-fields`' finding). This only reports the
+/// fact of the case-only difference, for a repository that wants it.
+///
+/// "Differing only by case" is plain `str::to_lowercase` equality: Unicode
+/// lower-casing, not case folding, so `CAFÉ`/`café` are grouped while
+/// `Maße`/`Masse` stay different names, as `ADR-57` decided. Normalisation
+/// forms (NFC/NFD) are likewise different names. This is a reporting
+/// heuristic over keys already present, so a mis-grouping cannot produce a
+/// wrong verdict elsewhere.
+pub fn header_case_variant_key(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_HEADER_CASE_VARIANT_KEY;
+    let mut findings = Vec::new();
+
+    let candidates: Vec<&Record> = records.iter().collect();
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Record,
+        candidates,
+        |record| *record,
+        |record| {
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
+            // Groups in order of first appearance, each holding its distinct
+            // exact spellings (with the line of the first) in header order, so
+            // the output is stable across runs.
+            let mut groups: Vec<(String, Vec<(&str, usize)>)> = Vec::new();
+            for field in &record.header.fields {
+                let key = field.key.as_str();
+                let lowered = key.to_lowercase();
+                let group = match groups.iter().position(|(l, _)| *l == lowered) {
+                    Some(i) => &mut groups[i].1,
+                    None => {
+                        groups.push((lowered, Vec::new()));
+                        &mut groups.last_mut().expect("just pushed").1
+                    }
+                };
+                if !group.iter().any(|(seen, _)| *seen == key) {
+                    group.push((key, field.line));
+                }
+            }
+            for (_, spellings) in groups.iter().filter(|(_, s)| s.len() > 1) {
+                let named = spellings
+                    .iter()
+                    .map(|(key, line)| format!("'{key}' (line {line})"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: Some(spellings[0].1),
+                    waived: None,
+                    message: format!(
+                        "header writes keys differing only by case: {named} -- field names compare exactly (ADR-57), so these are different fields; this reports the difference, not which spelling is right"
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -791,5 +872,200 @@ mod tests {
             "{population:?}"
         );
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    // header.case-variant-key (MILE-113). Opt-in, never declaration-driven:
+    // it reads the keys a record wrote, not the vocabulary its type declared.
+
+    #[test]
+    fn two_keys_differing_only_by_case_are_reported_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Status: Accepted\n> status: Draft\n",
+        );
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("'Status'"), "{findings:?}");
+        assert!(findings[0].message.contains("'status'"), "{findings:?}");
+        assert_eq!(findings[0].rule, RULE_HEADER_CASE_VARIANT_KEY);
+        assert!(findings[0].line.is_some(), "{findings:?}");
+    }
+
+    #[test]
+    fn the_rule_needs_no_field_declaration_at_all_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Status: Accepted\n> status: Draft\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn three_spellings_of_one_key_are_one_finding_naming_all_three() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Status: A\n> status: B\n> STATUS: C\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (_, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        for spelling in ["'Status'", "'status'", "'STATUS'"] {
+            assert!(findings[0].message.contains(spelling), "{findings:?}");
+        }
+    }
+
+    #[test]
+    fn two_independent_case_variant_pairs_are_two_findings_in_header_order() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Status: A\n> Author: x\n> status: B\n> author: y\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (_, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(findings[0].message.contains("'Status'"), "{findings:?}");
+        assert!(findings[1].message.contains("'Author'"), "{findings:?}");
+    }
+
+    #[test]
+    fn a_record_with_no_case_variants_is_examined_and_clean() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Status: Accepted\n> Author: x\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(
+            examined(&exec),
+            1,
+            "a clean pass must say what it looked at"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// An exact repeat is `duplicate_keys()`'s signal, reported by
+    /// `header.required-fields`; this rule is composable alongside it, not a
+    /// second report of the same fact.
+    #[test]
+    fn an_exact_repeat_is_not_this_rule_s_finding() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: A\n> Status: B\n");
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn an_exact_repeat_beside_a_case_variant_still_reports_the_variant_once() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "> Status: A\n> Status: B\n> status: C\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (_, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let msg = &findings[0].message;
+        assert_eq!(msg.matches("'Status'").count(), 1, "{msg}");
+    }
+
+    /// `ADR-57`: a different spelling is a different field, and the engine
+    /// does not decide that `Masse` and `Maße` are one name. Only a
+    /// lower-casing difference is reported.
+    #[test]
+    fn non_ascii_case_variants_are_reported_but_sharp_s_is_not_folded() {
+        let variant = record("docs/adr/ADR-1-x.md", "adr", "> CAFÉ: a\n> café: b\n");
+        let sharp_s = record("docs/adr/ADR-2-x.md", "adr", "> Maße: a\n> Masse: b\n");
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[variant, sharp_s], &config);
+        assert_eq!(examined(&exec), 2);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].file.ends_with("ADR-1-x.md"), "{findings:?}");
+    }
+
+    #[test]
+    fn variants_in_two_different_records_are_not_one_pair() {
+        let a = record("docs/adr/ADR-1-x.md", "adr", "> Status: A\n");
+        let b = record("docs/adr/ADR-2-x.md", "adr", "> status: B\n");
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[a, b], &config);
+        assert_eq!(examined(&exec), 2);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn works_on_yaml_frontmatter_headers_too() {
+        let (r, _) = yaml_record(
+            "docs/adr/ADR-1-x.md",
+            "---\nStatus: A\nstatus: B\n---\n# 1 — X\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn an_unreadable_header_is_unreadable_not_clean() {
+        let (r, _) = yaml_record(
+            "docs/adr/ADR-1-x.md",
+            "---\nStatus: [unclosed\n---\n# 1 — X\n",
+        );
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (
+                population.eligible(),
+                population.examined(),
+                population.unreadable()
+            ),
+            (1, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_header_none_type_is_out_of_scope_for_case_variant_key() {
+        let r = record("code/src.rs", "code", "fn main() {}\n");
+        let config = config_with_types(vec![(
+            "code",
+            type_config_with_shape(crate::header::HeaderShape::None),
+        )]);
+        let (exec, findings) = header_case_variant_key(&[r], &config);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (
+                population.examined(),
+                population.unreadable(),
+                population.out_of_scope()
+            ),
+            (0, 0, 1),
+            "{population:?}"
+        );
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    /// `ADR-57` stays exactly as decided: this rule adds a signal and changes
+    /// no exact-match verdict.
+    #[test]
+    fn it_leaves_the_exact_match_rules_verdicts_unchanged() {
+        let config = config_for_required(vec![("adr", vec!["Status"])]);
+        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: A\n> status: B\n");
+        assert!(r.header.duplicate_keys().is_empty());
+        assert_eq!(r.header.get("Status"), Some("A"));
+        let (_, required) = header_required_fields(std::slice::from_ref(&r), &config);
+        assert!(required.is_empty(), "{required:?}");
     }
 }

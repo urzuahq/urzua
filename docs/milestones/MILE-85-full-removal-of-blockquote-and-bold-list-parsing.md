@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M1ZK010SZ6Q9A8W8RKSR1J7V
 Status: Planned
-Phase: '2'
+Phase: '0'
 Track: header-format
-Blocked-on: real adoption data on how much the deprecated shapes are still in use elsewhere
+Blocked-on: a header rewriter, run as a one-off script in the adopter's switchover (MILE-102), like the filename rename
 ---
 # 85 — Full removal of blockquote and bold-list parsing
 
@@ -30,9 +30,25 @@ state, so this milestone can't move to `Done` on this repo's evidence alone -- i
 data ADR-33 itself names as the actual gate, which did not exist when this milestone was filed (see
 the 2026-11-02 revision-log row).
 
+## Decision (2026-11-04)
+
+The maintainer decided on full cleanup at switchover. The `bold-list` and `blockquote` header shapes
+are dropped, and the switchover (`MILE-102`) rewrites the adopter's headers to the canonical
+`yaml-frontmatter` shape rather than urzua parsing the deprecated shapes through adoption. This
+supersedes the earlier reading in this record that parsing support must stay for an un-migrated
+external corpus: the one real corpus in view is converted once, in the switchover.
+
+The dependency is a header rewriter. It is a one-off script written and run inside the switchover,
+the same way the filename rename is, not a shipped command; `MILE-23` and `MILE-65` (a reusable
+header-shape migration) are not on the Phase 0 path. Removal of the parser branches follows the
+rewrite: the adopter corpus must read as `yaml-frontmatter` and pass `check` before the
+`Blockquote`/`BoldList` branches, `HeaderLayout` and `header.layout-consistency` are deleted. The
+phase moves from 2 back to Phase 0, since the switchover is the Phase 0 exit.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial milestone. **Why:** ADR-33 named full removal as an explicit non-decision, deferred until real adoption data exists, but never tracked it as an actual milestone -- filed here alongside MILE-3's completion. | **structural** |
 > | 2026-11-02 | Noted that this milestone's precondition, "once `yaml-frontmatter` is the only shape any real corpus still needs", is now contradicted: a real adopter corpus of several hundred records uses bold-list headers and bare zero-padded numeric filenames, so the precondition is not met; whether to keep, defer, or close this milestone is a maintainer decision, and `Status` and `Phase` are unchanged. **Why:** the adoption data `ADR-33` named as the gate has arrived and points the other way. | **substantive** |
+> | 2026-11-04 | Recorded the maintainer decision of full cleanup at switchover: the bold-list and blockquote header shapes are dropped, and the switchover rewrites the adopter's headers to the canonical shape through a one-off header rewriter. Phase changed from 2 to 0 and `Blocked-on` now names that rewriter; `Status` unchanged. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the switchover is the Phase 0 exit, and it removes the precondition (an adopter still needing the deprecated shapes) that kept this deferred. | **substantive** |
