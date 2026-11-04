@@ -247,7 +247,7 @@ fn read_published_files(
     Ok(out)
 }
 
-pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
+pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<String>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
         Err(e) => return emit(&CouldNotRun::from(e)),
@@ -280,6 +280,16 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
             Ok(e) => e,
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
+        if !extra.is_empty() && base.is_some() {
+            // The diff lists tracked paths only, so a named file outside the
+            // tracked set could never be examined: refusing is the alternative
+            // to dropping it in silence (`BUG-24`'s failure shape).
+            return emit(&CouldNotRun::from(
+                "--base cannot be combined with a named file git does not track; \
+                 drop --base or track the file"
+                    .to_string(),
+            ));
+        }
         if !extra.is_empty() {
             discovered.paths.extend(extra);
             discovered.paths.sort();
@@ -288,7 +298,20 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         }
     }
 
-    let scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
+    // Computed against the full tracked set, then used only to narrow what is
+    // reported on: the corpus a pointer resolves against stays whole (`MILE-123`).
+    let changed = match &base {
+        Some(base) => match urzua_io::changed_paths_since(&repo_root, base) {
+            Ok(c) => {
+                discovered.source = urzua_io::DiscoverySource::GitDiff;
+                Some(c)
+            }
+            Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+        },
+        None => None,
+    };
+
+    let mut scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
 
     // A path argument narrows what is *reported on*. It must not narrow the
     // corpus a pointer resolves against: a target outside the requested path
@@ -303,6 +326,34 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+
+    // A diff run examines the changed records and every record a change
+    // reaches, not the changed files alone (`MILE-123`): the corpus above is
+    // whole, so a dependent can be found and judged.
+    let mut diff_scope = None;
+    // How many records the diff reached before a path argument narrowed it.
+    let mut reached_before_narrowing = 0usize;
+    if let Some(changes) = &changed {
+        let examination = match crate::diff_scope::examine(
+            &repo_root,
+            &config,
+            &config_path,
+            &records,
+            changes,
+        ) {
+            Ok(e) => e,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+        reached_before_narrowing = examination.examined.len();
+        scoped.retain(|p| examination.examined.contains(p));
+        let mut scope = examination.scope;
+        let kept: std::collections::HashSet<&std::path::Path> =
+            scoped.iter().map(|p| p.as_path()).collect();
+        scope
+            .dependents
+            .retain(|d| kept.contains(std::path::Path::new(d)));
+        diff_scope = Some(scope);
+    }
     let in_scope: std::collections::HashSet<&std::path::Path> =
         scoped.iter().map(|p| p.as_path()).collect();
 
@@ -635,6 +686,18 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         });
     }
 
+    // A diff run reports only on what changed. The same exemptions as a path
+    // scope apply: a finding about the config, or from a rule that reports
+    // outside the corpus, is about the run rather than a record, and dropping
+    // it would be `BUG-86`'s failure again.
+    if diff_scope.is_some() {
+        findings.retain(|f| {
+            f.file == config_path.as_path()
+                || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
+                || in_scope.contains(f.file.as_path())
+        });
+    }
+
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
     let waivers = urzua_core::waiver::load_waivers(&records);
@@ -655,8 +718,41 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
     // -- a run that established nothing and found a blocking error at once. A
     // blocking finding is something established, so it settles the question
     // before the record count is consulted.
+    // A diff in which no governed record changed, and nothing reaches one, is
+    // a run that was asked about nothing and found nothing: `ok`, not
+    // `not-run` (a run that could not look). The notice and the empty
+    // `changed_paths` keep it distinguishable from a whole-corpus pass.
+    let empty_diff = diff_scope
+        .as_ref()
+        .is_some_and(|d| examined.is_empty() && d.whole_corpus_reason.is_none());
+    if empty_diff && reached_before_narrowing > 0 {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: "scope".to_string(),
+            message: format!(
+                "the path argument excluded all {reached_before_narrowing} record(s) the change since {} reached (changed or dependent); nothing was examined",
+                base.as_deref().unwrap_or_default(),
+            ),
+        });
+    } else if empty_diff {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: "scope".to_string(),
+            message: format!(
+                "no governed record changed since {} ({} changed path(s), none a record or the configuration); nothing was examined",
+                base.as_deref().unwrap_or_default(),
+                diff_scope.as_ref().map_or(0, |d| d.changed_paths.len()),
+            ),
+        });
+    }
     let status = if blocking {
         ReportStatus::FindingsPresent
+    } else if empty_diff {
+        if active_findings().count() == 0 {
+            ReportStatus::Ok
+        } else {
+            ReportStatus::FindingsPresent
+        }
     } else if examined.is_empty() || !crate::gate::any_rule_looked(&rules_executed) {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
@@ -680,7 +776,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>) -> ExitCode {
         rules_executed,
         scope: ScopeInfo {
             source: crate::discovery::scope_source(discovered.source),
+            base: base.clone(),
             record_types: config.record_types.keys().cloned().collect(),
+            diff: diff_scope,
         },
         blocking,
         findings,

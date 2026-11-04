@@ -19,6 +19,7 @@ use clap::{Parser, Subcommand};
 use urzua_core::report::{CouldNotRun, Report};
 
 mod commands;
+mod diff_scope;
 mod discovery;
 mod gate;
 
@@ -77,7 +78,16 @@ enum Command {
     /// must be distinguishable from a check that ran on nothing. Stdout is
     /// always the JSON report (ADR-0023) -- an agent piping it never has to
     /// know to ask.
-    Check { paths: Vec<PathBuf> },
+    ///
+    /// `--base <ref>` reports on only the records changed since the merge base of `<ref>` and
+    /// HEAD (staged and unstaged edits included), and says so in `scope.source` and `scope.base`.
+    /// References still resolve against the whole tracked corpus.
+    Check {
+        /// Report only on records changed against this ref.
+        #[arg(long)]
+        base: Option<String>,
+        paths: Vec<PathBuf>,
+    },
 
     /// Which records govern `path` -- every record whose `Realized-by`
     /// names it as evidence (ADR-0024).
@@ -215,7 +225,7 @@ fn main() -> ExitCode {
     };
 
     match cli.command {
-        Command::Check { paths } => commands::check::run(cli.config, paths),
+        Command::Check { base, paths } => commands::check::run(cli.config, paths, base),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
         Command::New {
