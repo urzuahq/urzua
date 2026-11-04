@@ -14,9 +14,10 @@ Blocked-on: —
 irregularity each fixture was built to exhibit, and one case file per acceptance case pairing a
 corpus, a config, an invocation and an expected result.
 
-**None of it exists.** Nothing reads `manifest.yaml`; the workspace has three test files
-(`check_integration.rs`, `new_integration.rs`, `purity.rs`), none of them an acceptance suite. This is
-why `SPEC-4` stayed `Draft` when `SPEC-1`, `2` and `3` were accepted (`BUG-26`).
+**Part of it now exists** (see the structural revision row of 2026-11-04): `tests/acceptance.rs` is a
+custom runner that reads case files and `manifest.yaml`, and four corpora and six cases are checked in.
+What remains for this milestone is the other half of the criterion: every documented bug reproduces in
+the suite. The harness itself moved to `MILE-170` (Phase 0).
 
 ## Why it is Phase 0
 
@@ -54,3 +55,5 @@ so the format has never met a real case. Expect the spec to change on contact --
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s second success criterion depends on an acceptance suite that does not exist, and no milestone tracked building it. The case for it is no longer the spec's: a review of one unreleased diff found eight defects, none covered by a test, and every one was corpus-shaped. | **substantive** |
 > | 2026-11-04 | `Phase` 0 -> 1; `Status` unchanged. **Why:** Maintainer decision, 2026-11-04: the full acceptance suite is a Phase 1 exit criterion, not part of the Phase 0 exit; `SPEC-1` already lists it under Phase 1. | **substantive** |
+> | 2026-11-04 | Split: the acceptance harness (the runner, the `manifest.yaml` reader, the case format and `known_gap` markers, the private-corpus hook) is filed as `MILE-170` at Phase 0. This milestone stays at Phase 1 and now means "every documented bug reproduces in the suite against corpora", which is `SPEC-1`'s Phase 1 criterion. `Status` and `Phase` unchanged. **Why:** the refactors in the foundation set (`MILE-171` to `MILE-176`) need the harness as a safety net during Phase 0, while the bug-reproduction coverage is Phase 1 work. | **substantive** |
+> | 2026-11-04 | Corrected the stale sentence "None of it exists" in What, which stopped being true when the first runner landed (`SPEC-4` 0.4, 2026-11-02): `urzua-cli/tests/acceptance.rs` and `tests/acceptance/corpora/{corpus-a,corpus-b,corpus-c,corpus-zero}` exist. The earlier rows are left as written. **Why:** a milestone that says nothing exists misleads the reader into rebuilding the runner; the record of what was believed at filing is kept in the log. | **structural** |
