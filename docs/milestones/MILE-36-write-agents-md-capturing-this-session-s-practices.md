@@ -26,4 +26,4 @@ something worth writing rather than letting it keep living nowhere.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial record: already complete at creation time. | **structural** |
-> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-177`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

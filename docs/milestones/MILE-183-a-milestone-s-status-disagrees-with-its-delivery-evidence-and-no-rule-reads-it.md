@@ -7,7 +7,7 @@ Implements: SPEC-1
 Blocked-on: —
 Realized-by: code:rust/crates/urzua-core/src/rules/status.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-core/src/status_model.rs, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs
 ---
-# 177 — A milestone's Status disagrees with its delivery evidence and no rule reads it
+# 183 — A milestone's Status disagrees with its delivery evidence and no rule reads it
 
 ## What
 

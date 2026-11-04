@@ -124,7 +124,7 @@ pub fn detect_repairs(
     let delivery_types = crate::rules::statuses_by_type(config);
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         let embodiment = embodiment_outcome(record, &mut repairs);
-        // `Status` against delivery evidence (`MILE-177`): the one case with a
+        // `Status` against delivery evidence (`MILE-183`): the one case with a
         // single correct value is repaired; the reverse is `unevidenced_successes`.
         let status = match delivery_types.get(&record.record_type) {
             Some(decl) if decl.delivery.is_some() => {
@@ -171,7 +171,7 @@ pub fn detect_repairs(
     (population, repairs)
 }
 
-/// Records whose success `Status` has no delivery evidence (`MILE-177`). `fix`
+/// Records whose success `Status` has no delivery evidence (`MILE-183`). `fix`
 /// does not downgrade them -- the repair is adding evidence, which only a person
 /// or the delivering change can supply -- so they are reported, never written.
 pub fn unevidenced_successes(
@@ -612,8 +612,15 @@ mod tests {
             tier: 1,
             evidence: "Realized-by computes to Implemented".to_string(),
         };
-        let result =
-            apply_repair(content, &repair, "2026-11-04", "beau", &Default::default()).unwrap();
+        let result = apply_repair(
+            content,
+            &repair,
+            "2026-11-04",
+            "beau",
+            &Default::default(),
+            true,
+        )
+        .unwrap();
         assert!(result.contains("\nStatus: Done\n"), "{result}");
         assert!(
             result.contains("# Planned work whose Status is open"),

@@ -107,7 +107,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     // its only consumer is `embodiment.consistency`; with that rule off `fix`
     // has no embodiment verdict to repair, so say so instead of computing a
     // verdict from an empty drift set (`MILE-159`, as `check` gates it). The
-    // `Status` repair (`MILE-177`) is the other thing `fix` writes, and needs
+    // `Status` repair (`MILE-183`) is the other thing `fix` writes, and needs
     // no drift, so `status.delivery-agreement` being on is enough to proceed.
     let enabled = |rule: &str| {
         config

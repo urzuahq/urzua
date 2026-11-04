@@ -28,5 +28,5 @@ of what was actually broken in `doctor`.
 > **Revision log**
 >
 > | Date | Change | Class |
-> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: every command prints through the one `emit` function in `main.rs`; no inline `to_string_pretty` copy remains in a command. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-177`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: every command prints through the one `emit` function in `main.rs`; no inline `to_string_pretty` copy remains in a command. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > |---|---|---|

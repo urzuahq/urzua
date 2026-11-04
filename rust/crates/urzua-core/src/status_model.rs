@@ -55,12 +55,12 @@ pub struct StatusDecl {
     pub require: Vec<StatusFieldRule>,
     #[serde(default)]
     pub forbid: Vec<StatusFieldRule>,
-    /// How the type's `Status` is held to its delivery evidence (`MILE-177`).
+    /// How the type's `Status` is held to its delivery evidence (`MILE-183`).
     #[serde(default)]
     pub delivery: Option<DeliveryDecl>,
 }
 
-/// `statuses.delivery` (`MILE-177`): which computed evidence tiers mean the work
+/// `statuses.delivery` (`MILE-183`): which computed evidence tiers mean the work
 /// was delivered, which statuses mean it was not, and what a delivered record's
 /// `Status` is repaired to. All of it is the type's declaration; the engine
 /// knows no status or tier by name beyond the tiers `Embodiment` can compute.

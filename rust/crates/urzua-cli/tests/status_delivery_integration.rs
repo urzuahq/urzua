@@ -1,5 +1,5 @@
 //! `status.delivery-agreement` and the `Status` repair in `urzua fix`
-//! (`MILE-177`) against the real binary: a record whose delivery evidence says
+//! (`MILE-183`) against the real binary: a record whose delivery evidence says
 //! it is built while its `Status` says it is not, and a success `Status` with no
 //! evidence, are both reported; `fix` writes only the first.
 

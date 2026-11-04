@@ -266,7 +266,7 @@ Two details carry weight:
   or repeated, or an entry with any other key (`{pattern, flags}`) is a load-time error naming the
   type and `statuses`.
 
-  `statuses.delivery` (optional, `MILE-177`) holds a type's `Status` to its delivery evidence:
+  `statuses.delivery` (optional, `MILE-183`) holds a type's `Status` to its delivery evidence:
 
   ```yaml
   record_types:
@@ -894,4 +894,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.45`. `field.pending` takes the optional `pending_until_required` option, off unless declared `true`: a pending value in a field the type's `statuses.require` ties to certain statuses is not reported before the record reaches one of them, and the skipped slot stays eligible and unexamined. **Why:** `MILE-169` -- a placeholder `Regression-test` is legitimate on an `Open` bug and a gap on a `Fixed` one; `status.required-field-missing` already judges the latter. | **substantive** |
 > | 2026-11-04 | Bumped to `0.46`. Documented the opt-in `citation.issue-exists` rule and its structured `issue_refs` option (`snapshot`, `repository`, `forms: [number, url]`); `reference_sections` and `skip_revision_log` are also accepted by it. **Why:** `MILE-143` -- the issue and pull request half; `SPEC-1` documents the `urzua refs refresh` command that writes the snapshot. | **substantive** |
 > | 2026-11-04 | Bumped to `0.47`. A type's `revision_log` takes `required: true|false` (default `true`), which `urzua fix --apply` reads; it may stand alone. **Why:** `MILE-159` -- records without a revision log section could never be written by `fix --apply`. | **substantive** |
-> | 2026-11-04 | Bumped to `0.48`. A type's `statuses` declaration gains an optional `delivery` mapping (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`), validated at load, and the opt-in rule `status.delivery-agreement` reads it. This repository declares it on `milestone`, which now knows `Realized-by`, and its `implementable` list gains `Done`. **Why:** `MILE-177` -- no rule compared a stated `Status` with delivery evidence, so about thirty built milestones read `Planned`; the mapping is the type's declaration, not engine policy. | **substantive** |
+> | 2026-11-04 | Bumped to `0.48`. A type's `statuses` declaration gains an optional `delivery` mapping (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`), validated at load, and the opt-in rule `status.delivery-agreement` reads it. This repository declares it on `milestone`, which now knows `Realized-by`, and its `implementable` list gains `Done`. **Why:** `MILE-183` -- no rule compared a stated `Status` with delivery evidence, so about thirty built milestones read `Planned`; the mapping is the type's declaration, not engine policy. | **substantive** |

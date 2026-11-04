@@ -102,7 +102,7 @@ fn run_status_rule(
 }
 
 /// How one record's `Status` stands against its delivery evidence
-/// (`MILE-177`), shared by `status.delivery-agreement` and `urzua fix`.
+/// (`MILE-183`), shared by `status.delivery-agreement` and `urzua fix`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeliveryJudgement {
     pub status_field: String,
@@ -183,7 +183,7 @@ pub fn judge_delivery(
     })
 }
 
-/// A record's `Status` against its delivery evidence, both ways (`MILE-177`):
+/// A record's `Status` against its delivery evidence, both ways (`MILE-183`):
 /// the evidence computes to a declared delivered tier while the status is
 /// declared not done, and a success status whose evidence computes to a
 /// declared unevidenced tier. The mapping is the type's `statuses.delivery`;
