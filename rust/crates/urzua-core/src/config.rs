@@ -113,15 +113,21 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
+    /// (`MILE-137`). Only meaningful to `date.field-valid`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_fields: Option<Vec<String>>,
     /// Severity per field, within one rule (`MILE-140`): a field named here
     /// reports at its own level (`warn` or `error`), every other field at the
     /// rule's `level`. Only meaningful to the rules that report per field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field_levels: Option<BTreeMap<String, RuleLevel>>,
-    /// Statuses at which implementation is permitted for a record whose type
-    /// declares no `statuses.implementable` (`MILE-133`). Only meaningful to
-    /// `embodiment.back-pointer-decision-accepted`; optional, because a type
-    /// that declares its implementable statuses needs no fallback.
+    /// Statuses that count as accepted for a record whose type declares no
+    /// `statuses.success`, or, for the back-pointer gate, no
+    /// `statuses.implementable` (`MILE-133`). Only meaningful to
+    /// `embodiment.back-pointer-decision-accepted` and
+    /// `embodiment.requires-accepted-status`; optional, because a type that declares its
+    /// success statuses needs no fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
 }
@@ -228,6 +234,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             claim_max_age_days: Option<u32>,
             #[serde(default)]
+            date_fields: Option<Vec<String>>,
+            #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
         }
@@ -267,6 +275,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: table.back_pointer_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
+                date_fields: table.date_fields,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
             })
@@ -288,6 +297,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
+                date_fields: None,
                 field_levels: None,
                 accepted_statuses: None,
             })
@@ -769,9 +779,18 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "date_fields",
+        owners: &[crate::rules::RULE_DATE_FIELD_VALID],
+        consequence_if_missing: "names no date field and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "accepted_statuses",
-        owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED],
-        consequence_if_missing: "leaves a type with no declared implementable statuses unjudged",
+        owners: &[
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+            crate::rules::RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
+        ],
+        consequence_if_missing: "leaves a type with no declared success statuses (implementable statuses for the back-pointer gate) unjudged",
         optional: true,
     },
     RuleOption {
@@ -801,12 +820,13 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "closed_statuses" => setting.closed_statuses.as_ref(),
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
+        "date_fields" => setting.date_fields.as_ref(),
+        "accepted_statuses" => setting.accepted_statuses.as_ref(),
         "published_paths" => setting.published_paths.as_ref(),
         "source_paths" => setting.source_paths.as_ref(),
         "application_paths" => setting.application_paths.as_ref(),
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
-        "accepted_statuses" => setting.accepted_statuses.as_ref(),
         _ => None,
     }
 }

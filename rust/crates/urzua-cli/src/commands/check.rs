@@ -581,6 +581,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         }),
         crate::gate::gated(
             &config,
+            rules::RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
+            || rules::embodiment_requires_accepted_status(&records, &config),
+        ),
+        crate::gate::gated(
+            &config,
             rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
             || {
                 let (files, paths): (&[_], &[String]) = match &back_pointer_sources {
@@ -741,6 +746,9 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         }),
         crate::gate::gated(&config, rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT, || {
             rules::status_forbidden_field_present(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_DATE_FIELD_VALID, || {
+            rules::date_field_valid(&records, &config)
         }),
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
