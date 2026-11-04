@@ -4,6 +4,7 @@ Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:.github/workflows/checks.yml, code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-16
+Accepted-on: 2026-09-16
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -107,6 +108,7 @@ than merely tedious.
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** shipping `v0.2.1` showed `verify-ci` could only ever report whether a human clicked approve, and that it checked a commit other than the one being tagged. Both were invisible until the flow ran end to end without a defect consuming the run. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/workflows/checks.yml, code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 43982d054. | **structural** |
 
 ## Amendment (2026-09-16): two Consequences corrected by the first real release
 

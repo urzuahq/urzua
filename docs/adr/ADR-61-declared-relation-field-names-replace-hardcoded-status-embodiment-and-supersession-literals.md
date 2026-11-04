@@ -2,6 +2,7 @@
 Stable-Id: 01M35PMJ7Z615RVYZ6TD9GSJ3D
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-09-23
 Author: beauwilliams
 Deciders: beauwilliams
 Derives-from: RFC-42
@@ -76,3 +77,4 @@ is superseded by `RFC-42`'s general mechanism.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Decided. **Why:** `RFC-42` named three open questions blocking implementation; resolved all three in favor of the broadest consistent scope (all four literals, one config surface, with its own validation rule) rather than a narrower patch that would leave the same gap one field later. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit b455c5226. | **structural** |

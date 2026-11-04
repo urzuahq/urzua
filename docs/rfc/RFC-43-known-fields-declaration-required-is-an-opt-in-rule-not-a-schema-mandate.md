@@ -2,6 +2,7 @@
 Stable-Id: 01M363DVQVHNSP0H8YVKQ1HJ6H
 Status: Accepted
 Date: 2026-09-23
+Accepted-on: 2026-09-23
 Author: beauwilliams
 ---
 # 43 — known fields declaration required is an opt-in rule not a schema mandate
@@ -84,3 +85,4 @@ This is additive only:
 > |---|---|---|
 > | 2026-09-23 | Filed as `Draft`. **Why:** a round-20 code review's refuted finding (an undeclared-field case-mismatch going unchecked) raised a real question underneath the refutation — the user asked for an opt-in way to require the declaration, not a mandate, matching `config.pointer-declaration-missing`'s existing pattern. | **substantive** |
 > | 2026-09-23 | Accepted via `ADR-62`: inline fix-suggesting message, and this repository enables the rule on its own config in the same change. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 50cd47dea. | **structural** |

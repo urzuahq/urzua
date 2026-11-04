@@ -2,6 +2,7 @@
 Stable-Id: 01M33QRYRW15K91N5S6HXF41C0
 Status: Accepted
 Date: 2026-09-22
+Accepted-on: 2026-09-22
 Author: beauwilliams
 ---
 # 40 — a declared field lookup that misses needs one contract, not one guess per rule
@@ -157,3 +158,4 @@ before this lands.
 > |---|---|---|
 > | 2026-09-22 | Filed. **Why:** a `/code-review v0.3.0...main` pass found `claim_status_agreement` and the embodiment rule family answering "the declared field's exact-cased key is missing" in opposite, undeclared ways (`BUG-100`, `BUG-101`). Patching each call site separately would add a ninth answer to a question that already has two contradictory ones; this proposes the one the project is missing. | **substantive** |
 > | 2026-09-22 | `Status: Draft` → `Accepted`; decided by `ADR-58`. **Why:** the proposal's scope was small enough to decide and implement in one pass rather than leave open across a release. `ADR-58` rejected a fourth `FieldRead` state (a differently-cased miss carrying its own value) in favor of one dedicated rule, `header.field-case-mismatch`, diagnosing it -- narrower than this RFC's own open question, which left that choice unresolved. | **substantive** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 055f434c3. | **structural** |

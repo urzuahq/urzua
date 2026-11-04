@@ -4,6 +4,7 @@ Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/src/commands/init.rs
 Date: 2026-09-17
+Accepted-on: 2026-09-17
 Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
@@ -137,3 +138,4 @@ migration detectable rather than silent.
 > | 2026-09-17 | `Embodiment: Not started` → `Verified`, with `Realized-by` naming the code and the test. **Why:** the parser, `urzua init`'s renderer, the fourteen call sites and this repo's own config all moved to YAML, `toml` left both crates and the purity allowlist, and the thirteen specs this record named were updated in the same change -- so nothing here asserts what the code contradicts any more. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/src/commands/init.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c4cfcfa3e. | **structural** |
