@@ -1,5 +1,5 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -57,6 +57,18 @@ adds real enum enforcement.
 History is the existing revision-log model (RFC-6), reused unmodified: a milestone's `Status`
 transitions are recorded as dated, classified revision-log entries on the milestone record itself,
 not a separate mechanism.
+
+## Required sections
+
+Every milestone, open or closed, carries a `## Done means` section, declared under the type's `sections`
+in `.urzua/config.yaml` and enforced at `error` by `section.required` (`SPEC-3`). It states the concrete,
+checkable criteria that make the milestone done: the command, rule or file, and what it reports. An open
+milestone derives them from its What and Why; a `Done` milestone states the criteria its delivery met, so
+"done" is judged against them and not against the What, and a closure that does not meet its What is
+reopened rather than left `Done`. Where it fits, the criteria include that the capability is exercised in
+the repository's own configuration and records, not only by unit tests. A `WontDo` milestone is exempt
+(`exempt_statuses`): it will never be done, so it has no criteria to meet. The template
+(`.urzua/templates/milestone.md`) carries the section, and `/milestone` fills it.
 
 ## Phase vocabulary
 
@@ -122,3 +134,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-02 | Added the "Phase vocabulary" section defining `0` bootstrap, `1` worth installing, `2` agent-facing, `3` differentiated, `4` scale; bumped to `0.8`. **Why:** `Phase` was documented only as "a plain tag (`0`, `1`, ...)", so the same number meant different things across records and nothing said where adopter-blocking work belongs; `0` now has a stated meaning, which `MILE-35` and the first-adopter milestones rely on. | **substantive** |
 > | 2026-11-04 | Phase vocabulary: the `0` row now states the single Phase 0 exit (`SPEC-1`, Exit bar) instead of only "the first adopter replacement"; `Version` `0.8` -> `0.9`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. The type declares `Realized-by` (delivery evidence) and `statuses.delivery`; the delivering PR sets `Realized-by` and `Status: Done`. **Why:** `MILE-183`. | **substantive** |
+> | 2026-11-04 | Added the "Required sections" section and bumped to `0.11`: every milestone carries `## Done means`, declared under `sections` and enforced by `section.required`, with `WontDo` exempt. **Why:** maintainer decision of 2026-11-04: "done" was being judged from the What, and the closure audit found closures that over-claimed; stating the criteria on every record lets a closure be checked against them. | **substantive** |

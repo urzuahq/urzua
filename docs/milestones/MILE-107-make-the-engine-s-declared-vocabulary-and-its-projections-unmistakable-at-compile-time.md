@@ -67,6 +67,10 @@ the safe pattern is already the majority in `rules.rs`, so it is demonstrated ra
 normalizes where the old code did not or fails to where it did. Every current caller wants a test
 pinning present behaviour **before** the type is introduced.
 
+## Done means
+
+`FieldName` and `RecordId` exist as types whose `Eq` and `Hash` state the comparison rule once, the ten rule signatures that took a bare collection derived from configuration take `&Config`, and `StatusValue` was decided against in `ADR-59`, not deferred; `relation_field_literals.rs` fails when a rule restates a literal, and the full test suite, `make ci` and `check` over a real corpus pass.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -75,3 +79,4 @@ pinning present behaviour **before** the type is introduced.
 > | 2026-09-21 | Filed. **Why:** `RFC-39` was a `Draft` with no work item, and both halves of it caused a shipped defect during the `0.4.0` review on the day it was filed. Filed so the work is scheduled rather than left as a proposal, and so the evidence stays attached to it while it is fresh. | **substantive** |
 > | 2026-09-22 | `Status: Planned` → `Done`. **Why:** `ADR-59` decided the scope precisely (`FieldName` and `RecordId` built; the `&Config` convergence done for all ten signatures; `StatusValue` decided against, not deferred) and both were implemented and verified: full test suite, `make ci`, and a real-corpus `check` run reporting the same 70 findings before and after. `RecordTypeConfig`'s own fields stay `Vec<String>` -- narrower than this record's original "Values" section proposed, corrected in `ADR-59` before implementation once counting construction sites found over ninety of them, almost all test fixtures never implicated in a comparison bug. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

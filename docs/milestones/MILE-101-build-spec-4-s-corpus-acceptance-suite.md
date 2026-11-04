@@ -49,6 +49,10 @@ It specifies `manifest.toml` and `<case-id>.toml`, updated to `.yaml` under `ADR
 so the format has never met a real case. Expect the spec to change on contact -- and the change to be
 `SPEC-4`'s revision log, not a silent divergence.
 
+## Done means
+
+Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest.yaml` recording each irregularity it was built to exhibit, every irregularity the manifests list has a case file pairing the corpus, a config, an invocation and an expected result, and `tests/acceptance.rs` runs all of them in `cargo test --workspace`; a case whose expectation is removed fails the run, bug-reproduction coverage is complete for the bugs `SPEC-4` names, and the harness half (mutation proof, coverage report) delivered by `MILE-170` is not repeated here.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -59,3 +63,4 @@ so the format has never met a real case. Expect the spec to change on contact --
 > | 2026-11-04 | Corrected the stale sentence "None of it exists" in What, which stopped being true when the first runner landed (`SPEC-4` 0.4, 2026-11-02): `urzua-cli/tests/acceptance.rs` and `tests/acceptance/corpora/{corpus-a,corpus-b,corpus-c,corpus-zero}` exist. The earlier rows are left as written. **Why:** a milestone that says nothing exists misleads the reader into rebuilding the runner; the record of what was believed at filing is kept in the log. | **structural** |
 > | 2026-11-04 | `MILE-170` delivered the harness half (mutation proof, coverage report, property, "Nth record type" case, `corpus-d` to `corpus-f`); this milestone's bug-reproduction coverage is unchanged. `Status` and `Phase` unchanged. **Why:** keeps the split recorded on both sides. | **structural** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** the runner (`acceptance.rs`) and two corpora with manifests exist (merged in #146) and a property slice (`property.rs`, #97); the full suite `SPEC-4` specifies, every irregularity per manifest, is not. `Status` stays Planned. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

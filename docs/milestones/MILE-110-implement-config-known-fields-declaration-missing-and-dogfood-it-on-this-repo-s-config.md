@@ -32,9 +32,14 @@ same 70 findings before and after — this repository's six declared record type
 `known_fields` for every one of them, so enabling the rule here required no config fixes, only the
 one-line addition to `rules:`.
 
+## Done means
+
+The opt-in rule `config.known-fields-declaration-missing` reports a record type declaring no `known_fields` at all, mirroring `config.pointer-declaration-missing`'s shape and message, a fixture covers a declaring and a non-declaring type, and the rule is enabled at `error` in this repository's own `.urzua/config.yaml`, which passes it.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and implemented in one round. **Why:** `RFC-43`/`ADR-62` decided the design the same day the underlying question surfaced from a refuted code-review finding; scheduled and built together. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
