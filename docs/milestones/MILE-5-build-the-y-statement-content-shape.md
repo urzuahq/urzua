@@ -17,6 +17,10 @@ Extract a Decision section's TL;DR block and check it contains the five Y-statem
 
 The first real content shape, proving the section-parser design; validated against two independent real implementations that converged on the same extraction/matching approach.
 
+## Done means
+
+A required section can declare `shape: y-statement` with a marker, and the opt-in rule `section.shape` reports a section whose extracted block lacks any of the five phrases (word-boundary matched) and reports a marker with no block following it as a distinct finding; a fixture covers both failures and a passing block.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -27,3 +31,4 @@ The first real content shape, proving the section-parser design; validated again
 > | 2026-11-04 | Built as the opt-in rule `section.shape` with shape `y-statement` on a required section (`SPEC-3`). `Status` stays `Planned`. **Why:** the shape is a declared parameter of `sections.required`, per `ADR-53`. The five phrases are fixed, not declarable, because this milestone names them and nothing asks for others; they are matched on word boundaries, case-insensitively, over one block. An optional `marker` opens the block at the first line containing it (a declared marker the section lacks, and a marker with no block after it, are each their own finding); with no marker the section's first paragraph is the block. A list item or blank line ends the block. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: opt-in rule `section.shape` with shape `y-statement` checks the five phrases on word boundaries and reports a marker with no block. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | `Blocked-on` now reads `MILE-98`. **Why:** `narrative-field.stale` flagged a blocker that reached `Done`, and the delivery backfill of `MILE-183` set it; the remaining blocker is still open. `Status` unchanged. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

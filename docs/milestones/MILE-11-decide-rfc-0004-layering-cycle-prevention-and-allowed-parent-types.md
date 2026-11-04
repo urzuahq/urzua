@@ -16,7 +16,13 @@ Turn RFC-4's addendum (cycle prevention for Implements/Derives-from, an optional
 
 Surfaced by exercising the generic relationship mechanism with a fourth record type (milestone) -- cheap to decide now, expensive to retrofit once real corpora have cross-type links.
 
+## Done means
+
+An ADR records the decision on cycle prevention for `Implements` and `Derives-from` and on an optional per-profile allowed-parent-types constraint (adopted or rejected, with the reason), `RFC-4` points at it, and if adopted the rule or option is declared in `.urzua/config.yaml` and exercised against a planted cycle and a planted disallowed parent in urzua's own corpus tests.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

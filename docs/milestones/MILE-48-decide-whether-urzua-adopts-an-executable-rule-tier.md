@@ -15,7 +15,13 @@ Write an RFC deciding whether Urzua interoperates with an executable-rule tier (
 
 Embodiment (RFC-5) verifies after the fact; an executable rule prevents at commit, for the subset of decisions expressible as a code check. Undecided whether Urzua positions Embodiment as the fallback for decisions that can't be executable rules, competes on executable rules directly, or cedes that ground entirely -- currently no record answers this at all.
 
+## Done means
+
+An RFC decides whether urzua interoperates with an executable-rule tier as a complement to Embodiment or declines to build one, and names which of the three positions (fallback for what cannot be executable, direct competition, or ceding the ground) it takes with the reasoning; it is filed under `docs/rfc/` and passes `urzua check`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

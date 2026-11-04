@@ -28,6 +28,10 @@ an unattended action on every merge to main") -- opening a PR is not itself cutt
 one requires a maintainer to remember `workflow_dispatch` exists and go trigger it by hand. A PR
 that opens itself is a standing, visible reminder instead of a step nobody's watching for.
 
+## Done means
+
+`prepare-release.yml` triggers on push to `main` and, when unreleased changesets exist, opens or updates a release pull request carrying the staged version bump and compiled `CHANGELOG.md`, so a maintainer reviews and merges a normal PR; it has no trigger that pushes a release straight to `main` (`ADR-45` replaced the `workflow_dispatch` path this milestone first planned to keep).
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -37,3 +41,4 @@ that opens itself is a standing, visible reminder instead of a step nobody's wat
 > | 2026-11-02 | Labelled the body as the original `ADR-29`-era plan. **Why:** review found the body still described a release flow `ADR-45` replaced. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Superseded in part by `ADR-45`; `Status` stays Done. **Why:** the closure audit of #234 found that the instruction to keep `workflow_dispatch` working no longer holds: `prepare-release.yml` has only a `push` trigger on `main`, the release PR being the mechanism `ADR-45` decided. What this milestone delivered, the release PR opened or updated automatically on push to `main`, is unchanged. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

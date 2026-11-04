@@ -15,7 +15,13 @@ Write an RFC deciding Urzua's MCP position: whether to ship an MCP server at all
 
 MILE-29 already names "a read-only MCP server" as a build target, but no RFC or ADR backs that stance -- unlike every other build-track milestone, its own `Implements` field is empty. The position (why read-only, why this specific data) needs deciding before the build, not assumed by the milestone's own title.
 
+## Done means
+
+An RFC states urzua's MCP position: whether to ship an MCP server, why read-only if so, and which data it exposes (rejected and superseded decisions); it is filed under `docs/rfc/`, passes `urzua check`, and `MILE-29` cites it in `Implements` so the build milestone no longer rests on an unrecorded stance.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

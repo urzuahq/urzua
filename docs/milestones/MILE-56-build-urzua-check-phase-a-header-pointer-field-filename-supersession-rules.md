@@ -17,6 +17,10 @@ The initial `check` rule set: `header.required-fields`, `pointer.resolution`, `f
 
 SPEC-2's own Phase A: a validator whose first run is green has told you nothing about itself, so both seed rules were chosen because they fire on this corpus's real, pre-existing defects.
 
+## Done means
+
+`urzua check` runs the Phase A rule set (`header.required-fields`, `pointer.resolution`, `field.quality`, `filename.title-consistency`, `relation.supersession-reciprocity`) over a corpus, each rule firing on a planted defect in `check_integration.rs`, and over this repository's own records they run and examine them; `Implements` points at the current `ADR-23`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -24,3 +28,4 @@ SPEC-2's own Phase A: a validator whose first run is green has told you nothing 
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
 > | 2026-11-04 | `Implements: ADR-7` changed to `ADR-23` (`ADR-23` superseded `ADR-7`). **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

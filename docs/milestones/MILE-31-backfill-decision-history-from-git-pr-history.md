@@ -16,7 +16,13 @@ Reconstruct decision history from commits/PRs with confidence scoring and a draf
 
 Named in research as the single biggest adoption unlock, and explicitly out of scope for RFC-1 as written.
 
+## Done means
+
+A backfill command reconstructs decision records from git and pull request history, scores each with a confidence, writes them as drafts that stay in a draft status until a human confirms, and a second run is a no-op; a fixture history yields the expected drafts with their confidence and none with a decided status.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

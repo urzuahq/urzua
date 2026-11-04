@@ -29,6 +29,10 @@ type-prefix + no-padding rename, and the `mile` prefix change.
 tool currently does. This is a maintainer-triggered act (ADR-29) -- tracked here rather than run
 unilaterally.
 
+## Done means
+
+A release past `v0.1.0` was cut that consumed the pending `.changeset/*.md` fragments, bumped `rust/Cargo.toml`'s version and compiled `CHANGELOG.md` entries for the work shipped since (`CHANGELOG.md` carries `0.2.0`, `0.2.1` and `0.3.0`), through the release mechanism `ADR-45` decided (`prepare-release.yml` then `publish-release.yml`), not the `workflow_dispatch` path first planned.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -38,3 +42,4 @@ unilaterally.
 > | 2026-09-07 | Dropped the hardcoded "13" from the title (now "the pending changesets"); noted the count is 14 as of this date in the body instead. **Why:** found live during backlog triage -- the count had already drifted from 13 to 14 with nothing catching it, and hardcoding a transient number into a permanent title guarantees it drifts again. | **structural** |
 > | 2026-11-02 | Labelled the body as the original `ADR-29`-era plan. **Why:** review found the body still described a release flow `ADR-45` replaced. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

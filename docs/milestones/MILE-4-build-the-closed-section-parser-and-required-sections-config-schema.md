@@ -93,6 +93,10 @@ nothing to notice.
 That is the case for this milestone stated as a number rather than an intuition: a type's template
 declares what its records look like, and the corpus has been diverging from it a record at a time.
 
+## Done means
+
+A type declares required sections under `sections.required` and the opt-in rule `section.required` reports a record that lacks one, counting one slot per record and required section; a type without the declaration has nothing eligible; a fixture plants a missing section and observes the finding, and the capability is exercised by urzua's own `.urzua/config.yaml` (ADRs require `Context`, bugs their defect section).
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -104,3 +108,4 @@ declares what its records look like, and the corpus has been diverging from it a
 > | 2026-11-02 | Unblocked: `RFC-33` was Accepted; maintainer decision 2026-11-02. `Blocked-on` now reads `MILE-98`; `Status` stays `Planned`. **Why:** `narrative-field.stale` flagged the reference once `RFC-33` reached a terminal status, and the maintainer decided the dependency no longer holds. `MILE-98` is still open and stays named. | **substantive** |
 > | 2026-11-04 | Built as the opt-in rule `section.required`, reading `required` under a type's declared `sections` (`SPEC-3`). `Status` stays `Planned`. **Why:** `MILE-98` merged the declared `sections` model and `section::parse_sections` and nothing read them. Matching is by exact `##` heading text, the population is one slot per `(record, required section)` so a missing section is counted rather than dropped, and a type that declares no `required` has nothing eligible. Run read-only against this repository's `adr` records with three sections required, 31 required sections were missing across 65 records. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #90: opt-in rule `section.required` reads the declared `sections.required`; the population counts one slot per record and required section. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
