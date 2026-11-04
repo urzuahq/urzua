@@ -281,9 +281,7 @@ fn uncovered_paths(
             waived: None,
             declared_severity: None,
             suggested_action: None,
-            action_source: ActionSource::new(variant)
-                .key_path(["rules", rule, option])
-                .text(entry.as_str()),
+            action_source: ActionSource::new(variant).key_path(["rules", rule, option]),
         })
         .collect()
 }

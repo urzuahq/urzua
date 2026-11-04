@@ -1,0 +1,11 @@
+id: an-allowed-edge-is-clean
+corpus: corpus-j
+commits:
+  - write:
+      records/ADR-0001-proposed.md: "---\nStatus: Accepted\n---\n# ADR-0001 \u2014 Moves forward\n\nEdited.\n"
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - status.transition-allowed
+expect_no_findings:
+  - {rule: status.transition-allowed}

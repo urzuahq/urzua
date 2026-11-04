@@ -1,0 +1,10 @@
+id: a-whole-repo-run-judges-no-transition
+corpus: corpus-j
+# There is no committed side without --base, so the rule reports not-applicable
+# rather than a pass it cannot have earned.
+invocation: [check]
+expect_exit: 0
+expect_stdout_contains:
+  - '"status": "not-applicable"'
+proves:
+  - status.transition-allowed

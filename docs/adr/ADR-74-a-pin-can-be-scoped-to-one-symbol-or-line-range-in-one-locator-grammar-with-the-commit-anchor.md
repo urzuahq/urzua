@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6MA7HNPBGVZ1MFY3NJ6A3NG
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -27,7 +28,7 @@ Today's evidence, from the drift review of 2026-11-04 and the history since:
   code, which a pin scoped to the cited item would still have caught, because the items that changed were the
   ones those decisions are about.
 - The churn sits in a few volatile files. Counted on `main` since #180: `.urzua/config.yaml` 37 commits,
-  `rust/crates/urzua-core/src/config.rs` 35, `rust/crates/urzua-cli/tests/check_integration.rs` 14,
+  `rust/crates/urzua-core/src/config.rs` 35, `rust/crates/urzua-cli/tests/check_integration.rs` 15,
   `rules/embodiment.rs` 13, `main.rs` 8. `config.rs` is about 3,460 lines; a decision that cites it is
   about one rule's options or one struct, a few percent of the file. A file-level pin on a file that busy
   goes stale on the next unrelated commit, however often it is re-baselined (`urzua fix --rebaseline`,
@@ -51,7 +52,7 @@ Three constraints shape the answer:
 | Option | Pros | Cons |
 |---|---|---|
 | A. Keep file-level pins; make re-baselining cheaper | Nothing new to build or learn | The 11 needless re-pins recur on every volatile file; review fatigue stays |
-| B. A scope between path and pin: `path#<symbol>` or `path#L<a>-L<b>`, symbols found by resolvers declared in config (chosen) | Pin goes stale only when the cited item changes; no language list in the engine; one grammar that can also carry `MILE-84`'s commit anchor; file-level locators unchanged | Each resolver is config an adopter must write and keep right; a regex resolver is approximate; a line range moves when lines are added above it |
+| B. A scope between path and pin: `path#<symbol>` or `path#L<a>-L<b>`, symbols found by resolvers declared in config (chosen) | Pin goes stale only when the cited item changes; no language list in the engine; one grammar that can also carry `MILE-84`'s commit anchor; file-level locators unchanged | Each resolver is config an adopter must write and keep right; a regex resolver is approximate; a line range moves when lines are added above it; a pin hashes the span the resolver finds, so a resolver is part of the contract |
 | C. Markers inside the cited file (`// urzua:begin ADR-57` ... `// urzua:end`) | Exact span, survives edits above it | Edits the cited file for the record's sake; impossible in generated, vendored or comment-less files (`MILE-84` names these as the reason for locators); couples code to record ids |
 | D. Parse each language (tree-sitter or similar) and hash the syntax node | Precise; whitespace and comment changes do not matter | A hardcoded list of languages and grammars in the engine, against the founding claim; a heavy dependency and a per-language upgrade burden |
 | E. Pins as a separate header field (`ADR-67` option C) | Room for per-locator metadata | A schema change to `Realized-by`, which `ADR-18` kept flat; `ADR-67` already declined it |
@@ -62,112 +63,229 @@ In the context of file-level evidence pins that go stale on edits unrelated to t
 facing a corpus whose most-cited files are its most-edited ones, we decided that **a locator may carry a
 scope between its path and its pin, naming one symbol or one line range, and that scope is found by a
 resolver the repository declares in config**, to achieve pins that go stale only when the cited item
-changes, accepting that resolvers are approximate and must be kept right by the repository.
+changes, accepting that resolvers are approximate and that the grammar and the end kinds are a contract the
+corpus depends on.
 
-**1. One grammar.** A locator is
+**1. One grammar and one parse order.** A locator is
 
 ```
 locator := category ":" path [ "#" scope ] [ "@" anchor ]
-scope   := "L" line [ "-L" line ]  |  symbol
-anchor  := "sha256:" 64 lowercase hex  |  7 to 40 lowercase hex (a commit)
+scope   := range | symbol
+range   := "L" N [ "-L" M ]      N and M decimal, no leading zero, 1 <= N <= M
+symbol  := seg ( "::" ( seg | "<" seg ">" ) )*     seg := [A-Za-z_] [A-Za-z0-9_.-]*
+anchor  := "sha256:" 64 lowercase hex  |  7 to 64 lowercase hex (a commit)
 ```
 
-`category` is `spec`, `code` or `test` as today, and it alone decides the evidence tier, as today. A
-locator without `#` and `@` is unchanged, and so is `path@sha256:<hex>` (`ADR-67`). Examples:
-`code:rust/crates/urzua-core/src/config.rs#RuleSettings@sha256:<hex>`,
-`code:.github/workflows/ci.yml#L10-L40@sha256:<hex>`.
+`category` is `spec`, `code` or `test` as today and alone decides the evidence tier. A scope that
+begins with `L` followed by a digit is never a symbol: it is a range or it is malformed (`L10` is a range;
+`L10x`, `L0` and `L40-L10` are malformed), so the two never overlap. A symbol contains none of `/`, `@`,
+`#`, `,` or whitespace and does not start with a digit or `.`. Qualified names are in the grammar from the
+first build, so the irreversible part is decided once: `A::b` is member `b` of container `A`, and
+`A::<Trait>::b` is member `b` of the impl of `Trait` for `A` (point 5). A `<`...`>` segment holds one bare
+trait name, with no generics and no path. 64 hex is allowed
+for a commit because a repository using the SHA-256 object format has such commits; the `sha256:` prefix
+disambiguates.
+
+The parser takes, in order: (1) a trailing `@sha256:` plus exactly 64 lowercase hex, exactly as `ADR-67`
+does; (2) otherwise a trailing `@` plus 7 to 64 lowercase hex, which is the reserved commit anchor (point
+2); (3) in what remains, the text after the **last** `#`, as the scope only if it matches `scope`, and
+otherwise the whole text is the path. `L0`, `L010` and `L40-L10` do not match `range` and, beginning
+`L` and a digit, are malformed. A locator carrying both anchors is malformed. A path ending in
+`#word` that matches `symbol` therefore reads as a scope, and such a file cannot be cited even at file level;
+no escape syntax is given. The corpus has no `#` in any `Realized-by` value today, so nothing regresses, and a
+planted test covers it. A glob cannot carry a scope (`src/**#Foo` is malformed). A locator whose text
+contains `#` or `@sha256:` and fails this grammar is reported by `embodiment.locator-exists` as a malformed
+scope or pin naming the grammar, never as a path missing from the tree.
+
+Examples, each naming an item that exists in the current code:
+`code:rust/crates/urzua-core/src/config.rs#RuleSetting@sha256:<hex>` (a type),
+`code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::excludes@sha256:<hex>` (a method of a type
+with three inherent `impl` blocks, found in the first),
+`code:rust/crates/urzua-core/src/config.rs#RuleSetting::<Deserialize>::deserialize@sha256:<hex>` (a method
+of a trait impl) and `code:.github/workflows/ci.yml#L10-L40@sha256:<hex>`.
 
 **2. Where `MILE-84` fits.** The `sha256:` anchor is a content pin. The commit anchor (`@<commit>`) is
-reserved in the grammar for `MILE-84`: it reads the scope as of that commit, a pointer to a site that
-survives a refactor, not a content hash. `MILE-84`'s candidate `path@<short-sha>:<line>` is therefore
-written `path#L<line>@<short-sha>`. The two anchors are mutually exclusive on one locator. This ADR decides
-the slots and the order (path, scope, anchor); it builds only the content pin. `MILE-84` decides what a
-commit anchor verifies in its own ADR, and that ADR inherits this grammar rather than choosing another.
-The pin parser stays what `ADR-67` made it: only `@sha256:` plus exactly 64 lowercase hex is a pin, and
-any other text stays in the path, so a malformed pin is a locator that names nothing, reported by
-`embodiment.locator-exists`, never an unpinned one.
+reserved for `MILE-84`: it reads the scope as of that commit, a pointer to a site that survives a refactor,
+not a content hash. `MILE-84`'s candidate `path@<short-sha>:<line>` is therefore written
+`path#L<line>@<short-sha>`. This ADR binds the slot order (path, scope, anchor) and the anchor token shape
+(hex, 7 to 64), and nothing else; what a commit anchor verifies stays in `MILE-84`'s ADR. It builds only the
+content pin: in the first build a locator that parses with a commit anchor is reported by
+`embodiment.locator-exists` as "commit anchor not yet supported", never accepted as unpinned or ignored.
 
-**3. The hashed bytes.** The scope resolves to a contiguous run of whole lines. The pin is the sha256 of
-those lines exactly as stored, joined by `\n` (a CRLF file is hashed after line-ending normalisation, so
-the same text hashes the same on every platform). Nothing else is normalised: not whitespace, not
-comments. A reformat of the cited item is drift. That is the conservative choice: a pin may be re-set by
-hand but must never pass a change it should have reported.
+**3. The hashed bytes.** The scope resolves to a contiguous span of whole lines. The pinned bytes are the
+span's lines, each with at most one trailing `\r` removed, joined by `\n`, with no trailing newline, read as
+UTF-8 (a leading U+FEFF on line 1 is dropped). A file that is not valid UTF-8 cannot carry a scoped pin and
+is reported. Nothing else is normalised: not whitespace, not comments, so a reformat of the item is drift;
+the engine cannot know whether whitespace is semantic (Python, YAML, a Makefile). A file-level pin is
+unchanged and still hashes the raw bytes of the file, so the same text has a platform-stable scoped hash and
+a line-ending-dependent file-level hash, and a scoped pin over every line of a file is not equal to that
+file's file-level pin (changing the file-level hash would stale every existing pin). `SPEC-8` gives a shell
+recipe that reproduces a scoped hash from a given span. A later per-resolver normalisation would be opt-in
+and counts as a resolver edit (point 8).
 
-**4. A line range** `L<a>-L<b>` (inclusive, 1-based; `L<a>` alone is one line) needs no resolver and works
-on any text file. It is exact and also brittle: lines inserted above it shift the content out of the range
-and the pin goes stale. It is for files where a symbol cannot be named (a workflow, a config block) and
-the span is stable. It does not claim to fix the edits-above case; the commit anchor of `MILE-84` is where
-that is addressed.
+**4. A line range** needs no resolver and works on any text file. It is exact and brittle: lines inserted
+above it shift the content out of the range and the pin goes stale, and the finding says the text may have
+moved. It is for files where a symbol cannot be named (a workflow, a config block) and is shipped in the
+first build, because point 6's answer for a file type with no resolver depends on it. A symbol scope
+survives a move of the item within its file, and a file rename passes once the locator path is edited and
+the span is unchanged. For generated files a symbol survives reordering and a range does not; cite the
+generator's input where there is one.
 
 **5. A symbol is found by a declared resolver, not a parser.** The engine ships no language knowledge.
 Config declares resolvers as structured data (`ADR-64`), each naming the files it covers by glob, how a
-symbol's first line is recognised, and how its last line is found, the latter from a closed set the engine
-implements generically: `brace_balanced` (balanced `{}` from the first line), `indent` (until a line
-indented no deeper than the first), `heading` (until the next heading of equal or higher level), `blank_line`
-(until the next blank line). The start recogniser is a declared pattern in which the symbol is substituted
-and escaped, the same `pattern` form the config already uses for placeholder vocabularies. Exact key names
-are fixed in `SPEC-3` when this is built. A repository that wants Rust symbols declares a Rust resolver; a
-default set may be scaffolded by `urzua init` as ordinary config the repository then owns, never compiled
-into the engine. A resolver is approximate by nature (a pattern, not a grammar) and the ADR says so
-rather than hiding it: it finds the item a human meant in the repository's own code, and where it cannot,
-point 6 applies.
+symbol's first line is recognised, and how its last line is found from a closed set of **end kinds** the
+engine implements generically: `brace_balanced` (balanced `{}` from the first line), `indent` (until a line
+indented no deeper than the first), `heading` (until the next heading of equal or higher level),
+`blank_line` (until the next blank line), `semicolon` (the first line ending in `;` at the item's own depth; for members). The start recogniser is a declared pattern in which the symbol is
+substituted after regular-expression escaping (the symbol arrives from record text). Optional parts: a
+`leading` pattern extends the span upward over contiguous matching lines (attributes, doc comments), and
+without it leading lines are not pinned.
 
-**6. A scope that stops resolving is reported, never passed.** `embodiment.locator-exists` reports, with
-the locator and the reason, each of: the file is missing (as today); no resolver covers the file, so the
-scoped form is **unsupported for that file type** (a symbol scope only; a line range always works); the
-symbol matches nothing (renamed, moved or deleted); the symbol matches more than once (ambiguous: never
-first-match-wins); the range lies beyond the end of the file; a resolver is malformed (a load error at
-config validation). A locator reported this way is not also evaluated for drift, so one cause produces one
-finding. `urzua fix --rebaseline` re-pins a scoped pin exactly as it does a file-level one, but refuses to
-re-pin one that does not resolve and lists it as failed with the reason, because re-hashing "whatever is at
-the range now" would turn a deleted symbol into a silent pass. A rename is repaired by editing the scope,
-which is a visible diff in the record.
+*Members.* A method does not live inside its type's span: it lives in one or more `impl` blocks elsewhere
+in the file. So a qualified symbol is resolved in two steps over a **container**, which is declared
+separately from the plain `start`: `container` has its own start pattern (with the `{symbol}` placeholder),
+an end kind, and `spans: all`, declaring that the container may match several spans. For Rust the container
+pattern matches an inherent impl, `impl Name {` and `impl<T> Name<T> {` (the name must follow `impl`
+directly, so `impl Trait for Name` does not match), and `spans: all` makes every such block a candidate. A
+`member` pattern then finds the item inside a span. `A::b` resolves as: (1) the container spans of `A`, at
+least one or the reason is "container not found"; (2) the `member` pattern for `b` inside every one of
+those spans; (3) the matches counted **across all spans together**: none is "member not found", more than
+one is **ambiguous** and reported, exactly one is the resolved span, to which `leading` applies. A `member` declares its own start pattern and its own end kind, from the same closed set; a method is
+`brace_balanced`, and a `;`-terminated item (a constant, a trait-method declaration) uses an end kind
+`semicolon`, which ends at the first line that ends in `;` at the member's own depth. A member is matched
+only at the nesting depth directly inside the container's braces (or at the container's indent, for an
+`indent` container): the engine tracks depth, not the pattern, so a match deeper inside another member
+(a nested `fn`, a closure-local helper) is not a candidate. A member whose end its end kind cannot find is
+reported as "the end is not found". A type
+whose methods are split over several `impl` blocks is therefore addressable, and a method name repeated in
+two of them is reported, never first-match-wins. A container declared without `spans: all` must match
+exactly one span.
 
-**7. Unpinned scoped locators and the rest of the evidence model.** A scoped locator with no pin is
-existence-checked at its scope (point 6) and its drift falls back to the git-history heuristic of `ADR-32`
-at file level, as an unpinned locator does today; the scope sharpens only a pin. `embodiment.locator-promotion-
-candidate` keys on path and scope, so two decisions citing different symbols of one file are not a shared
-claim. Embodiment tiers, the grace window, `claim_max_age_days` and back-pointers are unchanged.
+*Namespace.* A container is matched by name across the whole file, not per module: the first build treats a
+file as one namespace, so two same-named types in different inline modules are merged into one candidate
+set, and a member of one can be reported ambiguous with the other. A resolver may anchor its container
+pattern at a given indent to exclude nested modules.
+
+*Trait impls.* A trait impl's members are addressed `A::<Trait>::b`. A resolver declares it with
+`trait_container`, a pattern with two placeholders, `{trait}` and `{symbol}`; for Rust it matches
+`impl<'de> Deserialize<'de> for RuleSetting {` for `RuleSetting::<Deserialize>`, ignoring generics on the
+trait name, and allows an optional leading path before the trait (`impl std::fmt::Display for X {` matches
+`X::<Display>`), which the Rust template and its test vectors cover. `A::<Trait>` with no member means the
+whole impl block: its span or spans, under the same uniqueness rule, so a trait impl can be pinned as a
+unit; `<Trait>` is never the first segment. It has the same `spans: all` and the same uniqueness across all matching spans, so several
+impls of one generic trait (`From<A>` and `From<B>` for one type) make a member ambiguous, which is
+reported and not worked around in the first build. A resolver without `trait_container` reports the
+`::<Trait>::` form as unsupported for that file type. A member of a member (`A::b::c`) is not supported: one
+container level only, reported as unsupported.
+
+Exact key names are fixed in `SPEC-3` when this is built. Validation is
+at config load (`ADR-64` clause 5): two resolvers whose globs cover one file, a start pattern without the
+symbol placeholder, or a malformed pattern is a load error, never first-wins. A default set may be
+scaffolded by `urzua init` as ordinary config the repository then owns, never compiled in, only for file
+types the corpus actually cites, each with test vectors (a planted ambiguous and a planted early-end case).
+
+**6. A scope that stops resolving is reported, never passed (while `embodiment.locator-exists` is
+enabled, as with a missing file today).** The rule reports, with the locator and the reason: the file is
+missing (as today); the file is not valid UTF-8; no resolver covers the file, so a symbol scope is
+unsupported for that file type (a line range always works); the symbol matches nothing (renamed, moved out
+of the file or deleted); the symbol matches more than once (ambiguous: never first-match-wins); for a qualified symbol, the container or the member is not found, or the member is ambiguous across the container's spans; the `::<Trait>::` form or a member of a member is unsupported for that resolver; the locator carries a commit anchor ("commit anchor not yet supported"); the end is
+not found (never balanced before end of file); the range lies beyond the end of the file. A locator reported
+this way is not also evaluated for drift, so one cause produces one finding. `urzua fix --rebaseline`
+re-pins a scoped pin as it does a file-level one but refuses one that does not resolve and lists it as a
+failed pin with its reason, per pin and not per record, because re-hashing "whatever is at the range now"
+would turn a deleted symbol into a silent pass. A rename is repaired by editing the scope, a visible diff
+in the record. The engine cannot detect an early end (a `}` inside a string ends a `brace_balanced` span
+early and the rest is unpinned), so point 7 puts the resolved span in front of the reviewer.
+
+**7. One authoring route, and the resolved span is always shown.** A person cannot reproduce a regex plus an
+end kind by hand, so the supported way to obtain a first hash is `urzua explain <path>#<scope>`: it prints
+the resolved first and last line, and the hash, ready to paste after
+`@sha256:`. `urzua fix --rebaseline` lists the resolved span beside the recorded and current hash, so the
+reviewer diffs exactly those lines and sees that the resolver found the item the decision is about. A
+bogus placeholder hash re-baselined later would record a re-verification of something never verified, and
+is not a supported route. `explain <path>` also reports the scope of each record that cites the path.
+
+**8. Drift for a scoped locator.** For a scoped pin, freshness is not judged from the cited file's last
+commit, because that commit says nothing about the scope: a scoped pin that no longer matches is drift
+immediately, unless the record declares an audit date (`drift_audit_field`), in which case the window
+counts from that date as for a file-level pin. (Using `git log -L` for the span's last commit is correct but
+ties drift to git's line tracking and costs a subprocess per pin; it is not taken in the first build.) A
+scope **without a pin** has no effect on drift, so `embodiment.locator-exists` reports it as "scope given
+without a pin: drift is judged on the whole file", at the rule's severity; the scope is still
+existence-checked, so an unpinned scoped locator is never a silent no-op. Comparing the scope's content at
+the commit that last touched the `Realized-by` line is real scope-level drift without a pin, but it is a
+second mechanism and belongs to `MILE-84`'s commit-anchor ADR. `embodiment.locator-promotion-candidate`
+keys on path and scope, so two decisions citing different symbols of one file are not a shared claim.
+Embodiment tiers, `claim_max_age_days` and back-pointers are unchanged.
+
+**9. Shape in the code (`SPEC-22`).** Resolution is one pure function over text,
+`resolve_scope(text, resolver, scope) -> Result<Span, ScopeError>`, in `urzua-core`; discovery reads each
+file once per run (memoised, as `BUG-135` did for git) and the existence, drift and re-baseline call
+sites share one outcome type in place of today's `bool` and `Option`. A locator is parsed once into
+`Locator { path, scope, anchor }`; every consumer other than drift, existence and re-baselining (`explain`,
+`check --base`, status, promotion) uses `.path`, so a record that cites `config.rs#RuleSetting` still
+answers for `config.rs`. The re-pin edit keeps the scope in the spelling as written.
+
+**10. Resolvers are part of the contract.** See Reversibility.
 
 ## Reversibility
 
 Hard to reverse once records use it: the grammar is written into record headers, many of them in Accepted,
-frozen ADRs, so changing it later means a migration of every scoped locator. That is why the slots (scope,
-then anchor) are decided now and the resolver config, which can change freely, is not. Everything else is
-additive: a repository that writes no scoped locator and declares no resolver sees no change, and a
-file-level pin keeps its `ADR-67` meaning. Walking the feature back means re-pinning each scoped locator
-at file level, which is the state the corpus is in today.
+frozen ADRs, so changing it later means a migration of every scoped locator. The grammar and the behaviour of
+each end kind are the contract. A resolver's patterns are config, but editing one changes the bytes under
+every pin that uses it, so a resolver edit is a corpus-wide re-baseline (an attributed row on each record)
+and `urzua check` reports it as such. End kinds are append-only: the behaviour of a shipped kind never
+changes (a fix ships as a new kind name), and `SPEC-3` states each kind normatively with test vectors.
+Everything else is additive: a repository that writes no scoped locator and declares no resolver sees no
+change, and a file-level pin keeps its `ADR-67` meaning. Walking the feature back means re-pinning each
+scoped locator at file level, the state the corpus is in today.
 
 ## Consequences
 
-- The 11 needless re-pins of the review would not have occurred, and the three real divergences would
-  still have been reported, if each pin had been scoped to the item its decision is about.
-- A pin is only as good as its resolver. A too-loose start pattern pins the wrong item silently; the
-  mitigations are point 6 (ambiguity is reported) and the review of a resolver as config.
-- Whitespace-only edits inside a pinned item are drift (point 3). That is noise of the same kind this ADR
-  removes elsewhere; it is accepted for now so that no pin can pass a change it should have caught.
-- Line-range pins on a file that grows above them will go stale; they are a fallback, not the main use.
-- A symbol rename is a finding the author must fix by hand; there is no rename tracking.
-- Accepting this ADR amends `ADR-67` (its pin syntax gains the scope slot) and puts a constraint on
-  `MILE-84` (the commit anchor uses the anchor slot). Neither record is changed by drafting this one.
-- Building it follows `MILE-185`: the grammar and `embodiment.locator-exists` reasons, hashing, resolver
-  config in `SPEC-3`, `--rebaseline` in `SPEC-8`, `SPEC-2` for the rule, then narrowing this repository's
-  pins on `config.rs`, `check_integration.rs`, `main.rs`, `embodiment.rs` and `.urzua/config.yaml`.
+- The 11 needless re-pins of the review would not have occurred, and the three real divergences would still
+  have been reported, if each pin had been scoped to the item its decision is about.
+- A pin is only as good as its resolver. A too-loose start pattern pins the wrong item; ambiguity is
+  reported, an early end is not detectable, and `brace_balanced` is blind to braces in strings and comments,
+  `indent` to odd blank lines and tabs, `heading` to `#` lines inside fenced code. Test fixtures that embed
+  source as strings can produce a second match, so ambiguity occurs in files that look unambiguous.
+- Adding a second item of the same name anywhere in the file turns a passing pin into an ambiguity finding,
+  the unrelated-edit noise this ADR removes. Strict is kept for the first build because it is what the ADR
+  promises. A recorded alternative: when a pin exists, resolve ambiguity by content (pass if exactly one
+  candidate hashes to the pin), tolerant of moves without being first-match-wins.
+- Whitespace-only edits inside a pinned item are drift (point 3).
+- A method's pin hashes only the method's lines. A change to the impl header (its generics or bounds) or to
+  its `where` clause is not drift. A reviewer who needs it pins `A::<Trait>` or the type.
+- Several impls of one generic trait cannot be pinned by member (`FieldName::<From>::from` is ambiguous when
+  `From<&str>` and `From<String>` are both implemented); the only way to pin one today is a line range.
+- Line-range pins on a file that grows above them go stale; they are the fallback (point 4).
+- A symbol rename is a finding the author fixes by hand; there is no rename tracking.
+- `--force` re-baselines every stale record under one `--reason`; with scoped pins that is smaller but still a
+  bulk attestation.
+- The bare form cannot name every item: methods live in `impl` blocks outside the type's span, and names
+  such as `new` or `default` recur in every impl. That is why qualified names, `container`, `member` and
+  `trait_container` are in the first build; the maintainer chose to include methods. The cost is more
+  resolver config per language and more ways to be ambiguous (several impls of one generic trait).
+- Accepting this ADR sets housekeeping for the same change: a dated `## Amendment` to `ADR-67` (its pin
+  syntax gains the scope slot), a revision row on `MILE-84` (the anchor slot is taken), `MILE-185` set to
+  `Implements: ADR-74`, rows in `SPEC-2`, `SPEC-3` and `SPEC-8`, and a re-check of the five files `MILE-185`
+  names against what the first build can address.
+- Building it follows `MILE-185`: grammar, the `embodiment.locator-exists` reasons, hashing, resolver
+  config in `SPEC-3`, `--rebaseline` in `SPEC-8`, `SPEC-2` for the rule; then narrowing this repository's pins
+  on `config.rs`, `check_integration.rs`, `main.rs`, `embodiment.rs` and `.urzua/config.yaml`, tested with
+  the default grace window, not only with `drift_grace_days: 0`.
 
-### Open questions for the maintainer
+### Questions answered in review, for the maintainer to confirm
 
-1. Qualified symbols. Should a scope accept a qualified name (`Config::load`, `Type.method`), and if so how
-   does a resolver map it, or is one bare identifier enough for the first build?
-2. Whitespace. Is exact-bytes hashing (point 3) right, or should trailing whitespace and line endings be
-   normalised, accepting a weaker pin for fewer false drifts?
-3. Default resolvers. Should `urzua init` scaffold resolvers for common languages as config the
-   repository owns (point 5), or should the engine ship none at all and leave them to the repository?
-4. Line ranges. Given their brittleness (point 4), should the first build ship only symbol scopes, leaving
-   ranges until the commit anchor of `MILE-84` exists?
-5. Anchor order. Is `path#L<line>@<commit>` acceptable as the spelling of `MILE-84`'s candidate, and may
-   this ADR bind `MILE-84` to it, or must `MILE-84` be decided first?
-6. File names containing `#`. The last `#` followed by a valid scope is read as the scope; a path that ends
-   so cannot be cited in the scoped form. Acceptable?
+1. Qualified symbols: the first build supports one container level. `A::b` finds `b` in every span
+   the container pattern matches (`spans: all`, so a type with several `impl` blocks works) and requires it to
+   be unique across them; `A::<Trait>::b` addresses a trait impl through a declared `trait_container`
+   pattern. Members of members are reported as unsupported.
+2. Whitespace: exact bytes with only the line-ending, BOM and final-newline normalisation of point 3.
+3. Default resolvers: scaffolded by `urzua init` as repository-owned config, only for file types the corpus
+   cites, with test vectors.
+4. Line ranges: in the first build.
+5. Anchor order: bound (path, scope, anchor; hex 7 to 64); what a commit anchor verifies stays `MILE-84`'s.
+6. A `#` in a file name: accepted, with the rule of point 1 and no escape syntax.
 
 ## References
 
@@ -178,4 +296,11 @@ at file level, which is the state the corpus is in today.
 - `RFC-5`: defines a locator as a file or glob with no sub-file form.
 - `MILE-185`: the build this ADR gates; `MILE-84`: line- and commit-anchored locators, which share this grammar.
 - `MILE-181`: attributed re-baselining.
-- `SPEC-2`, `SPEC-3`, `SPEC-8`: the specs the build documents this in.
+- `SPEC-2`, `SPEC-3`, `SPEC-8`, `SPEC-22`: the specs the build documents this in and follows.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Drafted as Proposed, then amended after independent review and two re-checks: full locator grammar and parse order, hashed bytes specified, one authoring route, no file-based grace for a scoped pin, unpinned scopes reported, append-only end kinds, and member resolution for Rust (several container spans, direct-child depth, trait impls, a `semicolon` end kind). | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted, with methods in the first build. **Why:** Maintainer decision, 2026-11-04, conditional on review; the final re-check left one blocker (member span and depth), now resolved. | **substantive** |

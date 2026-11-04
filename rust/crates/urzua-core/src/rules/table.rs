@@ -344,7 +344,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_CONSISTENCY,
-        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (`test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to `Drift detected` unconditionally (RFC-5 tier 1, ADR-18/ADR-32). A record with no `Realized-by` field is judged on the back-pointers that cite it (`MILE-149`); one stating `Verified` or `Implemented` that has neither a `Realized-by` field nor a citing back-pointer is reported as a claim with no evidence, computed `Not started` (`MILE-161`), and one stating any other value is not judged and stays unexamined. Requires full git history — a shallow checkout makes this rule silently unable to detect anything. Three opt-in refinements, all off by default (`MILE-129`): a locator written `path@sha256:<64 hex>` drifts when the file's content hash differs and not otherwise, in place of the git-history heuristic; the `drift_grace_days` option holds back reporting drift whose locator last changed fewer than that many days ago, and a record in that window agrees with either its tier or a stated `Drift detected` (the window never contradicts a record that already says so, and `urzua fix` leaves it alone); the optional `drift_audit_field` option names a declared date field (needs `drift_grace_days`): a record carrying a `YYYY-MM-DD` date there has its window counted from that last-audit date instead of from the cited file's last change, and a malformed date is reported and falls back to the file (`MILE-166`); the `claim_max_age_days` option warns when the `Realized-by` line was last touched more than that many days ago. The optional `sticky_states` option lists `Embodiment` values a human sets that no evidence can compute, such as `Deprecated` and `Inactive`: a record stating one is examined and never reported as drift or as an old claim, `urzua fix` leaves it alone, and a listed value that evidence does compute (`Verified`, `Implemented`, `Specified`, `Not started`, `Drift detected`) is a load error because it would hide real drift (`MILE-148`). Source back-pointers (see `embodiment.back-pointer-resolution`) are evidence too: an `Implements:` citation is code tier and a `Verifies:` citation in a declared test file is test tier, equal to a `test:` locator (`MILE-146`). A record with `Embodiment` but no `Realized-by` field is judged on back-pointer evidence alone when one cites it, and a record neither cited nor carrying `Realized-by` is not judged (`MILE-149`); a finding names the evidence it computed from.",
+        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (the tier order of the `embodiment` declaration, by default `test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to the declared drift state unconditionally (RFC-5 tier 1, ADR-18/ADR-32). A record with no `Realized-by` field is judged on the back-pointers that cite it (`MILE-149`); one stating a state the declaration marks `claims_built` that has neither a `Realized-by` field nor a citing back-pointer is reported as a claim with no evidence, computed to the declared no-evidence state (`MILE-161`), and one stating any other value is not judged and stays unexamined. Requires full git history — a shallow checkout makes this rule silently unable to detect anything. Three opt-in refinements, all off by default (`MILE-129`): a locator written `path@sha256:<64 hex>` drifts when the file's content hash differs and not otherwise, in place of the git-history heuristic; the `drift_grace_days` option holds back reporting drift whose locator last changed fewer than that many days ago, and a record in that window agrees with either its tier or a stated drift state (the window never contradicts a record that already says so, and `urzua fix` leaves it alone); the optional `drift_audit_field` option names a declared date field (needs `drift_grace_days`): a record carrying a `YYYY-MM-DD` date there has its window counted from that last-audit date instead of from the cited file's last change, and a malformed date is reported and falls back to the file (`MILE-166`); the `claim_max_age_days` option warns when the `Realized-by` line was last touched more than that many days ago. The optional `sticky_states` option lists `Embodiment` values a human sets that no evidence can compute, such as `Deprecated` and `Inactive`: a record stating one is examined and never reported as drift or as an old claim, `urzua fix` leaves it alone, and a listed value that evidence does compute (a state of the `embodiment` declaration) is a load error because it would hide real drift (`MILE-148`). Source back-pointers (see `embodiment.back-pointer-resolution`) are evidence too: an `Implements:` citation is code tier and a `Verifies:` citation in a declared test file is test tier, equal to a `test:` locator (`MILE-146`). A record with `Embodiment` but no `Realized-by` field is judged on back-pointer evidence alone when one cites it, and a record neither cited nor carrying `Realized-by` is not judged (`MILE-149`); a finding names the evidence it computed from.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -372,7 +372,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
-        description: "A record whose `Status` is not an accepted status states an `Embodiment` of `Implemented` or `Verified` (`MILE-138`): a decision not yet made cannot have been built. The accepted statuses are the type's declared `statuses.success`; a type declaring none uses the rule's `accepted_statuses` option, and with neither the type is not examined. `Specified`, `Not started`, `Inactive` and `Drift detected` are not flagged, and a record missing either field is left to the header rules. Opt-in; the population counts the records the rule could judge.",
+        description: "A record whose `Status` is not an accepted status states an `Embodiment` the `embodiment` declaration marks `claims_built` (`MILE-138`): a decision not yet made cannot have been built. The accepted statuses are the type's declared `statuses.success`; a type declaring none uses the rule's `accepted_statuses` option, and with neither the type is not examined. Any other state, including the drift state and a sticky one, is not flagged, and a record missing either field is left to the header rules. Opt-in; the population counts the records the rule could judge.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -398,8 +398,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["back_pointer_paths", "test_paths"],
         actions: &[
             VariantAction::new("back-pointer-unresolved", ActionDecl::Exempt("the edit is to a source file comment, and no action kind addresses a non-record file yet")),
-            VariantAction::new("back-pointer-uncovered-path", ActionDecl::CONFIG_REMOVE),
-            VariantAction::new("back-pointer-uncovered-test-path", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("back-pointer-uncovered-path", ActionDecl::CONFIG_SET),
+            VariantAction::new("back-pointer-uncovered-test-path", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         run: |c| {
@@ -430,7 +430,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("decision-not-implementable", ActionDecl::Exempt("the edit is to a source file comment or to the cited record, and no action kind addresses a non-record file yet")),
             VariantAction::new("decision-unjudgeable", ActionDecl::Exempt("the edit is to a type or rule declaration that depends on which statuses permit implementation, a policy choice with no single target")),
-            VariantAction::new("decision-uncovered-path", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("decision-uncovered-path", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         run: |c| {
@@ -584,7 +584,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         header_none: HeaderNone::OutOfScope,
         options: &[],
         actions: &[
-            VariantAction::new("case-variant-key", ActionDecl::FIELD_REMOVE),
+            VariantAction::new("case-variant-key", ActionDecl::Exempt("the rule reads the keys a record wrote, not a declared vocabulary, so it cannot tell the declared spelling from the stray one and a remove could delete the declared key")),
         ],
         phase: Phase::Main,
         run: |c| {
@@ -713,6 +713,23 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_CONFIG_COMPANION_DECLARATION_MISSING,
+        description: "A type's `companion_fields` lists pairs of relation roles, for example `[embodiment_state, embodiment_locator]`, whose fields it must declare together (`BUG-41`). A type declaring one field of a pair in `required_fields`/`known_fields` without the other is reported, as is a pair whose fields it declares neither of: a rule reading both, such as `embodiment.consistency`, cannot judge a record that lacks one. The fields are the ones the type's `relation_fields` names for the roles; no pair is known to the engine.",
+        scope: Scope::Config,
+        anchor: Anchor::Config,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
+        actions: &[
+            VariantAction::new("companion-field-missing", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("companion-pair-undeclared", ActionDecl::CONFIG_APPEND),
+        ],
+        phase: Phase::Main,
+        run: |c| config_companion_declaration_missing(c.config, c.config_path),
+    },
+    RuleDef {
         id: RULE_CONFIG_POINTER_DECLARATION_MISSING,
         description: "A type declaring either `pointer_fields` or `narrative_fields` must declare both explicitly, even as `[]` (MILE-90/ADR-44) — omitting one is not the same as declaring zero fields of that kind.",
         scope: Scope::Config,
@@ -757,7 +774,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         actions: &[
-            VariantAction::new("pointer-narrative-overlap", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("pointer-narrative-overlap", ActionDecl::Exempt("a field named in both lists could belong in either, and which list should keep it is the author's decision, not a computable repair")),
         ],
         phase: Phase::Main,
         run: |c| config_pointer_narrative_overlap(c.config, c.config_path),
@@ -883,6 +900,42 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         run: |c| {
             status_forbidden_field_present(c.records, c.config)
+        },
+    },
+    RuleDef {
+        id: RULE_STATUS_TRANSITION_ALLOWED,
+        description: "A changed record's `Status` moved along an edge its type's `statuses.transitions` does not list, comparing the status the merge base committed with the one in the change under check, or a record new in the change starts at a status outside `statuses.initial` (`MILE-144`, `ADR-72`). Needs `--base`: a whole-repo run reports it not-applicable, not a pass. A type declaring no `transitions` is not examined, a record the diff did not change is eligible and not examined, and a record whose committed status cannot be read or is no longer declared is counted unreadable. A renamed record reads as new (`BUG-191`), because the diff reports a rename as a deletion plus an addition. A repository whose ADRs and RFCs enter at `Proposed` or `Draft` and are accepted in a later change declares that as `initial`, so a record filed already accepted is reported; this repository does so.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        reads_declaration: None,
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        actions: &[
+            VariantAction::new("transition-not-allowed", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        run: |c| {
+            status_transition_allowed(c.records, c.config, c.committed_statuses)
+        },
+    },
+    RuleDef {
+        id: RULE_STATUS_UNREACHABLE,
+        description: "A status a type declares in `statuses.values` that no path of its `statuses.transitions` reaches from `statuses.initial` (`MILE-144`, `ADR-72`): no record can legitimately hold it. Judges the declaration, not a record, so it needs no `--base`. A type declaring no `transitions` is not examined. Enable it at `warn` for the informational reading.",
+        scope: Scope::Config,
+        anchor: Anchor::Config,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
+        actions: &[
+            VariantAction::new("status-unreachable", ActionDecl::CONFIG_SET),
+        ],
+        phase: Phase::Main,
+        run: |c| {
+            status_unreachable(c.config, c.config_path)
         },
     },
     RuleDef {
@@ -1034,7 +1087,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["published_paths"],
         actions: &[
             VariantAction::new("published-path-reference", ActionDecl::Exempt("the edit is to a published non-record file, and no action kind addresses a non-record file yet")),
-            VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         run: |c| published_path_reference(c.published_files, c.published_paths, c.config),

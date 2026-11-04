@@ -256,7 +256,7 @@ fn rules_lists_each_variant_with_its_action_or_its_exemption_reason() {
     let dir = std::env::temp_dir();
     let rules = parsed(&urzua(&dir, &["rules"]));
     let all = rules["rules"].as_array().unwrap();
-    assert_eq!(all.len(), 53, "every shipped rule is listed");
+    assert_eq!(all.len(), 56, "every shipped rule is listed");
     let find = |id: &str| {
         all.iter()
             .find(|r| r["id"] == id)

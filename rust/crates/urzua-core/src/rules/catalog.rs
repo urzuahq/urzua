@@ -11,6 +11,7 @@ pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-
 pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
 pub const RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS: &str =
     "config.header-none-has-no-required-fields";
+pub const RULE_CONFIG_COMPANION_DECLARATION_MISSING: &str = "config.companion-declaration-missing";
 pub const RULE_POINTER_RESOLUTION: &str = "pointer.resolution";
 pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
 pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
@@ -49,6 +50,8 @@ pub const RULE_STATUS_UNDECLARED_VALUE: &str = "status.undeclared-value";
 pub const RULE_STATUS_REQUIRED_FIELD_MISSING: &str = "status.required-field-missing";
 pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-present";
 pub const RULE_STATUS_DELIVERY_AGREEMENT: &str = "status.delivery-agreement";
+pub const RULE_STATUS_TRANSITION_ALLOWED: &str = "status.transition-allowed";
+pub const RULE_STATUS_UNREACHABLE: &str = "status.unreachable-state";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";

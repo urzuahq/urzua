@@ -310,6 +310,166 @@ pub fn status_undeclared_value(
     )
 }
 
+/// What the merge base says of a changed record's `Status` (`ADR-72`). The
+/// caller reads it from git; the core never opens a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommittedStatus {
+    /// The record is not in the base: it starts at its current status.
+    New,
+    /// The status the base committed.
+    Status(String),
+    /// The base has the record but no readable status.
+    Unreadable,
+}
+
+/// A changed record whose `Status` moved along an edge its type's declared
+/// `transitions` does not allow, or a new record that starts somewhere other
+/// than `initial` (`MILE-144`, `ADR-72`). `committed` is `None` without
+/// `--base`: the rule is then not applicable, not a pass. A record the diff did
+/// not change is eligible and not examined.
+pub fn status_transition_allowed(
+    records: &[Record],
+    config: &Config,
+    committed: Option<&HashMap<PathBuf, CommittedStatus>>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_STATUS_TRANSITION_ALLOWED;
+    let declared = statuses_by_type(config);
+    let candidates: Vec<&Record> = records
+        .iter()
+        .filter(|r| {
+            declared
+                .get(&r.record_type)
+                .is_some_and(|d| d.has_transitions())
+        })
+        .collect();
+    let mut findings = Vec::new();
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Record,
+        candidates,
+        |record| *record,
+        |record| {
+            let decl = &declared[&record.record_type];
+            let status_field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::Status,
+            );
+            let status = match declared_value(record, status_field) {
+                Ok(v) if !v.trim().is_empty() => v.trim(),
+                Ok(_) => return Outcome::Absent,
+                Err(outcome) => return outcome,
+            };
+            // Without `--base` there is no committed side: every record is
+            // eligible and none examined, and the rule says it was not applicable.
+            let Some(before) = committed.and_then(|c| c.get(&record.path)) else {
+                return Outcome::Absent;
+            };
+            // A status the type does not declare is `status.undeclared-value`'s
+            // finding; the graph has no edge to judge it by.
+            if !decl.declares(status) {
+                return Outcome::Absent;
+            }
+            let message = match before {
+                CommittedStatus::Unreadable => return Outcome::Unreadable,
+                CommittedStatus::New if decl.is_initial(status) => None,
+                CommittedStatus::New => Some(format!(
+                    "a new record starts at {status_field} '{status}', which is not an initial status (initial: {})",
+                    decl.initial.join(", ")
+                )),
+                CommittedStatus::Status(old) if old == status => None,
+                CommittedStatus::Status(old) if !decl.declares(old) => return Outcome::Unreadable,
+                CommittedStatus::Status(old) if decl.allows(old, status) => None,
+                CommittedStatus::Status(old) => {
+                    let next = decl.transitions.get(old.as_str()).map(Vec::as_slice).unwrap_or(&[]);
+                    Some(format!(
+                        "{status_field} changed from '{old}' to '{status}', which '{}' does not allow (from '{old}': {})",
+                        record.record_type,
+                        if next.is_empty() { "nothing, it is terminal".to_string() } else { next.join(", ") }
+                    ))
+                }
+            };
+            if let Some(message) = message {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("transition-not-allowed").field(status_field),
+                    message,
+                });
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: if committed.is_some() {
+                RuleStatus::Ran
+            } else {
+                RuleStatus::NotApplicable
+            },
+            examined_records,
+        },
+        findings,
+    )
+}
+
+/// A declared status no path of its type's `transitions` reaches from `initial`
+/// (`MILE-144`, `ADR-72`). Judges the declaration, so it needs no `--base`. A
+/// type declaring no graph is eligible and not examined.
+pub fn status_unreachable(
+    config: &Config,
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_STATUS_UNREACHABLE;
+    let mut findings = Vec::new();
+    let population = census(
+        PopulationUnit::RecordType,
+        config.sorted_type_names(),
+        |type_name| {
+            let Some(decl) = config.record_types[*type_name].status_decl() else {
+                return Outcome::Absent;
+            };
+            if !decl.has_transitions() {
+                return Outcome::Absent;
+            }
+            for status in decl.unreachable() {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: config_path.to_path_buf(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("status-unreachable")
+                        .key_path(["record_types", type_name, "statuses", "transitions"]),
+                    message: format!(
+                        "record type '{type_name}' declares status '{status}' but no path of its transitions reaches it from initial ({})",
+                        decl.initial.join(", ")
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
 /// A field the record's status requires, blank, unedited template text or a
 /// value from the type's declared `pending` vocabulary.
 pub fn status_required_field_missing(
