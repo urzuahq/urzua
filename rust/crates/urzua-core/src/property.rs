@@ -336,6 +336,7 @@ mod tests {
                 inverse: "Followed-by".to_string(),
                 reciprocity: crate::config::PairReciprocity::Required,
                 cross_type: false,
+                provisional: None,
             }],
             rules: std::collections::BTreeMap::new(),
             record_types: [(

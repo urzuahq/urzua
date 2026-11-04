@@ -1258,6 +1258,36 @@ pub struct RelationPair {
     /// May the two ends be different record types. Defaults to `true`.
     #[serde(default = "default_cross_type")]
     pub cross_type: bool,
+    /// Optional split by the claimant's status (`MILE-154`): a claim from a
+    /// record at one of these statuses that is not settled by an echo is held
+    /// to the provisional level instead of the rule's.
+    #[serde(default)]
+    pub provisional: Option<ProvisionalClaim>,
+}
+
+/// Which claimants make a pair's claim provisional, and how loudly an
+/// unsettled provisional claim is reported (`MILE-154`, `MILE-127`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProvisionalClaim {
+    /// Claimant statuses (its `Status` role field, exact match) at which the
+    /// claim is not yet an assertion, such as `Draft` or `Proposed`.
+    pub statuses: Vec<String>,
+    /// The level an unsettled provisional claim is reported at. Defaults to
+    /// `warn`; the rule's own level is the full severity.
+    #[serde(default = "default_provisional_level")]
+    pub level: ProvisionalLevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProvisionalLevel {
+    Warn,
+    Error,
+}
+
+fn default_provisional_level() -> ProvisionalLevel {
+    ProvisionalLevel::Warn
 }
 
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
@@ -1300,6 +1330,43 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             if let Some(other) = fields.insert(field.as_str(), label) {
                 return bad(format!(
                     "field '{field}' is used by pair '{other}' and pair '{label}' (or twice by one pair); each field belongs to exactly one side of one pair"
+                ));
+            }
+        }
+    }
+    // A provisional split naming a status no type declares never applies,
+    // which reads as a clean run (ADR-7).
+    for pair in &config.relation_pairs {
+        let Some(prov) = &pair.provisional else {
+            continue;
+        };
+        let label = pair.name.as_str();
+        if prov.statuses.is_empty() {
+            return bad(format!(
+                "pair '{label}' provisional.statuses must list at least one status"
+            ));
+        }
+        let declared: std::collections::BTreeSet<String> = config
+            .record_types
+            .values()
+            .filter_map(|t| t.status_decl())
+            .flat_map(|d| d.values)
+            .collect();
+        let mut seen = std::collections::BTreeSet::new();
+        for status in &prov.statuses {
+            if status.trim().is_empty() || *status != status.trim() {
+                return bad(format!(
+                    "pair '{label}' provisional status '{status}' is blank or has surrounding whitespace"
+                ));
+            }
+            if !seen.insert(status.as_str()) {
+                return bad(format!(
+                    "pair '{label}' provisional.statuses lists '{status}' twice"
+                ));
+            }
+            if !declared.contains(status) {
+                return bad(format!(
+                    "pair '{label}' provisional status '{status}' is not in the `statuses.values` of any record type, so it could never apply"
                 ));
             }
         }
@@ -2030,6 +2097,41 @@ record_types:
         let c = parse(&pair_cfg("", y)).unwrap();
         assert!(c.relation_pairs[0].cross_type);
         assert_eq!(c.relation_pairs[0].reciprocity, PairReciprocity::None);
+    }
+
+    fn prov_cfg(pairs: &str) -> String {
+        format!(
+            "schema_version: 2\n{pairs}record_types:\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Amends\", \"Amended-by\"]\n    statuses:\n      values: [Draft, Accepted]\n"
+        )
+    }
+
+    #[test]
+    fn a_provisional_split_loads_and_a_misdeclared_one_is_refused() {
+        let pair = |prov: &str| {
+            format!("relation_pairs:\n  - {{name: a, forward: Amends, inverse: Amended-by, reciprocity: required, provisional: {prov}}}\n")
+        };
+        let c = parse(&prov_cfg(&pair("{statuses: [Draft]}"))).unwrap();
+        let p = c.relation_pairs[0].provisional.as_ref().unwrap();
+        assert_eq!(p.statuses, vec!["Draft"]);
+        assert_eq!(p.level, ProvisionalLevel::Warn);
+        let c = parse(&prov_cfg(&pair("{statuses: [Draft], level: error}"))).unwrap();
+        assert_eq!(
+            c.relation_pairs[0].provisional.as_ref().unwrap().level,
+            ProvisionalLevel::Error
+        );
+        for bad in [
+            "{statuses: []}",
+            "{statuses: [Proposed]}",
+            "{statuses: [Draft, Draft]}",
+            "{statuses: [' Draft']}",
+            "{statuses: [Draft], level: off}",
+            "{statuses: [Draft], colour: red}",
+        ] {
+            assert!(
+                parse(&prov_cfg(&pair(bad))).is_err(),
+                "{bad} must be refused"
+            );
+        }
     }
 
     #[test]
