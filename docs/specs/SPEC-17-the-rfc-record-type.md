@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-08
 Status: Accepted
 Author: beauwilliams
@@ -25,7 +25,7 @@ record_types:
     dir: "docs/rfc"
     required_fields: ["Status", "Date", "Author"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Supersedes / Superseded-by", "Amends", "Implements"]
+    known_fields: ["Stable-Id", "Supersedes / Superseded-by", "Amends", "Implements", "Non-reference-ids"]
     spec: "SPEC-17"
     pointer_fields: ["Implements", "Amends"]
     narrative_fields: []
@@ -40,6 +40,7 @@ record_types:
 | `Supersedes / Superseded-by` | comma-separated or `—`, optional | Same reciprocity model as `adr`. |
 | `Amends` | comma-separated, optional | An RFC narrowing or correcting an earlier one without fully superseding it — distinct from `Supersedes`, which replaces outright. Declared as one of this type's `pointer_fields` entries (MILE-90/ADR-44) — previously never resolved by anything. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever bug or decision this RFC's proposal addresses (e.g. `RFC-23`'s own `Implements: BUG-8`). Added to `known_fields` and declared as this type's other `pointer_fields` entry in the same pass (MILE-90/ADR-44) — previously in real use but never declared, silently tripping `header.field-set-consistency`. |
+| `Non-reference-ids` | comma-separated exact ids, optional | Ids this RFC names without citing as a reference (an example, a retracted number): `citation.resolution` does not resolve or report a citation of them in this record only, and reports a listed id the RFC never cites. Named by the rule's `non_reference_field` option (SPEC-3). Not a pointer field. |
 
 No `Deciders` field — an RFC is a proposal one person can author; deciding it is what the resulting
 ADR's own `Deciders` field records.
@@ -72,3 +73,4 @@ ADR's own `Deciders` field records.
 > | 2026-09-09 | Added `Implements` to `known_fields`, declared `pointer_fields = ["Implements", "Amends"]`/`narrative_fields = []` in config (MILE-90/ADR-44). **Why:** `RFC-23`'s own header (`Implements: BUG-8`) had been silently tripping `header.field-set-consistency` since it was written -- `rfc` never declared `Implements` as known despite already using it in practice. `Amends` had also never been resolved by anything; declaring it a `pointer_fields` entry makes it real. | **substantive** |
 > | 2026-09-11 | Bumped to `0.8`. **Why:** `Author`'s row stated the resolution mechanism ("same as `adr`") but not the written form, so BUG-18's no-`@` convention wasn't actually inherited by a reader of this spec alone -- it only looked like it was. Stated explicitly; this type's own `Author` values were backfilled in the same change. | **substantive** |
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
+> | 2026-11-04 | Bumped to `0.9`. Added the optional `Non-reference-ids` field to `known_fields`: the exact ids a record names without citing as a reference (`BUG-190`, `ADR-75`). **Why:** `RFC-5` writes an example id from another corpus that a real record could otherwise capture. | **substantive** |

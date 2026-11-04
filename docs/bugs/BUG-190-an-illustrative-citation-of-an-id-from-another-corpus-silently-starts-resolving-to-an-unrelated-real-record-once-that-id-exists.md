@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6N0R3T1R3DST4TUSB5G1LL1
-Status: Open
+Status: Fixed
 Found-in: 'creating ADR-72 in this repository (2026-11-04), which made citation.resolution resolve ADR-18 and RFC-5 citations of ADR-72 to it; the waivers for them were removed in #256 because waiver.matches-nothing reported them'
-Regression-test: 'pending'
+Regression-test: 'rust/crates/urzua-core/src/rules/citation.rs::the_incident_an_id_later_created_as_a_real_record_changes_nothing_observed_failing, rust/crates/urzua-cli/tests/citation_resolution_integration.rs::a_declared_non_reference_id_survives_the_id_becoming_a_real_record_end_to_end_observed_failing'
 ---
 # 190 — An illustrative citation of an id from another corpus silently starts resolving to an unrelated real record once that id exists
 
@@ -35,6 +35,10 @@ The per-record list is the stronger candidate: it is explicit, scoped to one rec
 - `ADR-18` and `RFC-5` declare `ADR-72` as illustrative (the shorthand "ADR-72/73/74" is read as the one citation `ADR-72`; the other two numbers are not citations), and `urzua check` on this repository reports no finding for them, with no waiver, before and after any record with that number exists. An Info notice that the declared id now resolves may remain.
 - `SPEC-2` and `SPEC-3` document the declaration with revision rows; the regression test names the incident (an illustrative id later created as a real record) and is observed failing first.
 
+## Fix
+
+Built as `ADR-75` decides: `citation.resolution` takes `non_reference_field`, a header field listing the exact ids a record names without citing as a reference. A citation of a listed id is neither resolved nor reported in that record only (`external_ids` first); a listed id the record never cites and a malformed entry are findings; a field that is unknown or is a pointer, narrative or relation-role field is a config error; `check` prints one aggregated Info notice for listed ids that now match a real record. `ADR-18` and `RFC-5` declare `ADR-72` with a structural revision row each, and no waiver. `SPEC-2`, `SPEC-3`, `SPEC-16` and `SPEC-17` document it. The other seven waived records are a separate change, as `ADR-75` decides.
+
 ## References
 
 - `ADR-18`, `RFC-5`: the two records that cite the example.
@@ -49,3 +53,4 @@ The per-record list is the stronger candidate: it is explicit, scoped to one rec
 > | 2026-11-04 | Filed at Phase 0. **Why:** found while creating `ADR-72`; the same will recur for the other two ids. Left `Status: Open`: the declaration's shape needs a maintainer decision. | **substantive** |
 > | 2026-11-04 | Deciding ADR drafted: `ADR-75` (Proposed) proposes the per-record header declaration, with the inline marker and three other shapes weighed and five open questions. Nothing is built; `Status` stays `Open` and `Regression-test` stays `pending`. **Why:** the shape is written into records, including frozen ones, and no Accepted record decides it, so the maintainer decides first. | **substantive** |
 > | 2026-11-04 | Done means corrected, and the Why sentence about the next ids. **Why:** the engine reads "ADR-72/73/74" as the single citation `ADR-72`, so `ADR-73` and `ADR-74` were never captured and cannot be declared (a declared id the record never cites is itself reported); the exposure is general, not this pair. Found in the review of `ADR-75`. `Status` unchanged. | **substantive** |
+> | 2026-11-04 | `Status` changed from Open to Fixed and `Regression-test` filled; the declaration is built as `ADR-75` decides (see Fix). **Why:** the fix and its tests, observed failing first, are in the same PR. | **substantive** |
