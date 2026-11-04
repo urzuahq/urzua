@@ -214,6 +214,9 @@ mod tests {
                     "note".to_string(),
                     RecordTypeConfig {
                         dir: "docs/notes".to_string(),
+                        identity: None,
+                        fields: None,
+                        sections: None,
                         required_fields: Vec::new(),
                         header_shape: Default::default(),
                         prefix: None,
@@ -324,6 +327,9 @@ mod tests {
                 "note".to_string(),
                 RecordTypeConfig {
                     dir: "docs/notes".to_string(),
+                    identity: None,
+                    fields: None,
+                    sections: None,
                     required_fields: declared.clone(),
                     header_shape: Default::default(),
                     prefix: None,
@@ -479,6 +485,9 @@ mod tests {
                     "note".to_string(),
                     RecordTypeConfig {
                         dir: dir.clone(),
+                        identity: None,
+                        fields: None,
+                        sections: None,
                         required_fields: Vec::new(),
                         header_shape: Default::default(),
                         prefix: None,

@@ -104,6 +104,9 @@ mod tests {
     pub(crate) fn type_config(spec: Option<&str>) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
             dir: "docs/x".to_string(),
+            identity: None,
+            fields: None,
+            sections: None,
             required_fields: Vec::new(),
             header_shape: crate::header::HeaderShape::default(),
             prefix: None,
@@ -178,6 +181,9 @@ mod tests {
     ) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
             dir: "docs/x".to_string(),
+            identity: None,
+            fields: None,
+            sections: None,
             required_fields: Vec::new(),
             header_shape: shape,
             prefix: None,
@@ -221,6 +227,9 @@ mod tests {
     ) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
             dir: "docs/x".to_string(),
+            identity: None,
+            fields: None,
+            sections: None,
             required_fields: required_fields.iter().map(|s| s.to_string()).collect(),
             header_shape: crate::header::HeaderShape::default(),
             prefix: None,
