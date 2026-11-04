@@ -88,6 +88,7 @@ pub fn detect_repairs(
         // handed in as plain data, the same shape `embodiment_consistency`
         // takes, so this function stays pure (MILE-15).
         let computed = compute_embodiment(
+            &config.embodiment,
             &realized_by_value.map(parse_realized_by).unwrap_or_default(),
             drifted.contains(&record.path),
             cited_by_code,
@@ -95,7 +96,8 @@ pub fn detect_repairs(
         );
         let stated = stated.trim();
         // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
-        let keeps_stated_drift = fresh_drift.contains(&record.path) && stated == "Drift detected";
+        let keeps_stated_drift =
+            fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated);
         if stated != computed && !keeps_stated_drift {
             repairs.push(Repair {
                 record: record.path.clone(),
@@ -439,6 +441,7 @@ mod tests {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -559,6 +562,7 @@ mod tests {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
+            embodiment: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),

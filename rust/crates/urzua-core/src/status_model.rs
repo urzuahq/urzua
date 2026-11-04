@@ -23,6 +23,7 @@
 //! Transitions between statuses are MILE-144, not this.
 
 use crate::config::{ConfigError, RecordTypeConfig};
+use crate::embodiment_model::EmbodimentDecl;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -255,7 +256,11 @@ fn check_pending(entries: &[PendingEntry]) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
+fn validate_one(
+    rt: &RecordTypeConfig,
+    d: &StatusDecl,
+    embodiment: &EmbodimentDecl,
+) -> Result<(), String> {
     check_list("values", &d.values, false)?;
     check_list("success", &d.success, true)?;
     check_list("failure", &d.failure, true)?;
@@ -278,7 +283,7 @@ fn validate_one(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
         return Err(format!("'{v}' is in both `success` and `failure`"));
     }
     if let Some(delivery) = &d.delivery {
-        validate_delivery(rt, d, delivery)?;
+        validate_delivery(rt, d, delivery, embodiment)?;
     }
     let declared = rt.known_fields.as_ref().map(|_| rt.declared_fields());
     for (what, rules) in [("require", &d.require), ("forbid", &d.forbid)] {
@@ -325,8 +330,9 @@ fn validate_delivery(
     rt: &RecordTypeConfig,
     d: &StatusDecl,
     delivery: &DeliveryDecl,
+    embodiment: &EmbodimentDecl,
 ) -> Result<(), String> {
-    const TIERS: [&str; 4] = ["Verified", "Implemented", "Specified", "Not started"];
+    let tiers: Vec<&str> = embodiment.evidence_states().collect();
     check_list("delivery.delivered_tiers", &delivery.delivered_tiers, false)?;
     check_list(
         "delivery.unevidenced_tiers",
@@ -338,10 +344,10 @@ fn validate_delivery(
         ("delivery.delivered_tiers", &delivery.delivered_tiers),
         ("delivery.unevidenced_tiers", &delivery.unevidenced_tiers),
     ] {
-        if let Some(t) = list.iter().find(|t| !TIERS.contains(&t.as_str())) {
+        if let Some(t) = list.iter().find(|t| !tiers.contains(&t.as_str())) {
             return Err(format!(
                 "`{what}` names '{t}', which is not a tier computed from evidence (one of: {})",
-                TIERS.join(", ")
+                tiers.join(", ")
             ));
         }
     }
@@ -391,6 +397,7 @@ fn validate_delivery(
 /// half-written declaration into a silent no-op (ADR-7).
 pub(crate) fn validate(
     types: &BTreeMap<String, RecordTypeConfig>,
+    embodiment: &EmbodimentDecl,
 ) -> Result<BTreeMap<String, StatusDecl>, ConfigError> {
     let mut out = BTreeMap::new();
     for (name, rt) in types {
@@ -403,7 +410,7 @@ pub(crate) fn validate(
         }
         let decl: StatusDecl =
             yaml_serde::from_value(raw.clone()).map_err(|e| invalid(name, e.to_string()))?;
-        validate_one(rt, &decl).map_err(|reason| invalid(name, reason))?;
+        validate_one(rt, &decl, embodiment).map_err(|reason| invalid(name, reason))?;
         out.insert(name.clone(), decl);
     }
     Ok(out)

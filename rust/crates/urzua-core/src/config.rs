@@ -34,6 +34,12 @@ pub struct Config {
     /// means `error`, so a repository that does not declare it is unchanged.
     #[serde(default, skip_serializing_if = "FailOn::is_default")]
     pub fail_on: FailOn,
+    /// The `Embodiment` vocabulary (`MILE-144`); absent means the built-in one.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::embodiment_model::EmbodimentDecl::is_default"
+    )]
+    pub embodiment: crate::embodiment_model::EmbodimentDecl,
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -907,6 +913,8 @@ pub enum ConfigError {
     StickyStateIsComputed { rule: String, state: String },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
+    #[error("embodiment: {reason}")]
+    InvalidEmbodiment { reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -1357,7 +1365,11 @@ pub fn parse_with_document_models(
         });
     }
     let models = crate::document_model::validate_declarations(&config.record_types)?;
-    crate::status_model::validate(&config.record_types)?;
+    config
+        .embodiment
+        .validate()
+        .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
+    crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
@@ -1625,7 +1637,7 @@ pub fn parse_with_document_models(
         // state is exactly what the evidence can reproduce.
         if setting.level != RuleLevel::Off {
             for state in setting.sticky_states.iter().flatten() {
-                if crate::rules::COMPUTED_EMBODIMENT_STATES.contains(&state.trim()) {
+                if config.embodiment.is_computed(state.trim()) {
                     return Err(ConfigError::StickyStateIsComputed {
                         rule: name.clone(),
                         state: state.clone(),
