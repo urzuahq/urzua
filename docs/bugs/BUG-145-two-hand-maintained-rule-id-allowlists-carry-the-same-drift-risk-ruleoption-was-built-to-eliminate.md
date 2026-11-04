@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M376A4R1WWWNH1SG401X1RHH
-Status: Open
+Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 26"
-Regression-test: "not yet written -- Status: Open, no fix decided yet"
+Regression-test: 'rust/crates/urzua-core/src/rules/table.rs::every_rule_id_constant_has_a_table_entry, rust/crates/urzua-core/src/rules/table.rs::a_rule_anchor_agrees_with_its_scope'
 ---
 # 145 — two hand-maintained rule-id allowlists carry the same drift risk RuleOption was built to eliminate
 
@@ -38,3 +38,4 @@ in one place versus staying as its own constant, not a drop-in reuse of the exis
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified both are genuinely hand-maintained rule-id lists with no mechanism forcing a new rule to be added to either. Left `Status: Open` -- unifying them into `RuleOption` needs deciding that type's schema, not a quick edit. | **substantive** |
+> | 2026-11-04 | `Status` set to `Fixed`; `Regression-test` filled. Fixed in #243 (`MILE-171` step 1: one `RULE_TABLE` of `RuleDef`s replaces the parallel rule lists, with `needs_identity_index` declared per rule) and #246 (step 3: each rule declares the `Anchor` its findings sit on, replacing the outside-the-corpus list); `IDENTITY_DEPENDENT_RULES` and `RULES_REPORTING_OUTSIDE_THE_CORPUS` no longer exist (`grep -rn` finds neither). **Why:** the fix this record asked for, a per-rule fact declared once beside the rule, is what the table is. | **substantive** |
