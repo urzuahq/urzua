@@ -13,7 +13,7 @@ Derives-from: RFC-1
 
 ## Purpose
 
-Ship the smallest thing that is **genuinely used in two real codebases** and proves the founding
+Ship the smallest thing that is **genuinely used in real codebases** (its own repository and one adopter's in Phase 0, two adopters' by the Phase 1 exit) and proves the founding
 claim — one implementation instead of three — with documented bug histories from independently
 built tooling as its acceptance test.
 

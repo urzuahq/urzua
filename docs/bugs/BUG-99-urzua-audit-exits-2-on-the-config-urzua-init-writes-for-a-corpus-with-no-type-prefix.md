@@ -3,7 +3,6 @@ Stable-Id: 01M30VE5PPB5TVTF85WW5BRH8H
 Status: Open
 Found-in: "Reviewing what the 0.4.0 population work did and did not fix; reproduced against a scratch repository built to the prefixless shape"
 Regression-test: "init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared, check_integration.rs"
-Blocked-on: RFC-38
 ---
 # 99 — urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
 
@@ -88,6 +87,7 @@ arguing rather than assuming.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | `Blocked-on: RFC-38` removed. **Why:** `RFC-38` is accepted, so nothing blocks the root fix; what remains is building it. | **substantive** |
 > | 2026-11-04 | The root fix is now `RFC-38`'s implementation: `audit` becomes a `check` preset whose read-only rule set comes from config. `Status` is unchanged. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-09-22 | Mitigated, not closed: `init` now emits a `rule-applicability` notice when its proposed config leaves `audit`'s entire rule set undeclared, so the adopter learns this before running `audit` rather than from its exit code. **Why:** the user asked to fix this before release; this record's own diagnosis says the root cause is `audit` owning a rule set at all (`RFC-38`), which stays undecided, so `Status` stays `Open` and `Blocked-on: RFC-38` stays -- this is exactly the "warning from `init` is the cheapest patch" option the previous entry already named, applied now rather than left for `RFC-38`'s resolution. `audit`'s own exit-code behavior is deliberately unchanged (`BUG-77`'s regression test still passes, and a new test asserts it stays that way alongside the new notice). | **substantive** |
 > | 2026-09-23 | The exact reproduction above no longer reproduces, as an incidental side effect of an unrelated fix: `audit` (found by a separate code review to be silently using a lossy record index and never running `identity.collision`, unlike `check`) now also runs `identity.collision`, which -- unlike `pointer.resolution`/`relation.supersession-reciprocity` -- needs no declared prefix to judge a corpus meaningfully. On this bug's own scratch repro, `audit` now reports `status: ok`, exit 0, instead of `not-run`, exit 2. **`Status` stays `Open`**: this closes the specific reproduction, not the root cause -- `audit` still hardcodes which rules it runs rather than reading the adopter's own declaration, and a future rule addition to `audit` could reopen the same shape for a corpus with neither identity-dependent nor identity-independent rules declared. `RFC-38` remains the real fix. | **substantive** |

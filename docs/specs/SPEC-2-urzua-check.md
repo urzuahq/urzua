@@ -109,7 +109,7 @@ it merges.
 
 ### Phase C — the second corpus
 
-The falsifiable one. A second codebase runs green under the same binary with no code change, and its
+Part of the Phase 1 exit (`SPEC-1`), not Phase 0's. The falsifiable one. A second codebase runs green under the same binary with no code change, and its
 hand-written linter is deleted. A failure here is a schema
 finding to record rather than a code path to add.
 
