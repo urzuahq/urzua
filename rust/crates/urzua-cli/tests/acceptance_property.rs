@@ -29,8 +29,8 @@ impl Rng {
     fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
-    fn pick<'a, T>(&mut self, items: &'a [T]) -> &'a T {
-        &items[self.below(items.len())]
+    fn pick<T: Copy>(&mut self, items: &[T]) -> T {
+        items[self.below(items.len())]
     }
 }
 
@@ -134,7 +134,7 @@ const NAME_ALPHABET: &[&str] = &[
 fn generated_name(rng: &mut Rng) -> String {
     loop {
         let len = 1 + rng.below(10);
-        let name: String = (0..len).map(|_| *rng.pick(NAME_ALPHABET)).collect();
+        let name: String = (0..len).map(|_| rng.pick(NAME_ALPHABET)).collect();
         // A name with edge whitespace is a different property (the untrimmed
         // value rule); the declared names are exercised separately.
         if name.trim() == name && name != "Status" && name != "Date" {
@@ -234,7 +234,7 @@ fn wrappings() -> Vec<(&'static str, String)> {
         ),
         ("indented code block", format!("{}\n", indent(FAKE, "    "))),
         ("html comment", format!("<!--\n{FAKE}-->\n")),
-        ("block quote", format!("{}", indent(FAKE, "> "))),
+        ("block quote", indent(FAKE, "> ")),
         (
             "fence in a list item",
             format!("- an example:\n\n  ```\n{}  ```\n", indent(FAKE, "  ")),
@@ -242,8 +242,8 @@ fn wrappings() -> Vec<(&'static str, String)> {
     ]
 }
 
-/// (archetype name, header lines): a clean record, one with an undeclared field
-/// and one with the required Status removed from the header.
+/// (archetype name, extra header lines): a clean record and one with an
+/// undeclared field.
 fn archetypes() -> Vec<(&'static str, &'static str)> {
     vec![("clean", ""), ("undeclared", "Flavor: mint\n")]
 }
@@ -374,7 +374,8 @@ fn relation_violations(off: Option<&str>) -> Vec<String> {
             let mut entry = lead.clone();
             if rng.below(2) == 0 {
                 entry.push(' ');
-                entry.push_str(*rng.pick(ANNOTATIONS));
+                let annotation = rng.pick(ANNOTATIONS);
+                entry.push_str(annotation);
             }
             if lead != "REC-0001" {
                 leads.push(lead);

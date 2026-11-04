@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-08-20
 Status: Draft
 Author: beauwilliams
@@ -205,8 +205,45 @@ built, and where it differs from the sketch:
   addition to the checked-in ones. Unset, the runner prints a one-line skip note rather than staying
   silent. This lets a maintainer run fixtures that cannot be published against the same runner.
 
-Not built: the cases in the tables above other than those seeded (three irregularities, a positive
-control and corpus zero), the generative property, mutation checking and the "Nth record type" case.
+### Added by MILE-170
+
+- **Mutation proof.** Every case names the rules it proves: the rules in its `expect_findings` and
+  `expect_rules_ran`, plus any listed in `proves`. After the case passes, the runner re-runs it with
+  each of those rules set to `off` in the config the case runs under (after `setup`, so an `init`ed
+  config is mutated too) and the case must then fail. This is "a case that passes against a build with
+  the rule removed is not a case", executed on every run. A mutation that makes the config invalid
+  (exit 2) is a harness failure, not a proof. A case that asserts something no single rule produces
+  (a positive control, a config error, `init` output) gives `mutation_exempt` a reason instead; a case
+  with neither is rejected. `expect_rules_ran` asserts the same thing for each rule it lists (status
+  `ran` over a non-empty population), so only its first rule is switched off; the others count once that
+  held, which keeps a case over corpus zero to two runs.
+- **Coverage report.** An unfiltered run prints how many rules in `ALL_RULES` have a case whose
+  mutation proof held and lists every rule that has none (`uncovered  <rule>`). It reports and does
+  not fail: a rule added by another change has no case yet, and the list is where that is seen.
+- **More expectations.** `expect_rules_ran`, `expect_mirrored` (two path prefixes whose findings name
+  the same non-empty set of rules), and `message_contains` on a finding matcher. Cases run on a few
+  threads and an identical read-only run over `@repo` is made once.
+- **Corpora.** `corpus-d` plants one irregularity per field-quality and structural rule (blank,
+  pending, untrimmed and case-variant fields, an undeclared status, a body bullet standing in for a
+  header field, a wrapped value, a comment line inside the header, a one-sided supersession, an
+  annotation that cites references, a missing section, a prose citation and a cited path that do not
+  resolve, a record one directory below its type's `dir`, a mistyped `dir` beside a working type).
+  `corpus-e` is the "Nth record type" case. `corpus-f` covers the shape, forbidden-field,
+  case-variant-key and cross-type rules. Corpus zero has one case per rule family, each asserting
+  that the family's enabled rules run over a non-empty population and that the whole check is clean.
+- **The "Nth record type" case.** `corpus-e` declares a throwaway type, `gizmo`, named nowhere in the
+  source, beside `adr`. The same planted violations sit in both type directories and must be met by the
+  same rules; the control run with the declaration removed examines none of the gizmo files.
+- **The generative property** is `rust/crates/urzua-cli/tests/acceptance_property.rs`, run by
+  `cargo test`. A fixed-seed generator makes it reproducible. Field names from a wide alphabet are each
+  accepted as declared or reported by name; wrapping a record's body in every fence variant, a comment
+  or a quote leaves the verdict unchanged; relation values with annotations that cite references
+  round-trip to the reference that begins each entry. Each property is also run with its rule off (or,
+  for invariance, against an input that really changes the verdict) and must then fail.
+
+Not built: the cases in the tables above that no rule family detects today (the "silent zeros" git-history
+cases, drift reported while exiting 0, the permanent-ceiling case), the rules with no case (the report names
+them), and mutation of a defect reintroduced into the source rather than a rule switched off.
 
 ## Success criteria
 
@@ -239,3 +276,4 @@ control and corpus zero), the generative property, mutation checking and the "Nt
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-09-18 | Stays `Draft`, deliberately. **Why:** unlike `SPEC-1`/`2`/`3`, this spec's subject does not exist. No code reads `manifest.yaml` or a per-case `<case-id>.yaml`, and the only test files in the workspace are `check_integration.rs`, `new_integration.rs` and `purity.rs`. `Draft` is the accurate status, and flipping it with the others would have been the bulk edit `BUG-26` warned against. | **structural** |
 > | 2026-11-02 | Bumped to `0.4`. **Why:** MILE-101 built the first runner; the spec now records the shape that met a real case: the runner location, the case fields actually supported, `known_gap` markers, a read `manifest.yaml`, and the `URZUA_ACCEPTANCE_EXTRA` private-corpus hook. | **substantive** |
+> | 2026-11-04 | Bumped to `0.5`. **Why:** `MILE-170` built the rest of the harness: mutation proof of every case, the coverage report of rules with no case, the "Nth record type" case, the generative property, corpora `corpus-d` to `corpus-f` and one corpus-zero case per rule family. Recorded under "Added by MILE-170"; the success criteria are unchanged and criterion 2 now holds for every case by construction. | **substantive** |

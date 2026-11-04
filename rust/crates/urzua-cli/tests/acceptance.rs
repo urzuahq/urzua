@@ -112,6 +112,9 @@ struct Fixture {
     irregularity: String,
 }
 
+/// A case's outcome and the rules whose mutation proof held.
+type CaseResult = (Outcome, Vec<String>);
+
 enum Outcome {
     Pass,
     KnownGap(String),
@@ -479,7 +482,7 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
 /// Run the case, then prove each rule it names: with the rule off in the
 /// case's own config the case must fail. Returns the outcome and the rules
 /// whose proof held.
-fn run_case(case: &Case, corpus_dir: &Path) -> (Outcome, Vec<String>) {
+fn run_case(case: &Case, corpus_dir: &Path) -> CaseResult {
     let unmet = match evaluate(case, corpus_dir, None) {
         Ok(u) => u,
         Err(e) => {
@@ -655,7 +658,7 @@ fn main() {
     // Cases are independent (each owns a throwaway repo), so run them on a few
     // threads; results are printed in discovery order, so output is stable.
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let results: std::sync::Mutex<Vec<Option<(Outcome, Vec<String>)>>> =
+    let results: std::sync::Mutex<Vec<Option<CaseResult>>> =
         std::sync::Mutex::new((0..queue.len()).map(|_| None).collect());
     let workers = std::thread::available_parallelism()
         .map(|n| n.get())
