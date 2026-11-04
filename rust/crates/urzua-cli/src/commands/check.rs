@@ -1,6 +1,6 @@
 //! `urzua check` (SPEC-2): the validator.
 //!
-//! `run` composes four stages, each a function of at most 80 lines:
+//! `run` composes four stages, each a function of at most 100 lines:
 //!
 //! 1. `open_session` and `narrow`: find the repository, load the corpus whole,
 //!    and decide what the run reports on (path scopes, `--base`).
@@ -397,26 +397,9 @@ fn load_context<'a>(
         ));
     }
 
-    // Records a source comment cites (`MILE-128`).
-    let back_pointed = back_pointer_sources
-        .as_ref()
-        .map(|s| {
-            rules::back_pointer_evidence(
-                &s.files,
-                &s.back_pointer_paths,
-                &s.test_paths,
-                config,
-                &record_index,
-            )
-        })
-        .unwrap_or_default();
+    let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
-    // The committed snapshot of issue and pull request numbers (`MILE-143`):
-    // a file read, never a request, so `check` stays offline.
-    let refs_snapshot = load_refs_snapshot(config, repo_root);
-    if let (Some(refs), Ok(snapshot)) = (issue_refs_declaration(config), &refs_snapshot) {
-        notices.push(refs_notice(&refs.snapshot, snapshot));
-    }
+    let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
 
     Ok((
         Context {
@@ -448,6 +431,39 @@ fn load_context<'a>(
         },
         notices,
     ))
+}
+
+/// Records a source comment cites (`MILE-128`).
+fn cited_records(
+    sources: Option<&rules::BackPointerSources>,
+    config: &Config,
+    index: &rules::RecordIndex,
+) -> rules::BackPointerEvidence {
+    sources
+        .map(|s| {
+            rules::back_pointer_evidence(
+                &s.files,
+                &s.back_pointer_paths,
+                &s.test_paths,
+                config,
+                index,
+            )
+        })
+        .unwrap_or_default()
+}
+
+/// The committed snapshot of issue and pull request numbers (`MILE-143`): a
+/// file read, never a request, so `check` stays offline.
+fn load_refs_with_notice(
+    config: &Config,
+    repo_root: &Path,
+    notices: &mut Vec<Notice>,
+) -> Result<RefsSnapshot, String> {
+    let refs_snapshot = load_refs_snapshot(config, repo_root);
+    if let (Some(refs), Ok(snapshot)) = (issue_refs_declaration(config), &refs_snapshot) {
+        notices.push(refs_notice(&refs.snapshot, snapshot));
+    }
+    refs_snapshot
 }
 
 fn refs_notice(snapshot_path: &str, snapshot: &RefsSnapshot) -> Notice {
