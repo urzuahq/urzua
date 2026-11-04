@@ -46,9 +46,14 @@ both over-fire on prose that's genuinely just explaining context and under-fire 
 phrased less mechanically). Whether this is buildable at all — and if so, as a hard rule or a
 `doctor`-style advisory nudge — is exactly what's undecided here.
 
+## Done means
+
+A `check` finding or `doctor` check reports a record whose `## References` prose cites another record in load-bearing language ("implements", "decided by", "folds in", "supersedes") while no matching structured pointer (`Implements`, `Derives-from`, `Parent`) names it, the load-bearing words come from config rather than the engine, `References` itself stays loose, and a fixture covers a cited-only record and a pointer-backed one; it is run over urzua's own corpus and its findings are fixed or waived.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial milestone. **Why:** found live, twice this session (SPEC-16/17 and RFC-18), that a load-bearing citation living only in `## References` prose has no mechanism to flag it as a candidate for a real structured pointer instead. | **structural** |
 > | 2026-09-08 | Considered and rejected a new generic `References` header field as the fix (RFC-21) -- both motivating cases turned out to be fixable with *existing* fields (`Implements: ADR-10` on SPEC-16/17; `Implements: RFC-18` added to MILE-6 itself), confirmed live in `urzua graph`. Restores this milestone's original scope: detection, pointing at an existing field, not new schema. Also surfaced `BUG-7` (pointer fields tolerating trailing prose), a real but separate defect. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

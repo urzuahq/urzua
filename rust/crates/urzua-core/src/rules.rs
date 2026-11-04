@@ -98,14 +98,11 @@ mod tests {
     ) -> Config {
         Config {
             schema_version: 2,
-            relation_pairs: Vec::new(),
-            fail_on: Default::default(),
-            embodiment: Default::default(),
-            rules: std::collections::BTreeMap::new(),
             record_types: entries
                 .into_iter()
                 .map(|(type_name, type_config)| (type_name.to_string(), type_config))
                 .collect(),
+            ..Default::default()
         }
     }
 
@@ -126,21 +123,9 @@ mod tests {
 
     pub(crate) fn type_config(spec: Option<&str>) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
-            exclude_files: Vec::new(),
             dir: "docs/x".to_string(),
-            identity: None,
-            fields: None,
-            sections: None,
-            statuses: None,
-            required_fields: Vec::new(),
-            header_shape: crate::header::HeaderShape::default(),
-            prefix: None,
-            known_fields: None,
-            pointer_fields: None,
-            narrative_fields: None,
             spec: spec.map(|s| s.to_string()),
-            relation_fields: None,
-            revision_log: None,
+            ..Default::default()
         }
     }
 
@@ -155,7 +140,6 @@ mod tests {
                     (
                         name,
                         crate::config::RecordTypeConfig {
-                            exclude_files: Vec::new(),
                             required_fields: fields.into_iter().map(String::from).collect(),
                             ..type_config(None)
                         },
@@ -175,7 +159,6 @@ mod tests {
                     (
                         name,
                         crate::config::RecordTypeConfig {
-                            exclude_files: Vec::new(),
                             known_fields: Some(fields.into_iter().map(String::from).collect()),
                             ..type_config(None)
                         },
@@ -189,21 +172,8 @@ mod tests {
         shape: crate::header::HeaderShape,
     ) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
-            exclude_files: Vec::new(),
-            dir: "docs/x".to_string(),
-            identity: None,
-            fields: None,
-            sections: None,
-            statuses: None,
-            required_fields: Vec::new(),
             header_shape: shape,
-            prefix: None,
-            known_fields: None,
-            pointer_fields: None,
-            narrative_fields: None,
-            spec: None,
-            relation_fields: None,
-            revision_log: None,
+            ..type_config(None)
         }
     }
 
@@ -237,21 +207,11 @@ mod tests {
         narrative_fields: Option<&[&str]>,
     ) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
-            exclude_files: Vec::new(),
-            dir: "docs/x".to_string(),
-            identity: None,
-            fields: None,
-            sections: None,
-            statuses: None,
             required_fields: required_fields.iter().map(|s| s.to_string()).collect(),
-            header_shape: crate::header::HeaderShape::default(),
-            prefix: None,
             known_fields: known_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             pointer_fields: pointer_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             narrative_fields: narrative_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
-            spec: None,
-            relation_fields: None,
-            revision_log: None,
+            ..type_config(None)
         }
     }
 

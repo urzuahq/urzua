@@ -33,8 +33,13 @@ invalidate/recompute it per-checkout unambiguously.
 Nothing in `urzua-core` has this exposure today (every rule recomputes fresh from the records it's
 handed each invocation); this is purely a forward note for a command that doesn't exist yet.
 
+## Done means
+
+`urzua index` or an equivalent command writes a generated `INDEX.json` listing every record's type, id, status and title, a second run changes nothing, and the location is resolved from the working-copy root passed in, never from an ambient environment variable or the process working directory (a test with two worktrees reads the right cache); `check` reports a stale index, and it is exercised on urzua's own corpus.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-09 | Added a forward note on safely resolving `INDEX.json`'s location relative to the actual working-copy root, not an ambient environment variable or process `cwd`. **Why:** a generalized, previously-observed stale-cache/worktree-resolution bug pattern, surfaced while planning MILE-90 — recorded here since this is the durable home for whoever eventually builds this milestone, not the ephemeral session plan that surfaced it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

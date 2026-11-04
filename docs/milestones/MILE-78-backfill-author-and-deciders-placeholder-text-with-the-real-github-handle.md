@@ -30,9 +30,14 @@ requiring the field (RFC-1) -- an anonymized placeholder in every single one def
 thoroughly as an unfilled blank would, just less visibly, since `field.quality` doesn't flag
 placeholder-shaped prose that happens to already be non-empty.
 
+## Done means
+
+No ADR, RFC or spec in this repository carries the anonymized `Author` or `Deciders` placeholder; every one names a real GitHub handle, and `field.quality` and `field.pending` (`field_state.rs`) report a placeholder if one returns; `urzua check` over this repository reports none.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped: mechanically replaced all 92 placeholder instances (`Author`/`Deciders`) with `@beauwilliams` across every ADR, RFC, and spec. **Why:** the placeholder defeated the actual purpose of the `Author`/`Deciders` fields (RFC-1's accountability requirement) in every single record that had one; the real value has been known the whole time, so leaving it unfixed was pure debt, not an open question. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

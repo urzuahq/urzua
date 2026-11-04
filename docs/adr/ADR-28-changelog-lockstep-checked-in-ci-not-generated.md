@@ -1,7 +1,7 @@
 ---
 Status: Superseded
 Embodiment: Implemented
-Realized-by: code:.github/workflows/ci.yml
+Realized-by: code:.github/workflows/ci.yml@sha256:cc0baa44652ec9a5b60c5785db098463d602e175661412c76c8afce646913eea
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -62,3 +62,9 @@ field. Fails closed only on the one condition it exists to catch.
 
 - `CHANGELOG.md` — the file's own stated purpose, which this ADR enforces rather than restates.
 - `.github/workflows/ci.yml` — the `changelog` job.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Pinned `.github/workflows/ci.yml` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified for a Superseded record: the only change to ci.yml is an unrelated changeset-required fix. | **structural** |

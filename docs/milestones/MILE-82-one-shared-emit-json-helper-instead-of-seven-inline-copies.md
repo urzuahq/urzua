@@ -25,8 +25,13 @@ the underlying gap. Scoped out of BUG-4 itself (kept that fix narrow, per SPEC-9
 scope) and tracked here instead, since it's a real, separate piece of generic tooling work, not part
 of what was actually broken in `doctor`.
 
+## Done means
+
+Every command prints its JSON through the one shared `emit` function in `main.rs`, and no inline `println!` of `serde_json::to_string_pretty` remains in any command; `doctor` prints JSON, and `check_integration.rs` asserts each command's stdout parses as one JSON value.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: every command prints through the one `emit` function in `main.rs`; no inline `to_string_pretty` copy remains in a command. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > |---|---|---|

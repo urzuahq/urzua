@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:d738b6b7c5c7e5e02e4e124786dcf6c07ded2ce065375f2f1218ec5dfae2dea2, code:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df, code:rust/crates/urzua-cli/src/discovery.rs@sha256:4cb230d9ff43d0a7a6b57577ef7a7d4c29c0789c17320603f70436e9dbc4f707, test:rust/crates/urzua-io/src/lib.rs@sha256:d738b6b7c5c7e5e02e4e124786dcf6c07ded2ce065375f2f1218ec5dfae2dea2, test:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:a49eedaabcd01e2393ff6e269bca9a606dfa3149a82d0fcd5d585b74d0bdd5df
+Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, code:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:6b61cdfe6465941db592cce5290aaa097ca1480754502c1d4056c7d63596ac53, code:rust/crates/urzua-cli/src/discovery.rs@sha256:0f25fa8cbe3e5d26e7ef2b17b4a278df5fcd4a1f95a3bad6701af7e0597842cd, test:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/rules/embodiment.rs@sha256:6b61cdfe6465941db592cce5290aaa097ca1480754502c1d4056c7d63596ac53
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -90,6 +90,28 @@ exchange for correct history — cheap at this repo's size, revisit only if that
   discovery cost per job.
 - `fix`-writability of `Drift detected` remains a real, named gap.
 
+## Amendment (2026-11-04): missing history is an error, `fix` writes the drift, and pins refine it
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged.*
+
+Three statements in the Decision no longer match the code. Detection by `git blame` on the
+`Realized-by` line, nothing stored on the record and the computation living in the impure layer all
+stand, and that blame comparison remains the path for an unpinned locator (`urzua-cli/src/discovery.rs`).
+
+- **Missing history is an error, not "no drift".** The Decision says `commit_strictly_before` is
+  "wrapped to return `false` (never an error)" so that "an ambiguous or missing history reads as 'no
+  drift'". `#214` reversed this on purpose: it returns a `Result`, and a git failure (a commit the
+  repository does not have, as in a shallow clone) is an `Err` that the check reports, "never a quiet
+  no drift" (`MILE-159`, `#229`). `is_shallow_repository` and `commit_for_line_in` were added with it.
+  The Consequences line that a shallow checkout "produces a passing-but-meaningless drift result,
+  never an outright error" is likewise no longer true.
+- **`fix` writes `Drift detected`.** The Decision scopes out `fix --apply` writing `Embodiment: Drift
+  detected`. `urzua fix` now writes it, as the revision rows of `ADR-45` show, and the Consequences
+  line "`fix`-writability of `Drift detected` remains a real, named gap" is closed.
+- **Drift is no longer unconditional.** `ADR-67` refines it: a pinned locator compares a content hash
+  and does not consult git history, `drift_grace_days` holds back a recent change, and a stated
+  `Drift detected` is accepted inside that window (`#182`).
+
 ## References
 
 - RFC-5 §2, tier 1 — the staleness signal this ADR implements.
@@ -105,3 +127,5 @@ exchange for correct history — cheap at this repo's size, revisit only if that
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit bf8a93c5a. | **structural** |
+> | 2026-11-04 | Amendment added: a git failure is now an error and not "no drift" (`#214`, `#229`), `fix` now writes `Drift detected`, and `ADR-67` made drift conditional on pins and the grace window. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-io/src/lib.rs` d738b6b7c5c7 -> 671f9e9b0ff5, `rust/crates/urzua-core/src/rules/embodiment.rs` a49eedaabcd0 -> 6b61cdfe6465, `rust/crates/urzua-cli/src/discovery.rs` 4cb230d9ff43 -> 0f25fa8cbe3e. Reason: Re-pinned with the amendment above: git-blame drift detection still holds for unpinned locators; the error handling, fix write and pin refinement are recorded. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

@@ -16,7 +16,13 @@ The agentic, judgment-requiring repair tiers beyond Tier 1's mechanical recomput
 
 Named in RFC-8/ADR-15 as future scope, not yet built.
 
+## Done means
+
+Each repair tier beyond Tier 1 is decided in an ADR and built as a declared option of `urzua fix` that never writes without a mechanical verifier accepting the result; a planted repair that fails verification is refused and reported, and the tier is exercised against urzua's own records.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

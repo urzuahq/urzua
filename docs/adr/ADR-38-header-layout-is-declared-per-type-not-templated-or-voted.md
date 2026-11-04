@@ -1,8 +1,8 @@
 ---
 Status: Accepted
 Stable-Id: 01M1Z17D93V6R1JMM21ETKZKV8
-Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/header.rs@sha256:7eeae176eeebad15cda048c33cf017daa9f77e00301ab284474359981109fd11, code:rust/crates/urzua-core/src/config.rs@sha256:f8fe5e070ddb8ef7a7a080a4ca9cbfed4fe099cfa2180210f870c472e9891cf4, code:rust/crates/urzua-core/src/rules/header.rs@sha256:17e08ea792a9e943ebce30619e42d99a83effc01d0160e2efd943ee056164097, test:rust/crates/urzua-core/src/rules/header.rs@sha256:17e08ea792a9e943ebce30619e42d99a83effc01d0160e2efd943ee056164097
+Embodiment: Deprecated
+Realized-by: code:rust/crates/urzua-core/src/header.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-core/src/rules/header.rs
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -94,6 +94,20 @@ type declaring `Blockquote` again (an external adopter's own config, not this re
 benefit from it, and removing working, tested code with no cost to keeping it is not this decision's
 call to make.
 
+## Amendment (2026-11-04): the mechanism was removed
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-04 from the drift review the maintainer approved). The Decision text above is unchanged, and so is `Status`; see the revision log.*
+
+The 2026-09-08 amendment above says "the rule and the `HeaderLayout` enum stay in the codebase,
+unused rather than deleted". That is no longer true. `MILE-85` (`#205`), which removed blockquote and
+bold-list header parsing entirely, deleted `header.layout-consistency`, the `HeaderLayout` type and
+the `header_layout` config key; none of them exists in `rust/`, and `urzua rules` lists no layout
+rule. No decision replaces it: a header is YAML frontmatter, so there is no sub-format left to
+declare, and `ADR-33` is the closest record. The `Embodiment` of this record is therefore set to
+`Deprecated`, a declared sticky state that no evidence computes, and the pins on `header.rs`,
+`config.rs` and `rules/header.rs` are dropped, because those files no longer hold the mechanism the
+pins were attesting. The locators remain as the historical location of the code.
+
 ## References
 
 - RFC-10 — the closed-header model and the three tolerated sub-formats this decision narrows for
@@ -113,3 +127,4 @@ call to make.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 80dfe63c2. | **structural** |
+> | 2026-11-04 | `Embodiment` set to `Deprecated` and the `@sha256:` pins on `Realized-by` dropped; amendment added saying `MILE-85` (`#205`) removed `header_layout`, `header.layout-consistency` and `HeaderLayout`. **Why:** drift review of 2026-11-04, approved by beauwilliams; the pinned evidence still hashed, but the mechanism it attested no longer exists, and re-baselining would have certified it. `Status` is left `Accepted` for the maintainer: the ADR vocabulary has `Superseded`, which needs a successor record, and none exists. The amendment is proposed, pending maintainer acceptance. | **substantive** |

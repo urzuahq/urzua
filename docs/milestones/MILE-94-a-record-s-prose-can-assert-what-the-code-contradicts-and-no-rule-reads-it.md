@@ -75,6 +75,10 @@ and the rule that checks it. Candidates surfaced by the above, not a settled lis
 - `MILE-83` -- `Done`, and the proof this approach works.
 - `RFC-28` -- the mirror direction: source files claiming to implement a record.
 
+## Done means
+
+A load-bearing claim a record makes about the code moves out of prose into a checked field, and `check` reports a field whose claim the code contradicts; the mechanism is decided in an ADR, applied to the five stale-claim cases that prompted this record in urzua's own records, and a planted contradiction between a record's field and the code is reported while the corrected one passes.
+
 ## References
 
 - RFC-7 -- an instruction is not a mechanism; the prediction this milestone is the evidence for.
@@ -87,3 +91,4 @@ and the rule that checks it. Candidates surfaced by the above, not a settled lis
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial record, `Status: Planned`. **Why:** five stale claims merged into `main` in one session with every check green, because no rule reads prose. Filed as a named gap rather than five corrections, since correcting them individually leaves the mechanism that permitted them untouched -- and this project's own `RFC-7` already ruled that the instruction meant to prevent it is unenforced by construction. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

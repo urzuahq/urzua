@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-id/src/lib.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs, test:rust/crates/urzua-id/src/lib.rs
+Realized-by: code:rust/crates/urzua-id/src/lib.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:0d031cec31058a8e148fc646d12dde0c0e9323a2068db9e41dba6a2c3431d448, test:rust/crates/urzua-id/src/lib.rs
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -62,3 +62,4 @@ numbers, unchanged by this ADR) — so this is the cheapest point at which to ha
 > |---|---|---|
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c63eebe25. | **structural** |
+> | 2026-11-04 | Pinned `rust/crates/urzua-cli/src/commands/migrate.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: the only change since the evidence was last checked is the removal of the blockquote and bold-list Stable-Id shapes from migrate ids; ULID generation (urzua-id) is unchanged and the Decision holds. | **structural** |

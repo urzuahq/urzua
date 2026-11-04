@@ -28,9 +28,14 @@ been `Blocked on: BUG-3`, a drift rule could have flagged it the moment BUG-3's 
 milestone whose stated blocker silently resolved and nobody noticed defeats the purpose of tracking
 the blocker at all.
 
+## Done means
+
+`Blocked-on` is a checked header field of the milestone type, declared a narrative field in config, `pointer.resolution` reports a `Blocked-on` reference that does not resolve, and the opt-in rule `narrative-field.stale` reports a resolved reference whose target has reached a terminal status; a fixture covers a stale and a live blocker, and urzua's own milestones carry `Blocked-on` in the header and run the rule.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped (ADR-42): `Blocked-on` moved from a body section into `milestone`'s header (all 84 files migrated); `pointer.resolution` gained `Blocked-on` for dangling-reference checking; a new `blocked_on_stale` rule flags a resolved `Blocked-on` reference whose target reached a terminal status. **Why:** design review found `Blocked on` was the one field-shaped exception across the entire schema still living as unchecked prose, not just this one field's problem in isolation -- moving it into the header was more consistent than building a second, body-text-specific checking path. Verified against the real, live MILE-2/3 case: the rule was confirmed firing before the actual fix was applied, not only against synthetic fixtures. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
