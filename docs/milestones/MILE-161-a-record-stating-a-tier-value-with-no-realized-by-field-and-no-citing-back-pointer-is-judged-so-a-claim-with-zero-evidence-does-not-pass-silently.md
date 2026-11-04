@@ -25,3 +25,4 @@ A record stating Verified or Implemented with no evidence of either kind is repo
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented: `embodiment.consistency` reports a record stating `Verified` or `Implemented` with neither a `Realized-by` field nor a citing back-pointer, and a record stating no tier stays unexamined in the census; `test_tier_integration.rs` covers all three cases. Run over this repository it found three records claiming `Implemented` with no evidence (ADR-7, ADR-8, ADR-28), now given the `Realized-by` the work already named in their References. `urzua fix` is unchanged and does not repair these. `Status` stays `Planned`. **Why:** the Done-when contract. | **substantive** |
