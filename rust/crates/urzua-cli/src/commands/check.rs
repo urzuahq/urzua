@@ -521,7 +521,13 @@ pub fn run(
     let back_pointed = back_pointer_sources
         .as_ref()
         .map(|s| {
-            rules::back_pointer_evidence(&s.files, &s.back_pointer_paths, &config, &record_index)
+            rules::back_pointer_evidence(
+                &s.files,
+                &s.back_pointer_paths,
+                &s.test_paths,
+                &config,
+                &record_index,
+            )
         })
         .unwrap_or_default();
 
@@ -600,11 +606,18 @@ pub fn run(
             &config,
             rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
             || {
-                let (files, paths): (&[_], &[String]) = match &back_pointer_sources {
-                    Some(s) => (&s.files, &s.back_pointer_paths),
-                    None => (&[], &[]),
-                };
-                rules::embodiment_back_pointer_resolution(files, paths, &config, &record_index)
+                let (files, paths, tests): (&[_], &[String], &[String]) =
+                    match &back_pointer_sources {
+                        Some(s) => (&s.files, &s.back_pointer_paths, &s.test_paths),
+                        None => (&[], &[], &[]),
+                    };
+                rules::embodiment_back_pointer_resolution(
+                    files,
+                    paths,
+                    tests,
+                    &config,
+                    &record_index,
+                )
             },
         ),
         crate::gate::gated(
@@ -861,6 +874,20 @@ pub fn run(
                         .is_some_and(|c| c.changed.iter().any(|p| p.starts_with(&f.file))))
                 || in_scope.contains(f.file.as_path())
         });
+    }
+
+    // Every other finding names a repository-relative file; the config rules
+    // were handed the path the config was loaded from, which is absolute by
+    // default, so the same finding differed by checkout (BUG-185). Relativized
+    // here, after the filters above compare against the loaded path, and
+    // before waivers match on it. A `--config` outside the repository has no
+    // relative form and stays as given.
+    for f in &mut findings {
+        if f.file == config_path.as_path() {
+            if let Ok(rel) = f.file.strip_prefix(&repo_root) {
+                f.file = rel.to_path_buf();
+            }
+        }
     }
 
     // A waiver is a record (ADR-0011), never a config-level ignore list.

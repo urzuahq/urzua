@@ -96,6 +96,7 @@ mod tests {
             record_types: [(
                 record_type.to_string(),
                 crate::config::RecordTypeConfig {
+                    exclude_files: Vec::new(),
                     dir: format!("docs/{record_type}"),
                     identity: None,
                     fields: None,

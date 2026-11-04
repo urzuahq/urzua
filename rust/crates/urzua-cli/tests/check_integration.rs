@@ -3574,3 +3574,149 @@ fn the_acceptance_date_by_status_is_expressed_with_statuses_require_forbid_and_d
     assert_eq!(parsed["blocking"], true);
     assert_eq!(output.status.code(), Some(1));
 }
+
+fn excluded_files_repo(
+    name: &str,
+    exclude: &str,
+    files: &[&str],
+    rules: &str,
+) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules: {rules}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n{exclude}"
+        ),
+    )
+    .unwrap();
+    for f in files {
+        let content = if *f == "README.md" {
+            "# Architecture decisions\n\nAn index.\n".to_string()
+        } else {
+            "---\nStatus: Accepted\n---\n# ADR-1 - X\n".to_string()
+        };
+        std::fs::write(dir.join("docs/adr").join(f), content).unwrap();
+    }
+    commit_all(&dir);
+    dir
+}
+
+fn check_json(dir: &Path) -> serde_json::Value {
+    let out = run_urzua(dir, &["check"]);
+    serde_json::from_slice(&out.stdout).expect("JSON on stdout")
+}
+
+fn findings_for<'a>(parsed: &'a serde_json::Value, file: &str) -> Vec<&'a serde_json::Value> {
+    parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["file"] == file)
+        .collect()
+}
+
+/// `MILE-150`/`BUG-183`: a declared exclusion takes a named non-record file out
+/// of every rule's population and the type's file census.
+#[test]
+fn a_declared_non_record_file_is_in_no_rule_population_or_census_observed_failing() {
+    let rules = "{header.required-fields: error, filename.identity-pattern: warn}";
+    let dir = excluded_files_repo(
+        "exclude-declared",
+        "    exclude_files: [\"README.md\"]\n",
+        &["ADR-1-a.md", "README.md"],
+        rules,
+    );
+    let parsed = check_json(&dir);
+    assert!(
+        findings_for(&parsed, "docs/adr/README.md").is_empty(),
+        "{parsed}"
+    );
+    for exec in parsed["rules_executed"].as_array().unwrap() {
+        if exec["rule"] == "filename.identity-pattern" || exec["rule"] == "header.required-fields" {
+            assert_eq!(exec["population"]["examined"], 1, "{exec}");
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_undeclared_readme_is_still_reported_and_counted() {
+    let rules = "{header.required-fields: error, filename.identity-pattern: warn}";
+    let dir = excluded_files_repo(
+        "exclude-undeclared",
+        "",
+        &["ADR-1-a.md", "README.md"],
+        rules,
+    );
+    let parsed = check_json(&dir);
+    assert!(
+        !findings_for(&parsed, "docs/adr/README.md").is_empty(),
+        "{parsed}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_undeclared_stray_file_is_reported_beside_a_declared_exclusion() {
+    let rules = "{filename.identity-pattern: warn}";
+    let dir = excluded_files_repo(
+        "exclude-stray",
+        "    exclude_files: [\"README.md\"]\n",
+        &["ADR-1-a.md", "README.md", "notes.md"],
+        rules,
+    );
+    let parsed = check_json(&dir);
+    assert!(
+        findings_for(&parsed, "docs/adr/README.md").is_empty(),
+        "{parsed}"
+    );
+    assert_eq!(
+        findings_for(&parsed, "docs/adr/notes.md").len(),
+        1,
+        "{parsed}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A type whose only other file is the excluded one has no record to match, so
+/// the rule must not report "none of the type's 1 file(s) matches".
+#[test]
+fn an_excluded_file_is_not_counted_in_the_all_off_pattern_total() {
+    let rules = "{filename.identity-pattern: warn}";
+    let dir = excluded_files_repo(
+        "exclude-census",
+        "    exclude_files: [\"README.md\"]\n",
+        &["README.md", "0001-a.md"],
+        rules,
+    );
+    let parsed = check_json(&dir);
+    let all: Vec<_> = parsed["findings"].as_array().unwrap().iter().collect();
+    assert_eq!(all.len(), 1, "{parsed}");
+    assert_eq!(all[0]["file"], "docs/adr", "{parsed}");
+    let m = all[0]["message"].as_str().unwrap();
+    assert!(m.contains("1 file(s)") && !m.contains("README"), "{m}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `BUG-185`: a config-level finding names the configuration as a
+/// repository-relative path, like every other finding.
+#[test]
+fn a_config_level_finding_names_a_repository_relative_config_path_observed_failing() {
+    let dir = excluded_files_repo(
+        "config-relative",
+        "",
+        &["0001-a.md"],
+        "{identity.collision: error, config.scope-matches-nothing: warn}",
+    );
+    let parsed = check_json(&dir);
+    let hits = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "config.scope-matches-nothing")
+        .collect::<Vec<_>>();
+    assert_eq!(hits.len(), 1, "{parsed}");
+    assert_eq!(hits[0]["file"], ".urzua/config.yaml", "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+}

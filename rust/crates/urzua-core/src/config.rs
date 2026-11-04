@@ -123,6 +123,12 @@ pub struct RuleSetting {
     /// `embodiment.back-pointer-resolution`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back_pointer_paths: Option<Vec<String>>,
+    /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
+    /// the test class: a `Verifies:` comment there is test-tier evidence for
+    /// the record it cites (`MILE-146`). Only meaningful to
+    /// `embodiment.back-pointer-resolution`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_paths: Option<Vec<String>>,
     /// Days a locator change must have aged before it counts as drift
     /// (`MILE-129`). Only meaningful to `embodiment.consistency`; omitted
     /// means no grace window.
@@ -133,6 +139,12 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// `Embodiment` values a human sets that no evidence can compute
+    /// (`Deprecated`, `Inactive`): a record stating one is not reported as
+    /// drift (`MILE-148`). Only meaningful to `embodiment.consistency`;
+    /// omitted means every stated value must match the computed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky_states: Option<Vec<String>>,
     /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -256,9 +268,13 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             back_pointer_paths: Option<Vec<String>>,
             #[serde(default)]
+            test_paths: Option<Vec<String>>,
+            #[serde(default)]
             drift_grace_days: Option<u32>,
             #[serde(default)]
             claim_max_age_days: Option<u32>,
+            #[serde(default)]
+            sticky_states: Option<Vec<String>>,
             #[serde(default)]
             date_fields: Option<Vec<String>>,
             #[serde(default)]
@@ -301,8 +317,10 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 exclude_paths: table.exclude_paths,
                 allow_extension_prefix: table.allow_extension_prefix,
                 back_pointer_paths: table.back_pointer_paths,
+                test_paths: table.test_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
+                sticky_states: table.sticky_states,
                 date_fields: table.date_fields,
                 field_levels: table.field_levels,
                 accepted_statuses: table.accepted_statuses,
@@ -324,14 +342,24 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 exclude_paths: None,
                 allow_extension_prefix: None,
                 back_pointer_paths: None,
+                test_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
+                sticky_states: None,
                 date_fields: None,
                 field_levels: None,
                 accepted_statuses: None,
                 external_ids: None,
             })
         }
+    }
+}
+
+impl RecordTypeConfig {
+    /// Whether `file_name` is declared a non-record file of this type
+    /// (`exclude_files`): it is not loaded and no rule examines it.
+    pub fn excludes(&self, file_name: &str) -> bool {
+        self.exclude_files.iter().any(|f| f == file_name)
     }
 }
 
@@ -389,6 +417,14 @@ pub struct RecordTypeConfig {
     /// `dir` already decouples the type name from its directory name.
     #[serde(default)]
     pub prefix: Option<String>,
+    /// File names directly in `dir` that are not this type's records (an index
+    /// `README.md`, a `_template.md`). A named file is never loaded as a
+    /// record, so it is in no rule's population and not in the type's file
+    /// census; an unnamed stray file is still reported by
+    /// `filename.identity-pattern`. Bare file names only, matched exactly
+    /// (MILE-150): a path or a glob would be a second selection language.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude_files: Vec<String>,
     /// The expected line layout (MILE-0075) within `Blockquote`'s own
     /// tolerance for how fields are laid out -- one field per line, or
     /// several pipe-delimited on one line. Declared, not voted, the same
@@ -644,6 +680,10 @@ pub enum ConfigError {
         option: String,
         consequence: &'static str,
     },
+    #[error("rule '{rule}' option 'test_paths' entry '{entry}' is not inside any 'back_pointer_paths' entry, so no file under it is scanned and a `Verifies:` comment there would count for nothing")]
+    TestPathOutsideBackPointerPaths { rule: String, entry: String },
+    #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
+    StickyStateIsComputed { rule: String, state: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -660,6 +700,8 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("record type '{record_type}' declares exclude_files entry '{entry}', which is not a bare file name -- it would exclude nothing")]
+    InvalidExcludedFile { record_type: String, entry: String },
     #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
@@ -815,6 +857,18 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "test_paths",
+        owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION],
+        consequence_if_missing: "reads no `Verifies:` comment as test evidence",
+        optional: true,
+    },
+    RuleOption {
+        name: "sticky_states",
+        owners: &[crate::rules::RULE_EMBODIMENT_CONSISTENCY],
+        consequence_if_missing: "holds every stated Embodiment to the computed value",
+        optional: true,
+    },
+    RuleOption {
         name: "date_fields",
         owners: &[crate::rules::RULE_DATE_FIELD_VALID],
         consequence_if_missing: "names no date field and can never report",
@@ -870,6 +924,8 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
         "external_ids" => setting.external_ids.as_ref(),
+        "test_paths" => setting.test_paths.as_ref(),
+        "sticky_states" => setting.sticky_states.as_ref(),
         _ => None,
     }
 }
@@ -977,6 +1033,18 @@ pub fn parse_with_document_models(
                 record_type: name.clone(),
                 dir: rt.dir.clone(),
             });
+        }
+        for entry in &rt.exclude_files {
+            let bare = !entry.is_empty()
+                && entry != "."
+                && entry != ".."
+                && !entry.contains(['/', '\\', '*', '?', '[']);
+            if !bare {
+                return Err(ConfigError::InvalidExcludedFile {
+                    record_type: name.clone(),
+                    entry: entry.clone(),
+                });
+            }
         }
         // The effective prefix, not only a declared one: a type named
         // `my_type` with no `prefix` defaults to `MY_TYPE`, which no filename
@@ -1105,6 +1173,19 @@ pub fn parse_with_document_models(
             }
         }
 
+        // A sticky state equal to a computed one would hide real drift: that
+        // state is exactly what the evidence can reproduce.
+        if setting.level != RuleLevel::Off {
+            for state in setting.sticky_states.iter().flatten() {
+                if crate::rules::COMPUTED_EMBODIMENT_STATES.contains(&state.trim()) {
+                    return Err(ConfigError::StickyStateIsComputed {
+                        rule: name.clone(),
+                        state: state.clone(),
+                    });
+                }
+            }
+        }
+
         for (option, present) in [
             ("drift_grace_days", setting.drift_grace_days.is_some()),
             ("claim_max_age_days", setting.claim_max_age_days.is_some()),
@@ -1154,12 +1235,13 @@ pub fn parse_with_document_models(
     // findings all use the same spelling.
     for (name, setting) in config.rules.iter_mut() {
         let level = setting.level;
-        let path_options: [(&'static str, &mut Option<Vec<String>>); 5] = [
+        let path_options: [(&'static str, &mut Option<Vec<String>>); 6] = [
             ("published_paths", &mut setting.published_paths),
             ("source_paths", &mut setting.source_paths),
             ("application_paths", &mut setting.application_paths),
             ("exclude_paths", &mut setting.exclude_paths),
             ("back_pointer_paths", &mut setting.back_pointer_paths),
+            ("test_paths", &mut setting.test_paths),
         ];
         for (option, paths) in path_options {
             let Some(paths) = paths.as_mut() else {
@@ -1198,6 +1280,25 @@ pub fn parse_with_document_models(
                         reason,
                     });
                 }
+            }
+        }
+    }
+    // A test path outside every back-pointer path is never scanned, so a
+    // `Verifies:` there would be a silent no-op.
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let scanned = setting.back_pointer_paths.as_deref().unwrap_or_default();
+        for entry in setting.test_paths.iter().flatten() {
+            let covered = scanned
+                .iter()
+                .any(|b| crate::rules::path_is_published(std::path::Path::new(entry), b));
+            if !covered {
+                return Err(ConfigError::TestPathOutsideBackPointerPaths {
+                    rule: name.clone(),
+                    entry: entry.clone(),
+                });
             }
         }
     }
@@ -1258,6 +1359,43 @@ pub struct RelationPair {
     /// May the two ends be different record types. Defaults to `true`.
     #[serde(default = "default_cross_type")]
     pub cross_type: bool,
+    /// Optional split by the claimant's status (`MILE-154`): a claim from a
+    /// record at one of these statuses that is not settled by an echo is held
+    /// to the provisional level instead of the rule's.
+    #[serde(default)]
+    pub provisional: Option<ProvisionalClaim>,
+    /// The record types that carry this pair (`MILE-155`). Omitted means
+    /// global, as before: every type declaring a side's field carries it.
+    /// Declared, a record of another type is not the pair's business, and a
+    /// claim to a record of another type is out of scope rather than an
+    /// unechoed claim, because that type cannot hold the inverse field.
+    #[serde(default)]
+    pub types: Option<Vec<String>>,
+}
+
+/// Which claimants make a pair's claim provisional, and how loudly an
+/// unsettled provisional claim is reported (`MILE-154`, `MILE-127`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProvisionalClaim {
+    /// Claimant statuses (its `Status` role field, exact match) at which the
+    /// claim is not yet an assertion, such as `Draft` or `Proposed`.
+    pub statuses: Vec<String>,
+    /// The level an unsettled provisional claim is reported at. Defaults to
+    /// `warn`; the rule's own level is the full severity.
+    #[serde(default = "default_provisional_level")]
+    pub level: ProvisionalLevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProvisionalLevel {
+    Warn,
+    Error,
+}
+
+fn default_provisional_level() -> ProvisionalLevel {
+    ProvisionalLevel::Warn
 }
 
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
@@ -1300,6 +1438,77 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             if let Some(other) = fields.insert(field.as_str(), label) {
                 return bad(format!(
                     "field '{field}' is used by pair '{other}' and pair '{label}' (or twice by one pair); each field belongs to exactly one side of one pair"
+                ));
+            }
+        }
+    }
+    // A pair scoped to types that do not exist, or that carry neither of its
+    // fields, would examine nothing (ADR-7).
+    for pair in &config.relation_pairs {
+        let Some(types) = &pair.types else { continue };
+        let label = pair.name.as_str();
+        if types.is_empty() {
+            return bad(format!(
+                "pair '{label}' types must list at least one record type"
+            ));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for name in types {
+            if !seen.insert(name.as_str()) {
+                return bad(format!("pair '{label}' types lists '{name}' twice"));
+            }
+            let Some(rt) = config.record_types.get(name) else {
+                return bad(format!(
+                    "pair '{label}' types names '{name}', which is not a configured record type"
+                ));
+            };
+            let declares = |f: &str| {
+                rt.required_fields
+                    .iter()
+                    .chain(rt.known_fields.iter().flatten())
+                    .any(|d| d == f)
+            };
+            if !declares(&pair.forward) && !declares(&pair.inverse) {
+                return bad(format!(
+                    "pair '{label}' types names '{name}', which declares neither '{}' nor '{}', so it could never carry the pair",
+                    pair.forward, pair.inverse
+                ));
+            }
+        }
+    }
+    // A provisional split naming a status no type declares never applies,
+    // which reads as a clean run (ADR-7).
+    for pair in &config.relation_pairs {
+        let Some(prov) = &pair.provisional else {
+            continue;
+        };
+        let label = pair.name.as_str();
+        if prov.statuses.is_empty() {
+            return bad(format!(
+                "pair '{label}' provisional.statuses must list at least one status"
+            ));
+        }
+        let declared: std::collections::BTreeSet<String> = config
+            .record_types
+            .values()
+            .filter_map(|t| t.status_decl())
+            .flat_map(|d| d.values)
+            .collect();
+        let mut seen = std::collections::BTreeSet::new();
+        for status in &prov.statuses {
+            if status.trim().is_empty() || *status != status.trim() {
+                return bad(format!(
+                    "pair '{label}' provisional status '{status}' is blank or has surrounding whitespace"
+                ));
+            }
+            if !seen.insert(status.as_str()) {
+                return bad(format!(
+                    "pair '{label}' provisional.statuses lists '{status}' twice"
+                ));
+            }
+            if !declared.contains(status) {
+                return bad(format!(
+                    "pair '{label}' provisional status '{status}' is not in the `statuses.values` of any record type, so it could never apply"
                 ));
             }
         }
@@ -1471,6 +1680,7 @@ mod tests {
     #[test]
     fn declared_fields_unions_required_and_known() {
         let t = RecordTypeConfig {
+            exclude_files: Vec::new(),
             dir: "docs/adr".to_string(),
             identity: None,
             fields: None,
@@ -1600,6 +1810,35 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'published_paths'"));
+    }
+
+    #[test]
+    fn sticky_states_belongs_to_consistency_and_may_not_name_a_computed_state() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [Deprecated, Inactive]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["embodiment.consistency"].sticky_states.as_deref(),
+            Some(&["Deprecated".to_string(), "Inactive".to_string()][..])
+        );
+        let computed = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [Deprecated, Verified]\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(computed.contains("'Verified'") && computed.contains("sticky_states"));
+        let elsewhere = parse(&format!(
+            "{base}  field.quality:\n    level: error\n    sticky_states: [Deprecated]\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(elsewhere.contains("does not take the option 'sticky_states'"));
+        let blank = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [\" \"]\n"
+        ));
+        assert!(blank.is_err(), "a blank entry is not a declaration");
     }
 
     #[test]
@@ -2032,6 +2271,61 @@ record_types:
         assert_eq!(c.relation_pairs[0].reciprocity, PairReciprocity::None);
     }
 
+    fn prov_cfg(pairs: &str) -> String {
+        format!(
+            "schema_version: 2\n{pairs}record_types:\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Amends\", \"Amended-by\"]\n    statuses:\n      values: [Draft, Accepted]\n"
+        )
+    }
+
+    #[test]
+    fn a_provisional_split_loads_and_a_misdeclared_one_is_refused() {
+        let pair = |prov: &str| {
+            format!("relation_pairs:\n  - {{name: a, forward: Amends, inverse: Amended-by, reciprocity: required, provisional: {prov}}}\n")
+        };
+        let c = parse(&prov_cfg(&pair("{statuses: [Draft]}"))).unwrap();
+        let p = c.relation_pairs[0].provisional.as_ref().unwrap();
+        assert_eq!(p.statuses, vec!["Draft"]);
+        assert_eq!(p.level, ProvisionalLevel::Warn);
+        let c = parse(&prov_cfg(&pair("{statuses: [Draft], level: error}"))).unwrap();
+        assert_eq!(
+            c.relation_pairs[0].provisional.as_ref().unwrap().level,
+            ProvisionalLevel::Error
+        );
+        for bad in [
+            "{statuses: []}",
+            "{statuses: [Proposed]}",
+            "{statuses: [Draft, Draft]}",
+            "{statuses: [' Draft']}",
+            "{statuses: [Draft], level: off}",
+            "{statuses: [Draft], colour: red}",
+        ] {
+            assert!(
+                parse(&prov_cfg(&pair(bad))).is_err(),
+                "{bad} must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pair_scoped_to_types_loads_and_a_misdeclared_scope_is_refused() {
+        let pair = |types: &str| {
+            format!("relation_pairs:\n  - {{name: a, forward: Amends, inverse: Amended-by, reciprocity: required, types: {types}}}\n")
+        };
+        let c = parse(&pair_cfg("", &pair("[rfc]"))).unwrap();
+        assert_eq!(c.relation_pairs[0].types, Some(vec!["rfc".to_string()]));
+        assert!(parse(&pair_cfg("", AMEND_PAIR)).unwrap().relation_pairs[0]
+            .types
+            .is_none());
+        for bad in ["[]", "[rfc, rfc]", "[nope]", "rfc"] {
+            assert!(
+                parse(&pair_cfg("", &pair(bad))).is_err(),
+                "{bad} must be refused"
+            );
+        }
+        let neither = "schema_version: 2\nrelation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required, types: [adr]}\nrecord_types:\n  rfc:\n    dir: docs/rfc\n    known_fields: [Amends, Amended-by]\n  adr:\n    dir: docs/adr\n    known_fields: [Title]\n";
+        assert!(parse(neither).is_err());
+    }
+
     #[test]
     fn a_config_without_relation_pairs_loads_unchanged() {
         assert!(parse(&pair_cfg("", "")).unwrap().relation_pairs.is_empty());
@@ -2177,6 +2471,43 @@ record_types:
         ] {
             let err = parse(&format!("{base}{bad}")).unwrap_err().to_string();
             assert!(err.contains(needle), "{bad}: {err}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod exclude_files_tests {
+    use super::*;
+
+    fn with(entry: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    exclude_files: {entry}\nrules:\n  identity.collision: error\n"
+        )
+    }
+
+    #[test]
+    fn plain_file_names_load() {
+        let config = parse(&with("[\"README.md\", \"_template.md\"]")).unwrap();
+        assert_eq!(
+            config.record_types["adr"].exclude_files,
+            vec!["README.md", "_template.md"]
+        );
+    }
+
+    #[test]
+    fn an_entry_that_is_not_a_bare_file_name_is_refused_at_load() {
+        for bad in [
+            "\"\"",
+            "\"docs/adr/README.md\"",
+            "\"../README.md\"",
+            "\"*.md\"",
+            "\".\"",
+        ] {
+            let result = parse(&with(&format!("[{bad}]")));
+            assert!(
+                matches!(result, Err(ConfigError::InvalidExcludedFile { .. })),
+                "{bad} must be refused: {result:?}"
+            );
         }
     }
 }

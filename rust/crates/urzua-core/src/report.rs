@@ -627,7 +627,9 @@ pub struct NewReport {
     pub status: ReportStatus,
     pub path: PathBuf,
     pub display_number: u32,
-    pub stable_id: String,
+    /// `null` when the type's closed field set does not declare `Stable-Id`, so
+    /// none was written (`BUG-182`).
+    pub stable_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }

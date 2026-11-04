@@ -215,6 +215,7 @@ mod tests {
                 record_types: [(
                     "note".to_string(),
                     RecordTypeConfig {
+                        exclude_files: Vec::new(),
                         dir: "docs/notes".to_string(),
                         identity: None,
                         fields: None,
@@ -336,11 +337,14 @@ mod tests {
                 inverse: "Followed-by".to_string(),
                 reciprocity: crate::config::PairReciprocity::Required,
                 cross_type: false,
+                provisional: None,
+            types: None,
             }],
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "note".to_string(),
                 RecordTypeConfig {
+                    exclude_files: Vec::new(),
                     dir: "docs/notes".to_string(),
                     identity: None,
                     fields: None,
@@ -534,6 +538,7 @@ mod tests {
                 record_types: [(
                     "note".to_string(),
                     RecordTypeConfig {
+                        exclude_files: Vec::new(),
                         dir: dir.clone(),
                         identity: None,
                         fields: None,

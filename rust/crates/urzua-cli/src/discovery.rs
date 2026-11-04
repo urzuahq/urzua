@@ -95,7 +95,9 @@ pub(crate) fn load_records(
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if !urzua_core::record::is_governed_record_filename(file_name) {
+            if !urzua_core::record::is_governed_record_filename(file_name)
+                || type_config.excludes(file_name)
+            {
                 continue;
             }
             let full_path = repo_root.join(rel_path);
@@ -465,6 +467,8 @@ pub(crate) fn read_files_under(
 pub(crate) struct BackPointerSources {
     pub(crate) files: Vec<rules::PublishedFile>,
     pub(crate) back_pointer_paths: Vec<String>,
+    /// The declared test class, a subset of `back_pointer_paths` (`MILE-146`).
+    pub(crate) test_paths: Vec<String>,
 }
 
 /// Reads the back-pointer sources, or `None` when the rule is absent or off:
@@ -512,9 +516,15 @@ fn read_sources_for_rule(
     else {
         return Ok(None);
     };
+    let test_paths = config
+        .rules
+        .get(rule)
+        .and_then(|s| s.test_paths.clone())
+        .unwrap_or_default();
     let files = read_files_under(repo_root, discovered, &source_paths, rule)?;
     Ok(Some(BackPointerSources {
         files,
         back_pointer_paths: source_paths,
+        test_paths,
     }))
 }
