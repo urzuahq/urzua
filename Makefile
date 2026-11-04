@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants hooks-install \
+.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants hooks-install hooks-auto \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint rust-clean
 
 help: ## Show available commands
@@ -21,7 +21,7 @@ help: ## Show available commands
 
 # ---------------------------------------------------------------- all languages
 
-build: rust-build ## Build everything
+build: rust-build hooks-auto ## Build everything and wire the git hooks
 check: rust-check ## Type-check / compile-check everything
 test: rust-test ## Run all tests
 fmt: rust-fmt ## Format all code
@@ -32,11 +32,27 @@ clean: rust-clean ## Remove build artifacts
 ci: fmt-check lint rust-build test records rule-table-check release-guard release-invariants ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
-hooks-install: ## Install the opt-in git hooks: pre-commit (urzua check --base HEAD), pre-push (fmt + clippy + urzua check)
-	@cp .git-hooks/pre-commit .git/hooks/pre-commit
-	@cp .git-hooks/pre-push .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-commit .git/hooks/pre-push
-	@echo "pre-commit and pre-push hooks installed"
+hooks-install: ## Wire the versioned git hooks (core.hooksPath=.git-hooks): pre-commit (urzua check --base HEAD), pre-push (fmt + clippy + urzua check)
+	@current="$$(git config --get core.hooksPath || true)"; \
+	if [ -n "$$current" ] && [ "$$current" != ".git-hooks" ]; then \
+	  echo "hooks-install: core.hooksPath is already '$$current'; not overriding it." >&2; \
+	  echo "hooks-install: point it at .git-hooks, or call .git-hooks/pre-commit from your hook. 'urzua doctor' reports the wiring." >&2; \
+	  exit 1; \
+	fi; \
+	chmod +x .git-hooks/pre-commit .git-hooks/pre-push; \
+	git config core.hooksPath .git-hooks; \
+	echo "git hooks wired: core.hooksPath=.git-hooks (pre-commit, pre-push)"
+
+# Run by `make build`, so the first build of a clone wires the hooks with no
+# opt-in step (MILE-179). Never fails the build: outside a git work tree there
+# is nothing to wire, and a hooksPath the contributor chose is theirs. Both are
+# said on stderr, and `urzua doctor` reports the state either way.
+hooks-auto:
+	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+	  $(MAKE) --no-print-directory hooks-install || true; \
+	else \
+	  echo "hooks-auto: not a git work tree; git hooks not wired" >&2; \
+	fi
 
 # ---------------------------------------------------------------------- rust
 

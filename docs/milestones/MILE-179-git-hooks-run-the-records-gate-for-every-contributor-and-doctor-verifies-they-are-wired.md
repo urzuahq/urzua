@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K4FM2RJYDTE8JK0M2B7PH5
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-71
@@ -29,3 +29,4 @@ Whether a hook fails or warns when the binary is absent. Failing makes a fresh c
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's commit-time gate and its automatic installation have no counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Delivered and shipped: hooks are versioned in `.git-hooks/` and wired by `core.hooksPath`, which the first `make build` sets (`make hooks-install` does only that, and never overrides a path the contributor chose); `urzua doctor` reports each layer as not installed, installed and running `urzua`, installed and not running it, or installed without the execute bit, each planted in a test; a planted bad header is stopped by the commit hook in a test. **Decision:** an absent binary, or a `check` that exits 2, makes the commit hook warn with a `NOT RUN` banner on stderr and exit 0 rather than fail. **Why:** `ADR-71` says only CI is the guarantee and a git hook cannot be forced onto a clone; failing would stop a fresh clone from committing the build that creates the binary, and the banner keeps the skip from reading as success. Blocking findings still stop the commit, and the findings are now shown (the hook used to discard them). | **substantive** |
