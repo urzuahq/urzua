@@ -206,14 +206,21 @@ content to match. Either add a dated, transparent note to its own Consequences s
 the correction, or write a new record that narrows/supersedes it and say so explicitly in both
 places. `Status` is never silently changed during an otherwise-structural edit.
 
-## A record's Status is a human decision, not yours to set
+## A record's Status: who sets it
 
 Filing a record is not deciding it. Create records as `Draft`/`Open`/`Planned` and leave `Status`
-there — only the user moves it to `Accepted`/`Rejected`/`Fixed`/`Done`. The same rule covers any
-other field whose value asserts a decision was reached on someone's behalf — `Supersedes /
-Superseded-by`, a vacated-number tombstone, closing a cross-reference — not just the literal
-`Status` key itself. Distinct from the rule above: that one guards an already-decided record's
-content; this one guards the decision itself.
+there, with two exceptions. An ADR's or RFC's `Status` (`Accepted`, `Rejected`, `Superseded`) is the
+maintainer's decision and is never yours to set, however finished the work looks. A `milestone` is
+different: the PR that fully delivers it sets its `Realized-by` locators (the code and tests that
+deliver it) and `Status: Done` in that same PR, with a structural revision row citing the PR, and the
+maintainer reviewing the PR is the human decision. `status.delivery-agreement` fails when they
+disagree, and `urzua fix --apply` writes the `Done` for you when the evidence is there. A milestone
+the PR only partly delivers keeps its `Status` and gets a revision row saying what remains; put no
+`Realized-by` locator on it until it is delivered, because the evidence is read as "delivered". A
+bug follows the fixed-in-PR convention. The same rule covers any other field whose value asserts a
+decision was reached on someone's behalf (`Supersedes / Superseded-by`, a vacated-number tombstone,
+closing a cross-reference) and is not covered by the exceptions above. Distinct from the rule above
+this one: that one guards an already-decided record's content; this one guards the decision itself.
 
 ## Don't build speculative capability
 

@@ -5,6 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: ADR-23
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 69 — Stdout is always JSON; remove the --format flag
 
@@ -21,3 +22,4 @@ Two output shapes mean two things that can silently drift apart, and an agent pi
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-06 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

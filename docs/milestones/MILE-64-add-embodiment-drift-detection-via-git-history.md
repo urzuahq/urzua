@@ -5,6 +5,7 @@ Phase: '0'
 Track: embodiment-model
 Implements: ADR-32
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/fix_drift_git_integration.rs
 ---
 # 64 — Add Embodiment drift detection via git history
 
@@ -21,3 +22,4 @@ A back-pointer that's merely present proves someone typed a string once, not tha
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
