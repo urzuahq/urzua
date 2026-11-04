@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -47,7 +47,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > Its number and identity are unchanged deliberately. Roughly thirty-five records, comments and
 > source files cite `SPEC-1` for the rules above; renumbering or repurposing it would be the
 > reverse-reference blast radius this spec's own acceptance suite records as a bug class. Identity
-> is stable, and the split is additive — RFC-11 §6, applied to this document. `SPEC-7` is vacated
+> is stable, and the split is additive — RFC-11 §6, applied to this document. spec number 7 is vacated
 > (retracted into SPEC-6 v0.2, ADR-14) and deliberately not reused for any of the above, per RFC-13's
 > principle that a vacated number is a record, not a gap to silently fill.
 
@@ -273,3 +273,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-04 | Exit bar restated: Phase 0 has a single exit (urzua governs its own repository in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the second codebase, the full acceptance suite and the `new`-is-faster measurement move to the Phase 1 exit; `Version` `0.5` -> `0.6`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Exit bar restated again: Phase 0 is urzua reproducing, in its own repository and its own `.urzua/config.yaml`, the governance functionality a real adopter environment has, with zero standing warnings; replacing one adopter's hand-written linter (`MILE-102`) moves to the Phase 1 exit; `Version` `0.6` -> `0.7`. **Why:** Maintainer decision, 2026-11-04: Phase 0 is bootstrapping and parity on a solid codebase, and the adopter switchover follows it. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. Reworded the vacated-number sentence to say "spec number 7" in place of the retired record id, so `citation.resolution` no longer reads it as a dangling citation. The meaning is unchanged. **Why:** `MILE-156` -- the rule is now enabled in this repository. | **substantive** |

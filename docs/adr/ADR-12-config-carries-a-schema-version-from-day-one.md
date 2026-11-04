@@ -43,7 +43,7 @@ already named.
 ## References
 
 - SPEC-3 — the open question this decides.
-- `.urzua/config.toml` — this repository's own config, updated to carry the field.
+- `.urzua/config.yaml` — this repository's own config (named `config.toml` when this decision was made), updated to carry the field.
 
 ## Amendment (2026-09-17): the format changes, this decision does not
 
