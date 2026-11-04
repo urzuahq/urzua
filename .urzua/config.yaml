@@ -18,6 +18,7 @@ record_types:
       - "Embodiment"
       - "Realized-by"
       - "Stable-Id"
+      - "Accepted-on"
       - "Derives-from"
       - "Supersedes / Superseded-by"
     statuses:
@@ -45,6 +46,7 @@ record_types:
     header_shape: "yaml-frontmatter"
     known_fields:
       - "Stable-Id"
+      - "Accepted-on"
       - "Supersedes / Superseded-by"
       - "Amends"
       - "Amended-by"
@@ -196,7 +198,11 @@ rules:
   status.required-field-missing: error
   date.field-valid:
     level: error
-    date_fields: ["Date"]
+    date_fields: ["Date", "Accepted-on"]
+  # An acceptance date may not precede the record's own date (MILE-157).
+  date.field-order:
+    level: error
+    date_order: ["Date <= Accepted-on"]
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
