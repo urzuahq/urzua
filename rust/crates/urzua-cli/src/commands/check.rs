@@ -530,6 +530,15 @@ pub fn run(
     // that rule (`BUG-116`).
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
     notices.extend(rules::identity_collision_notices(&identity_collisions));
+    // A record satisfying a required section through a declared alias is
+    // disclosed (`MILE-165`), only when `section.required` is on.
+    if config
+        .rules
+        .get(rules::RULE_SECTION_REQUIRED)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
+    {
+        notices.extend(rules::section_alias_notices(&records, &config, &full_text));
+    }
 
     // Records a source comment cites (`MILE-128`): code-tier evidence for
     // `embodiment.consistency`, read from files the CLI already loaded.

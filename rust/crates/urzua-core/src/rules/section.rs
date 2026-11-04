@@ -30,7 +30,9 @@ pub fn section_required(
         full_text,
         |_| true,
         |slot, sections| {
-            if find_section(sections, &slot.required.name).is_none() {
+            if find_section(sections, slot.required).is_none()
+                && !preamble_carries_marker(slot.required, &slot.preamble(sections))
+            {
                 findings.push(Finding {
                     rule: RULE_SECTION_REQUIRED.to_string(),
                     severity: FindingSeverity::Error,
@@ -38,7 +40,21 @@ pub fn section_required(
                     line: None,
                     waived: None,
                     declared_severity: None,
-                    message: format!("required section `## {}` is missing", slot.required.name),
+                    message: if slot.required.aliases.is_empty() {
+                        format!("required section `## {}` is missing", slot.required.name)
+                    } else {
+                        let aliases: Vec<String> = slot
+                            .required
+                            .aliases
+                            .iter()
+                            .map(|a| format!("`## {a}`"))
+                            .collect();
+                        format!(
+                            "required section `## {}` is missing, and so is every alias ({})",
+                            slot.required.name,
+                            aliases.join(", ")
+                        )
+                    },
                 });
             }
             Outcome::Examined
@@ -67,9 +83,19 @@ pub fn section_shape(
         full_text,
         |required| required.shape.is_some(),
         |slot, sections| {
-            // A missing section is `section.required`'s to report.
-            let Some(section) = find_section(sections, &slot.required.name) else {
-                return Outcome::Absent;
+            // A missing section is `section.required`'s to report, unless the
+            // declaration also reads the preamble and the block's marker is
+            // there: then the preamble is judged by the same shape check.
+            let preamble;
+            let (section, outside) = match find_section(sections, slot.required) {
+                Some((section, _)) => (section, false),
+                None => {
+                    preamble = slot.preamble(sections);
+                    if !preamble_carries_marker(slot.required, &preamble) {
+                        return Outcome::Absent;
+                    }
+                    (&preamble, true)
+                }
             };
             let shape = slot.required.shape.as_ref().expect("filtered on shape");
             if let Err((line, message)) = check_shape(section, shape) {
@@ -80,7 +106,14 @@ pub fn section_shape(
                     line: Some(line),
                     waived: None,
                     declared_severity: None,
-                    message: format!("section `## {}`: {message}", slot.required.name),
+                    message: if outside {
+                        format!(
+                            "the preamble (before the first `##` section, where `## {}` is absent): {message}",
+                            slot.required.name
+                        )
+                    } else {
+                        format!("section `## {}`: {message}", slot.required.name)
+                    },
                 });
             }
             Outcome::Examined
@@ -102,6 +135,45 @@ struct Slot<'a> {
     record: &'a Record,
     required: &'a RequiredSection,
     decl: &'a SectionsDecl,
+    /// The record's full text, to read the preamble from.
+    text: &'a str,
+    /// Lines of the header region.
+    header_end: usize,
+}
+
+impl Slot<'_> {
+    /// The text before the first `##` heading, as a section with no heading.
+    fn preamble(&self, sections: &[Section]) -> Section {
+        let end = sections.first().map_or(usize::MAX, |s| s.line - 1);
+        let lines: Vec<&str> = self
+            .text
+            .lines()
+            .enumerate()
+            .skip(self.header_end)
+            .take_while(|(i, _)| *i < end)
+            .map(|(_, l)| l)
+            .collect();
+        Section {
+            heading: String::new(),
+            line: self.header_end,
+            end_line: self.header_end + lines.len(),
+            body: lines.iter().map(|l| format!("{l}\n")).collect(),
+        }
+    }
+}
+
+/// Whether the declaration reads the preamble and the block's marker sits in
+/// it (case-insensitively, as the shape check finds it).
+fn preamble_carries_marker(required: &RequiredSection, preamble: &Section) -> bool {
+    let Some(SectionShape::YStatement { marker: Some(m) }) = &required.shape else {
+        return false;
+    };
+    required.preamble
+        && prose_lines(preamble).iter().any(|(_, l)| {
+            strip_quote(l)
+                .to_ascii_lowercase()
+                .contains(&m.to_ascii_lowercase())
+        })
 }
 
 /// The shared census: candidates are every required section (passing `keep`)
@@ -131,11 +203,18 @@ fn run_slots(
         let Some(decl) = decls.get(record.record_type.as_str()) else {
             continue;
         };
+        let text = full_text
+            .get(&record.path)
+            .map(String::as_str)
+            .unwrap_or_default();
+        let header_end = record.header.region.map_or(0, |(_, end)| end);
         for required in decl.required.iter().filter(|r| keep(r)) {
             candidates.push(Slot {
                 record,
                 required,
                 decl,
+                text,
+                header_end,
             });
         }
     }
@@ -205,8 +284,66 @@ pub(super) fn record_sections(record: &Record, text: &str) -> Vec<Section> {
     parse_sections(&body, skip + 1)
 }
 
-fn find_section<'a>(sections: &'a [Section], name: &str) -> Option<&'a Section> {
-    sections.iter().find(|s| s.heading == name)
+/// The section satisfying `required`, with the heading it was found under:
+/// the `name` first, then each alias in the order declared.
+fn find_section<'a>(
+    sections: &'a [Section],
+    required: &'a RequiredSection,
+) -> Option<(&'a Section, &'a str)> {
+    required.headings().find_map(|h| {
+        sections
+            .iter()
+            .find(|s| s.heading == h)
+            .map(|section| (section, h))
+    })
+}
+
+/// One `Info` notice per `(required section, alias)` that at least one record
+/// satisfied through the alias, listing those records (`MILE-165`). Never a
+/// finding: an alias is a declared equivalent, but a repository should see
+/// which records use one. Same scope as `section.required` (exempt, unreadable
+/// and header-less records are not read).
+pub fn section_alias_notices(
+    records: &[Record],
+    config: &Config,
+    full_text: &HashMap<PathBuf, String>,
+) -> Vec<Notice> {
+    let mut used: std::collections::BTreeMap<(String, String, String), Vec<String>> =
+        Default::default();
+    let _ = run_slots(
+        records,
+        config,
+        full_text,
+        |required| !required.aliases.is_empty(),
+        |slot, sections| {
+            if let Some((_, heading)) = find_section(sections, slot.required) {
+                if heading != slot.required.name {
+                    used.entry((
+                        slot.record.record_type.clone(),
+                        slot.required.name.clone(),
+                        heading.to_string(),
+                    ))
+                    .or_default()
+                    .push(slot.record.path.display().to_string());
+                }
+            }
+            Outcome::Examined
+        },
+    );
+    used.into_iter()
+        .map(|((record_type, name, alias), mut paths)| {
+            paths.sort();
+            Notice {
+                severity: NoticeSeverity::Info,
+                subject: RULE_SECTION_REQUIRED.to_string(),
+                message: format!(
+                    "{} {record_type} record(s) satisfy required section `## {name}` through its alias `## {alias}`: {}",
+                    paths.len(),
+                    paths.join(", ")
+                ),
+            }
+        })
+        .collect()
 }
 
 /// `Err((line, message))` when `section` does not have `shape`.
@@ -719,5 +856,95 @@ mod tests {
         let body = format!("{HEAD}| A | x |\n\n{HEAD}| A | x |\n| B | y |\n");
         let (_, f) = run(section_shape, T_DECL, &options(&body));
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    const ALIASED: &str = "{from: headings, required: [{name: Decision, aliases: [Resolution]}]}";
+
+    #[test]
+    fn a_declared_alias_satisfies_the_requirement_and_is_disclosed_observed_failing() {
+        let content = doc("Accepted", "## Resolution\n\nd\n");
+        let (e, f) = run(section_required, ALIASED, &content);
+        assert!(f.is_empty(), "{f:?}");
+        assert_eq!(counts(&e), (1, 1));
+
+        let r = record("docs/adr/ADR-1-x.md", "adr", &content);
+        let text = HashMap::from([(PathBuf::from("docs/adr/ADR-1-x.md"), content.clone())]);
+        let notices = section_alias_notices(&[r], &config(ALIASED), &text);
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert!(notices[0].message.contains("`## Decision`"));
+        assert!(notices[0].message.contains("`## Resolution`"));
+        assert!(notices[0].message.contains("docs/adr/ADR-1-x.md"));
+    }
+
+    #[test]
+    fn the_name_wins_over_an_alias_and_neither_is_a_finding_naming_both() {
+        let both = doc("Accepted", "## Resolution\n\nr\n\n## Decision\n\nd\n");
+        let r = record("docs/adr/ADR-1-x.md", "adr", &both);
+        let text = HashMap::from([(PathBuf::from("docs/adr/ADR-1-x.md"), both.clone())]);
+        assert!(section_alias_notices(&[r], &config(ALIASED), &text).is_empty());
+
+        let (_, f) = run(
+            section_required,
+            ALIASED,
+            &doc("Accepted", "## Context\n\nc\n"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("Decision") && f[0].message.contains("Resolution"));
+    }
+
+    #[test]
+    fn the_shape_check_follows_an_alias() {
+        let decl = "{from: headings, required: [{name: Decision, aliases: [Resolution], shape: y-statement}]}";
+        let ok = doc("Accepted", &format!("## Resolution\n\n{Y}\n"));
+        let (e, f) = run(section_shape, decl, &ok);
+        assert!(f.is_empty(), "{f:?}");
+        assert_eq!(counts(&e), (1, 1));
+        let bad = doc("Accepted", "## Resolution\n\nNot a y-statement.\n");
+        let (_, f) = run(section_shape, decl, &bad);
+        assert_eq!(f.len(), 1, "{f:?}");
+    }
+
+    const PRE: &str = "{from: headings, required: [{name: Decision, shape: y-statement, marker: 'Y-statement:', preamble: true}]}";
+
+    #[test]
+    fn a_y_statement_in_the_preamble_is_judged_by_the_same_shape_check_observed_failing() {
+        let good = doc(
+            "Accepted",
+            &format!("Y-statement: {Y}\n\n## Context\n\nc\n"),
+        );
+        let (_, f) = run(section_required, PRE, &good);
+        assert!(f.is_empty(), "{f:?}");
+        let (e, f) = run(section_shape, PRE, &good);
+        assert!(f.is_empty(), "{f:?}");
+        assert_eq!(counts(&e), (1, 1));
+
+        let bad = doc(
+            "Accepted",
+            "Y-statement: In the context of a, we decided c.\n\n## Context\n\nc\n",
+        );
+        let (_, f) = run(section_shape, PRE, &bad);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("preamble"), "{}", f[0].message);
+        assert_eq!(f[0].line, Some(6));
+    }
+
+    #[test]
+    fn the_preamble_is_read_only_when_declared_and_only_when_the_marker_is_there() {
+        // Declared but no marker in the preamble: still a missing section.
+        let none = doc("Accepted", "Just prose.\n\n## Context\n\nc\n");
+        let (_, f) = run(section_required, PRE, &none);
+        assert_eq!(f.len(), 1, "{f:?}");
+        // Marker in the preamble but `preamble` not declared: missing.
+        let not_declared = "{from: headings, required: [{name: Decision, shape: y-statement, marker: 'Y-statement:'}]}";
+        let content = doc(
+            "Accepted",
+            &format!("Y-statement: {Y}\n\n## Context\n\nc\n"),
+        );
+        let (_, f) = run(section_required, not_declared, &content);
+        assert_eq!(f.len(), 1, "{f:?}");
+        // A marker after the first `##` heading is not the preamble.
+        let late = doc("Accepted", &format!("## Context\n\nY-statement: {Y}\n"));
+        let (_, f) = run(section_required, PRE, &late);
+        assert_eq!(f.len(), 1, "{f:?}");
     }
 }

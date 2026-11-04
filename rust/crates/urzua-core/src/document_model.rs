@@ -232,6 +232,22 @@ pub struct RequiredSection {
     /// The `##` heading text, matched exactly after trimming.
     pub name: String,
     pub shape: Option<SectionShape>,
+    /// Other `##` heading texts that satisfy this requirement (`MILE-165`),
+    /// matched exactly after trimming, in the order tried after `name`.
+    pub aliases: Vec<String>,
+    /// Also read a `y-statement` from the preamble, the text before the first
+    /// `##` heading, when the section itself is absent (`MILE-165`). Needs the
+    /// shape's `marker`, because without one the block the preamble would be
+    /// read from is the H1's first paragraph.
+    pub preamble: bool,
+}
+
+impl RequiredSection {
+    /// Every heading text that satisfies this requirement: `name`, then the
+    /// aliases.
+    pub fn headings(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.name.as_str()).chain(self.aliases.iter().map(String::as_str))
+    }
 }
 
 /// A content shape a required section can declare. Shape is structure only:
@@ -256,6 +272,10 @@ struct RawRequiredSection {
     marker: Option<String>,
     #[serde(default)]
     min_rows: Option<yaml_serde::Value>,
+    #[serde(default)]
+    aliases: Option<Vec<String>>,
+    #[serde(default)]
+    preamble: Option<bool>,
 }
 
 impl RawRequiredSection {
@@ -314,7 +334,34 @@ impl RawRequiredSection {
                 ))
             }
         };
-        Ok(RequiredSection { name, shape })
+        let aliases: Vec<String> = self
+            .aliases
+            .unwrap_or_default()
+            .into_iter()
+            .map(|a| a.trim().to_string())
+            .collect();
+        if aliases.iter().any(String::is_empty) {
+            return Err(format!("section '{name}': an alias must not be blank"));
+        }
+        for (i, alias) in aliases.iter().enumerate() {
+            if *alias == name || aliases[..i].contains(alias) {
+                return Err(format!(
+                    "section '{name}': alias '{alias}' repeats a heading it already names"
+                ));
+            }
+        }
+        let preamble = self.preamble.unwrap_or(false);
+        if preamble && !matches!(shape, Some(SectionShape::YStatement { marker: Some(_) })) {
+            return Err(format!(
+                "section '{name}': `preamble` needs shape `y-statement` with a `marker`, which is how the block is found outside a section"
+            ));
+        }
+        Ok(RequiredSection {
+            name,
+            shape,
+            aliases,
+            preamble,
+        })
     }
 }
 
@@ -326,11 +373,12 @@ fn deserialize_required<'de, D: serde::Deserializer<'de>>(
     let mut out: Vec<RequiredSection> = Vec::with_capacity(raw.len());
     for r in raw {
         let section = r.resolve().map_err(serde::de::Error::custom)?;
-        if out.iter().any(|o| o.name == section.name) {
-            return Err(serde::de::Error::custom(format!(
-                "`required` names section '{}' twice",
-                section.name
-            )));
+        for heading in section.headings() {
+            if out.iter().any(|o| o.headings().any(|h| h == heading)) {
+                return Err(serde::de::Error::custom(format!(
+                    "`required` names section '{heading}' twice"
+                )));
+            }
         }
         out.push(section);
     }
@@ -747,5 +795,40 @@ mod tests {
             "    sections: {from: headings, required: [{name: A}], exempt_statuses: [' ']}\n",
         );
         assert!(e.contains("blank"), "{e}");
+    }
+
+    #[test]
+    fn aliases_and_preamble_load_and_malformed_ones_are_refused() {
+        let models = split(&cfg(
+            "    sections: {from: headings, required: [{name: Decision, aliases: [Resolution, Outcome], shape: y-statement, marker: 'Y-statement', preamble: true}]}\n",
+        ))
+        .unwrap();
+        let r = &models["adr"].sections.as_ref().unwrap().required[0];
+        assert_eq!(r.aliases, ["Resolution", "Outcome"]);
+        assert!(r.preamble);
+        assert_eq!(
+            r.headings().collect::<Vec<_>>(),
+            ["Decision", "Resolution", "Outcome"]
+        );
+        for (decl, needle) in [
+            ("{name: A, aliases: [' ']}", "alias"),
+            ("{name: A, aliases: [A]}", "repeats"),
+            ("{name: A, aliases: [B, B]}", "repeats"),
+            ("{name: A, preamble: true}", "preamble"),
+            ("{name: A, shape: y-statement, preamble: true}", "marker"),
+            (
+                "{name: A, shape: table-min-rows, min_rows: 1, preamble: true}",
+                "preamble",
+            ),
+        ] {
+            let e = invalid(&format!(
+                "    sections: {{from: headings, required: [{decl}]}}\n"
+            ));
+            assert!(e.contains(needle), "{decl}: {e}");
+        }
+        let e = invalid(
+            "    sections: {from: headings, required: [{name: A, aliases: [B]}, {name: B}]}\n",
+        );
+        assert!(e.contains("twice"), "{e}");
     }
 }
