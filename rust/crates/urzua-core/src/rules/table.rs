@@ -136,10 +136,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["not_in", "fields"],
         phase: Phase::Main,
         run: |c| {
-            let setting = c.config.rules.get(RULE_POINTER_TARGET_STATUS);
-            let not_in = setting.and_then(|s| s.not_in.clone()).unwrap_or_default();
-            let fields = setting.and_then(|s| s.fields.as_deref());
-            pointer_target_status(c.records, c.config, &not_in, fields, c.index)
+            let opts: PointerTargetOpts = c.config.rule_opts(RULE_POINTER_TARGET_STATUS);
+            pointer_target_status(c.records, c.config, &opts.not_in, opts.fields.as_deref(), c.index)
         },
     },
     RuleDef {
@@ -181,11 +179,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["claim_paths", "closed_statuses"],
         phase: Phase::Main,
         run: |c| {
-            let setting = c.config.rules.get(RULE_CLAIM_STATUS_AGREEMENT);
-            let closed = setting
-                .and_then(|s| s.closed_statuses.clone())
-                .unwrap_or_default();
-            claim_status_agreement(c.claims, &closed, c.config, c.index)
+            let opts: ClaimOpts = c.config.rule_opts(RULE_CLAIM_STATUS_AGREEMENT);
+            claim_status_agreement(c.claims, &opts.closed_statuses, c.config, c.index)
         },
     },
     RuleDef {
@@ -339,10 +334,9 @@ pub const RULE_TABLE: &[RuleDef] = &[
                     Some(s) => (&s.files, &s.back_pointer_paths),
                     None => (&[], &[]),
                 };
-                let fallback = c.config.rules
-                    .get(RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED)
-                    .and_then(|s| s.accepted_statuses.clone())
-                    .unwrap_or_default();
+                let fallback = c.config
+                    .rule_opts::<DecisionAcceptedOpts>(RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED)
+                    .accepted_statuses;
                 embodiment_back_pointer_decision_accepted(
                     files,
                     paths,
@@ -475,16 +469,13 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["terminal_statuses"],
         phase: Phase::Main,
         run: |c| {
-            let terminal = c.config.rules
-                .get(RULE_NARRATIVE_FIELD_STALE)
-                .and_then(|s| s.terminal_statuses.clone())
-                .unwrap_or_default();
-            narrative_field_stale(c.records, c.config, &terminal, c.index)
+            let opts: NarrativeStaleOpts = c.config.rule_opts(RULE_NARRATIVE_FIELD_STALE);
+            narrative_field_stale(c.records, c.config, &opts.terminal_statuses, c.index)
         },
     },
     RuleDef {
         id: RULE_TYPE_DIR_MATCHES_NOTHING,
-        description: "A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type\u{2019}s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible.",
+        description: "A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type\u{2019}s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`).",
         scope: Scope::Config,
         anchor: Anchor::Config,
         needs_identity_index: false,
@@ -869,14 +860,9 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["source_paths", "exclude_paths"],
         phase: Phase::Main,
         run: |c| {
-            let setting = c.config.rules.get(RULE_DIFF_SOURCE_REQUIRES_RECORD);
-            let source = setting
-                .and_then(|s| s.source_paths.clone())
-                .unwrap_or_default();
-            let excluded = setting
-                .and_then(|s| s.exclude_paths.clone())
-                .unwrap_or_default();
-            source_requires_record(c.changed_paths, &source, &excluded, c.config)
+            let opts: SourceRequiresRecordOpts =
+                c.config.rule_opts(RULE_DIFF_SOURCE_REQUIRES_RECORD);
+            source_requires_record(c.changed_paths, &opts.source_paths, &opts.exclude_paths, c.config)
         },
     },
     RuleDef {
@@ -890,17 +876,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["application_paths", "exclude_paths"],
         phase: Phase::Main,
         run: |c| {
-            let setting = c.config.rules.get(RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
-            let application = setting
-                .and_then(|s| s.application_paths.clone())
-                .unwrap_or_default();
-            let excluded = setting
-                .and_then(|s| s.exclude_paths.clone())
-                .unwrap_or_default();
+            let opts: SourceAndRecordsMixedOpts =
+                c.config.rule_opts(RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
             source_and_records_mixed(
                 c.changed_paths,
-                &application,
-                &excluded,
+                &opts.application_paths,
+                &opts.exclude_paths,
                 c.config,
             )
         },

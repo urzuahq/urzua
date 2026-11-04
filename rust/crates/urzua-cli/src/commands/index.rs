@@ -23,11 +23,8 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     };
     let config = &workspace.config;
     let specs: Vec<urzua_core::config::IndexSpec> = config
-        .rules
-        .get(urzua_core::rules::RULE_INDEX_FRESHNESS)
-        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
-        .and_then(|s| s.indexes.clone())
-        .unwrap_or_default();
+        .enabled_rule_opts::<urzua_core::rules::IndexOpts>(urzua_core::rules::RULE_INDEX_FRESHNESS)
+        .map_or_else(Vec::new, |o| o.indexes);
     if specs.is_empty() {
         return emit(&CouldNotRun::from(
             "urzua index: no index is declared; enable index.freshness with an `indexes` list",

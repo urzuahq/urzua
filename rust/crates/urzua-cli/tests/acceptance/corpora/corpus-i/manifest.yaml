@@ -1,0 +1,31 @@
+fixtures:
+  - path: decisions/ADR-1-queue.md
+    irregularity: >-
+      none -- the highest id in the primary directory below ADR-5; the control.
+  - path: archive/ADR-2-old-cache.md
+    irregularity: >-
+      a record of the same type in the extra directory; the target of ADR-3's pointer.
+  - path: decisions/ADR-3-reads-the-archive.md
+    irregularity: >-
+      an Implements entry naming ADR-2, which lives in the other directory of the type.
+  - path: decisions/ADR-4-dangling.md
+    irregularity: >-
+      an Implements entry naming ADR-99, which is in neither directory.
+  - path: decisions/ADR-5-twin.md
+    irregularity: >-
+      shares its identity ADR-5 with a record in the other directory.
+  - path: archive/ADR-5-twin-in-the-archive.md
+    irregularity: >-
+      shares its identity ADR-5 with a record in the primary directory.
+  - path: archive/misc-notes.md
+    irregularity: >-
+      a file in the extra directory whose name carries no identity.
+  - path: archive/ADR-8-late.md
+    irregularity: >-
+      the highest id of the type, in the extra directory, so `urzua new` must scan it to number correctly.
+  - path: .urzua/config.yaml
+    irregularity: >-
+      the config the corpus is validated under: one `adr` type over `decisions` and `archive`; not a record.
+  - path: .urzua/missing-extra-dir.yaml
+    irregularity: >-
+      the same config with a second extra directory, `vanished`, that does not exist; not a record.

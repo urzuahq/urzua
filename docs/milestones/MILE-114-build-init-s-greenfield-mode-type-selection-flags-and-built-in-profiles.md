@@ -47,6 +47,10 @@ spec that has to stay a complete, replayable specification of its actual current
 revision (`ADR-14`). This is that relocation, not new scope -- every sentence here was already argued
 in `SPEC-5` before this milestone existed.
 
+## Done means
+
+`urzua init --types adr,rfc,spec [--dir docs]` runs non-interactively on a repository with no records, and an interactive run picks types from a menu; built-in profiles for `adr`, `rfc`, `spec` and `prd` are materialized as visible rules in the written `config.yaml` (never referenced by name), the written config passes `check`, adopt reports a record-shaped file it could not classify by path instead of excluding it silently, the open questions listed in the What are each decided or recorded, and `SPEC-5` describes exactly what ships.
+
 ## References
 
 - `SPEC-5` -- `urzua init`, now `Accepted` for the adopt path this milestone's own scope excludes.
@@ -60,3 +64,4 @@ in `SPEC-5` before this milestone existed.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed, relocating `SPEC-5`'s aspirational sections (greenfield mode, `--types`/`--dir`, built-in profiles, unclassified-file reporting) and its two unresolved success criteria and four open questions, so `SPEC-5` can be corrected to describe only what ships (`BUG-26`). | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

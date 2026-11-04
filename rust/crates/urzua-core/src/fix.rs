@@ -567,6 +567,7 @@ mod tests {
                 crate::config::RecordTypeConfig {
                     exclude_files: Vec::new(),
                     dir: "docs/adr".to_string(),
+                    extra_dirs: Vec::new(),
                     identity: None,
                     fields: None,
                     sections: None,

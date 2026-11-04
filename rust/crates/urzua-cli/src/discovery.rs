@@ -82,14 +82,13 @@ pub(crate) fn load_records(
             })
             .transpose()?
             .unwrap_or_default();
-        let type_dir = PathBuf::from(&type_config.dir);
         for rel_path in discovered {
             // This directory, not this subtree (RFC-35). Prefix matching let
             // two types claim one record whenever their dirs nested, which no
             // schema rule resolved -- and four heuristics accreted in `init`
             // guessing what an adopter meant by the overlap. A directory is a
             // type; `docs/rfc` holds RFCs.
-            if rel_path.parent() != Some(type_dir.as_path()) {
+            if !type_config.owns_dir(rel_path.parent()) {
                 continue;
             }
             let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
@@ -156,7 +155,7 @@ pub(crate) fn parse_prospective_record(
     let file_name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     for type_name in config.sorted_type_names() {
         let type_config = &config.record_types[type_name];
-        if rel_path.parent() != Some(Path::new(&type_config.dir))
+        if !type_config.owns_dir(rel_path.parent())
             || !urzua_core::record::is_governed_record_filename(file_name)
             || type_config.excludes(file_name)
         {

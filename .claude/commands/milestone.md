@@ -11,6 +11,11 @@ the result. The title is `$ARGUMENTS`; if it is empty, derive one from the conve
 
 Use this for planned work: decided, deferred or unrouted. Point it at the RFC or ADR it realizes only through a reference that resolves.
 
+The template carries a section that states when the milestone is finished. Fill it with concrete,
+checkable criteria a reviewer can verify against the repository (the command, rule or file and what it
+reports), never a restatement of the What, and include that the capability is exercised in this
+repository's own configuration and records where that fits. Step 4 refuses a record without it.
+
 ## Steps
 
 1. Scaffold. Run this and keep the printed `path`; every later step names it as `RECORD`.

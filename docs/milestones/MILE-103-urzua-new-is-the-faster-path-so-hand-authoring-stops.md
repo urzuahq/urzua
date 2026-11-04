@@ -53,9 +53,14 @@ The second is the useful one, because a refusal is a recorded instance of the cr
 Independent of `MILE-98` and `MILE-100`. It is about the authoring path in whatever corpus is in
 front of the tool.
 
+## Done means
+
+Records in this repository are created through `urzua new` and not by hand: `urzua new` is measurably the faster path (a recorded comparison of time or steps against hand-authoring), the agent commands of `MILE-177` route through it, and over a stated window no record is merged whose header `urzua new` would have produced differently and `check` rejected; the window and the count are recorded here when it is met (`SPEC-1` Phase 1 exit criterion).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s criterion 4 had no milestone and was deleted from the spec alongside criterion 3. It is about preference under choice, not availability -- `urzua new` exists and records in this corpus were still hand-written, two of them rejected for header shapes the command would have produced correctly. | **substantive** |
 > | 2026-11-04 | `Phase` 0 -> 1; `Status` unchanged. **Why:** Maintainer decision, 2026-11-04: `urzua new` being the faster path is a Phase 1 exit criterion, not part of the Phase 0 exit; `SPEC-1` already lists it under Phase 1. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
