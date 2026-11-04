@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6CXZET544KZ3KCXNVXP39XS
-Status: InProgress
+Status: Done
+Realized-by: code:rust/crates/urzua-cli/src/commands/export.rs, code:rust/crates/urzua-core/src/rules/section.rs, test:rust/crates/urzua-cli/tests/export_integration.rs
 Phase: '0'
 Track: roadmap-tracking
 ---
@@ -27,7 +28,7 @@ against every team hand-writing its own linter, applied to this repository's own
 
 ## Done means
 
-`urzua export --format json` emits every record of every configured type as plain JSON data (display id, `Stable-Id`, type, path, header fields and raw text), the field names are in `SPEC-1`'s output contract, `scripts/generate-dashboard.py` reads records only through it and no longer globs or parses `docs/`, and the record's sections are emitted for each type that declares where sections come from. The last clause is not met: `export` emits no sections although the ADR and bug types now declare them.
+`urzua export --format json` emits every record of every configured type as plain JSON data (display id, `Stable-Id`, type, path, header fields and raw text), the field names are in `SPEC-1`'s output contract, `scripts/generate-dashboard.py` reads records only through it and no longer globs or parses `docs/`, and the record's sections are emitted for each type that declares where sections come from. Each record carries `sections` and `preamble`, `null` for a type that declares none.
 
 ## References
 
@@ -42,3 +43,4 @@ against every team hand-writing its own linter, applied to this repository's own
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #137: `urzua export --format json` emits every record of every configured type as plain JSON. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Reopened: `Status` Done -> InProgress; `Realized-by` removed, evidence moved here. **Why:** the What asks for the records' sections to be exported once the declared document model says where sections come from. That condition now holds (the ADR and bug types declare `sections` in `.urzua/config.yaml`), and `urzua export --format json` emits only `type`, `path`, `id`, `stable_id`, `header_readable`, `header` and `raw_text`, no sections, so the What is not fully met. The plain-JSON export and the dashboard switch are delivered. Evidence kept from the Done state, which was a partial delivery and not the milestone's outcome: `code:rust/crates/urzua-cli/src/commands/export.rs, test:rust/crates/urzua-cli/tests/export_integration.rs`. A `Realized-by` under a not-done `Status` is a disagreement `status.delivery-agreement` (`MILE-183`) reports, so it is recorded in this row, as in `MILE-128`. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those this record's What asks for, and they are not met (see the previous row); `Status` is InProgress. | **structural** |
+> | 2026-11-04 | `Status` InProgress -> Done; `Realized-by` added. **Why:** `export` now emits `sections` (name, heading, line span, content) and `preamble` for each type that declares `sections`, through the parser `section.required` uses, with aliases resolved to the declared name (`MILE-165`); a type declaring none gets an explicit `null`, not an absent key, so no-declaration is distinct from declared-and-empty. Named in `SPEC-1`'s export contract; `scripts/generate-dashboard.py` reads the milestone What and Why from `sections` and its output is unchanged. | **substantive** |

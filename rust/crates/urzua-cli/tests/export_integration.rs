@@ -188,3 +188,79 @@ fn export_json_refuses_a_record_symlinked_outside_the_repository() {
     );
     std::fs::remove_file(&outside).ok();
 }
+
+fn sections_repo(name: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n    sections:\n      from: headings\n      required:\n        - {name: Context, aliases: [Background]}\n  note:\n    dir: \"docs/notes\"\n    prefix: \"NOTE\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-7-pick-a-thing.md"),
+        "---\nStatus: Accepted\n---\n# 7 — Pick a thing\n\nIntro prose.\n\n## Background\n\nWhy.\n\n```\n## not a heading\n```\n\n## Decision\n\nDo it.\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "sections"]);
+    dir
+}
+
+#[test]
+fn export_json_emits_declared_sections_with_aliases_resolved_and_the_preamble() {
+    let dir = sections_repo("sections");
+    let output = run_urzua(&dir, &["export", "--format", "json"]);
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let adr = &v["records"][0];
+    assert_eq!(adr["type"], "adr");
+    let sections = adr["sections"]
+        .as_array()
+        .expect("declared type has sections");
+    assert_eq!(sections.len(), 2);
+    // The alias resolves to the declared name; the written heading stays visible.
+    assert_eq!(sections[0]["name"], "Context");
+    assert_eq!(sections[0]["heading"], "Background");
+    assert!(sections[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("## not a heading"));
+    assert_eq!(sections[1]["name"], "Decision");
+    assert_eq!(sections[1]["heading"], "Decision");
+    assert_eq!(sections[1]["content"], "\nDo it.\n");
+    assert_eq!(sections[1]["line"], 16);
+    assert!(adr["preamble"].as_str().unwrap().contains("Intro prose."));
+}
+
+#[test]
+fn export_json_marks_a_type_with_no_sections_declaration_with_null() {
+    let dir = sections_repo("nullsections");
+    let output = run_urzua(&dir, &["export", "--format", "json"]);
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let note = &v["records"][1];
+    assert_eq!(note["type"], "note");
+    // Present and null, not absent: "no declaration" must differ from "not exported".
+    let obj = note.as_object().unwrap();
+    assert!(obj.contains_key("sections") && obj["sections"].is_null());
+    assert!(obj.contains_key("preamble") && obj["preamble"].is_null());
+}
+
+#[test]
+fn export_json_gives_a_declared_type_with_no_headings_an_empty_list() {
+    let dir = sections_repo("emptysections");
+    std::fs::write(
+        dir.join("docs/adr/ADR-9-bare.md"),
+        "---\nStatus: Accepted\n---\n# 9 — Bare\n\nOnly prose.\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "bare"]);
+    let output = run_urzua(&dir, &["export", "--format", "json"]);
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let bare = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "ADR-9")
+        .unwrap();
+    assert_eq!(bare["sections"], serde_json::json!([]));
+}
