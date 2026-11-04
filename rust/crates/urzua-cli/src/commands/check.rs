@@ -863,6 +863,20 @@ pub fn run(
         });
     }
 
+    // Every other finding names a repository-relative file; the config rules
+    // were handed the path the config was loaded from, which is absolute by
+    // default, so the same finding differed by checkout (BUG-185). Relativized
+    // here, after the filters above compare against the loaded path, and
+    // before waivers match on it. A `--config` outside the repository has no
+    // relative form and stays as given.
+    for f in &mut findings {
+        if f.file == config_path.as_path() {
+            if let Ok(rel) = f.file.strip_prefix(&repo_root) {
+                f.file = rel.to_path_buf();
+            }
+        }
+    }
+
     // A waiver is a record (ADR-0011), never a config-level ignore list.
     // Waived findings stay listed -- only excluded from blocking/status.
     let waivers = urzua_core::waiver::load_waivers(&records);

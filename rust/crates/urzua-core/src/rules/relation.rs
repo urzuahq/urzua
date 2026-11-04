@@ -290,7 +290,7 @@ fn provisional_severity(
     prov.statuses
         .iter()
         .any(|s| s == status)
-        .then(|| match prov.level {
+        .then_some(match prov.level {
             crate::config::ProvisionalLevel::Warn => FindingSeverity::Warning,
             crate::config::ProvisionalLevel::Error => FindingSeverity::Error,
         })
@@ -619,6 +619,7 @@ mod tests {
         let config = config_with_types(vec![(
             "adr",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     supersession: Some("Replaces".to_string()),
                     ..Default::default()

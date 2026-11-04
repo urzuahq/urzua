@@ -121,6 +121,7 @@ mod tests {
 
     pub(crate) fn type_config(spec: Option<&str>) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
+            exclude_files: Vec::new(),
             dir: "docs/x".to_string(),
             identity: None,
             fields: None,
@@ -149,6 +150,7 @@ mod tests {
                     (
                         name,
                         crate::config::RecordTypeConfig {
+                            exclude_files: Vec::new(),
                             required_fields: fields.into_iter().map(String::from).collect(),
                             ..type_config(None)
                         },
@@ -168,6 +170,7 @@ mod tests {
                     (
                         name,
                         crate::config::RecordTypeConfig {
+                            exclude_files: Vec::new(),
                             known_fields: Some(fields.into_iter().map(String::from).collect()),
                             ..type_config(None)
                         },
@@ -186,6 +189,7 @@ mod tests {
                     (
                         name,
                         crate::config::RecordTypeConfig {
+                            exclude_files: Vec::new(),
                             header_layout: Some(layout),
                             ..type_config(None)
                         },
@@ -199,6 +203,7 @@ mod tests {
         shape: crate::header::HeaderShape,
     ) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
+            exclude_files: Vec::new(),
             dir: "docs/x".to_string(),
             identity: None,
             fields: None,
@@ -246,6 +251,7 @@ mod tests {
         narrative_fields: Option<&[&str]>,
     ) -> crate::config::RecordTypeConfig {
         crate::config::RecordTypeConfig {
+            exclude_files: Vec::new(),
             dir: "docs/x".to_string(),
             identity: None,
             fields: None,

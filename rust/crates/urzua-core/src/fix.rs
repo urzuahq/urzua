@@ -261,6 +261,7 @@ mod tests {
             record_types: [(
                 "adr".to_string(),
                 crate::config::RecordTypeConfig {
+                    exclude_files: Vec::new(),
                     dir: "docs/adr".to_string(),
                     identity: None,
                     fields: None,
