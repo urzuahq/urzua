@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
-Blocked-on: MILE-171
+Blocked-on: —
 ---
 # 172 — Split check run into stages with a pure derive_status and move the source readers into discovery
 
@@ -27,3 +27,4 @@ Ordering: after `MILE-171`, which removes the 51 closures this function holds; d
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
+> | 2026-11-04 | `Blocked-on` cleared. **Why:** `MILE-171` is `Done` and `narrative-field.stale` flagged the leftover. `Status` unchanged; this milestone can start. | **substantive** |

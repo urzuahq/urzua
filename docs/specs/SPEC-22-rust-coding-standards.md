@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-23
 Status: Accepted
 Author: beauwilliams
@@ -186,7 +186,7 @@ would be unused structure.
 `urzua-core/src/rules/table.rs` holds `RULE_TABLE`, one `RuleDef` per shipped rule: its id, its
 adopter-facing description, the scope it looks at (records, config, files, diff or the run), the
 anchor its findings sit on (a record, the config, a file outside the corpus, a path, a directory),
-whether it resolves through the identity index, whether it needs `relation_pairs`, how it meets a
+the `RuleSetting` options it accepts, whether it resolves through the identity index, whether it needs `relation_pairs`, how it meets a
 `header_shape: none` type, the phase it runs in, and the function that runs it over the shared
 `RuleCtx`. The runner (`runner.rs`) owns the gate (a rule the repository has not enabled does not
 run), the declared severity, and the scope filter, which keeps or drops a finding by its rule's
@@ -240,3 +240,4 @@ occurrence rule applied to the registry (`MILE-171`).
 > | 2026-11-04 | Bumped to `0.4`. Added "A rule is one entry in `RULE_TABLE`, and nothing else names a rule". **Why:** a rule was registered in six places by hand and its properties lived in parallel lists; `MILE-171` replaces them with one table, and the convention keeps the next rule from reintroducing a list. | **substantive** |
 > | 2026-11-04 | Bumped to `0.5`. The convention names the table's `phase` and `run` fields and the runner that owns gating and severity. **Why:** `MILE-171` step 2: the 51 hand-written gating closures in `check` become table entries, so a rule that is in the table cannot be left unwired. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. The convention names the anchor and the scope filter the runner owns. **Why:** `MILE-171` step 3: `check` named two rule ids to scope their findings; the anchor on the rule's entry replaces them. | **substantive** |
+> | 2026-11-04 | Bumped to `0.7`. The convention names the options a rule accepts as a table field. **Why:** `MILE-171` step 4: the config loader kept its own list of which rule owns which option. | **substantive** |

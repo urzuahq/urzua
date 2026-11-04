@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K40Q60VB9T17T4YHKBYRXZ
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/table.rs, code:rust/crates/urzua-core/src/rules/runner.rs, code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 171 — One rule definition table and a runner that owns gating, severity, scoping and OutOfScope
 
@@ -32,3 +33,4 @@ Adding a rule is one table entry plus the rule function; no other list, closure 
 > | 2026-11-04 | First step landed (the rule definition table, `RULE_TABLE`, with the rule metadata and the three parallel lists derived from it); `Status` stays Planned. **Why:** the milestone is delivered in steps (table and metadata, then the runner for gating and severity, then scoping by anchor), each its own reviewable PR; `Realized-by` and `Done` are set by the PR that completes it. | **structural** |
 > | 2026-11-04 | Second step landed (the runner): each rule's table entry carries the function that runs it, `check` builds one `RuleCtx` and runs the table by phase, and the gate and declared severity live in the runner. `Status` stays Planned. **Why:** scoping by declared anchor is the remaining step. | **structural** |
 > | 2026-11-04 | Third step landed (scoping): each rule's table entry declares the anchor its findings sit on, and a path argument or `--base` keeps or drops a finding by it, so `RULES_REPORTING_OUTSIDE_THE_CORPUS`, the snapshot special case and the two rule-id exceptions in `check` are gone. `Status` stays Planned. **Why:** the config-option ownership lists remain. | **structural** |
+> | 2026-11-04 | Fourth step landed and `Status` Planned -> Done, `Realized-by` added. The config loader's option ownership (which rule accepts which option, the `field_levels` rule list, the per-rule `name !=` checks) now reads the rule's table entry, and `config.relation-field-not-known` checks `relation_fields.date` and `author` (`MILE-176`'s gap). **Why:** checked against this record's Done means: a rule is one table entry plus its function (the test that every `RULE_*` constant is in the table, and the config option test, fail otherwise); no list, closure or filter in `check`, the config loader or `init` names a rule id to treat it differently; `--base` and `check <path>` scope by the declared anchor; the `MILE-119` test iterates the table; `urzua check` output over this repository and the acceptance corpora is byte-identical before and after; the acceptance suite passes unchanged. What stays outside the table by design: the commands that read one rule's own options to gather its inputs (`check`'s claim, index and published-file readers, `fix`'s drift gate), which pick inputs and do not register or filter a rule. `MILE-119`'s population builder is `scoped_census_records`, which remains the one place a `header_shape: none` type is classified out of scope; the table declares each rule's `header_none` and the test enforces it. | **structural** |
