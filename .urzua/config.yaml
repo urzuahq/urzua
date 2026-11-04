@@ -2,6 +2,17 @@ schema_version: 2
 # Warnings fail this repository's own CI (MILE-145): the zero-warning state
 # must not regress. Both checks.yml steps read this, whole-repo and --base.
 fail_on: warning
+# The Embodiment vocabulary (MILE-144): the states evidence computes to, highest
+# tier first, and the evidence category that lifts a record to each. The engine
+# knows no state name; `claims_built` marks the states that say work was built.
+# `Deprecated` and `Inactive` are human-set and stay `sticky_states` below.
+embodiment:
+  drift: Drift detected
+  tiers:
+    - {state: Verified, evidence: test, claims_built: true}
+    - {state: Implemented, evidence: code, claims_built: true}
+    - {state: Specified, evidence: spec}
+  none: Not started
 record_types:
   adr:
     dir: "docs/adr"

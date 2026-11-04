@@ -211,6 +211,7 @@ mod tests {
                 schema_version: 2,
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
+                embodiment: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -333,6 +334,7 @@ mod tests {
         let config = Config {
             schema_version: 2,
             fail_on: Default::default(),
+            embodiment: Default::default(),
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -537,6 +539,7 @@ mod tests {
                 schema_version: 2,
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
+                embodiment: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

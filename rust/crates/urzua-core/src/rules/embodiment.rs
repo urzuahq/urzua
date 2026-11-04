@@ -1,4 +1,5 @@
 use super::*;
+use crate::embodiment_model::{EmbodimentDecl, Evidence};
 
 /// A record's `Realized-by` field, categorized (ADR-0018's MVP scope --
 /// three flat lists, not RFC-0005's full claim graph). `spec:`/`code:`/
@@ -110,45 +111,30 @@ pub fn realized_by_locator_paths(value: &str) -> Vec<String> {
         .collect()
 }
 
-/// Every value [`compute_embodiment`] can return. A state outside this set is
-/// one no evidence reproduces; `embodiment.consistency` can only hold a record
-/// to the set above, so a declared `sticky_states` entry may not name one.
-pub const COMPUTED_EMBODIMENT_STATES: [&str; 5] = [
-    "Drift detected",
-    "Verified",
-    "Implemented",
-    "Specified",
-    "Not started",
-];
-
 /// ADR-0018's tier computation: the highest tier with a non-empty category.
-/// `test` outranks `code` outranks `spec` -- a claim verified by a test is
-/// stronger evidence than a claim only pointed at by a spec. `drifted`
-/// (ADR-0032) overrides every tier unconditionally -- `DriftDetected` is an
-/// alarm state reachable from any other state, per the schema's own
-/// description, not just another tier to rank against the others.
+/// The declared vocabulary (`MILE-144`, `Config::embodiment`) names the tiers
+/// and their order; by default `test` outranks `code` outranks `spec` -- a
+/// claim verified by a test is stronger evidence than a claim only pointed at
+/// by a spec. `drifted` (ADR-0032) overrides every tier unconditionally -- the
+/// drift state is an alarm reachable from any other state, not just another
+/// tier to rank against the others.
 /// `back_pointed` (`MILE-128`): a source comment cites the record, which is
-/// code-tier evidence -- it lifts `Specified` or `Not started` to
-/// `Implemented`, and never outranks a `test` locator or drift.
+/// code-tier evidence -- it lifts a lower tier to the code tier, and never
+/// outranks a `test` locator or drift.
 /// `test_pointed` (`MILE-146`): a test-class file cites it with `Verifies:`,
 /// which is test-tier evidence, equal to a `test` locator.
-pub(crate) fn compute_embodiment(
+pub(crate) fn compute_embodiment<'a>(
+    decl: &'a EmbodimentDecl,
     realized_by: &RealizedBy,
     drifted: bool,
     back_pointed: bool,
     test_pointed: bool,
-) -> &'static str {
-    if drifted {
-        "Drift detected"
-    } else if !realized_by.test.is_empty() || test_pointed {
-        "Verified"
-    } else if !realized_by.code.is_empty() || back_pointed {
-        "Implemented"
-    } else if !realized_by.spec.is_empty() {
-        "Specified"
-    } else {
-        "Not started"
-    }
+) -> &'a str {
+    decl.state_for(drifted, |evidence| match evidence {
+        Evidence::Test => !realized_by.test.is_empty() || test_pointed,
+        Evidence::Code => !realized_by.code.is_empty() || back_pointed,
+        Evidence::Spec => !realized_by.spec.is_empty(),
+    })
 }
 
 /// The field name `record`'s own type uses for `role` (`RFC-42`/`ADR-61`),
@@ -353,7 +339,7 @@ pub fn embodiment_consistency(
             // record (`MILE-149`), or when the record states a tier that no
             // evidence of either kind supports (`MILE-161`); one stating no
             // tier stays unexamined, and an unreadable header is never judged.
-            let claims_a_tier = matches!(stated.trim(), "Verified" | "Implemented");
+            let claims_a_tier = config.embodiment.claims_built(stated.trim());
             let realized_by_value = match declared_value(record, locator_field) {
                 Ok(v) => Some(v),
                 Err(Outcome::Absent) if cited_by_code || cited_by_test || claims_a_tier => None,
@@ -361,6 +347,7 @@ pub fn embodiment_consistency(
             };
 
             let computed = compute_embodiment(
+                &config.embodiment,
                 &realized_by_value.map(parse_realized_by).unwrap_or_default(),
                 drifted.contains(&record.path),
                 cited_by_code,
@@ -375,7 +362,7 @@ pub fn embodiment_consistency(
             // Fresh drift (`drift_grace_days`) only holds back reporting: a
             // record that already says `Drift detected` is right, not wrong.
             let agrees_with_fresh_drift =
-                fresh_drift.contains(&record.path) && stated.trim() == "Drift detected";
+                fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated.trim());
             if stated.trim() != computed && !agrees_with_fresh_drift {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -612,7 +599,7 @@ pub fn embodiment_requires_accepted_status(
                 // No declared accepted status: eligible, but nothing to judge by.
                 return Outcome::Absent;
             }
-            if matches!(stated, "Implemented" | "Verified")
+            if config.embodiment.claims_built(stated)
                 && !accepted.iter().any(|a| a.trim() == status)
             {
                 findings.push(Finding {
@@ -946,7 +933,7 @@ mod tests {
     fn a_test_locator_outranks_a_code_locator() {
         let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
         assert_eq!(
-            compute_embodiment(&realized, false, false, false),
+            compute_embodiment(&EmbodimentDecl::default(), &realized, false, false, false),
             "Verified"
         );
     }
@@ -955,7 +942,7 @@ mod tests {
     fn a_drifted_record_computes_to_drift_detected_regardless_of_tier() {
         let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
         assert_eq!(
-            compute_embodiment(&realized, true, false, false),
+            compute_embodiment(&EmbodimentDecl::default(), &realized, true, false, false),
             "Drift detected"
         );
     }
@@ -1296,17 +1283,20 @@ mod tests {
     #[test]
     fn a_back_pointer_never_outranks_a_test_locator_or_a_drift() {
         let none = RealizedBy::default();
-        assert_eq!(compute_embodiment(&none, false, true, false), "Implemented");
+        assert_eq!(
+            compute_embodiment(&EmbodimentDecl::default(), &none, false, true, false),
+            "Implemented"
+        );
         let verified = RealizedBy {
             test: vec!["t.rs".into()],
             ..Default::default()
         };
         assert_eq!(
-            compute_embodiment(&verified, false, true, false),
+            compute_embodiment(&EmbodimentDecl::default(), &verified, false, true, false),
             "Verified"
         );
         assert_eq!(
-            compute_embodiment(&none, true, true, false),
+            compute_embodiment(&EmbodimentDecl::default(), &none, true, true, false),
             "Drift detected"
         );
     }
