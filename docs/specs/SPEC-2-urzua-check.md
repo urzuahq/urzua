@@ -1,5 +1,5 @@
 ---
-Version: '0.43'
+Version: '0.44'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -229,13 +229,11 @@ which stays only for what genuinely isn't built yet.
 | Rule id | What it checks |
 |---|---|
 | `header.required-fields` | Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here. |
-| `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
 | `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
 | `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
-| `header.deprecated-shape` | Which configured types still declare a deprecated `header_shape` (`blockquote`/`bold-list`) instead of `yaml-frontmatter` (ADR-33). Parsing support for the deprecated shapes stays; this rule only surfaces which types haven't migrated. |
 | `config.pointer-declaration-missing` | A type declaring either `pointer_fields` or `narrative_fields` must declare both explicitly, even as `[]` (MILE-90/ADR-44) — omitting one is not the same as declaring zero fields of that kind. |
 | `config.pointer-field-not-known` | Every field named in a type's `pointer_fields`/`narrative_fields` must also appear in that type's own `required_fields`/`known_fields` (MILE-90/ADR-44) — otherwise `header.field-set-consistency` would never have heard of it. |
 | `config.pointer-narrative-overlap` | A field must be exactly one kind: named in both `pointer_fields` and `narrative_fields` for the same type is a contradiction (MILE-90/ADR-44). |
@@ -415,7 +413,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
   The defect is `eligible: N, examined: 0` — the rule was handed candidates and reached a verdict on
   none of them. That is §5 of RFC-11 applied to a rule's input rather than its output. `eligible: 0`
   is a *different* state and not a defect: it is the cold start of enabling a rule before its scope
-  exists, which `header.layout-consistency` occupies permanently on this repository. Neither is a
+  exists, which any rule declared before its scope exists occupies. Neither is a
   `check` verdict — what gets checked is the adopter's declaration (`ADR-53`) — and the separation
   between disclosing the population and judging it is `MILE-106`'s.
 - **Fixture containment.** The rule tests deliberately contain record-shaped strings, and a
@@ -508,3 +506,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.41`. `type.dir-matches-nothing` also reports a type's `exclude_files` entry that names no tracked file directly in its `dir`. Rule table regenerated. **Why:** `MILE-150` -- a stale exclusion is a declaration that silently does nothing. | **substantive** |
 > | 2026-11-04 | Bumped to `0.42`. `relation.pair-reciprocity` counts a claim to a record type outside a pair's declared `types` as eligible and unexamined instead of out of scope, so `config.scope-matches-nothing` no longer warns on it. **Why:** `MILE-155` -- the claim is legitimate; the configuration is not what failed to reach it. | **substantive** |
 > | 2026-11-04 | Bumped to `0.43`. `citation.path-exists` takes an optional `skip_tables` option (a table whose rows are history is not read), and `citation.resolution` counts a declared external id as eligible and unexamined rather than out of scope; the rule table is regenerated, and the `citation.resolution` row no longer writes its numeric-range example as a citable id. **Why:** `MILE-143` -- revision-log rows name paths as they were; `BUG-186` -- a declared external id was reported as a misconfiguration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.44`. Removed the `header.layout-consistency` and `header.deprecated-shape` rules from the generated rule table: with the `blockquote` and `bold-list` shapes gone there is no layout to declare and no deprecated shape a config can hold. A record still written in a removed form is reported by `header.required-fields` with the form named, and naming either removed rule under `rules:` is an unknown-rule load error. **Why:** `MILE-85`. | **substantive** |

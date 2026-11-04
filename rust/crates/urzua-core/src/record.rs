@@ -34,8 +34,7 @@ pub struct Record {
 }
 
 impl Record {
-    /// Parse using the default (blockquote) header shape -- the long-standing
-    /// behavior, kept for callers that have no per-type shape to declare.
+    /// Parse using the default (`yaml-frontmatter`) header shape, kept for callers that have no per-type shape to declare.
     pub fn parse(path: PathBuf, record_type: String, content: &str) -> Self {
         Self::parse_with_shape(path, record_type, content, HeaderShape::default())
     }
@@ -151,7 +150,7 @@ mod tests {
             PathBuf::from(path),
             "adr".into(),
             content,
-            HeaderShape::Blockquote,
+            HeaderShape::YamlFrontmatter,
             "ADR".into(),
             m,
         )
@@ -159,13 +158,13 @@ mod tests {
 
     #[test]
     fn a_type_declaring_nothing_loads_exactly_as_before() {
-        let content = "# 1 — X\n\n> Status: Draft\n";
+        let content = "---\nStatus: Draft\n---\n# 1 — X\n";
         let declared = load("docs/adr/ADR-1-x.md", content, &RecordModel::default());
         let old = Record::parse_with_shape_and_prefix(
             PathBuf::from("docs/adr/ADR-1-x.md"),
             "adr".into(),
             content,
-            HeaderShape::Blockquote,
+            HeaderShape::YamlFrontmatter,
             "ADR".into(),
         );
         assert_eq!(declared.header, old.header);

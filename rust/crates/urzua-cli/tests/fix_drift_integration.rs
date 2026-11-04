@@ -36,7 +36,7 @@ const RECORD_PATH: &str = "docs/adr/ADR-1-first.md";
 
 fn record_with(embodiment: &str) -> String {
     format!(
-        "# ADR-1: First\n\n> Embodiment: {embodiment}\n> Realized-by: code:src/a.rs\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        "---\nEmbodiment: {embodiment}\nRealized-by: code:src/a.rs\n---\n# ADR-1: First\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
     )
 }
 
@@ -91,8 +91,8 @@ fn apply_writes_drift_detected_and_a_revision_log_row() {
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     assert_eq!(json(&out)["status"], "applied");
     let after = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
-    assert!(after.contains("> Embodiment: Drift detected\n"), "{after}");
-    assert!(!after.contains("> Embodiment: Implemented"), "{after}");
+    assert!(after.contains("\nEmbodiment: Drift detected\n"), "{after}");
+    assert!(!after.contains("Embodiment: Implemented"), "{after}");
     assert!(after.contains("Tool-authored (by "), "{after}");
     std::fs::remove_dir_all(&dir).ok();
 }

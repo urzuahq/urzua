@@ -121,8 +121,10 @@ mod tests {
         let r = Record::parse(
             std::path::PathBuf::from("docs/waivers/WAIVER-1-x.md"),
             "waiver".to_string(),
-            "> rule: header.required-fields
-> scope: docs/adr/ADR-1-x.md
+            "---
+rule: header.required-fields
+scope: docs/adr/ADR-1-x.md
+---
 ",
         );
         let waivers = load_waivers(&[r]);

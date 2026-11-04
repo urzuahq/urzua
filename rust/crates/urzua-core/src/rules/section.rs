@@ -425,7 +425,7 @@ mod tests {
     const Y: &str = "In the context of a, facing b, we decided c, to achieve d, accepting e.";
 
     fn doc(status: &str, body: &str) -> String {
-        format!("> Status: {status}\n\n# 1 — X\n\n{body}")
+        format!("---\nStatus: {status}\n---\n# 1 — X\n\n{body}")
     }
 
     fn config(sections_yaml: &str) -> Config {
@@ -515,7 +515,7 @@ mod tests {
         let (_, f) = run(
             section_required,
             REQ,
-            "> Author: a\n\n# 1 — X\n\n## Other\n",
+            "---\nAuthor: a\n---\n# 1 — X\n\n## Other\n",
         );
         assert_eq!(f.len(), 2, "{f:?}");
     }

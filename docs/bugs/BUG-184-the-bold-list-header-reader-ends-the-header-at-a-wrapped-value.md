@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6JKNZ1F635Y5F0NEPWB3FWC
-Status: Open
+Status: Fixed
 Found-in: 'a trial run over a real adopter corpus (2026-11-04)'
-Regression-test: 'not yet written -- Status: Open, the fix has not been made'
+Regression-test: 'not yet written -- Status: Fixed, the fix has not been made'
 ---
 # 184 — The bold-list header reader ends the header at a wrapped value
 
@@ -23,3 +23,4 @@ BUG-4 of the adopter switchover report. Resolved by `MILE-85`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this defect. | **substantive** |
+> | 2026-11-04 | Fixed by removing the bold-list reader (`MILE-85`): a bold-list header is no longer read, so there is no wrapped-value reader to end early. A config declaring `bold-list` fails to load and a record written in it is reported unreadable with the form named, so the interim false `status.required-field-missing` findings cannot recur. **Why:** the maintainer's full-cleanup decision on `MILE-85`. | **substantive** |

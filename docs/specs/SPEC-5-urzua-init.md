@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -71,18 +71,14 @@ setup for a repository with no records yet are `MILE-114`'s scope, not this spec
 
 ## Proposed header shape
 
-For each proposed type, `init` parses the type's existing records with the real header parser under
-each supported shape (`yaml-frontmatter`, `bold-list`, `blockquote`) and proposes the shape they parse
-under, so the first `check` reads the corpus (`BUG-151`; `ADR-33`'s 2026-11-02 amendment). YAML
-frontmatter that parses with fields at the very start of a record is its header outright. Otherwise a
-record takes the shape whose parsed region carries the most fields, so a quoted block in the body (a
-Y-statement, say) never outranks the real header; equal field counts fall back to the earliest
-region, then to the order above. The
-deprecated-shape steer is carried by `header.deprecated-shape`, which `init` declares in the config it
-writes. When a type's records use more than one shape, the majority shape is proposed (a tie goes to
-`yaml-frontmatter`) and a `header-shape` notice names the split; when none of a type's records parse
-under any shape, `yaml-frontmatter` is proposed with a notice. A type with no records keeps
-`yaml-frontmatter`. Each `proposed` entry reports the chosen `header_shape`.
+`init` proposes `header_shape: yaml-frontmatter` for every type, the only shape with a reader (the
+`blockquote` and `bold-list` shapes were removed, `MILE-85`). For each proposed type it parses the
+existing records with the real header parser and counts those whose header is YAML frontmatter at the
+very start of the record; a record written in a removed form, or with no readable header, is counted
+in a `header-shape` notice that names the form (`2 in the removed bold-list form`), because `check`
+reports each such record as unreadable until its header is rewritten as YAML frontmatter. A type whose
+records are all frontmatter gets no notice. A type with no records is proposed `yaml-frontmatter`.
+Each `proposed` entry reports the chosen `header_shape`.
 
 ## Safety
 
@@ -105,7 +101,7 @@ The real, shipped shape (`InitReport`/ADR-46):
   "status": "ok",
   "dry_run": false,
   "config_path": ".urzua/config.yaml",
-  "proposed": [{ "name": "adr", "dir": "docs/adr", "record_count": 5, "prefix": null, "header_shape": "bold-list" }],
+  "proposed": [{ "name": "adr", "dir": "docs/adr", "record_count": 5, "prefix": null, "header_shape": "yaml-frontmatter" }],
   "written": true
 }
 ```
@@ -166,3 +162,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-02 | Leading YAML frontmatter that parses with fields takes precedence over the field-count rule. **Why:** review found body `- **Key:**` bullets could outvote a real frontmatter header. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Bumped to `0.7`. `init` proposes only `yaml-frontmatter` and reports, in a `header-shape` notice, the existing records written in a removed `blockquote` or `bold-list` form; it no longer infers a shape from the corpus and no longer declares `header.deprecated-shape`. **Why:** `MILE-85` removed those shapes. | **substantive** |

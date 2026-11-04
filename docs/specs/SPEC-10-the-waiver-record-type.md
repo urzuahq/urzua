@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -42,7 +42,7 @@ No relationship fields (MILE-90/ADR-44): both `pointer_fields` and `narrative_fi
 empty, not omitted — a waiver names a rule and a scope, never another record, so there's nothing for
 either axis to cover. Declaring both `[]` rather than leaving them undeclared satisfies
 `config.pointer-declaration-missing`, the same "explicit zero, not an implicit default" principle
-`known_fields`/`header_layout` already follow.
+`known_fields` already follows.
 
 No `Status` field: a waiver's lifecycle is entirely computed from `Expires` (`is_active(today)`),
 not separately authored — unlike every other record type, there is nothing for a human to declare
@@ -89,3 +89,4 @@ computed from non-waived findings only.
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Declared `pointer_fields = []`/`narrative_fields = []` in config (MILE-90/ADR-44) — explicit zero, not omitted, since `waiver` is the one type with no relationship fields to declare. **Why:** MILE-90's new `config.pointer-declaration-missing` rule requires every type to make this choice explicit. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
+> | 2026-11-04 | Bumped to `0.6`. Dropped the reference to the removed `header_layout` option. **Why:** `MILE-85`. | **substantive** |

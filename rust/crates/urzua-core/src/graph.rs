@@ -183,7 +183,6 @@ mod tests {
                     required_fields: vec![],
                     header_shape: crate::header::HeaderShape::default(),
                     prefix: None,
-                    header_layout: None,
                     known_fields: None,
                     pointer_fields: None,
                     narrative_fields: None,
@@ -213,7 +212,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Realized-by: code:rust/src/lib.rs\n",
+            "---\nRealized-by: code:rust/src/lib.rs\n---\n",
         );
         let result = explain(&[r], "rust/src/lib.rs", &no_relation_field_overrides());
         assert_eq!(result.len(), 1);
@@ -227,7 +226,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Realized-by: code:./rust/src/lib.rs\n",
+            "---\nRealized-by: code:./rust/src/lib.rs\n---\n",
         );
         for q in ["rust/src/lib.rs", "./rust/src/lib.rs", "rust/./src/lib.rs"] {
             assert_eq!(
@@ -243,7 +242,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Realized-by: code:rust/src/lib.rs\n",
+            "---\nRealized-by: code:rust/src/lib.rs\n---\n",
         );
         assert!(explain(&[r], "rust/src/other.rs", &no_relation_field_overrides()).is_empty());
     }
@@ -253,7 +252,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Evidence: code:rust/src/lib.rs\n",
+            "---\nEvidence: code:rust/src/lib.rs\n---\n",
         );
         let config = config_with_relation_field(
             "adr",
@@ -269,8 +268,12 @@ mod tests {
 
     #[test]
     fn graph_reads_a_custom_supersession_field_name_observed_failing() {
-        let old = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
-        let new = record("docs/adr/ADR-2-y.md", "adr", "> Replaces: ADR-1\n");
+        let old = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: Superseded\n---\n",
+        );
+        let new = record("docs/adr/ADR-2-y.md", "adr", "---\nReplaces: ADR-1\n---\n");
         let config = config_with_relation_field(
             "adr",
             crate::config::RelationFields {
@@ -286,8 +289,12 @@ mod tests {
 
     #[test]
     fn graph_includes_a_resolving_implements_edge_not_dangling() {
-        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
-        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-1\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "---\nStatus: Accepted\n---\n");
+        let source = record(
+            "docs/adr/ADR-1-y.md",
+            "adr",
+            "---\nImplements: RFC-1\n---\n",
+        );
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
         let (edges, _collisions) = graph(
             &[target, source],
@@ -303,7 +310,11 @@ mod tests {
 
     #[test]
     fn graph_marks_a_non_resolving_reference_as_dangling_observed_failing() {
-        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-9999\n");
+        let source = record(
+            "docs/adr/ADR-1-y.md",
+            "adr",
+            "---\nImplements: RFC-9999\n---\n",
+        );
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
         let (edges, _collisions) = graph(
             &[source],
@@ -321,8 +332,12 @@ mod tests {
         // pointer_resolution's -- a padded reference (RFC-0001) against an
         // unpadded filename (RFC-1-x.md) was reported dangling even though
         // pointer_resolution correctly resolved the same reference.
-        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Accepted\n");
-        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: RFC-0001\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "---\nStatus: Accepted\n---\n");
+        let source = record(
+            "docs/adr/ADR-1-y.md",
+            "adr",
+            "---\nImplements: RFC-0001\n---\n",
+        );
         let pointer_fields = field_map(&[("adr", &["Implements"])]);
         let (edges, _collisions) = graph(
             &[target, source],
@@ -343,8 +358,16 @@ mod tests {
         // A pre-existing gap this same rewrite fixes for free: graph() used
         // to hardcode a 3-field list that never included Parent, even though
         // README/SPEC-13 both document it as a real edge type.
-        let target = record("docs/specs/SPEC-1-x.md", "spec", "> Status: Accepted\n");
-        let source = record("docs/specs/SPEC-2-y.md", "spec", "> Parent: SPEC-1\n");
+        let target = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nStatus: Accepted\n---\n",
+        );
+        let source = record(
+            "docs/specs/SPEC-2-y.md",
+            "spec",
+            "---\nParent: SPEC-1\n---\n",
+        );
         let pointer_fields = field_map(&[("spec", &["Parent"])]);
         let (edges, _collisions) = graph(
             &[target, source],
@@ -359,11 +382,11 @@ mod tests {
 
     #[test]
     fn graph_includes_a_narrative_edge_kinded_correctly() {
-        let bug = record("docs/bugs/BUG-1-x.md", "bug", "> Status: Open\n");
+        let bug = record("docs/bugs/BUG-1-x.md", "bug", "---\nStatus: Open\n---\n");
         let milestone = record(
             "docs/milestones/MILESTONE-1-y.md",
             "milestone",
-            "> Blocked-on: BUG-1\n",
+            "---\nBlocked-on: BUG-1\n---\n",
         );
         let narrative_fields = field_map(&[("milestone", &["Blocked-on"])]);
         let (edges, _collisions) = graph(
@@ -378,11 +401,15 @@ mod tests {
 
     #[test]
     fn graph_reports_supersedes_as_pointer_kind() {
-        let old = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
+        let old = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: Superseded\n---\n",
+        );
         let new = record(
             "docs/adr/ADR-2-y.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-1\n",
+            "---\nSupersedes / Superseded-by: ADR-1\n---\n",
         );
         let (edges, _collisions) = graph(
             &[old, new],
@@ -401,11 +428,15 @@ mod tests {
         // (ADR-44) -- a config that also lists it in either declared list
         // must not produce a second, possibly differently-kinded edge for
         // the same reference.
-        let old = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
+        let old = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: Superseded\n---\n",
+        );
         let new = record(
             "docs/adr/ADR-2-y.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-1\n",
+            "---\nSupersedes / Superseded-by: ADR-1\n---\n",
         );
         let pointer_fields = field_map(&[("adr", &["Supersedes / Superseded-by"])]);
         let (edges, _collisions) = graph(

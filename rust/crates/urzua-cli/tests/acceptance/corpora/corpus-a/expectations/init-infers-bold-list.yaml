@@ -1,6 +1,0 @@
-id: init-infers-bold-list
-corpus: corpus-a
-invocation: [init, --dry-run]
-expect_exit: 0
-expect_stdout_contains:
-  - "header_shape: bold-list"

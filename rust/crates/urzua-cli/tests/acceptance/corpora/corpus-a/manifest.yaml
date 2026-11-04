@@ -12,6 +12,12 @@ fixtures:
       sees more than one file.
   - path: .urzua/declared-bold-list.yaml
     irregularity: >-
-      the config an adopter would hand-write (`header_shape: bold-list`,
-      Status required); not a record. No `.urzua/config.yaml` exists on purpose,
-      so `init` has something to propose.
+      the config an adopter would have hand-written when the bold-list shape was
+      readable (`header_shape: bold-list`, Status required); not a record. It is
+      now rejected at load. No `.urzua/config.yaml` exists on purpose, so `init`
+      has something to propose.
+  - path: .urzua/declared-yaml.yaml
+    irregularity: >-
+      the same declaration under `yaml-frontmatter`, the only shape with a
+      reader; not a record. Run against the bold-list records it exercises the
+      error that names the removed form.

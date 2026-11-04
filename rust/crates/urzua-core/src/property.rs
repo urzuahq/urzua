@@ -224,7 +224,6 @@ mod tests {
                         required_fields: Vec::new(),
                         header_shape: Default::default(),
                         prefix: None,
-                        header_layout: None,
                         known_fields: Some(vec![declared.clone()]),
                         pointer_fields: None,
                         narrative_fields: None,
@@ -236,7 +235,9 @@ mod tests {
                 .collect(),
             };
 
-            let body = format!("> {written}: x\n");
+            // Quoted: a generated name may be `-` or a bare combining mark, which
+            // a plain YAML key cannot be.
+            let body = format!("---\n'{written}': x\n---\n");
             let record = crate::record::Record {
                 path: std::path::PathBuf::from("docs/notes/0001-x.md"),
                 record_type: "note".to_string(),
@@ -299,7 +300,6 @@ mod tests {
     #[test]
     fn every_record_and_field_rule_can_report_examined_below_eligible() {
         use crate::config::{Config, RecordTypeConfig};
-        use crate::header::HeaderLayout;
         use crate::rules;
         use std::collections::HashMap;
 
@@ -358,7 +358,6 @@ mod tests {
                     required_fields: declared.clone(),
                     header_shape: Default::default(),
                     prefix: None,
-                    header_layout: Some(HeaderLayout::OnePerLine),
                     known_fields: Some(declared.clone()),
                     pointer_fields: Some(fields(&["Derives-from"])),
                     narrative_fields: Some(fields(&["Blocked-on"])),
@@ -380,10 +379,6 @@ mod tests {
             (
                 "header.required-fields",
                 rules::header_required_fields(&records, &config),
-            ),
-            (
-                "header.layout-consistency",
-                rules::header_layout_consistency(&records, &config),
             ),
             (
                 "header.field-set-consistency",
@@ -547,7 +542,6 @@ mod tests {
                         required_fields: Vec::new(),
                         header_shape: Default::default(),
                         prefix: None,
-                        header_layout: None,
                         known_fields: None,
                         pointer_fields: None,
                         narrative_fields: None,

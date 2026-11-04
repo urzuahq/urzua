@@ -75,8 +75,8 @@ fn severities(v: &serde_json::Value) -> Vec<(String, String)> {
         .collect()
 }
 
-const BOTH_BLANK: &str = "# ADR-1: First\n\n> Deciders:\n> Reviewers:\n";
-const ONLY_REVIEWERS_BLANK: &str = "# ADR-1: First\n\n> Deciders: Ana\n> Reviewers:\n";
+const BOTH_BLANK: &str = "---\nDeciders:\nReviewers:\n---\n# ADR-1: First\n";
+const ONLY_REVIEWERS_BLANK: &str = "---\nDeciders: Ana\nReviewers:\n---\n# ADR-1: First\n";
 const OPTION: &str = "    field_levels: {Deciders: error, Reviewers: warn}\n";
 
 #[test]

@@ -107,11 +107,6 @@ pub(super) fn required_fields_by_type(config: &Config) -> HashMap<String, Vec<St
     project_by_type(config, |cfg| Some(cfg.required_fields.clone()))
 }
 
-/// A type's `header_layout`, by type name, when declared (`ADR-59`).
-pub(super) fn header_layout_by_type(config: &Config) -> HashMap<String, HeaderLayout> {
-    project_by_type(config, |cfg| cfg.header_layout)
-}
-
 /// A type's declared field set, by type name, only for a type that declares
 /// `known_fields` (`ADR-59`): `header.field-set-consistency` skips a type
 /// declaring only `required_fields` by design, and a map with an entry for

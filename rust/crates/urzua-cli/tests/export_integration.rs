@@ -27,7 +27,7 @@ fn fixture_repo(name: &str) -> std::path::PathBuf {
     git(&dir, &["config", "user.name", "test"]);
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n  note:\n    dir: \"docs/notes\"\n    prefix: \"NOTE\"\n    required_fields: [\"Status\"]\n    header_shape: \"bold-list\"\n",
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n  note:\n    dir: \"docs/notes\"\n    prefix: \"NOTE\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     // yaml-frontmatter, with a Stable-Id.
@@ -36,10 +36,10 @@ fn fixture_repo(name: &str) -> std::path::PathBuf {
         "---\nStable-Id: 01ABCDEF\nStatus: Accepted\n---\n# 7 — Pick a thing\n\nBody text.\n",
     )
     .unwrap();
-    // bold-list, no Stable-Id.
+    // A second type, no Stable-Id.
     std::fs::write(
         dir.join("docs/notes/NOTE-3-a-note.md"),
-        "# 3 — A note\n\n- **Status:** Open\n\nNote body.\n",
+        "---\nStatus: Open\n---\n# 3 — A note\n\nNote body.\n",
     )
     .unwrap();
     git(&dir, &["add", "-A"]);

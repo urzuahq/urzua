@@ -1,0 +1,8 @@
+id: check-removed-bold-list-config-is-rejected
+corpus: corpus-a
+invocation: [--config, .urzua/declared-bold-list.yaml, check, records/]
+expect_exit: 2
+expect_json:
+  - {at: /status, equals: not-run}
+expect_stdout_contains:
+  - "header shape 'bold-list' is no longer supported"

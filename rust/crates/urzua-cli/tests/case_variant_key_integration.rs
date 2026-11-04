@@ -72,8 +72,8 @@ fn findings_of<'a>(report: &'a serde_json::Value, id: &str) -> Vec<&'a serde_jso
         .collect()
 }
 
-const VARIANT: &str = "# 1 — X\n\n> Status: Accepted\n> status: Draft\n";
-const CLEAN: &str = "# 2 — Y\n\n> Status: Accepted\n";
+const VARIANT: &str = "---\nStatus: Accepted\nstatus: Draft\n---\n# 1 — X\n";
+const CLEAN: &str = "---\nStatus: Accepted\n---\n# 2 — Y\n";
 
 #[test]
 fn a_declared_rule_reports_the_case_variant_and_what_it_examined_observed_failing() {

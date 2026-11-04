@@ -104,8 +104,16 @@ mod tests {
     fn narrative_field_stale_reads_the_declared_terminals_observed_failing() {
         let yaml = "schema_version: 2\nrecord_types:\n  bug:\n    dir: docs/bugs\n    required_fields: [Status]\n    known_fields: [Blocked-on]\n    pointer_fields: []\n    narrative_fields: [Blocked-on]\n    statuses:\n      values: [Open, Fixed, Not a bug]\n      success: [Fixed]\n      failure: [Not a bug]\n";
         let config = crate::config::parse(yaml).unwrap();
-        let blocked = record("docs/bugs/BUG-1-x.md", "bug", "> Blocked-on: BUG-2\n");
-        let target = record("docs/bugs/BUG-2-y.md", "bug", "> Status: Not a bug\n");
+        let blocked = record(
+            "docs/bugs/BUG-1-x.md",
+            "bug",
+            "---\nBlocked-on: BUG-2\n---\n",
+        );
+        let target = record(
+            "docs/bugs/BUG-2-y.md",
+            "bug",
+            "---\nStatus: Not a bug\n---\n",
+        );
         let records = [blocked, target];
         let index = build_normalized_index(&records);
         let list = vec!["Fixed".to_string()];
@@ -118,8 +126,16 @@ mod tests {
         // The compiled-in table knew five type names and returned "not
         // terminal" for every other, so the rule was inert for any corpus that
         // named its types differently -- which is every adopter (BUG-59).
-        let blocked = record("docs/decisions/DEC-1-x.md", "dec", "> Blocked-on: DEC-2\n");
-        let target = record("docs/decisions/DEC-2-y.md", "dec", "> Status: Ratified\n");
+        let blocked = record(
+            "docs/decisions/DEC-1-x.md",
+            "dec",
+            "---\nBlocked-on: DEC-2\n---\n",
+        );
+        let target = record(
+            "docs/decisions/DEC-2-y.md",
+            "dec",
+            "---\nStatus: Ratified\n---\n",
+        );
         let config = config_with_types(vec![(
             "dec",
             type_config_pointer(&["Status"], None, None, Some(&["Blocked-on"])),
@@ -148,11 +164,11 @@ mod tests {
         // The exact live case this rule was built for: MILE-2/3's Blocked-on
         // named BUG-3, which had already shipped (Status: Fixed) with nothing
         // catching it, since Blocked-on used to be unchecked free-text prose.
-        let bug = record("docs/bugs/BUG-3-x.md", "bug", "> Status: Fixed\n");
+        let bug = record("docs/bugs/BUG-3-x.md", "bug", "---\nStatus: Fixed\n---\n");
         let milestone = record(
             "docs/milestones/MILE-2-x.md",
             "milestone",
-            "> Status: Planned\n> Blocked-on: BUG-3\n",
+            "---\nStatus: Planned\nBlocked-on: BUG-3\n---\n",
         );
         let config = config_with_types(vec![
             (
@@ -174,11 +190,11 @@ mod tests {
 
     #[test]
     fn a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale() {
-        let bug = record("docs/bugs/BUG-4-x.md", "bug", "> Status: Open\n");
+        let bug = record("docs/bugs/BUG-4-x.md", "bug", "---\nStatus: Open\n---\n");
         let milestone = record(
             "docs/milestones/MILE-9-x.md",
             "milestone",
-            "> Status: Planned\n> Blocked-on: BUG-4\n",
+            "---\nStatus: Planned\nBlocked-on: BUG-4\n---\n",
         );
         let config = config_with_types(vec![(
             "milestone",
@@ -197,7 +213,7 @@ mod tests {
         let milestone = record(
             "docs/milestones/MILE-5-x.md",
             "milestone",
-            "> Status: Planned\n> Blocked-on: a decision that hasn't been made\n",
+            "---\nStatus: Planned\nBlocked-on: a decision that hasn't been made\n---\n",
         );
         let config = config_with_types(vec![(
             "milestone",
@@ -224,7 +240,7 @@ mod tests {
         let milestone = record(
             "docs/milestones/MILE-6-x.md",
             "milestone",
-            "> Status: Planned\n> Blocked-on: BUG-9999\n",
+            "---\nStatus: Planned\nBlocked-on: BUG-9999\n---\n",
         );
         let config = config_with_types(vec![(
             "milestone",
@@ -246,11 +262,11 @@ mod tests {
         // MILE-90: the rule now reads whatever the type's own
         // narrative_fields declares, not a hardcoded "Blocked-on" literal --
         // proven with a differently-named field.
-        let bug = record("docs/bugs/BUG-7-x.md", "bug", "> Status: Fixed\n");
+        let bug = record("docs/bugs/BUG-7-x.md", "bug", "---\nStatus: Fixed\n---\n");
         let rfc = record(
             "docs/rfc/RFC-1-x.md",
             "rfc",
-            "> Status: Draft\n> Motivated-by: BUG-7\n",
+            "---\nStatus: Draft\nMotivated-by: BUG-7\n---\n",
         );
         let config = config_with_types(vec![
             (
@@ -270,11 +286,11 @@ mod tests {
 
     #[test]
     fn narrative_field_stale_reads_a_custom_status_field_name_observed_failing() {
-        let bug = record("docs/bugs/BUG-8-x.md", "bug", "> State: Fixed\n");
+        let bug = record("docs/bugs/BUG-8-x.md", "bug", "---\nState: Fixed\n---\n");
         let rfc = record(
             "docs/rfc/RFC-2-x.md",
             "rfc",
-            "> Status: Draft\n> Motivated-by: BUG-8\n",
+            "---\nStatus: Draft\nMotivated-by: BUG-8\n---\n",
         );
         let config = config_with_types(vec![
             (

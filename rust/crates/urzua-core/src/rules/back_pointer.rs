@@ -722,7 +722,7 @@ mod tests {
             path,
             "adr",
             "ADR",
-            &format!("# t\n\n> **Status:** {status}\n"),
+            &format!("---\nStatus: '{status}'\n---\n# t\n"),
         )
     }
 

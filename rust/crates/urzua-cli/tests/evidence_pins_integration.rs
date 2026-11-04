@@ -51,7 +51,7 @@ fn record(realized_by: &str) -> String {
 
 fn record_stating(state: &str, realized_by: &str) -> String {
     format!(
-        "# ADR-1: First\n\n> Embodiment: {state}\n> Realized-by: {realized_by}\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        "---\nEmbodiment: '{state}'\nRealized-by: '{realized_by}'\n---\n# ADR-1: First\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
     )
 }
 

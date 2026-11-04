@@ -138,8 +138,8 @@ pub(super) struct H1<'a> {
 
 /// Frontmatter is skipped because a YAML comment line inside it starts with
 /// `# ` and would otherwise read as the title. Only a region opening at line
-/// 1 is frontmatter -- blockquote and bold-list headers sit *after* the H1,
-/// where skipping past them would skip the title itself.
+/// 1 is frontmatter, so a `prefix-lines` header (which sits *after* the H1)
+/// is never skipped past, which would skip the title itself.
 pub(super) fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> Option<H1<'_>> {
     let skip_through = header_region
         .filter(|&(start, _)| start == 1)
@@ -396,21 +396,21 @@ mod tests {
         let new_style = record(
             "docs/adr/ADR-36-x.md",
             "adr",
-            "# 36 — X\n\n> Status: Accepted\n",
+            "---\nStatus: Accepted\n---\n# 36 — X\n",
         );
         let legacy_style = record(
             "docs/adr/0037-y.md",
             "adr",
-            "# 37 — Y\n\n> Status: Accepted\n",
+            "---\nStatus: Accepted\n---\n# 37 — Y\n",
         );
         let mut full_text = HashMap::new();
         full_text.insert(
             new_style.path.clone(),
-            "# 36 — X\n\n> Status: Accepted\n".to_string(),
+            "---\nStatus: Accepted\n---\n# 36 — X\n".to_string(),
         );
         full_text.insert(
             legacy_style.path.clone(),
-            "# 37 — Y\n\n> Status: Accepted\n".to_string(),
+            "---\nStatus: Accepted\n---\n# 37 — Y\n".to_string(),
         );
         let (exec, findings) = filename_title_consistency(&[new_style, legacy_style], &full_text);
         assert_eq!(examined(&exec), 1);
@@ -427,12 +427,12 @@ mod tests {
             "docs/adr/DOC-ADR-2-x.md",
             "adr",
             "DOC-ADR",
-            "# 2 — X\n\n> Status: Accepted\n",
+            "---\nStatus: Accepted\n---\n# 2 — X\n",
         );
         let mut full_text = HashMap::new();
         full_text.insert(
             r.path.clone(),
-            "# 2 — X\n\n> Status: Accepted\n".to_string(),
+            "---\nStatus: Accepted\n---\n# 2 — X\n".to_string(),
         );
         let (exec, findings) = filename_title_consistency(&[r], &full_text);
         assert_eq!(examined(&exec), 1);
@@ -444,12 +444,12 @@ mod tests {
         let r = record(
             "docs/adr/ADR-0036-x.md",
             "adr",
-            "# 0099 — Wrong Number\n\n> Status: Accepted\n",
+            "---\nStatus: Accepted\n---\n# 0099 — Wrong Number\n",
         );
         let mut full_text = HashMap::new();
         full_text.insert(
             r.path.clone(),
-            "# 0099 — Wrong Number\n\n> Status: Accepted\n".to_string(),
+            "---\nStatus: Accepted\n---\n# 0099 — Wrong Number\n".to_string(),
         );
         let (_, findings) = filename_title_consistency(&[r], &full_text);
         assert_eq!(findings.len(), 1);

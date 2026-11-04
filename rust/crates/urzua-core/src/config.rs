@@ -3,7 +3,7 @@
 //! Phase A of `urzua check` needs, not the full spec.
 
 use crate::document_model::DocumentModel;
-use crate::header::{HeaderLayout, HeaderShape};
+use crate::header::HeaderShape;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -443,8 +443,8 @@ pub struct RecordTypeConfig {
     #[serde(default)]
     pub required_fields: Vec<String>,
     /// RFC-0010: the header shape is declared per profile, never sniffed.
-    /// Omitted means the long-standing blockquote shape, so an existing
-    /// config needs no change to keep its current behavior.
+    /// Omitted means `yaml-frontmatter`, the one shape with a reader
+    /// (`blockquote` and `bold-list` were removed, MILE-85).
     #[serde(default)]
     pub header_shape: HeaderShape,
     /// The filename/ID prefix `urzua new` emits and `check` recognizes for
@@ -464,18 +464,9 @@ pub struct RecordTypeConfig {
     /// (MILE-150): a path or a glob would be a second selection language.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude_files: Vec<String>,
-    /// The expected line layout (MILE-0075) within `Blockquote`'s own
-    /// tolerance for how fields are laid out -- one field per line, or
-    /// several pipe-delimited on one line. Declared, not voted, the same
-    /// principle Rule 1 already uses for required fields: a majority-rule
-    /// inference would silently ratify whatever drifted in. Omitted means
-    /// this axis isn't checked for the type -- additive, not a forced
-    /// migration for a corpus that hasn't declared it.
-    #[serde(default)]
-    pub header_layout: Option<HeaderLayout>,
     /// The additional fields a type's records may carry beyond
     /// `required_fields` (MILE-0081) -- e.g. `Embodiment`/`Realized-by` for
-    /// `adr`. Declared, not voted, same principle as `header_layout`: a
+    /// `adr`. Declared, not voted, same principle as `required_fields`: a
     /// majority-rule inference would just ratify whatever's already in the
     /// corpus. Omitted means this type's field set isn't checked at all --
     /// additive, and deliberately left undeclared for `spec` until MILE-0074
@@ -508,7 +499,7 @@ pub struct RecordTypeConfig {
     /// never inferred). Omitted means none currently covers this type, which
     /// `type.no-declared-spec` surfaces every run.
     ///
-    /// Unlike `header_layout`, omission is not a way to opt out: there is no
+    /// Omission is not a way to opt out: there is no
     /// value meaning "decided, none needed" (`ADR-0051`), so the signal
     /// cannot be answered -- only silenced per-repo once rule severity is
     /// configurable (MILE-0080).
@@ -645,6 +636,14 @@ impl RecordTypeConfig {
     }
 }
 
+/// The load error for a header shape that was removed (MILE-85): it names the
+/// form and the one to use, rather than the generic "unrecognized" message.
+pub(crate) fn removed_header_shape_message(shape: &str) -> String {
+    format!(
+        "header shape '{shape}' is no longer supported (removed in MILE-85); rewrite the type's records as YAML frontmatter and declare `yaml-frontmatter` (or `none` for a type with no header)"
+    )
+}
+
 impl<'de> Deserialize<'de> for HeaderShape {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -652,12 +651,13 @@ impl<'de> Deserialize<'de> for HeaderShape {
     {
         let s = String::deserialize(deserializer)?;
         match s.as_str() {
-            "blockquote" => Ok(HeaderShape::Blockquote),
-            "bold-list" => Ok(HeaderShape::BoldList),
+            removed @ ("blockquote" | "bold-list") => Err(serde::de::Error::custom(
+                removed_header_shape_message(removed),
+            )),
             "yaml-frontmatter" => Ok(HeaderShape::YamlFrontmatter),
             "none" => Ok(HeaderShape::None),
             other => Err(serde::de::Error::custom(format!(
-                "unrecognized header_shape '{other}' -- expected \"blockquote\", \"bold-list\", \"yaml-frontmatter\", or \"none\""
+                "unrecognized header_shape '{other}' -- expected \"yaml-frontmatter\" or \"none\""
             ))),
         }
     }
@@ -666,36 +666,9 @@ impl<'de> Deserialize<'de> for HeaderShape {
 impl Serialize for HeaderShape {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_str(match self {
-            HeaderShape::Blockquote => "blockquote",
-            HeaderShape::BoldList => "bold-list",
             HeaderShape::YamlFrontmatter => "yaml-frontmatter",
             HeaderShape::None => "none",
         })
-    }
-}
-
-impl Serialize for HeaderLayout {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(match self {
-            HeaderLayout::OnePerLine => "one-per-line",
-            HeaderLayout::PipeDelimited => "pipe-delimited",
-        })
-    }
-}
-
-impl<'de> Deserialize<'de> for HeaderLayout {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        match s.as_str() {
-            "one-per-line" => Ok(HeaderLayout::OnePerLine),
-            "pipe-delimited" => Ok(HeaderLayout::PipeDelimited),
-            other => Err(serde::de::Error::custom(format!(
-                "unrecognized header_layout '{other}' -- expected \"one-per-line\" or \"pipe-delimited\""
-            ))),
-        }
     }
 }
 
@@ -1840,18 +1813,10 @@ mod tests {
     /// would write configs this build cannot read back, and nothing else would
     /// notice.
     #[test]
-    fn header_shape_and_layout_survive_a_serialize_deserialize_round_trip() {
-        for shape in [
-            HeaderShape::Blockquote,
-            HeaderShape::BoldList,
-            HeaderShape::YamlFrontmatter,
-        ] {
+    fn header_shape_survives_a_serialize_deserialize_round_trip() {
+        for shape in [HeaderShape::YamlFrontmatter, HeaderShape::None] {
             let s = yaml_serde::to_string(&shape).unwrap();
             assert_eq!(shape, yaml_serde::from_str::<HeaderShape>(&s).unwrap());
-        }
-        for layout in [HeaderLayout::OnePerLine, HeaderLayout::PipeDelimited] {
-            let s = yaml_serde::to_string(&layout).unwrap();
-            assert_eq!(layout, yaml_serde::from_str::<HeaderLayout>(&s).unwrap());
         }
     }
 
@@ -1869,7 +1834,6 @@ mod tests {
             required_fields: vec!["Status".to_string()],
             header_shape: HeaderShape::default(),
             prefix: None,
-            header_layout: None,
             known_fields: Some(vec!["Embodiment".to_string()]),
             pointer_fields: None,
             narrative_fields: None,
@@ -2333,6 +2297,24 @@ record_types:
         // an existing config with no changes needed.
         let bug = config.record_types.get("bug").unwrap();
         assert_eq!(bug.relation_field(RelationRole::Status), "Status");
+    }
+
+    #[test]
+    fn a_removed_header_shape_is_a_clear_error_naming_the_form() {
+        // MILE-85: `blockquote` and `bold-list` are no longer read; a config
+        // declaring one must fail loudly, not fall back to another shape.
+        for shape in ["blockquote", "bold-list"] {
+            let yaml = format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    header_shape: \"{shape}\"\n"
+            );
+            let e = parse(&yaml).unwrap_err().to_string();
+            assert!(
+                e.contains(shape)
+                    && e.contains("no longer supported")
+                    && e.contains("yaml-frontmatter"),
+                "{e}"
+            );
+        }
     }
 
     #[test]

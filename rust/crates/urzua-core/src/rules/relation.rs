@@ -503,12 +503,12 @@ mod tests {
         let old = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Supersedes / Superseded-by: —\n",
+            "---\nSupersedes / Superseded-by: —\n---\n",
         );
         let new = record(
             "docs/adr/ADR-2-y.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-0001\n",
+            "---\nSupersedes / Superseded-by: ADR-0001\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -532,12 +532,12 @@ mod tests {
         let old = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Supersedes / Superseded-by: —\n",
+            "---\nSupersedes / Superseded-by: —\n---\n",
         );
         let new = record(
             "docs/adr/ADR-2-y.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-0001\n",
+            "---\nSupersedes / Superseded-by: ADR-0001\n---\n",
         );
 
         let config = config_with_types(vec![(
@@ -565,12 +565,12 @@ mod tests {
         let old = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-0002\n",
+            "---\nSupersedes / Superseded-by: ADR-0002\n---\n",
         );
         let new = record(
             "docs/adr/ADR-2-y.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-0001\n",
+            "---\nSupersedes / Superseded-by: ADR-0001\n---\n",
         );
 
         let config = config_with_types(vec![(
@@ -621,7 +621,7 @@ mod tests {
         let citer = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Supersedes / Superseded-by: ADR-0002\n",
+            "---\nSupersedes / Superseded-by: ADR-0002\n---\n",
         );
         let target = record("docs/adr/ADR-2-y.md", "adr", "this is not a header at all");
 
@@ -640,8 +640,12 @@ mod tests {
 
     #[test]
     fn a_type_declaring_a_custom_supersession_field_name_is_read_by_that_name_observed_failing() {
-        let old = record("docs/adr/ADR-1-x.md", "adr", "> Replaces: —\n");
-        let new = record("docs/adr/ADR-2-y.md", "adr", "> Replaces: ADR-0001\n");
+        let old = record("docs/adr/ADR-1-x.md", "adr", "---\nReplaces: —\n---\n");
+        let new = record(
+            "docs/adr/ADR-2-y.md",
+            "adr",
+            "---\nReplaces: ADR-0001\n---\n",
+        );
 
         let config = config_with_types(vec![(
             "adr",
@@ -670,7 +674,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Supersedes / Superseded-by: —\n",
+            "---\nSupersedes / Superseded-by: —\n---\n",
         );
         let config = config_with_types(vec![(
             "adr",
@@ -693,8 +697,12 @@ mod tests {
     #[test]
     fn relation_target_status_undeclared_flags_a_resolving_reference_to_an_undeclaring_type_observed_failing(
     ) {
-        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Date: 2026-01-01\n");
-        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-1\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "---\nDate: 2026-01-01\n---\n");
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-1\n---\n",
+        );
         let config = config_with_types(vec![
             (
                 "spec",
@@ -717,8 +725,12 @@ mod tests {
 
     #[test]
     fn relation_target_status_undeclared_is_silent_when_the_target_declares_status() {
-        let target = record("docs/rfc/RFC-1-x.md", "rfc", "> Status: Draft\n");
-        let source = record("docs/specs/SPEC-1-x.md", "spec", "> Implements: RFC-1\n");
+        let target = record("docs/rfc/RFC-1-x.md", "rfc", "---\nStatus: Draft\n---\n");
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-1\n---\n",
+        );
         let config = config_with_types(vec![
             (
                 "spec",
@@ -776,13 +788,17 @@ mod tests {
         let base = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Amended-by: —
+            "---
+Amended-by: —
+---
 ",
         );
         let amender = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Amends: RFC-1
+            "---
+Amends: RFC-1
+---
 ",
         );
         let records = [base, amender];
@@ -799,13 +815,17 @@ mod tests {
         let base = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Amended-by: RFC-2
+            "---
+Amended-by: RFC-2
+---
 ",
         );
         let amender = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Amends: RFC-1
+            "---
+Amends: RFC-1
+---
 ",
         );
         let records = [base, amender];
@@ -821,13 +841,17 @@ mod tests {
         let base = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Amended-by: RFC-2
+            "---
+Amended-by: RFC-2
+---
 ",
         );
         let other = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Amends: —
+            "---
+Amends: —
+---
 ",
         );
         let records = [base, other];
@@ -844,13 +868,17 @@ mod tests {
         let a = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Amends: RFC-2
+            "---
+Amends: RFC-2
+---
 ",
         );
         let b = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Amends: RFC-1
+            "---
+Amends: RFC-1
+---
 ",
         );
         let records = [a, b];
@@ -867,13 +895,17 @@ mod tests {
         let adr = record(
             "docs/adr/ADR-1-a.md",
             "adr",
-            "> Resolves: BUG-7
+            "---
+Resolves: BUG-7
+---
 ",
         );
         let bug = record(
             "docs/bug/BUG-7-b.md",
             "bug",
-            "> Resolved-by: ADR-1
+            "---
+Resolved-by: ADR-1
+---
 ",
         );
         let records = [adr.clone(), bug];
@@ -883,7 +915,9 @@ mod tests {
         let bug = record(
             "docs/bug/BUG-7-b.md",
             "bug",
-            "> Resolved-by: —
+            "---
+Resolved-by: —
+---
 ",
         );
         let records = [adr, bug];
@@ -900,10 +934,12 @@ mod tests {
         let adr = record(
             "docs/adr/ADR-1-a.md",
             "adr",
-            "> Resolves: BUG-7
+            "---
+Resolves: BUG-7
+---
 ",
         );
-        let bug = record("docs/bug/BUG-7-b.md", "bug", "> Title: x\n");
+        let bug = record("docs/bug/BUG-7-b.md", "bug", "---\nTitle: x\n---\n");
         let records = [adr, bug];
         let (_, findings) = run_pairs(&config, &records);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -918,8 +954,8 @@ mod tests {
             ],
             vec![pair("amendment", "Amends", "Amended-by", false)],
         );
-        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
-        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Amended-by: —\n");
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: ADR-2\n---\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "---\nAmended-by: —\n---\n");
         let records = [rfc, adr];
         let index = build_normalized_index(&records);
         let (exec, findings) = relation_pair_reciprocity(&records, &config, &index);
@@ -936,8 +972,8 @@ mod tests {
         let mut p = pair("amendment", "Amends", "Amended-by", true);
         p.reciprocity = crate::config::PairReciprocity::None;
         let config = pair_config(vec![("rfc", &["Amends", "Amended-by"])], vec![p]);
-        let a = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-2\n");
-        let b = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let a = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: RFC-2\n---\n");
+        let b = record("docs/rfc/RFC-2-b.md", "rfc", "---\nAmended-by: —\n---\n");
         let records = [a, b];
         let (exec, findings) = run_pairs(&config, &records);
         assert!(findings.is_empty(), "{findings:?}");
@@ -946,7 +982,7 @@ mod tests {
 
     #[test]
     fn a_pair_claim_naming_no_record_is_a_finding() {
-        let a = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-99\n");
+        let a = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: RFC-99\n---\n");
         let records = [a];
         let (_, findings) = run_pairs(&amend_config(), &records);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -968,7 +1004,7 @@ mod tests {
 
     #[test]
     fn an_unreadable_target_is_not_blamed_on_the_citer() {
-        let a = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-2\n");
+        let a = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: RFC-2\n---\n");
         let b = record("docs/rfc/RFC-2-b.md", "rfc", "this is not a header at all");
         let records = [a, b];
         let (_, findings) = run_pairs(&amend_config(), &records);
@@ -977,9 +1013,17 @@ mod tests {
 
     #[test]
     fn a_claim_naming_several_targets_is_judged_per_target() {
-        let one = record("docs/rfc/RFC-1-a.md", "rfc", "> Amended-by: RFC-3\n");
-        let two = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
-        let three = record("docs/rfc/RFC-3-c.md", "rfc", "> Amends: RFC-1, RFC-2\n");
+        let one = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "---\nAmended-by: RFC-3\n---\n",
+        );
+        let two = record("docs/rfc/RFC-2-b.md", "rfc", "---\nAmended-by: —\n---\n");
+        let three = record(
+            "docs/rfc/RFC-3-c.md",
+            "rfc",
+            "---\nAmends: RFC-1, RFC-2\n---\n",
+        );
         let records = [one, two, three];
         let (exec, findings) = run_pairs(&amend_config(), &records);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -1008,12 +1052,12 @@ mod tests {
         let base = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Status: Accepted\n> Amended-by: —\n> Amended-by-pending: RFC-2\n",
+            "---\nStatus: Accepted\nAmended-by: —\nAmended-by-pending: RFC-2\n---\n",
         );
         let draft = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Status: Draft\n> Amends: RFC-1\n",
+            "---\nStatus: Draft\nAmends: RFC-1\n---\n",
         );
         let (_, findings) = run_pairs(&provisional_config(), &[base, draft]);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -1030,12 +1074,12 @@ mod tests {
         let base = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Status: Accepted\n> Amended-by: —\n> Amended-by-pending: RFC-2\n",
+            "---\nStatus: Accepted\nAmended-by: —\nAmended-by-pending: RFC-2\n---\n",
         );
         let accepted = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Status: Accepted\n> Amends: RFC-1\n",
+            "---\nStatus: Accepted\nAmends: RFC-1\n---\n",
         );
         let (_, findings) = run_pairs(&provisional_config(), &[base, accepted]);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -1049,12 +1093,12 @@ mod tests {
         let base = record(
             "docs/rfc/RFC-1-a.md",
             "rfc",
-            "> Status: Accepted\n> Amended-by: RFC-2\n",
+            "---\nStatus: Accepted\nAmended-by: RFC-2\n---\n",
         );
         let draft = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Status: Draft\n> Amends: RFC-1\n",
+            "---\nStatus: Draft\nAmends: RFC-1\n---\n",
         );
         let (_, findings) = run_pairs(&provisional_config(), &[base, draft]);
         assert!(findings.is_empty(), "{findings:?}");
@@ -1062,11 +1106,11 @@ mod tests {
 
     #[test]
     fn a_pair_declaring_no_provisional_split_is_unchanged_by_status() {
-        let base = record("docs/rfc/RFC-1-a.md", "rfc", "> Status: Accepted\n");
+        let base = record("docs/rfc/RFC-1-a.md", "rfc", "---\nStatus: Accepted\n---\n");
         let draft = record(
             "docs/rfc/RFC-2-b.md",
             "rfc",
-            "> Status: Draft\n> Amends: RFC-1\n",
+            "---\nStatus: Draft\nAmends: RFC-1\n---\n",
         );
         let (_, findings) = run_pairs(&amend_config(), &[base, draft]);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
@@ -1085,8 +1129,8 @@ mod tests {
     #[test]
     fn a_claim_to_a_type_outside_a_scoped_pair_is_eligible_and_unexamined_not_an_error_observed_failing(
     ) {
-        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
-        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Title: x\n");
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: ADR-2\n---\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "---\nTitle: x\n---\n");
         let records = [rfc, adr];
         let (exec, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &records);
         assert!(findings.is_empty(), "{findings:?}");
@@ -1103,8 +1147,8 @@ mod tests {
 
     #[test]
     fn the_same_claim_in_a_global_pair_still_errors() {
-        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: ADR-2\n");
-        let adr = record("docs/adr/ADR-2-b.md", "adr", "> Title: x\n");
+        let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: ADR-2\n---\n");
+        let adr = record("docs/adr/ADR-2-b.md", "adr", "---\nTitle: x\n---\n");
         let records = [rfc, adr];
         let (_, findings) = run_pairs(&scoped_config(None), &records);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -1112,8 +1156,8 @@ mod tests {
 
     #[test]
     fn a_scoped_pair_still_judges_claims_between_its_own_types() {
-        let a = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-2\n");
-        let b = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let a = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: RFC-2\n---\n");
+        let b = record("docs/rfc/RFC-2-b.md", "rfc", "---\nAmended-by: —\n---\n");
         let (_, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &[a, b]);
         assert_eq!(findings.len(), 1, "{findings:?}");
     }
@@ -1131,8 +1175,8 @@ mod tests {
                 p
             }],
         );
-        let adr = record("docs/adr/ADR-1-a.md", "adr", "> Amends: RFC-2\n");
-        let rfc = record("docs/rfc/RFC-2-b.md", "rfc", "> Amended-by: —\n");
+        let adr = record("docs/adr/ADR-1-a.md", "adr", "---\nAmends: RFC-2\n---\n");
+        let rfc = record("docs/rfc/RFC-2-b.md", "rfc", "---\nAmended-by: —\n---\n");
         let (exec, findings) = run_pairs(&config, &[adr, rfc]);
         assert!(findings.is_empty(), "{findings:?}");
         assert_eq!(
@@ -1144,7 +1188,7 @@ mod tests {
 
     #[test]
     fn a_self_referencing_claim_is_judged_like_any_other() {
-        let lone = record("docs/rfc/RFC-1-a.md", "rfc", "> Amends: RFC-1\n");
+        let lone = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: RFC-1\n---\n");
         let (_, findings) = run_pairs(&amend_config(), &[lone]);
         assert_eq!(findings.len(), 1, "{findings:?}");
     }

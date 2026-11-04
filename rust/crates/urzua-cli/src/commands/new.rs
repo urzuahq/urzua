@@ -161,7 +161,7 @@ pub fn run(
     };
 
     // BUG-3: the configured header_shape wins unconditionally -- a template
-    // file's own (possibly stale, possibly blockquote) header shape is never
+    // file's own (possibly stale) header is never
     // allowed to override what the config actually declares. A yaml-
     // frontmatter type still gets a template's body scaffolding (`## What`,
     // the revision log) when one exists; it just doesn't get the template's
@@ -169,7 +169,10 @@ pub fn run(
     let template_path = repo_root
         .join(".urzua/templates")
         .join(format!("{record_type}.md"));
-    let content = if type_config.header_shape == urzua_core::header::HeaderShape::YamlFrontmatter {
+    // `none` returned above, so the only shape left is `yaml-frontmatter`
+    // (MILE-85 removed the blockquote and bold-list shapes a template's own
+    // header could once have been rendered in).
+    let content = {
         let mut out =
             urzua_core::new_record::render_synthetic_yaml(&params, &type_config.required_fields);
         if let Ok(template) = urzua_io::read_to_string(&template_path) {
@@ -179,16 +182,6 @@ pub fn run(
             }
         }
         out
-    } else {
-        match urzua_io::read_to_string(&template_path) {
-            Ok(template) => urzua_core::new_record::render_from_template(&template, &params),
-            Err(e) => {
-                return emit(&CouldNotRun::from(format!(
-                    "no template at {} and no synthesizable shape declared: {e}",
-                    template_path.display()
-                )))
-            }
-        }
     };
 
     let file_path = dir.join(&filename);

@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn a_record_with_no_revision_log_section_is_not_examined() {
-        let content = "# 0001 — X\n\n> Status: Draft\n";
+        let content = "---\nStatus: Draft\n---\n# 0001 — X\n";
         let r = record("docs/adr/0001-x.md", "adr", content);
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());

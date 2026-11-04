@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -11,33 +11,30 @@ Parent: SPEC-1
 
 ## Purpose
 
-Creates a record from the configured template with a stable ID assigned. Never asks the author to
+Creates a record from the type's configuration with a stable ID assigned. Never asks the author to
 pick a number. Fills in only what the tool can compute; every decision a human makes stays the
 template's own placeholder text for a human to pick.
 
-## The three paths, in priority order
+## How a record is built
 
-1. **A checked-in template exists (`.urzua/templates/<type>.md`) — fill it in.** The H1's number and
-   title, `Date`, `Author` (resolved the same way `fix --apply` resolves an identity: `gh api user`
-   wins even over an explicit `--by`, which wins over `git config user.name` — SPEC-8's identity
-   tiering, reused rather than redesigned), and a freshly generated `Stable-Id` line inserted right after the
-   header's first line. Everything else — `Status: Proposed | Accepted | ...`, `Deciders`, an
-   `Embodiment` starting value — stays exactly the enumerated placeholder text already in the
-   template, because those are decisions a human makes, not values `new` can compute.
-2. **No template, but the type declares `header_shape = "yaml-frontmatter"` — synthesize one** from
-   `required_fields`: every configured field emitted as a blank frontmatter key, so the config alone
-   drives what an author has to fill in, with no template file needing to exist. Two fields are not
-   blank: `Date` and `Author`, which `new` computes, and the type's status field, which starts at the
-   first value of the type's declared `statuses.values` (`MILE-151`). That is the vocabulary's entry
-   state rather than a decision, so moving a record on from it stays a human's; a type that declares
-   no `statuses` leaves the field blank.
-3. **Neither holds — refuse.** A record type with no template and a `blockquote`/`bold-list` shape
-   has nothing for `new` to safely generate a header from; guessing a shape is explicitly rejected
-   (this is `spec`'s own current state — MILE-74 tracks giving it a template).
+The header is always synthesized as YAML frontmatter from the type's `required_fields`, the only
+header shape `new` writes (the `blockquote` and `bold-list` shapes were removed, `MILE-85`): every
+configured field is emitted as a blank frontmatter key, so the config alone drives what an author
+has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, `Date` and
+`Author` (resolved the same way `fix --apply` resolves an identity: `gh api user` wins even over an
+explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tiering, reused rather
+than redesigned), and the type's status field, which starts at the first value of the type's
+declared `statuses.values` (`MILE-151`). That is the vocabulary's entry state rather than a
+decision, so moving a record on from it stays a human's; a type that declares no `statuses` leaves
+the field blank. Every other field is a decision a human makes and stays blank.
 
-**The configured `header_shape` wins unconditionally over path 1 existing** (BUG-3): if a type
-declares `yaml-frontmatter` but also happens to have a leftover template file, the config's
-declared shape still governs, never the template's mere presence.
+If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
+sections beneath the header) is appended under the synthesized header; the template's own header, in
+whatever shape, is never used (`BUG-3`: the configured `header_shape` wins unconditionally over a
+leftover template).
+
+A type declaring `header_shape: none` has nowhere to write a `Stable-Id`, so `new` refuses it
+(`ADR-50`).
 
 ## The declared identity pattern and field set (`MILE-151`)
 
@@ -100,9 +97,8 @@ take content and parameters, returning a string.
 
 ## What's deliberately not built
 
-- **A fourth fallback** — synthesizing a `blockquote` header from `required_fields` alone, the way
-  the YAML path does, for a type with neither a template nor a YAML declaration. Plausible, not
-  ruled out, not needed by any type this repo currently declares.
+- **Any header shape other than YAML frontmatter.** The `blockquote` and `bold-list` shapes were
+  removed (`MILE-85`), so there is no other shape for `new` to write.
 - **Interactive prompting** for `Status`/`Deciders`/etc. — `new` is a one-shot, scriptable command;
   a human or agent edits the placeholder text afterward in whatever tool they're already using.
 
@@ -129,3 +125,4 @@ take content and parameters, returning a string.
 > | 2026-11-02 | Bumped to `0.6`. A title with no slug is refused. **Why:** `new` wrote a slug-less `ADR-N-.md` that its own numbering scan ignored, so the next `new` reissued `N` (`BUG-167`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. A type's declared `identity` now decides numbering, the file name's padding and the H1's `PREFIX-N` form; the status field starts at the first declared status value instead of a literal `null`; `Stable-Id` is left out (report `stable_id: null`, warning notice) when a closed `known_fields` does not list it. A pattern `new` cannot name a file for is refused. **Why:** `MILE-151` and `BUG-182` -- the generator and the checker read two grammars, so its output failed `filename.identity-pattern` and `field.quality`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. `Stable-Id` is always written and the report's `stable_id` always populated; a closed `known_fields` that omits it yields a warning notice naming the inconsistency instead of an omitted identity. **Why:** `MILE-151` omitted it, contradicting ADR-21 (every record type gets a Stable-Id) and leaving a record with no identity. | **substantive** |
+> | 2026-11-04 | Bumped to `0.9`. `new` always synthesizes a YAML frontmatter header and appends a template's body scaffolding when one exists; the "fill the template in" path for a `blockquote` or `bold-list` template is gone. **Why:** `MILE-85` removed those shapes. | **substantive** |

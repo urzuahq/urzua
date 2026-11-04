@@ -21,9 +21,8 @@ pub struct ProposedRecordType {
     /// agree on one. `None` means the corpus uses the bare `NNNN-slug` shape,
     /// which carries no identity a rule can read (BUG-61).
     pub prefix: Option<String>,
-    /// The header shape the type's existing records parse under (BUG-151), so
-    /// the first `check` reads the corpus. `yaml-frontmatter` for a type whose
-    /// records parse under no shape, and for anything not yet inspected.
+    /// The header shape proposed for the type: always `yaml-frontmatter`, the
+    /// only shape with a reader (MILE-85).
     pub header_shape: HeaderShape,
 }
 
@@ -106,55 +105,32 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
         .collect()
 }
 
-/// The shapes init can propose, in tie-break order: the destination shape
-/// first, then the two deprecated ones (ADR-33).
-const CANDIDATE_SHAPES: [HeaderShape; 3] = [
-    HeaderShape::YamlFrontmatter,
-    HeaderShape::BoldList,
-    HeaderShape::Blockquote,
-];
-
-fn shape_name(shape: HeaderShape) -> &'static str {
-    match shape {
-        HeaderShape::Blockquote => "blockquote",
-        HeaderShape::BoldList => "bold-list",
-        HeaderShape::YamlFrontmatter => "yaml-frontmatter",
-        HeaderShape::None => "none",
-    }
+/// How one record's header reads under the only shape with a reader.
+enum HeaderReading {
+    /// YAML frontmatter at the very start of the document, with fields.
+    Frontmatter,
+    /// A removed form (`blockquote` or `bold-list`, MILE-85): named, not read.
+    Removed(&'static str),
+    /// No header at all, or one that does not parse.
+    Unreadable,
 }
 
-/// The shape one record's content parses under, using the real header parser.
-/// The two line-anchored shapes can both match a record (a Y-statement `>`
-/// quote in the body, say), so the shape whose region yields the most fields
-/// wins: a header is the region that carries the fields, and a stray quote
-/// carries few. Equal field counts fall back to the earliest region start,
-/// then to candidate order. Nothing here reads a field name.
-///
-/// One exception comes first: YAML frontmatter that parses with fields at the
-/// very start of the document is the header outright. Its position is
-/// structural, so `- **Key:**` bullets in the body cannot outvote it.
-fn shape_of(content: &str) -> Option<HeaderShape> {
+fn read_header(content: &str) -> HeaderReading {
     let yaml = header::parse_with_shape(content, HeaderShape::YamlFrontmatter);
     if matches!(yaml.region, Some((1, _))) && !yaml.fields.is_empty() {
-        return Some(HeaderShape::YamlFrontmatter);
+        return HeaderReading::Frontmatter;
     }
-    CANDIDATE_SHAPES
-        .iter()
-        .filter_map(|shape| {
-            let parsed = header::parse_with_shape(content, *shape);
-            parsed
-                .region
-                .filter(|_| !parsed.fields.is_empty())
-                .map(|(start, _)| (std::cmp::Reverse(parsed.fields.len()), start, *shape))
-        })
-        .min_by_key(|(fields, start, _)| (*fields, *start))
-        .map(|(_, _, shape)| shape)
+    match header::legacy_header_form(content) {
+        Some(form) => HeaderReading::Removed(form),
+        None => HeaderReading::Unreadable,
+    }
 }
 
-/// Set each proposed type's `header_shape` from its existing records
-/// (BUG-151), returning a notice for every type whose records disagree or
-/// parse under no shape. Reads only; a record that cannot be read counts as
-/// parsing under no shape.
+/// Report, for each proposed type, how many of its existing records `check`
+/// will read. `yaml-frontmatter` is the only shape proposed (the blockquote
+/// and bold-list shapes were removed, MILE-85), so a record in one of those
+/// forms is named in a notice rather than proposed a shape that cannot read
+/// it. Reads only; a record that cannot be read counts as unreadable.
 pub fn infer_header_shapes(
     repo_root: &Path,
     discovered: &[PathBuf],
@@ -162,9 +138,9 @@ pub fn infer_header_shapes(
 ) -> Vec<Notice> {
     let mut notices = Vec::new();
     for rt in proposed.iter_mut() {
-        let mut tally: Vec<(HeaderShape, usize)> =
-            CANDIDATE_SHAPES.iter().map(|s| (*s, 0)).collect();
-        let mut unparsed = 0usize;
+        rt.header_shape = HeaderShape::YamlFrontmatter;
+        let (mut yaml, mut blockquote, mut bold_list, mut unreadable) =
+            (0usize, 0usize, 0usize, 0usize);
         for rel in discovered {
             let in_type = rel.parent() == Some(Path::new(&rt.dir))
                 && rel
@@ -174,58 +150,37 @@ pub fn infer_header_shapes(
             if !in_type {
                 continue;
             }
-            let shape = std::fs::read_to_string(repo_root.join(rel))
-                .ok()
-                .and_then(|content| shape_of(&content));
-            match shape {
-                Some(shape) => {
-                    if let Some(entry) = tally.iter_mut().find(|(s, _)| *s == shape) {
-                        entry.1 += 1;
-                    }
-                }
-                None => unparsed += 1,
+            let reading = std::fs::read_to_string(repo_root.join(rel))
+                .map(|content| read_header(&content))
+                .unwrap_or(HeaderReading::Unreadable);
+            match reading {
+                HeaderReading::Frontmatter => yaml += 1,
+                HeaderReading::Removed("blockquote") => blockquote += 1,
+                HeaderReading::Removed(_) => bold_list += 1,
+                HeaderReading::Unreadable => unreadable += 1,
             }
         }
-
-        // Majority; a tie goes to the earlier candidate (the destination shape).
-        let mut best: Option<(HeaderShape, usize)> = None;
-        for (shape, n) in &tally {
-            if *n > 0 && best.is_none_or(|(_, b)| *n > b) {
-                best = Some((*shape, *n));
-            }
-        }
-        let Some((chosen, _)) = best else {
-            rt.header_shape = HeaderShape::YamlFrontmatter;
-            notices.push(Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_HEADER_SHAPE.to_string(),
-                message: format!(
-                    "none of the {} record(s) in {} parse under any header shape, so yaml-frontmatter is proposed; `check` will report each record's header as unreadable until the headers are written or the shape is set by hand",
-                    rt.record_count, rt.dir
-                ),
-            });
+        if blockquote + bold_list + unreadable == 0 {
             continue;
-        };
-        rt.header_shape = chosen;
-
-        let split: Vec<String> = tally
-            .iter()
-            .filter(|(_, n)| *n > 0)
-            .map(|(s, n)| format!("{n} {}", shape_name(*s)))
-            .chain((unparsed > 0).then(|| format!("{unparsed} unreadable")))
-            .collect();
-        if split.len() > 1 {
-            notices.push(Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_HEADER_SHAPE.to_string(),
-                message: format!(
-                    "records in {} use more than one header shape ({}); {} is proposed as the majority, and the others will not be read under it",
-                    rt.dir,
-                    split.join(", "),
-                    shape_name(chosen)
-                ),
-            });
         }
+        let unread: Vec<String> = [
+            (blockquote, "in the removed blockquote form"),
+            (bold_list, "in the removed bold-list form"),
+            (unreadable, "with no readable header"),
+        ]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, what)| format!("{n} {what}"))
+        .collect();
+        notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_HEADER_SHAPE.to_string(),
+            message: format!(
+                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} will be reported as unreadable by `check` until their headers are rewritten as YAML frontmatter",
+                rt.dir,
+                unread.join(", ")
+            ),
+        });
     }
     notices
 }
@@ -266,13 +221,14 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         let mut entry = Mapping::new();
         entry.insert(Value::from("dir"), Value::from(rt.dir.as_str()));
         entry.insert(Value::from("required_fields"), Value::Sequence(vec![]));
-        // The shape the type's records already use (BUG-151, ADR-33's
-        // amendment), so the first `check` reads the corpus. A deprecated
-        // shape is steered toward migration by `header.deprecated-shape`,
-        // which this config also declares.
+        // The one shape with a reader (MILE-85); `infer_header_shapes` notices
+        // any existing record that is not already written in it.
         entry.insert(
             Value::from("header_shape"),
-            Value::from(shape_name(rt.header_shape)),
+            Value::from(match rt.header_shape {
+                HeaderShape::YamlFrontmatter => "yaml-frontmatter",
+                HeaderShape::None => "none",
+            }),
         );
         // Without this, the prefix defaults to the type name upper-cased --
         // which is the directory's name, not the filenames' -- and every rule

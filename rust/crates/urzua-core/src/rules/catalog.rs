@@ -5,13 +5,11 @@
 /// config is validated against this list, so a typo is a load-time error
 /// naming the valid set rather than a check that silently never runs.
 pub const RULE_HEADER_REQUIRED_FIELDS: &str = "header.required-fields";
-pub const RULE_HEADER_LAYOUT_CONSISTENCY: &str = "header.layout-consistency";
 pub const RULE_HEADER_FIELD_SET_CONSISTENCY: &str = "header.field-set-consistency";
 pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
 pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
 pub const RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR: &str = "type.record-outside-declared-dir";
 pub const RULE_IDENTITY_COLLISION: &str = "identity.collision";
-pub const RULE_HEADER_DEPRECATED_SHAPE: &str = "header.deprecated-shape";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
 pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
@@ -64,13 +62,11 @@ pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
-    RULE_HEADER_LAYOUT_CONSISTENCY,
     RULE_HEADER_FIELD_SET_CONSISTENCY,
     RULE_TYPE_NO_DECLARED_SPEC,
     RULE_TYPE_DIR_MATCHES_NOTHING,
     RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
     RULE_IDENTITY_COLLISION,
-    RULE_HEADER_DEPRECATED_SHAPE,
     RULE_CONFIG_POINTER_DECLARATION_MISSING,
     RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
     RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
@@ -131,10 +127,6 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         description: "Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here.",
     },
     RuleMeta {
-        id: RULE_HEADER_LAYOUT_CONSISTENCY,
-        description: "A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38).",
-    },
-    RuleMeta {
         id: RULE_HEADER_FIELD_SET_CONSISTENCY,
         description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding.",
     },
@@ -153,10 +145,6 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_IDENTITY_COLLISION,
         description: "Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`).",
-    },
-    RuleMeta {
-        id: RULE_HEADER_DEPRECATED_SHAPE,
-        description: "Which configured types still declare a deprecated `header_shape` (`blockquote`/`bold-list`) instead of `yaml-frontmatter` (ADR-33). Parsing support for the deprecated shapes stays; this rule only surfaces which types haven't migrated.",
     },
     RuleMeta {
         id: RULE_CONFIG_POINTER_DECLARATION_MISSING,

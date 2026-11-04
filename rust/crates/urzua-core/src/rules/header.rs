@@ -30,7 +30,7 @@ pub fn header_required_fields(
 
         if record.header.is_unreadable() {
             let detail = match &record.header.parse_error {
-                Some(e) => format!(" -- YAML parse error: {e}"),
+                Some(e) => format!(" -- {e}"),
                 None => String::new(),
             };
             findings.push(Finding {
@@ -105,91 +105,12 @@ pub fn header_required_fields(
     )
 }
 
-/// Rule (MILE-0075): a record's header line layout matches its type's
-/// declared `header_layout`, when one is declared. `HeaderShape::Blockquote`
-/// deliberately tolerates one-per-line and pipe-delimited interchangeably for
-/// parsing (RFC-0010), which is correct for reading a corpus that hasn't
-/// picked one -- but it means drift within a type that HAS settled on one
-/// (found live: SPEC-2 through SPEC-6 all pipe-delimited, SPEC-1 alone
-/// one-per-line) previously went unflagged. Declared, not voted, same
-/// principle as Rule 1: a type with no declared `header_layout` is skipped
-/// entirely, examined stays 0 for it -- this is additive, never a forced
-/// migration.
-pub fn header_layout_consistency(
-    records: &[Record],
-    config: &Config,
-) -> (RuleExecution, Vec<Finding>) {
-    let declared_by_type = header_layout_by_type(config);
-    let declared_by_type = &declared_by_type;
-    const RULE_ID: &str = RULE_HEADER_LAYOUT_CONSISTENCY;
-    let mut findings = Vec::new();
-
-    // Eligible: records of a type that declares a layout. A type declaring
-    // none puts its records outside this rule's population -- the rule does not
-    // apply. A record whose header yields no detectable layout IS in the
-    // population and simply was not judged, which `eligible > examined` says
-    // and a bare count could not.
-    let candidates: Vec<&Record> = records
-        .iter()
-        .filter(|r| declared_by_type.contains_key(&r.record_type))
-        .collect();
-
-    let (population, examined_records) = scoped_census_records(
-        config,
-        PopulationUnit::Record,
-        candidates,
-        |record| *record,
-        |record| {
-            let Some(&declared) = declared_by_type.get(&record.record_type) else {
-                return Outcome::Absent;
-            };
-            let Some(actual) = record.header.layout() else {
-                return Outcome::Absent;
-            };
-
-            if actual != declared {
-                let (declared_label, actual_label) = (layout_label(declared), layout_label(actual));
-                findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                message: format!(
-                    "header layout '{actual_label}' disagrees with '{declared_label}', declared for record type '{}'",
-                    record.record_type
-                ),
-            });
-            }
-            Outcome::Examined
-        },
-    );
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
-        findings,
-    )
-}
-
-fn layout_label(layout: HeaderLayout) -> &'static str {
-    match layout {
-        HeaderLayout::OnePerLine => "one-per-line",
-        HeaderLayout::PipeDelimited => "pipe-delimited",
-    }
-}
-
 /// Rule (MILE-0081): every header field on a record belongs to its type's
 /// declared `required_fields` or `known_fields`. `header.required-fields`
 /// only catches a *missing* required field; nothing catches the opposite --
 /// a field present on some records of a type but not others (found live:
 /// SPEC-1 carries `Embodiment`/`Author`/`Derives-from` that SPEC-2 through
-/// SPEC-6 don't). Declared, not voted, same principle as `header_layout`: a
+/// SPEC-6 don't). Declared, not voted, same principle as `required_fields`: a
 /// type with no declared `known_fields` is skipped entirely, examined stays
 /// 0 for it -- required so an existing corpus's legitimate optional fields
 /// (`Stable-Id`, `Realized-by`, `Derives-from` on `adr`, none of which are
@@ -302,51 +223,6 @@ pub fn header_field_set_consistency(
             examined_records,
         },
         findings,
-    )
-}
-
-/// ADR-0033: `blockquote`/`bold-list` are deprecated, `yaml-frontmatter` is
-/// the one shape this project actively grows. Same config-level shape as
-/// `type_no_declared_spec` -- a schema inventory check, not a per-record
-/// one. Parsing support for the deprecated shapes stays (an external
-/// adopter's un-migrated corpus, or a first-time evaluator's existing docs,
-/// per ADR-0033's own stated reason for deprecating rather than removing);
-/// this rule only surfaces which configured types still declare one.
-pub fn header_deprecated_shape(
-    config: &Config,
-    config_path: &std::path::Path,
-) -> (RuleExecution, Vec<Finding>) {
-    schema_inventory_rule(
-        config,
-        RULE_HEADER_DEPRECATED_SHAPE,
-        |type_name, type_config, findings| {
-            // Explicit enumeration, not `!= YamlFrontmatter` (`ADR-50`): a
-            // negative test reports every future shape as deprecated on
-            // sight, and `none` (no header at all) is a different axis, not
-            // a deprecated one. A `match`, not `matches!`, so a fifth
-            // `HeaderShape` variant forces a decision here instead of
-            // silently inheriting a default.
-            let deprecated =
-                match type_config.header_shape {
-                    crate::header::HeaderShape::Blockquote
-                    | crate::header::HeaderShape::BoldList => true,
-                    crate::header::HeaderShape::YamlFrontmatter
-                    | crate::header::HeaderShape::None => false,
-                };
-            if deprecated {
-                findings.push(Finding {
-                    rule: RULE_HEADER_DEPRECATED_SHAPE.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    message: format!(
-                        "record type '{type_name}' declares a deprecated header shape -- migrate to `header_shape = \"yaml-frontmatter\"` (ADR-33)"
-                    ),
-                });
-            }
-        },
     )
 }
 
@@ -527,7 +403,7 @@ mod tests {
 
     #[test]
     fn missing_required_field_is_a_finding() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
+        let r = record("docs/adr/0001-x.md", "adr", "---\nStatus: Accepted\n---\n");
         let config = config_for_required(vec![("adr", vec!["Status", "Deciders"])]);
 
         let (exec, findings) = header_required_fields(&[r], &config);
@@ -602,7 +478,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> Deciders: someone\n",
+            "---\nStatus: Accepted\nDeciders: someone\n---\n",
         );
         let config = config_for_required(vec![("adr", vec!["Status", "Deciders"])]);
 
@@ -618,56 +494,13 @@ mod tests {
         let r = record(
             "docs/specs/0001-x.md",
             "spec",
-            "> Status: Draft\n> Embodiment: Not started\n",
+            "---\nStatus: Draft\nEmbodiment: Not started\n---\n",
         );
         let config = config_for_required(vec![("spec", vec!["Version"])]);
 
         let (_, findings) = header_required_fields(&[r], &config);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Version"));
-    }
-
-    #[test]
-    fn a_declared_pipe_delimited_type_flags_a_one_per_line_record() {
-        // The exact corpus defect this rule was chosen to catch: SPEC-0001
-        // rendered one-field-per-line while SPEC-0002 through SPEC-0006
-        // settled on pipe-delimited, and nothing said so.
-        let r = record(
-            "docs/specs/0001-x.md",
-            "spec",
-            "> Version: 0.1\n> Status: Draft\n",
-        );
-        let config = config_for_layout(vec![("spec", HeaderLayout::PipeDelimited)]);
-
-        let (exec, findings) = header_layout_consistency(&[r], &config);
-        assert_eq!(examined(&exec), 1);
-        assert_eq!(findings.len(), 1);
-        assert!(findings[0].message.contains("one-per-line"));
-        assert!(findings[0].message.contains("pipe-delimited"));
-    }
-
-    #[test]
-    fn a_matching_layout_produces_no_finding() {
-        let r = record(
-            "docs/specs/0002-x.md",
-            "spec",
-            "> Version: 0.1 | Status: Draft\n",
-        );
-        let config = config_for_layout(vec![("spec", HeaderLayout::PipeDelimited)]);
-
-        let (exec, findings) = header_layout_consistency(&[r], &config);
-        assert_eq!(examined(&exec), 1);
-        assert!(findings.is_empty());
-    }
-
-    #[test]
-    fn a_type_with_no_declared_layout_is_skipped_entirely() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Status: Accepted\n");
-        let config = config_with_types(vec![]);
-
-        let (exec, findings) = header_layout_consistency(&[r], &config);
-        assert_eq!(examined(&exec), 0);
-        assert!(findings.is_empty());
     }
 
     #[test]
@@ -678,7 +511,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> Date: 2026-09-07\n> Sponsor: someone\n",
+            "---\nStatus: Accepted\nDate: 2026-09-07\nSponsor: someone\n---\n",
         );
         let config = config_for_known(vec![("adr", vec!["Status", "Date"])]);
 
@@ -693,7 +526,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> Realized-by: code:x.rs\n",
+            "---\nStatus: Accepted\nRealized-by: code:x.rs\n---\n",
         );
         let config = config_for_known(vec![("adr", vec!["Status", "Realized-by"])]);
 
@@ -704,7 +537,7 @@ mod tests {
 
     #[test]
     fn a_type_with_no_declared_known_fields_is_skipped_entirely() {
-        let r = record("docs/specs/0001-x.md", "spec", "> Version: 0.1\n");
+        let r = record("docs/specs/0001-x.md", "spec", "---\nVersion: 0.1\n---\n");
         let config = config_with_types(vec![]);
 
         let (exec, findings) = header_field_set_consistency(&[r], &config);
@@ -712,79 +545,11 @@ mod tests {
         assert!(findings.is_empty());
     }
 
-    #[test]
-    fn a_type_still_declaring_blockquote_is_a_finding() {
-        let mut record_types = std::collections::BTreeMap::new();
-        record_types.insert(
-            "adr".to_string(),
-            type_config_with_shape(crate::header::HeaderShape::Blockquote),
-        );
-        let config = Config {
-            schema_version: 2,
-            relation_pairs: Vec::new(),
-            fail_on: Default::default(),
-            rules: std::collections::BTreeMap::new(),
-            record_types,
-        };
-
-        let (exec, findings) =
-            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(examined(&exec), 1);
-        assert_eq!(findings.len(), 1);
-        assert!(findings[0].message.contains("adr"));
-    }
-
-    #[test]
-    fn a_type_declaring_yaml_frontmatter_produces_no_finding() {
-        let mut record_types = std::collections::BTreeMap::new();
-        record_types.insert(
-            "adr".to_string(),
-            type_config_with_shape(crate::header::HeaderShape::YamlFrontmatter),
-        );
-        let config = Config {
-            schema_version: 2,
-            relation_pairs: Vec::new(),
-            fail_on: Default::default(),
-            rules: std::collections::BTreeMap::new(),
-            record_types,
-        };
-
-        let (exec, findings) =
-            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(examined(&exec), 1);
-        assert!(findings.is_empty());
-    }
-
-    /// `ADR-50`: `none` is a different axis, not a deprecated shape.
-    #[test]
-    fn a_type_declaring_no_header_is_not_reported_as_deprecated() {
-        let config = config_with_types(vec![(
-            "dec",
-            crate::config::RecordTypeConfig {
-                exclude_files: Vec::new(),
-                header_shape: crate::header::HeaderShape::None,
-                ..type_config(None)
-            },
-        )]);
-        let (exec, findings) =
-            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(examined(&exec), 1);
-        assert!(findings.is_empty(), "{findings:?}");
-    }
-
-    #[test]
-    fn a_blockquote_type_is_still_reported_as_deprecated_observed_failing() {
-        let config = config_with_types(vec![("adr", type_config(None))]);
-        let (_, findings) =
-            header_deprecated_shape(&config, std::path::Path::new(".urzua/config.yaml"));
-        assert_eq!(findings.len(), 1, "{findings:?}");
-    }
-
     /// BUG-101: a declared field written under a different case used to be
     /// silently absent everywhere. This rule is the one place that names it.
     #[test]
     fn a_declared_field_written_under_a_different_case_is_reported_observed_failing() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> status: Accepted\n");
+        let r = record("docs/adr/ADR-1-x.md", "adr", "---\nstatus: Accepted\n---\n");
         let config = config_for_required(vec![("adr", vec!["Status"])]);
         let (exec, findings) = header_field_case_mismatch(&[r], &config);
         assert_eq!(examined(&exec), 1);
@@ -795,7 +560,7 @@ mod tests {
 
     #[test]
     fn a_declared_field_written_correctly_cased_is_not_reported() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: Accepted\n");
+        let r = record("docs/adr/ADR-1-x.md", "adr", "---\nStatus: Accepted\n---\n");
         let config = config_for_required(vec![("adr", vec!["Status"])]);
         let (exec, findings) = header_field_case_mismatch(&[r], &config);
         assert_eq!(examined(&exec), 1);
@@ -804,7 +569,7 @@ mod tests {
 
     #[test]
     fn a_declared_field_never_written_at_all_is_absent_not_reported() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Author: x\n");
+        let r = record("docs/adr/ADR-1-x.md", "adr", "---\nAuthor: x\n---\n");
         let config = config_for_required(vec![("adr", vec!["Status"])]);
         let (exec, findings) = header_field_case_mismatch(&[r], &config);
         assert_eq!(
@@ -915,7 +680,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Status: Accepted\n> status: Draft\n",
+            "---\nStatus: Accepted\nstatus: Draft\n---\n",
         );
         let config = config_for_required(vec![("adr", vec!["Status"])]);
         let (exec, findings) = header_case_variant_key(&[r], &config);
@@ -932,7 +697,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Status: Accepted\n> status: Draft\n",
+            "---\nStatus: Accepted\nstatus: Draft\n---\n",
         );
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (exec, findings) = header_case_variant_key(&[r], &config);
@@ -945,7 +710,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Status: A\n> status: B\n> STATUS: C\n",
+            "---\nStatus: A\nstatus: B\nSTATUS: C\n---\n",
         );
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (_, findings) = header_case_variant_key(&[r], &config);
@@ -960,7 +725,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Status: A\n> Author: x\n> status: B\n> author: y\n",
+            "---\nStatus: A\nAuthor: x\nstatus: B\nauthor: y\n---\n",
         );
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (_, findings) = header_case_variant_key(&[r], &config);
@@ -974,7 +739,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Status: Accepted\n> Author: x\n",
+            "---\nStatus: Accepted\nAuthor: x\n---\n",
         );
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (exec, findings) = header_case_variant_key(&[r], &config);
@@ -986,12 +751,36 @@ mod tests {
         assert!(findings.is_empty(), "{findings:?}");
     }
 
+    /// A header with a repeated key. YAML frontmatter rejects one outright, so
+    /// it is built by hand, as a `prefix-lines` header can carry it.
+    fn record_with_fields(record_type: &str, fields: &[(&str, &str)]) -> Record {
+        Record {
+            path: PathBuf::from("docs/adr/ADR-1-x.md"),
+            record_type: record_type.to_string(),
+            type_prefix: "ADR".to_string(),
+            header: crate::header::Header {
+                fields: fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (k, v))| crate::header::HeaderField {
+                        key: crate::values::FieldName::new(*k),
+                        value: v.to_string(),
+                        line: i + 2,
+                    })
+                    .collect(),
+                region: Some((1, fields.len() + 2)),
+                parse_error: None,
+            },
+            identity: None,
+        }
+    }
+
     /// An exact repeat is `duplicate_keys()`'s signal, reported by
     /// `header.required-fields`; this rule is composable alongside it, not a
     /// second report of the same fact.
     #[test]
     fn an_exact_repeat_is_not_this_rule_s_finding() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: A\n> Status: B\n");
+        let r = record_with_fields("adr", &[("Status", "A"), ("Status", "B")]);
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (exec, findings) = header_case_variant_key(&[r], &config);
         assert_eq!(examined(&exec), 1);
@@ -1000,11 +789,7 @@ mod tests {
 
     #[test]
     fn an_exact_repeat_beside_a_case_variant_still_reports_the_variant_once() {
-        let r = record(
-            "docs/adr/ADR-1-x.md",
-            "adr",
-            "> Status: A\n> Status: B\n> status: C\n",
-        );
+        let r = record_with_fields("adr", &[("Status", "A"), ("Status", "B"), ("status", "C")]);
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (_, findings) = header_case_variant_key(&[r], &config);
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -1017,8 +802,12 @@ mod tests {
     /// lower-casing difference is reported.
     #[test]
     fn non_ascii_case_variants_are_reported_but_sharp_s_is_not_folded() {
-        let variant = record("docs/adr/ADR-1-x.md", "adr", "> CAFÉ: a\n> café: b\n");
-        let sharp_s = record("docs/adr/ADR-2-x.md", "adr", "> Maße: a\n> Masse: b\n");
+        let variant = record("docs/adr/ADR-1-x.md", "adr", "---\nCAFÉ: a\ncafé: b\n---\n");
+        let sharp_s = record(
+            "docs/adr/ADR-2-x.md",
+            "adr",
+            "---\nMaße: a\nMasse: b\n---\n",
+        );
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (exec, findings) = header_case_variant_key(&[variant, sharp_s], &config);
         assert_eq!(examined(&exec), 2);
@@ -1028,8 +817,8 @@ mod tests {
 
     #[test]
     fn variants_in_two_different_records_are_not_one_pair() {
-        let a = record("docs/adr/ADR-1-x.md", "adr", "> Status: A\n");
-        let b = record("docs/adr/ADR-2-x.md", "adr", "> status: B\n");
+        let a = record("docs/adr/ADR-1-x.md", "adr", "---\nStatus: A\n---\n");
+        let b = record("docs/adr/ADR-2-x.md", "adr", "---\nstatus: B\n---\n");
         let config = config_with_types(vec![("adr", type_config(None))]);
         let (exec, findings) = header_case_variant_key(&[a, b], &config);
         assert_eq!(examined(&exec), 2);
@@ -1095,7 +884,11 @@ mod tests {
     #[test]
     fn it_leaves_the_exact_match_rules_verdicts_unchanged() {
         let config = config_for_required(vec![("adr", vec!["Status"])]);
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: A\n> status: B\n");
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: A\nstatus: B\n---\n",
+        );
         assert!(r.header.duplicate_keys().is_empty());
         assert_eq!(r.header.get("Status"), Some("A"));
         let (_, required) = header_required_fields(std::slice::from_ref(&r), &config);
@@ -1120,7 +913,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> x-Local: 1\n> X-Other: 2\n> Sponsor: someone\n",
+            "---\nStatus: Accepted\nx-Local: 1\nX-Other: 2\nSponsor: someone\n---\n",
         );
         let (exec, findings) = header_field_set_consistency(&[r], &field_set_config(Some(true)));
         assert_eq!(examined(&exec), 1);
@@ -1133,7 +926,7 @@ mod tests {
         let r = record(
             "docs/adr/0001-x.md",
             "adr",
-            "> Status: Accepted\n> xlocal: 1\n> x_local: 2\n> Local-x-: 3\n",
+            "---\nStatus: Accepted\nxlocal: 1\nx_local: 2\nLocal-x-: 3\n---\n",
         );
         let (_, findings) = header_field_set_consistency(&[r], &field_set_config(Some(true)));
         assert_eq!(findings.len(), 3, "{findings:?}");
@@ -1145,7 +938,7 @@ mod tests {
             let r = record(
                 "docs/adr/0001-x.md",
                 "adr",
-                "> Status: Accepted\n> x-Local: 1\n",
+                "---\nStatus: Accepted\nx-Local: 1\n---\n",
             );
             let (_, findings) = header_field_set_consistency(&[r], &field_set_config(allow));
             assert_eq!(findings.len(), 1, "allow={allow:?}: {findings:?}");

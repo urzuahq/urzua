@@ -144,11 +144,15 @@ mod tests {
         // Before the fix, record_id() rejected any numeric prefix that
         // wasn't exactly 4 digits -- past 9999 records of one type,
         // references would have silently stopped resolving.
-        let target = record("docs/rfc/RFC-10000-x.md", "rfc", "> Status: Draft\n");
+        let target = record(
+            "docs/rfc/RFC-10000-x.md",
+            "rfc",
+            "---\nStatus: Draft\n---\n",
+        );
         let source = record(
             "docs/specs/SPEC-1-x.md",
             "spec",
-            "> Implements: RFC-10000\n",
+            "---\nImplements: RFC-10000\n---\n",
         );
         let config = config_with_types(vec![(
             "spec",
@@ -166,8 +170,16 @@ mod tests {
     fn a_reference_resolves_regardless_of_zero_padding() {
         // ADR-0034 (the filename's own padding) and a hand-typed ADR-34
         // reference must resolve to the same record (BUG-0002).
-        let target = record("docs/adr/ADR-0034-x.md", "adr", "> Status: Accepted\n");
-        let source = record("docs/specs/SPEC-1-y.md", "spec", "> Implements: ADR-34\n");
+        let target = record(
+            "docs/adr/ADR-0034-x.md",
+            "adr",
+            "---\nStatus: Accepted\n---\n",
+        );
+        let source = record(
+            "docs/specs/SPEC-1-y.md",
+            "spec",
+            "---\nImplements: ADR-34\n---\n",
+        );
         let config = config_with_types(vec![(
             "spec",
             type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
@@ -187,8 +199,12 @@ mod tests {
         // pre-ADR-36 history, and that history no longer exists in the
         // corpus. A reference to a filename in that shape is now correctly
         // dangling, not silently resolved.
-        let legacy_style = record("docs/adr/0037-y.md", "adr", "> Status: Accepted\n");
-        let source = record("docs/specs/SPEC-1-z.md", "spec", "> Implements: ADR-37\n");
+        let legacy_style = record("docs/adr/0037-y.md", "adr", "---\nStatus: Accepted\n---\n");
+        let source = record(
+            "docs/specs/SPEC-1-z.md",
+            "spec",
+            "---\nImplements: ADR-37\n---\n",
+        );
         let config = config_with_types(vec![(
             "spec",
             type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
@@ -210,9 +226,13 @@ mod tests {
             "docs/milestones/MILE-1-x.md",
             "milestone",
             "MILE",
-            "> Status: Planned\n",
+            "---\nStatus: Planned\n---\n",
         );
-        let source = record("docs/adr/ADR-1-y.md", "adr", "> Implements: MILE-1\n");
+        let source = record(
+            "docs/adr/ADR-1-y.md",
+            "adr",
+            "---\nImplements: MILE-1\n---\n",
+        );
         let config = config_with_types(vec![(
             "adr",
             type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),

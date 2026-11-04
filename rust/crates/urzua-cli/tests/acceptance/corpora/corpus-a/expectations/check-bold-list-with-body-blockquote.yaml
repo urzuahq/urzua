@@ -1,9 +1,0 @@
-id: check-bold-list-with-body-blockquote
-corpus: corpus-a
-invocation: [--config, .urzua/declared-bold-list.yaml, check, records/]
-expect_exit: 0
-expect_json:
-  - {at: /status, equals: ok}
-  - {at: /files_examined, equals: 2}
-expect_no_findings:
-  - {rule: header.required-fields}

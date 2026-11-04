@@ -66,9 +66,8 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
 /// Trimming inside those rules would paper over it; this reports it instead --
 /// the split `yamllint` makes between formatting and meaning.
 ///
-/// Only reachable through `yaml-frontmatter`: the blockquote parser trims at
-/// parse time and YAML trims an unquoted scalar, so it takes a quoted value to
-/// carry the space this far.
+/// YAML trims an unquoted scalar, so it takes a quoted value to carry the
+/// space this far.
 pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
     let declared_by_type = declared_fields_by_type(config);
     let declared_by_type = &declared_by_type;
@@ -299,7 +298,11 @@ mod tests {
     #[test]
     fn a_type_declaring_no_pending_vocabulary_keeps_the_substring_match() {
         let config = config_for_required(vec![("bug", vec!["Status"])]);
-        let r = record("docs/bugs/BUG-1-x.md", "bug", "> Status: Pending review\n");
+        let r = record(
+            "docs/bugs/BUG-1-x.md",
+            "bug",
+            "---\nStatus: Pending review\n---\n",
+        );
         let (_, findings) = field_pending(&[r], &config);
         assert_eq!(findings.len(), 1, "{findings:?}");
     }
@@ -379,7 +382,11 @@ mod tests {
 
     #[test]
     fn a_clean_value_is_not_reported_as_untrimmed() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Status: Superseded\n");
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nStatus: Superseded\n---\n",
+        );
         let config = config_for_required(vec![("adr", vec!["Status"])]);
         let (exec, findings) = field_untrimmed_value(&[r], &config);
         assert_eq!(examined(&exec), 1);
@@ -409,7 +416,11 @@ mod tests {
 
     #[test]
     fn a_value_with_no_reserved_leading_character_is_not_reported() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Author: beauwilliams\n");
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nAuthor: beauwilliams\n---\n",
+        );
         let config = config_for_required(vec![("adr", vec!["Author"])]);
         let (exec, findings) = field_leading_reserved_indicator(&[r], &config);
         assert_eq!(examined(&exec), 1);
@@ -424,7 +435,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Supersedes / Superseded-by: —\n",
+            "---\nSupersedes / Superseded-by: —\n---\n",
         );
         let config = config_for_required(vec![("adr", vec!["Supersedes / Superseded-by"])]);
         let (_, findings) = field_leading_reserved_indicator(&[r], &config);
@@ -484,7 +495,7 @@ mod tests {
     fn field_quality_flags_placeholder_not_just_absence() {
         // A field present per Rule 1 (the key exists) but never actually
         // filled in -- Rule 1 alone would pass this record.
-        let r = record("docs/adr/0001-x.md", "adr", "> Author: name\n");
+        let r = record("docs/adr/0001-x.md", "adr", "---\nAuthor: name\n---\n");
         let config = config_for_required(vec![("adr", vec!["Author"])]);
 
         let (exec, findings) = field_quality(&[r], &config);
@@ -514,7 +525,7 @@ mod tests {
         // states, so a repository declaring it `error` had a deliberate
         // `Pending` marker block CI, and declaring it `warn` stopped a genuinely
         // blank required field from blocking. No setting was correct.
-        let r = record("docs/adr/0001-x.md", "adr", "> Deciders: Pending\n");
+        let r = record("docs/adr/0001-x.md", "adr", "---\nDeciders: Pending\n---\n");
         let config = config_for_required(vec![("adr", vec!["Deciders"])]);
 
         let (_, quality) = field_quality(std::slice::from_ref(&r), &config);
@@ -526,7 +537,7 @@ mod tests {
 
         // The forgotten case stays with field.quality, and field.pending
         // must not claim it.
-        let blank = record("docs/adr/0002-y.md", "adr", "> Deciders:\n");
+        let blank = record("docs/adr/0002-y.md", "adr", "---\nDeciders:\n---\n");
         let (_, q2) = field_quality(std::slice::from_ref(&blank), &config);
         assert_eq!(q2.len(), 1);
         assert_eq!(q2[0].severity, FindingSeverity::Error);
@@ -536,7 +547,7 @@ mod tests {
 
     #[test]
     fn field_quality_passes_a_real_value() {
-        let r = record("docs/adr/0001-x.md", "adr", "> Author: someone\n");
+        let r = record("docs/adr/0001-x.md", "adr", "---\nAuthor: someone\n---\n");
         let config = config_for_required(vec![("adr", vec!["Author"])]);
 
         let (_, findings) = field_quality(&[r], &config);
@@ -548,7 +559,11 @@ mod tests {
         // BUG-5: (project lead) used to be this project's own placeholder
         // convention and classified as Present -- field.quality never had a
         // chance to catch a regression back to it (the ADR-38 incident).
-        let r = record("docs/adr/0001-x.md", "adr", "> Author: (project lead)\n");
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "---\nAuthor: (project lead)\n---\n",
+        );
         let config = config_for_required(vec![("adr", vec!["Author"])]);
 
         let (_, findings) = field_quality(&[r], &config);
@@ -654,7 +669,11 @@ mod tests {
 
     #[test]
     fn field_quality_reports_each_field_at_its_own_declared_level_observed_failing() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Deciders:\n> Reviewers:\n");
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nDeciders:\nReviewers:\n---\n",
+        );
         let config = levelled("field.quality", "{Deciders: error, Reviewers: warn}");
         let (_, findings) = field_quality(&[r], &config);
         let by = |f: &str| {
@@ -670,7 +689,11 @@ mod tests {
 
     #[test]
     fn an_unlisted_field_declares_no_severity_of_its_own_observed_failing() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Deciders:\n> Reviewers:\n");
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nDeciders:\nReviewers:\n---\n",
+        );
         let config = levelled("field.quality", "{Deciders: error}");
         let (_, findings) = field_quality(&[r], &config);
         let reviewers = findings
@@ -682,7 +705,11 @@ mod tests {
 
     #[test]
     fn without_the_option_no_finding_declares_a_severity() {
-        let r = record("docs/adr/ADR-1-x.md", "adr", "> Deciders:\n> Reviewers:\n");
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nDeciders:\nReviewers:\n---\n",
+        );
         let config = config_for_required(vec![("adr", vec!["Deciders", "Reviewers"])]);
         let (_, findings) = field_quality(&[r], &config);
         assert_eq!(findings.len(), 2);
@@ -694,7 +721,7 @@ mod tests {
         let r = record(
             "docs/adr/ADR-1-x.md",
             "adr",
-            "> Deciders: Pending\n> Reviewers: Pending\n",
+            "---\nDeciders: Pending\nReviewers: Pending\n---\n",
         );
         let config = levelled("field.pending", "{Deciders: error}");
         let (_, findings) = field_pending(&[r], &config);

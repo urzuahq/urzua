@@ -47,7 +47,7 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
     let dir = fixture_repo("yaml-with-template");
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+        "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
     )
     .unwrap();
     // A template that still uses the old blockquote shape -- this is
@@ -85,39 +85,6 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
     // template's sections.
     assert!(content.contains("## Context"));
     assert!(content.contains("## Decision"));
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
-fn new_still_uses_the_template_verbatim_for_the_default_blockquote_shape() {
-    let dir = fixture_repo("blockquote-default");
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        "schema_version: 2\nrules: {header.required-fields: error, header.layout-consistency: warn, header.field-set-consistency: warn, header.deprecated-shape: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join(".urzua/templates/adr.md"),
-        "# NNNN — Title\n\n> Status: Proposed\n\n## Context\n\nFill this in.\n",
-    )
-    .unwrap();
-    commit_all(&dir);
-
-    let output = run_urzua(&dir, &["new", "adr", "A real title"]);
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let path: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON on stdout");
-    let rel_path = path["path"].as_str().expect("path field");
-    let content = std::fs::read_to_string(dir.join(rel_path)).unwrap();
-
-    assert!(content.contains("> Status: Proposed"));
-    assert!(!content.starts_with("---\n"));
 
     std::fs::remove_dir_all(&dir).ok();
 }
