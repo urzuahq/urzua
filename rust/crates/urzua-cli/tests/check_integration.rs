@@ -3058,6 +3058,11 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "citation.resolution",
             "reads body text only; a header-less record is read whole",
         ),
+        (
+            "section.required",
+            "reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)",
+        ),
+        ("section.shape", "same as section.required"),
         // Claim-level: judges claim files, not records.
         (
             "claim.status-agreement",

@@ -657,6 +657,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
             || rules::published_path_reference(&published_files, &published_paths, &config),
         ),
+        crate::gate::gated(&config, rules::RULE_SECTION_REQUIRED, || {
+            rules::section_required(&records, &config, &full_text)
+        }),
+        crate::gate::gated(&config, rules::RULE_SECTION_SHAPE, || {
+            rules::section_shape(&records, &config, &full_text)
+        }),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());
