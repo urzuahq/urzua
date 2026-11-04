@@ -32,6 +32,8 @@ pub enum Declaration {
     RequiredFields,
     KnownFields,
     PointerFields,
+    /// `revision_log.version_bump` (`BUG-51`).
+    VersionBump,
 }
 
 impl Declaration {
@@ -41,6 +43,7 @@ impl Declaration {
             Declaration::RequiredFields => "required_fields",
             Declaration::KnownFields => "known_fields",
             Declaration::PointerFields => "pointer_fields",
+            Declaration::VersionBump => "revision_log.version_bump",
         }
     }
 }
@@ -301,11 +304,11 @@ pub const RULE_TABLE: &[RuleDef] = &[
     RuleDef {
         id: RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
         description: "A changed record that adds a revision-log row of a class its type declares must also change its version (`BUG-51`, `SPEC-18`: a substantive or structural change is a `Version` bump plus a revision-log entry). A type declares it as `revision_log: {version_bump: {field: Version, classes: [substantive, structural]}}`: a field name and the classes that require a bump, and no type has it by default. Judged against the merge base's copy of the record, so it reports `not-applicable` on a run with no `--base`, never clean; a record new in the diff has nothing to bump from and stays unexamined. A row counts as added when its cells appear in the current log and not in the merge base's. Enabling the rule when no type declares a bump is a config load error.",
-        scope: Scope::Diff,
+        scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::VersionBump),
         header_none: HeaderNone::Exempt("reads a declared version field and body text, only on a --base run"),
         options: &[],
         phase: Phase::Main,
@@ -619,6 +622,19 @@ pub const RULE_TABLE: &[RuleDef] = &[
         run: |c| {
             header_pointer_field_clean(c.records, c.config)
         },
+    },
+    RuleDef {
+        id: RULE_CONFIG_COMPANION_DECLARATION_MISSING,
+        description: "A type's `companion_fields` lists pairs of relation roles, for example `[embodiment_state, embodiment_locator]`, whose fields it must declare together (`BUG-41`). A type declaring one field of a pair in `required_fields`/`known_fields` without the other is reported, as is a pair whose fields it declares neither of: a rule reading both, such as `embodiment.consistency`, cannot judge a record that lacks one. The fields are the ones the type's `relation_fields` names for the roles; no pair is known to the engine.",
+        scope: Scope::Config,
+        anchor: Anchor::Config,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
+        phase: Phase::Main,
+        run: |c| config_companion_declaration_missing(c.config, c.config_path),
     },
     RuleDef {
         id: RULE_CONFIG_POINTER_DECLARATION_MISSING,
@@ -1128,6 +1144,10 @@ mod tests {
             vec![
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (
+                    RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+                    Declaration::VersionBump
+                ),
                 (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
             ]
