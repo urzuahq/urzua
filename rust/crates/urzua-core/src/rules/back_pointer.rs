@@ -135,6 +135,7 @@ pub fn embodiment_back_pointer_resolution(
                         pointer.id
                     ),
                     waived: None,
+                    declared_severity: None,
                 });
             }
         }
@@ -153,6 +154,7 @@ pub fn embodiment_back_pointer_resolution(
                      checked; remove the entry or correct the path"
                 ),
                 waived: None,
+                declared_severity: None,
             });
         }
     }

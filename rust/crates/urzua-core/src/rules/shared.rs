@@ -537,3 +537,21 @@ pub(super) fn cited_identifiers(line: &str, prefixes: &[String]) -> Vec<String> 
     }
     out
 }
+
+/// The severity a rule's `field_levels` option declares for `field`
+/// (`MILE-140`), or `None` when the rule declared nothing for it, in which
+/// case the gate applies the rule-level severity. Exact match on the field
+/// name, like every other field comparison (`ADR-57`).
+pub(super) fn declared_field_severity(
+    config: &Config,
+    rule: &str,
+    field: &str,
+) -> Option<FindingSeverity> {
+    use crate::config::RuleLevel;
+    match config.rules.get(rule)?.field_levels.as_ref()?.get(field)? {
+        RuleLevel::Error => Some(FindingSeverity::Error),
+        RuleLevel::Warn => Some(FindingSeverity::Warning),
+        // Refused at load; unreachable for a loaded config.
+        RuleLevel::Off => None,
+    }
+}

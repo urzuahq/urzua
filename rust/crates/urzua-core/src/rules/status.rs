@@ -41,7 +41,7 @@ fn run_status_rule(
     config: &Config,
     rule_id: &'static str,
     eligible: impl Fn(&StatusDecl) -> bool,
-    judge: impl Fn(&Judged) -> Vec<String>,
+    judge: impl Fn(&Judged) -> Vec<(Option<String>, String)>,
 ) -> (RuleExecution, Vec<Finding>) {
     let declared = statuses_by_type(config);
     let candidates: Vec<&Record> = records
@@ -73,13 +73,17 @@ fn run_status_rule(
                 status_field,
                 status,
             };
-            for message in judge(&judged) {
+            for (field, message) in judge(&judged) {
+                let declared_severity = field
+                    .as_deref()
+                    .and_then(|f| declared_field_severity(config, rule_id, f));
                 findings.push(Finding {
                     rule: rule_id.to_string(),
-                    severity: FindingSeverity::Error,
+                    severity: declared_severity.unwrap_or(FindingSeverity::Error),
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity,
                     message,
                 });
             }
@@ -111,12 +115,15 @@ pub fn status_undeclared_value(
             if j.decl.declares(j.status) {
                 return Vec::new();
             }
-            vec![format!(
-                "{} '{}' is not declared for type '{}' (declared: {})",
-                j.status_field,
-                j.status,
-                j.record_type,
-                j.decl.values.join(", ")
+            vec![(
+                None,
+                format!(
+                    "{} '{}' is not declared for type '{}' (declared: {})",
+                    j.status_field,
+                    j.status,
+                    j.record_type,
+                    j.decl.values.join(", ")
+                ),
             )]
         },
     )
@@ -139,9 +146,12 @@ pub fn status_required_field_missing(
                 .filter_map(|field| {
                     let state = classify(j.record.header.get(field));
                     matches!(state, FieldState::Blank | FieldState::Placeholder).then(|| {
-                        format!(
-                            "{} is {}, which requires '{field}', but it is {state:?} -- not a real, present value",
-                            j.status_field, j.status
+                        (
+                            Some(field.to_string()),
+                            format!(
+                                "{} is {}, which requires '{field}', but it is {state:?} -- not a real, present value",
+                                j.status_field, j.status
+                            ),
                         )
                     })
                 })
@@ -166,9 +176,12 @@ pub fn status_forbidden_field_present(
                 .into_iter()
                 .filter(|field| classify(j.record.header.get(field)) != FieldState::Blank)
                 .map(|field| {
-                    format!(
-                        "{} is {}, which forbids '{field}', but the record carries it",
-                        j.status_field, j.status
+                    (
+                        None,
+                        format!(
+                            "{} is {}, which forbids '{field}', but the record carries it",
+                            j.status_field, j.status
+                        ),
                     )
                 })
                 .collect()
@@ -268,5 +281,22 @@ mod tests {
         assert!(!is_finished(&declared, "adr", "Done", &fallback));
         assert!(!is_finished(&declared, "adr", "Proposed", &fallback));
         assert!(is_finished(&declared, "other", "Done", &fallback));
+    }
+
+    #[test]
+    fn a_missing_required_field_reports_at_its_own_declared_level_observed_failing() {
+        let yaml = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    known_fields: [Deciders, Reviewers]\n    statuses:\n      values: [Proposed, Accepted]\n      success: [Accepted]\n      require:\n        - {when: [Accepted], fields: [Deciders, Reviewers]}\nrules:\n  status.required-field-missing:\n    level: warn\n    field_levels: {Deciders: error}\n";
+        let config = crate::config::parse(yaml).expect("config loads");
+        let (_, findings) = status_required_field_missing(&[adr("Accepted", "")], &config);
+        let d = findings
+            .iter()
+            .find(|x| x.message.contains("'Deciders'"))
+            .unwrap();
+        let r = findings
+            .iter()
+            .find(|x| x.message.contains("'Reviewers'"))
+            .unwrap();
+        assert_eq!(d.declared_severity, Some(FindingSeverity::Error));
+        assert_eq!(r.declared_severity, None);
     }
 }

@@ -206,6 +206,7 @@ pub fn embodiment_locator_exists(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!("{field} has an empty locator"),
                     });
                     continue;
@@ -219,6 +220,7 @@ pub fn embodiment_locator_exists(
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!("{field} names '{locator}', which is not in the working tree"),
                 });
             }
@@ -310,6 +312,7 @@ pub fn embodiment_consistency(
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                     "stated {state_field} '{}' disagrees with '{computed}', computed from {locator_field}",
                     stated.trim()
@@ -324,6 +327,7 @@ pub fn embodiment_consistency(
                         file: record.path.clone(),
                         line: None,
                         waived: None,
+                        declared_severity: None,
                         message: format!(
                             "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
                         ),
@@ -418,6 +422,7 @@ pub fn embodiment_locator_promotion_candidate(
             file: first_path,
             line: None,
             waived: None,
+            declared_severity: None,
             message: format!(
                 "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
                 paths.len(),

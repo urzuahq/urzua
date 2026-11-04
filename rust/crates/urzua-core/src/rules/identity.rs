@@ -49,6 +49,7 @@ pub fn identity_collision(
                 file: record.path.clone(),
                 line: None,
                 waived: None,
+                declared_severity: None,
                 message: format!(
                     "identifier {id} is claimed by {} records ({}) -- a reference to it resolves to only one of them",
                     claimants.len(),

@@ -39,6 +39,7 @@ pub fn header_required_fields(
                 file: record.path.clone(),
                 line: None,
  waived: None,
+ declared_severity: None,
                 message: format!(
                     "no header-shaped region found -- required fields {required:?} cannot be checked{detail}"
                 ),
@@ -53,6 +54,7 @@ pub fn header_required_fields(
                 file: record.path.clone(),
                 line: None,
  waived: None,
+ declared_severity: None,
                 message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
             });
         }
@@ -81,6 +83,7 @@ pub fn header_required_fields(
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "missing required header field '{field}' for record type '{}'",
                         record.record_type
@@ -152,6 +155,7 @@ pub fn header_layout_consistency(
                 file: record.path.clone(),
                 line: None,
                 waived: None,
+                declared_severity: None,
                 message: format!(
                     "header layout '{actual_label}' disagrees with '{declared_label}', declared for record type '{}'",
                     record.record_type
@@ -272,6 +276,7 @@ pub fn header_field_set_consistency(
                     file: record.path.clone(),
                     line: Some(field.line),
                     waived: None,
+                    declared_severity: None,
                     message: match near_miss(&field.key, allowed) {
                         Some(declared) => format!(
                             "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case",
@@ -335,6 +340,7 @@ pub fn header_deprecated_shape(
                     file: config_path.to_path_buf(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "record type '{type_name}' declares a deprecated header shape -- migrate to `header_shape = \"yaml-frontmatter\"` (ADR-33)"
                     ),
@@ -392,6 +398,7 @@ pub fn header_field_case_mismatch(
                 file: record.path.clone(),
                 line: Some(found.line),
                 waived: None,
+                declared_severity: None,
                 message: format!(
                     "declared field '{field}' found as '{}' -- field names compare exactly (ADR-57); rename it",
                     found.key
@@ -473,6 +480,7 @@ pub fn header_case_variant_key(
                     file: record.path.clone(),
                     line: Some(spellings[0].1),
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "header writes keys differing only by case: {named} -- field names compare exactly (ADR-57), so these are different fields; this reports the difference, not which spelling is right"
                     ),
