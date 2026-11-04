@@ -231,6 +231,7 @@ mod tests {
         t.revision_log = Some(crate::config::RevisionLogDecl {
             marker: None,
             heading: Some("History".into()),
+            required: None,
         });
         let config = config_with_types(vec![("spec", t)]);
         let content = format!("# 1\n\n## History\n\n{LOG}");
