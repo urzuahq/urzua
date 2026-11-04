@@ -33,3 +33,4 @@ establish for an existing directory or an untracked file.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed, left `Status: Open`. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. With `Realized-by: code:src` where `src` is an existing tracked directory, `urzua check` reports `embodiment.locator-exists: Realized-by names 'src', which is not in the working tree`. **Why:** whether a locator may name a tree is the decision the record names. | **substantive** |

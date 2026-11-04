@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2WG83X4FDF5ADVSCPF7P434
-Status: Open
+Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "not yet written -- every rule init proposes must examine a non-zero number of records on the corpus init adopted"
+Regression-test: 'rust/crates/urzua-cli/src/commands/init.rs::a_rule_reading_a_declaration_init_does_not_write_is_not_proposed_observed_failing, rust/crates/urzua-cli/tests/check_integration.rs::init_does_not_propose_rules_that_would_examine_nothing_on_the_corpus_it_adopted'
 ---
 # 73 — init proposes rules whose declarations it did not write so they examine zero records
 
@@ -46,3 +46,5 @@ inert passes every test there is.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Recorded the chosen fix: `init` stops proposing the five declaration-dependent rules until their declarations exist and tells the adopter what to declare first; it infers nothing from the corpus (`ADR-33`). `Status` stays `Open`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `urzua init` on a two-ADR corpus, then `urzua check`, runs `field.quality`, `field.pending`, `header.field-set-consistency` and `header.pointer-field-clean` with `eligible: 0, examined: 0`. The decision of 2026-11-04 is recorded and the fix follows as its own pull request. **Why:** confirming against main before building. | **substantive** |
+> | 2026-11-04 | Fixed. `init` skips a rule whose table entry declares `reads_declaration` (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and reports them in a `rule-applicability` notice with the declaration each needs; `header.layout-consistency` no longer exists (`header_layout` was removed). Infers nothing (`ADR-33`). Documented in `SPEC-5` (`## Proposed rules`, `0.8`). **Why:** the maintainer decision of 2026-11-04 above. | **substantive** |

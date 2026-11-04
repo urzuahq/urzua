@@ -64,3 +64,4 @@ suppression.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `load_waivers` (`waiver.rs`) still filters on `r.record_type == "waiver"`, and `diff_scope.rs` reads `record_types.get("waiver")`. **Why:** `RFC-37`, which decides how a type declares what it does, is still Draft. | **substantive** |

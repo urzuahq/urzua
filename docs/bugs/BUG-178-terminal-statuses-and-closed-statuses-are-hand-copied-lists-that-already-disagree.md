@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6DHE7FTV278Q4GY103WZJ4P
-Status: Open
+Status: Fixed
 Found-in: 'an inventory of implicit state machines across config, engine and specs (2026-11-02), confirmed by reading .urzua/config.yaml'
 Regression-test: 'rust/crates/urzua-core/src/rules/claim.rs::a_claim_against_a_declared_failure_terminal_is_not_an_error_observed_failing, rust/crates/urzua-core/src/rules/narrative.rs::narrative_field_stale_reads_the_declared_terminals_observed_failing'
 ---
@@ -38,3 +38,4 @@ duplication `ADR-64` names.
 > | 2026-11-02 | Filed. **Why:** Found by the implicit state machine inventory. | **substantive** |
 > | 2026-11-02 | Dropped `pointer.target-status` `not_in` from the copies. **Why:** It is a separate, narrower policy (pointers must not target a Superseded record), not a list of finished statuses. | **substantive** |
 > | 2026-11-04 | `narrative-field.stale` and `claim.status-agreement` read the declared `success` and `failure` statuses of the target's type when it declares `statuses`, and keep their list for a type that declares none; this repository declares all five types, so `WontFix` and `Not a bug` now finish a bug for both rules. The lists stay in `.urzua/config.yaml` as the fallback. `Status` unchanged. **Why:** `MILE-132` Phase 0 (`SPEC-3`). | **substantive** |
+> | 2026-11-04 | `Status` set to `Fixed`. Fixed in #173 (`MILE-132`, see the 2026-11-04 row above): `narrative-field.stale` and `claim.status-agreement` read the declared `success` and `failure` statuses of the target's type, so `WontFix` and `Not a bug` finish a bug for both rules. The two lists stay in `.urzua/config.yaml` only as the fallback for a type that declares no `statuses`. **Why:** the disagreement between the copies no longer decides any verdict in a repository that declares its types. | **substantive** |

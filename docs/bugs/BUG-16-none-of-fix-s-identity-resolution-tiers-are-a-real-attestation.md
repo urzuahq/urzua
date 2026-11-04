@@ -54,3 +54,4 @@ only that each tier is progressively less like free-form guessing.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not a code defect with an obvious fix -- disposition is a new RFC amending RFC-2, not yet drafted. | **structural** |
+> | 2026-11-04 | Triage: still real, and a design question rather than a code defect; `Status` stays `Open`. `urzua fix --apply --by <name>` still writes `<name>` as free text and the `gh api user` tier (`urzua-io/src/lib.rs`) is still an unverified session identity. **Why:** the record asks for an RFC amending `RFC-2` (signed commits as the attestation), which no change here can decide. | **substantive** |

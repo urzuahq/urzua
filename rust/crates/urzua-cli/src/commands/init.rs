@@ -209,6 +209,39 @@ fn singular_type_name(dir_name: &str) -> String {
     dir_name.strip_suffix('s').unwrap_or(dir_name).to_string()
 }
 
+/// The rules `init` does not propose because the declaration each reads is one
+/// `init` does not write, grouped by declaration, so the adopter knows what to
+/// declare before enabling them (BUG-73).
+fn withheld_rule_notices() -> Vec<Notice> {
+    let mut by_declaration: Vec<(urzua_core::rules::Declaration, Vec<&'static str>)> = Vec::new();
+    for def in urzua_core::rules::RULE_TABLE {
+        let Some(declaration) = def.reads_declaration else {
+            continue;
+        };
+        match by_declaration.iter_mut().find(|(d, _)| *d == declaration) {
+            Some((_, rules)) => rules.push(def.id),
+            None => by_declaration.push((declaration, vec![def.id])),
+        }
+    }
+    if by_declaration.is_empty() {
+        return Vec::new();
+    }
+    let clauses: Vec<String> = by_declaration
+        .iter()
+        .map(|(declaration, rules)| {
+            format!("{} (declare `{}`)", rules.join(", "), declaration.key())
+        })
+        .collect();
+    vec![Notice {
+        severity: NoticeSeverity::Info,
+        subject: NOTICE_RULE_APPLICABILITY.to_string(),
+        message: format!(
+            "not proposed, because each reads a per-type declaration init does not infer and would examine no record until it exists: {}; declare it on a record type, then enable the rule",
+            clauses.join("; ")
+        ),
+    }]
+}
+
 /// Built through the real serializer rather than string-concatenated, so a
 /// directory name containing YAML metacharacters cannot break out of its value
 /// (BUG-36). The `Mapping` is ordered by `proposed`, so repeated runs over the
@@ -252,6 +285,13 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         // Pairs are declared, never inferred: enabling these with none
         // declared is a load error, so adopt mode cannot propose them.
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_relation_pairs) {
+            continue;
+        }
+        // A rule that reads a per-type declaration `init` leaves empty would
+        // report `ran` over zero records (BUG-73). `init` infers nothing from
+        // the corpus (ADR-33), so the adopter declares it and enables the rule;
+        // `withheld_rule_notices` says which.
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.reads_declaration.is_some()) {
             continue;
         }
         // A corpus whose filenames carry no type prefix has no identity for
@@ -373,6 +413,7 @@ pub fn run(dry_run: bool) -> ExitCode {
     // Correct, not a bug in `audit`'s exit-code policy (`BUG-77`) -- but the
     // adopter's documented first two commands should not surprise them.
     let mut notices = infer_header_shapes(&repo_root, &discovered.paths, &mut proposed);
+    notices.extend(withheld_rule_notices());
     if proposed.iter().all(|rt| rt.prefix.is_none()) {
         notices.push(Notice {
             severity: NoticeSeverity::Warning,
@@ -638,5 +679,55 @@ mod tests {
             yaml.contains("header.required-fields"),
             "rules that do not read an identity are still proposed: {yaml}"
         );
+    }
+
+    /// `BUG-73`: `init` writes `required_fields: []` and no `known_fields` or
+    /// `pointer_fields`, so a rule that reads one of them examines nothing on
+    /// the corpus it just adopted. It is not proposed, and the adopter is told
+    /// what to declare to turn it on.
+    #[test]
+    fn a_rule_reading_a_declaration_init_does_not_write_is_not_proposed_observed_failing() {
+        let proposed = vec![ProposedRecordType {
+            name: "adr".to_string(),
+            dir: "docs/adr".to_string(),
+            record_count: 3,
+            prefix: Some("ADR".to_string()),
+            header_shape: HeaderShape::YamlFrontmatter,
+        }];
+        let yaml = render_config_yaml(&proposed);
+        for rule in [
+            "field.quality",
+            "field.pending",
+            "header.field-set-consistency",
+            "header.pointer-field-clean",
+        ] {
+            assert!(
+                !yaml.contains(&format!("{rule}:")),
+                "{rule} reads a declaration init leaves empty, so it would examine zero records: {yaml}"
+            );
+        }
+        assert!(
+            yaml.contains("header.required-fields"),
+            "rules that read no declaration are still proposed: {yaml}"
+        );
+    }
+
+    #[test]
+    fn the_withheld_rules_are_disclosed_with_the_declaration_each_needs() {
+        let notices = withheld_rule_notices();
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        let message = &notices[0].message;
+        for needle in [
+            "field.quality",
+            "field.pending",
+            "required_fields",
+            "header.field-set-consistency",
+            "known_fields",
+            "header.pointer-field-clean",
+            "pointer_fields",
+        ] {
+            assert!(message.contains(needle), "{needle} missing from: {message}");
+        }
+        assert_eq!(notices[0].subject, crate::NOTICE_RULE_APPLICABILITY);
     }
 }

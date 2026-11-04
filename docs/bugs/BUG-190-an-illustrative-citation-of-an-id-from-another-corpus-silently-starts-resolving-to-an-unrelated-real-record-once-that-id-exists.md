@@ -12,7 +12,7 @@ Regression-test: 'pending'
 
 When this repository created its own `ADR-72` (allowed status transitions), the citation began to resolve, silently, to an unrelated real record. The finding disappeared, so each waiver matched nothing and `waiver.matches-nothing` reported it; the waivers had to be removed in #256. Nothing was wrong with the waivers' intent. The citations now point at a record that has nothing to do with the example, and no rule says so.
 
-The same will happen when the next id in the sequence (in draft as #260) and the one after it land. Any record that cites an id as history or illustration is exposed the same way, and the exposure is permanent: every new record in the namespace can capture an old illustrative citation.
+Only `ADR-72` was ever read as a citation, so the other two numbers were never at risk. Any record that writes an id in full as history or illustration is exposed the same way, and the exposure is permanent: every new record in the namespace can capture an old illustrative citation.
 
 ## Why nothing caught it
 
@@ -32,7 +32,7 @@ The per-record list is the stronger candidate: it is explicit, scoped to one rec
 - A record can declare, through config, that a citation of a given id is illustrative, and `citation.resolution` neither resolves nor reports it, in that record only.
 - A declared illustrative id that the record does not cite is reported, not ignored.
 - The same id cited as a real reference in another record still resolves.
-- `ADR-18` and `RFC-5` declare all three example ids as illustrative, and `urzua check` on this repository reports nothing for them, with no waiver, before and after the other two ids exist.
+- `ADR-18` and `RFC-5` declare `ADR-72` as illustrative (the shorthand "ADR-72/73/74" is read as the one citation `ADR-72`; the other two numbers are not citations), and `urzua check` on this repository reports no finding for them, with no waiver, before and after any record with that number exists. An Info notice that the declared id now resolves may remain.
 - `SPEC-2` and `SPEC-3` document the declaration with revision rows; the regression test names the incident (an illustrative id later created as a real record) and is observed failing first.
 
 ## References
@@ -48,3 +48,4 @@ The per-record list is the stronger candidate: it is explicit, scoped to one rec
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** found while creating `ADR-72`; the same will recur for the other two ids. Left `Status: Open`: the declaration's shape needs a maintainer decision. | **substantive** |
 > | 2026-11-04 | Deciding ADR drafted: `ADR-75` (Proposed) proposes the per-record header declaration, with the inline marker and three other shapes weighed and five open questions. Nothing is built; `Status` stays `Open` and `Regression-test` stays `pending`. **Why:** the shape is written into records, including frozen ones, and no Accepted record decides it, so the maintainer decides first. | **substantive** |
+> | 2026-11-04 | Done means corrected, and the Why sentence about the next ids. **Why:** the engine reads "ADR-72/73/74" as the single citation `ADR-72`, so `ADR-73` and `ADR-74` were never captured and cannot be declared (a declared id the record never cites is itself reported); the exposure is general, not this pair. Found in the review of `ADR-75`. `Status` unchanged. | **substantive** |

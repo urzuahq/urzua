@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6J948WM3NNBZA8WQN63E26M
-Status: Open
+Status: Fixed
 Found-in: 'running make records after MILE-129 merged with drift_grace_days: 14 (14 warnings, 2026-11-04)'
 Regression-test: 'rust/crates/urzua-cli/tests/evidence_pins_integration.rs::a_stated_drift_detected_is_not_contradicted_by_fresh_drift_inside_the_grace_window_observed_failing, rust/crates/urzua-cli/tests/evidence_pins_integration.rs::fix_does_not_flip_a_stated_drift_detected_while_the_drift_is_inside_the_grace_window_observed_failing, rust/crates/urzua-core/src/rules/embodiment.rs::fresh_drift_accepts_either_the_tier_or_drift_detected_observed_failing, rust/crates/urzua-core/src/fix.rs::fresh_drift_leaves_a_stated_drift_detected_alone_observed_failing'
 ---
@@ -33,3 +33,4 @@ Built under `MILE-129`; documented in `SPEC-2` (`embodiment.consistency`).
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** `make records` reported 14 warnings contradicting records that state `Drift detected`, once `drift_grace_days: 14` was set. | **substantive** |
+> | 2026-11-04 | `Status` set to `Fixed`. Fixed in #182: inside `drift_grace_days`, `embodiment.consistency` accepts either the tier value or a stated `Drift detected`, and `urzua fix` leaves a stated `Drift detected` alone; the `Regression-test` tests were added there. **Why:** the fix merged the day this was filed and the record was never closed. | **substantive** |
