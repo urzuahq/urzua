@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"recorded","cwd":"@ROOT@","tool_name":"Edit","tool_input":{"file_path":"@ROOT@/docs/adr/ADR-1-a.md","old_string":"prose","new_string":"better prose"}}

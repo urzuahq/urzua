@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","session_id":"recorded","cwd":"@ROOT@","tool_name":"Write","tool_input":{"file_path":"@ROOT@/docs/adr/ADR-1-a.md","content":"---\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\nprose\n"}}
