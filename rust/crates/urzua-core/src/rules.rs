@@ -31,6 +31,7 @@ mod narrative;
 mod pointer;
 mod relation;
 mod revision_log;
+mod section;
 mod shared;
 mod type_scope;
 
@@ -50,6 +51,7 @@ pub use narrative::*;
 pub use pointer::*;
 pub use relation::*;
 pub use revision_log::*;
+pub use section::*;
 pub use shared::*;
 pub use type_scope::*;
 

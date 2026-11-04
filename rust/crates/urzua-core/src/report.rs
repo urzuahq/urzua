@@ -121,6 +121,10 @@ pub enum PopulationUnit {
     Claim,
     /// One decision ID cited in a record's prose.
     Citation,
+    /// One `(record, section)` pair where the section is **declared by
+    /// config** (`sections.required`), so a section the record lacks is still
+    /// counted.
+    Section,
     /// One other rule's execution. The unit of a rule that judges the run
     /// rather than the corpus.
     Rule,

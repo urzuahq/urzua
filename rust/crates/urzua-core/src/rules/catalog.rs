@@ -44,6 +44,8 @@ pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
 pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
+pub const RULE_SECTION_REQUIRED: &str = "section.required";
+pub const RULE_SECTION_SHAPE: &str = "section.shape";
 pub const RULE_DIFF_SOURCE_REQUIRES_RECORD: &str = "diff.source-requires-record";
 pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mixed";
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
@@ -88,6 +90,8 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_CROSS_TYPE_DISALLOWED,
     RULE_CITATION_RESOLUTION,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+    RULE_SECTION_REQUIRED,
+    RULE_SECTION_SHAPE,
     RULE_DIFF_SOURCE_REQUIRES_RECORD,
     RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
     RULE_FILENAME_IDENTITY_PATTERN,
@@ -250,6 +254,14 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
         description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
+    },
+    RuleMeta {
+        id: RULE_SECTION_REQUIRED,
+        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`). A type that declares none is out of scope; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted out of scope, not asked for the sections. Presence only: it never judges what a section says.",
+    },
+    RuleMeta {
+        id: RULE_SECTION_SHAPE,
+        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning.",
     },
     RuleMeta {
         id: RULE_DIFF_SOURCE_REQUIRES_RECORD,
