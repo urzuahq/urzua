@@ -45,6 +45,10 @@ pub struct RuleDef {
     /// (`RFC-47`).
     pub requires_relation_pairs: bool,
     pub header_none: HeaderNone,
+    /// The `RuleSetting` options the rule accepts, by name. Declaring one on any
+    /// other rule is a load-time error: a silently ignored option is a check
+    /// that never fires.
+    pub options: &'static [&'static str],
     /// When in a run the rule executes.
     pub phase: Phase,
     /// Judges the run's inputs; never called for a rule the repository has not
@@ -101,6 +105,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             header_required_fields(c.records, c.config)
@@ -114,6 +119,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             pointer_resolution(c.records, c.config, c.index)
@@ -127,6 +133,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["not_in", "fields"],
         phase: Phase::Main,
         run: |c| {
             let setting = c.config.rules.get(RULE_POINTER_TARGET_STATUS);
@@ -143,6 +150,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["field_levels"],
         phase: Phase::Main,
         run: |c| {
             field_quality(c.records, c.config)
@@ -156,6 +164,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["pending_until_required", "field_levels"],
         phase: Phase::Main,
         run: |c| {
             field_pending(c.records, c.config)
@@ -169,6 +178,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is claims, not records"),
+        options: &["claim_paths", "closed_statuses"],
         phase: Phase::Main,
         run: |c| {
             let setting = c.config.rules.get(RULE_CLAIM_STATUS_AGREEMENT);
@@ -186,6 +196,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads the filename and H1 only"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             filename_title_consistency(c.records, c.full_text)
@@ -199,6 +210,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| supersession_reciprocity(c.records, c.config, c.index),
     },
@@ -210,6 +222,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: true,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             relation_pair_reciprocity(c.records, c.config, c.index)
@@ -223,6 +236,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: true,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             relation_cross_type_disallowed(c.records, c.config, c.index)
@@ -236,6 +250,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| relation_target_status_undeclared(c.records, c.config, c.index),
     },
@@ -247,6 +262,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads body text only"),
+        options: &[],
         phase: Phase::Main,
         run: |c| revision_log_change_class(c.records, c.config, c.full_text),
     },
@@ -258,6 +274,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["drift_grace_days", "drift_audit_field", "claim_max_age_days", "sticky_states"],
         phase: Phase::Main,
         run: |c| {
             embodiment_consistency(
@@ -278,6 +295,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["accepted_statuses"],
         phase: Phase::Main,
         run: |c| embodiment_requires_accepted_status(c.records, c.config),
     },
@@ -289,6 +307,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is source files, not records"),
+        options: &["back_pointer_paths", "test_paths"],
         phase: Phase::Main,
         run: |c| {
                 let (files, paths, tests): (&[_], &[String], &[String]) =
@@ -313,6 +332,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is source files, not records"),
+        options: &["back_pointer_paths", "accepted_statuses"],
         phase: Phase::Main,
         run: |c| {
                 let (files, paths): (&[_], &[String]) = match c.decision_gate_sources {
@@ -341,6 +361,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             // Tracked *and* on disk: tracked alone passes a staged deletion,
@@ -371,6 +392,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| embodiment_locator_promotion_candidate(c.records, c.config),
     },
@@ -382,6 +404,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["allow_extension_prefix"],
         phase: Phase::Main,
         run: |c| {
             header_field_set_consistency(c.records, c.config)
@@ -395,6 +418,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             field_untrimmed_value(c.records, c.config)
@@ -408,6 +432,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| field_leading_reserved_indicator(c.records, c.config),
     },
@@ -419,6 +444,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             header_field_case_mismatch(c.records, c.config)
@@ -432,6 +458,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             header_case_variant_key(c.records, c.config)
@@ -445,6 +472,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: true,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["terminal_statuses"],
         phase: Phase::Main,
         run: |c| {
             let terminal = c.config.rules
@@ -462,6 +490,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             let mut matched: HashMap<String, usize> = HashMap::new();
@@ -480,6 +509,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads the filename identifier only"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             identity_collision(c.records, c.collisions)
@@ -493,6 +523,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges tracked paths against the declared directories"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
                 // A staged deletion is going away, not a real ownership
@@ -511,6 +542,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             type_no_declared_spec(c.config, c.config_path)
@@ -524,6 +556,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             header_pointer_field_clean(c.records, c.config)
@@ -537,6 +570,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| config_pointer_declaration_missing(c.config, c.config_path),
     },
@@ -548,6 +582,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             config_pointer_field_not_known(c.config, c.config_path)
@@ -561,6 +596,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| config_pointer_narrative_overlap(c.config, c.config_path),
     },
@@ -572,17 +608,19 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| config_header_none_has_no_required_fields(c.config, c.config_path),
     },
     RuleDef {
         id: RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
-        description: "Every field named in a type's `relation_fields` (`RFC-42`/`ADR-61`) must also appear in that type's own `required_fields`/`known_fields`, the same shape as `config.pointer-field-not-known`.",
+        description: "Every field named in a type's `relation_fields` (`RFC-42`/`ADR-61`), including the `date` and `author` fields `urzua new` fills (`MILE-176`), must also appear in that type's own `required_fields`/`known_fields`, the same shape as `config.pointer-field-not-known`.",
         scope: Scope::Config,
         anchor: Anchor::Config,
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             config_relation_field_not_known(c.config, c.config_path)
@@ -596,6 +634,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
+        options: &[],
         phase: Phase::Main,
         run: |c| config_known_fields_declaration_missing(c.config, c.config_path),
     },
@@ -607,6 +646,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads the filename only"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             filename_identity_pattern(c.records, c.config)
@@ -620,6 +660,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             status_undeclared_value(c.records, c.config)
@@ -633,6 +674,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["field_levels"],
         phase: Phase::Main,
         run: |c| {
             status_required_field_missing(c.records, c.config)
@@ -646,6 +688,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             status_forbidden_field_present(c.records, c.config)
@@ -659,6 +702,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             status_delivery_agreement(c.records, c.config, c.back_pointed)
@@ -672,6 +716,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["date_fields"],
         phase: Phase::Main,
         run: |c| {
             date_field_valid(c.records, c.config)
@@ -685,6 +730,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::OutOfScope,
+        options: &["date_order"],
         phase: Phase::Main,
         run: |c| {
             date_field_order(c.records, c.config)
@@ -698,6 +744,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads body text only; a header-less record is read whole"),
+        options: &["external_ids", "skip_revision_log"],
         phase: Phase::Main,
         run: |c| {
             citation_resolution(c.records, c.config, c.full_text, c.index)
@@ -711,6 +758,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads body text only; a header-less record is read whole"),
+        options: &["reference_sections", "skip_revision_log"],
         phase: Phase::Main,
         run: |c| {
             // A file is present when tracked and on disk (as for
@@ -750,6 +798,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads body text only; a header-less record is read whole"),
+        options: &["reference_sections", "skip_revision_log", "issue_refs"],
         phase: Phase::Main,
         run: |c| {
             citation_issue_exists(c.records, c.config, c.full_text, c.refs_snapshot)
@@ -763,6 +812,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is published files, not records"),
+        options: &["published_paths"],
         phase: Phase::Main,
         run: |c| published_path_reference(c.published_files, c.published_paths, c.config),
     },
@@ -774,6 +824,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             section_required(c.records, c.config, c.full_text)
@@ -787,6 +838,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("reads body sections, as section.required does"),
+        options: &[],
         phase: Phase::Main,
         run: |c| {
             section_shape(c.records, c.config, c.full_text)
@@ -800,6 +852,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is index artifacts, not records"),
+        options: &["indexes"],
         phase: Phase::Main,
         run: |c| {
             index_freshness(c.records, c.full_text, c.index_artifacts)
@@ -813,6 +866,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is changed paths, and only on a --base run"),
+        options: &["source_paths", "exclude_paths"],
         phase: Phase::Main,
         run: |c| {
             let setting = c.config.rules.get(RULE_DIFF_SOURCE_REQUIRES_RECORD);
@@ -833,6 +887,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("population is changed paths, and only on a --base run"),
+        options: &["application_paths", "exclude_paths"],
         phase: Phase::Main,
         run: |c| {
             let setting = c.config.rules.get(RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
@@ -858,6 +913,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges other rules' populations"),
+        options: &[],
         phase: Phase::AfterRules,
         run: |c| config_scope_matches_nothing(c.run.executions, c.config_path),
     },
@@ -869,6 +925,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         needs_identity_index: false,
         requires_relation_pairs: false,
         header_none: HeaderNone::Exempt("judges waiver records against the run's findings, not a configured header"),
+        options: &[],
         phase: Phase::AfterScoping,
         run: |c| waiver_matches_nothing(
             c.run.waivers,
@@ -896,6 +953,11 @@ const fn ids<const N: usize>(table: &[RuleDef]) -> [&'static str; N] {
 /// valid set rather than a check that silently never runs. Derived from
 /// `RULE_TABLE`.
 pub const ALL_RULES: &[&str] = &ids::<{ RULE_TABLE.len() }>(RULE_TABLE);
+
+/// Whether `rule` accepts the option named `option`.
+pub fn rule_accepts_option(rule: &str, option: &str) -> bool {
+    rule_def(rule).is_some_and(|d| d.options.contains(&option))
+}
 
 /// The table entry for a rule id.
 pub fn rule_def(id: &str) -> Option<&'static RuleDef> {

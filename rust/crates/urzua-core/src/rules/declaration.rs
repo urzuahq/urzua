@@ -128,7 +128,8 @@ pub fn config_pointer_field_not_known(
     )
 }
 
-/// Rule (`RFC-42`/`ADR-61`): a declared `relation_fields` override must also
+/// Rule (`RFC-42`/`ADR-61`, `MILE-176`): a declared `relation_fields` override
+/// (a relation role, or the `date` and `author` fields `urzua new` fills) must also
 /// appear in that type's own `required_fields`/`known_fields` -- otherwise
 /// `ADR-60`'s declaration gate silently never examines it, the same trap
 /// `BUG-109` closed for the unqualified `Status` case.
@@ -144,17 +145,13 @@ pub fn config_relation_field_not_known(
                 return;
             };
             let declared = type_config.declared_fields();
-            for role in crate::config::RelationRole::ALL {
-                let Some(field) = relation_fields.get(role) else {
-                    continue;
-                };
+            for (key, field) in relation_fields.declared() {
                 if !declared.contains(field) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
                         config_path,
                         format!(
-                            "record type '{type_name}' declares '{field}' for relation_fields.{}, but it isn't in required_fields or known_fields",
-                            role.config_key()
+                            "record type '{type_name}' declares '{field}' for relation_fields.{key}, but it isn't in required_fields or known_fields"
                         ),
                     ));
                 }
@@ -575,6 +572,47 @@ mod tests {
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("State"));
+    }
+
+    #[test]
+    fn an_undeclared_date_or_author_field_is_a_finding_observed_failing() {
+        let config = config_with_types(vec![(
+            "rfc",
+            crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
+                relation_fields: Some(crate::config::RelationFields {
+                    date: Some("Created".to_string()),
+                    author: Some("Owner".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&["Status"], None, None, None)
+            },
+        )]);
+        let (_, findings) =
+            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(findings[0].message.contains("relation_fields.date"));
+        assert!(findings[0].message.contains("Created"));
+        assert!(findings[1].message.contains("relation_fields.author"));
+    }
+
+    #[test]
+    fn a_declared_date_and_author_field_is_not_a_finding() {
+        let config = config_with_types(vec![(
+            "rfc",
+            crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
+                relation_fields: Some(crate::config::RelationFields {
+                    date: Some("Created".to_string()),
+                    author: Some("Owner".to_string()),
+                    ..Default::default()
+                }),
+                ..type_config_pointer(&["Created", "Owner"], None, None, None)
+            },
+        )]);
+        let (_, findings) =
+            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]

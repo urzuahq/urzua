@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-3
-Blocked-on: MILE-171
+Blocked-on: —
 ---
 # 174 — One RuleSetting option-set definition and typed option access instead of unwrap_or_default re-reads
 
@@ -29,3 +29,4 @@ A new rule option is added in one place; a test fails if an option is declared i
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
+> | 2026-11-04 | `Blocked-on` cleared. **Why:** `MILE-171` is `Done` and `narrative-field.stale` flagged the leftover. `Status` unchanged; this milestone can start. | **substantive** |

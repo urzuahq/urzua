@@ -758,6 +758,18 @@ pub struct RelationFields {
 }
 
 impl RelationFields {
+    /// Every field name this type declares, with the `relation_fields` key it
+    /// was declared under: the four relation roles, then `date` and `author`
+    /// (`MILE-176`).
+    pub fn declared(&self) -> Vec<(&'static str, &str)> {
+        RelationRole::ALL
+            .into_iter()
+            .filter_map(|role| self.get(role).map(|field| (role.config_key(), field)))
+            .chain(self.date.as_deref().map(|f| ("date", f)))
+            .chain(self.author.as_deref().map(|f| ("author", f)))
+            .collect()
+    }
+
     /// The declared override for `role`, or `None` if this type didn't
     /// declare one -- the single match the compiler checks against
     /// `RelationRole::ALL`, in place of a hand-enumerated tuple list.
@@ -1005,17 +1017,12 @@ fn dir_escapes_repo(dir: &str) -> bool {
         })
 }
 
-/// One option's name, the one rule it belongs to, and what happens if a rule
-/// that needs it is declared without it. The single source for three facts a
-/// hand-maintained list per fact would let drift apart: which rule an option
-/// is "misplaced" on if declared elsewhere, whether a rule "requires options"
-/// to load at all (`rule_requires_options`, below), and what a missing
-/// required option's consequence is (`parse`'s `OptionRequired` check).
-/// Adding a fifth option-taking rule is one entry here instead of three edits
-/// that could drift from each other.
+/// One list-valued option's name and what happens if a rule that accepts it is
+/// declared without it. Which rules accept an option is the rule table's
+/// (`RuleDef::options`), so adding an option-taking rule is a table entry plus
+/// an entry here for a new option, not a second list of owners.
 struct RuleOption {
     name: &'static str,
-    owners: &'static [&'static str],
     consequence_if_missing: &'static str,
     /// An optional option may be omitted, but a declared one is still
     /// validated (non-empty, no blanks) so it cannot be a silent no-op.
@@ -1025,127 +1032,89 @@ struct RuleOption {
 const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "not_in",
-        owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
     RuleOption {
         name: "claim_paths",
-        owners: &[crate::rules::RULE_CLAIM_STATUS_AGREEMENT],
         consequence_if_missing: "scans nothing and can never report",
         optional: false,
     },
     RuleOption {
         name: "closed_statuses",
-        owners: &[crate::rules::RULE_CLAIM_STATUS_AGREEMENT],
         consequence_if_missing: "treats every claim as a violation, including correct ones",
         optional: false,
     },
     RuleOption {
         name: "terminal_statuses",
-        owners: &[crate::rules::RULE_NARRATIVE_FIELD_STALE],
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
     RuleOption {
         name: "published_paths",
-        owners: &[crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE],
         consequence_if_missing: "declares no boundary and can never report",
         optional: false,
     },
     RuleOption {
         name: "source_paths",
-        owners: &[crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD],
         consequence_if_missing: "declares no source and can never report",
         optional: false,
     },
     RuleOption {
         name: "application_paths",
-        owners: &[crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED],
         consequence_if_missing: "declares no application source and can never report",
         optional: false,
     },
     RuleOption {
         name: "exclude_paths",
-        owners: &[
-            crate::rules::RULE_DIFF_SOURCE_REQUIRES_RECORD,
-            crate::rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
-        ],
         consequence_if_missing: "excludes nothing from the source",
         optional: true,
     },
     RuleOption {
         name: "back_pointer_paths",
-        owners: &[
-            crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
-            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
-        ],
         consequence_if_missing: "scans no source file and can never report",
         optional: false,
     },
     RuleOption {
         name: "test_paths",
-        owners: &[crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION],
         consequence_if_missing: "reads no `Verifies:` comment as test evidence",
         optional: true,
     },
     RuleOption {
         name: "sticky_states",
-        owners: &[crate::rules::RULE_EMBODIMENT_CONSISTENCY],
         consequence_if_missing: "holds every stated Embodiment to the computed value",
         optional: true,
     },
     RuleOption {
         name: "date_fields",
-        owners: &[crate::rules::RULE_DATE_FIELD_VALID],
         consequence_if_missing: "names no date field and can never report",
         optional: false,
     },
     RuleOption {
         name: "date_order",
-        owners: &[crate::rules::RULE_DATE_FIELD_ORDER],
         consequence_if_missing: "names no date ordering and can never report",
         optional: false,
     },
     RuleOption {
         name: "accepted_statuses",
-        owners: &[
-            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
-            crate::rules::RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
-        ],
         consequence_if_missing: "leaves a type with no declared success statuses (implementable statuses for the back-pointer gate) unjudged",
         optional: true,
     },
     RuleOption {
         name: "reference_sections",
-        owners: &[
-            crate::rules::RULE_CITATION_PATH_EXISTS,
-            crate::rules::RULE_CITATION_ISSUE_EXISTS,
-        ],
         consequence_if_missing: "reads no section and can never report",
         optional: false,
     },
     RuleOption {
         name: "external_ids",
-        owners: &[crate::rules::RULE_CITATION_RESOLUTION],
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
         optional: true,
     },
     RuleOption {
         name: "fields",
-        owners: &[crate::rules::RULE_POINTER_TARGET_STATUS],
         consequence_if_missing: "checks every declared field",
         optional: true,
     },
-];
-
-/// The rules that report one finding per field and so take `field_levels`
-/// (`MILE-140`). A rule absent here is refused the option at load: a level
-/// for a field the rule never reports would be a silent no-op.
-const FIELD_LEVEL_RULES: &[&str] = &[
-    crate::rules::RULE_FIELD_QUALITY,
-    crate::rules::RULE_FIELD_PENDING,
-    crate::rules::RULE_STATUS_REQUIRED_FIELD_MISSING,
 ];
 
 /// `RULE_OPTIONS`'s field, by name -- the one place that knows which
@@ -1231,8 +1200,11 @@ fn option_field<'a>(
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    rule == crate::rules::RULE_INDEX_FRESHNESS
-        || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
+    crate::rules::rule_def(rule).is_some_and(|d| {
+        d.options
+            .iter()
+            .any(|o| *o == "indexes" || RULE_OPTIONS.iter().any(|r| r.name == *o))
+    })
 }
 
 /// Why an `issue_refs` declaration cannot work, or `None` when it can.
@@ -1470,7 +1442,7 @@ pub fn parse_with_document_models(
     // `indexes` is the one structured option, so it is validated apart from
     // the list-of-strings table below.
     for (name, setting) in &config.rules {
-        let owner = name == crate::rules::RULE_INDEX_FRESHNESS;
+        let owner = crate::rules::rule_accepts_option(name, "indexes");
         if setting.indexes.is_some() && !owner {
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
@@ -1499,7 +1471,7 @@ pub fn parse_with_document_models(
     }
     // `issue_refs` is structured too (`MILE-143`).
     for (name, setting) in &config.rules {
-        let owner = name == crate::rules::RULE_CITATION_ISSUE_EXISTS;
+        let owner = crate::rules::rule_accepts_option(name, "issue_refs");
         if setting.issue_refs.is_some() && !owner {
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
@@ -1543,7 +1515,7 @@ pub fn parse_with_document_models(
     for (name, setting) in &config.rules {
         for opt in RULE_OPTIONS {
             let present = option_field(opt.name, setting).is_some();
-            if present && !opt.owners.contains(&name.as_str()) {
+            if present && !crate::rules::rule_accepts_option(name, opt.name) {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: opt.name.to_string(),
@@ -1551,9 +1523,7 @@ pub fn parse_with_document_models(
             }
         }
         if setting.skip_revision_log.is_some()
-            && name != crate::rules::RULE_CITATION_PATH_EXISTS
-            && name != crate::rules::RULE_CITATION_ISSUE_EXISTS
-            && name != crate::rules::RULE_CITATION_RESOLUTION
+            && !crate::rules::rule_accepts_option(name, "skip_revision_log")
         {
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
@@ -1561,7 +1531,7 @@ pub fn parse_with_document_models(
             });
         }
         if setting.allow_extension_prefix.is_some()
-            && name != crate::rules::RULE_HEADER_FIELD_SET_CONSISTENCY
+            && !crate::rules::rule_accepts_option(name, "allow_extension_prefix")
         {
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
@@ -1569,7 +1539,9 @@ pub fn parse_with_document_models(
             });
         }
 
-        if setting.pending_until_required.is_some() && name != crate::rules::RULE_FIELD_PENDING {
+        if setting.pending_until_required.is_some()
+            && !crate::rules::rule_accepts_option(name, "pending_until_required")
+        {
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
                 option: "pending_until_required".to_string(),
@@ -1613,7 +1585,7 @@ pub fn parse_with_document_models(
             }
         }
         if let Some(levels) = &setting.field_levels {
-            if !FIELD_LEVEL_RULES.contains(&name.as_str()) {
+            if !crate::rules::rule_accepts_option(name, "field_levels") {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: "field_levels".to_string(),
@@ -1668,7 +1640,7 @@ pub fn parse_with_document_models(
         if setting.level != RuleLevel::Off {
             if let Some(field) = setting.drift_audit_field.as_deref() {
                 let field = field.trim();
-                let reason = if name != crate::rules::RULE_EMBODIMENT_CONSISTENCY {
+                let reason = if !crate::rules::rule_accepts_option(name, "drift_audit_field") {
                     None
                 } else if setting.drift_grace_days.is_none() {
                     Some(
@@ -1702,7 +1674,7 @@ pub fn parse_with_document_models(
             ("drift_audit_field", setting.drift_audit_field.is_some()),
             ("claim_max_age_days", setting.claim_max_age_days.is_some()),
         ] {
-            if present && name != crate::rules::RULE_EMBODIMENT_CONSISTENCY {
+            if present && !crate::rules::rule_accepts_option(name, option) {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: option.to_string(),
@@ -1722,7 +1694,7 @@ pub fn parse_with_document_models(
         }
         for opt in RULE_OPTIONS
             .iter()
-            .filter(|o| o.owners.contains(&name.as_str()))
+            .filter(|o| crate::rules::rule_accepts_option(name, o.name))
         {
             // Non-empty *and* no blank entries, not merely present: an empty
             // list is the harm each consequence describes, and a list of
@@ -3393,6 +3365,39 @@ mod exclude_files_tests {
                 matches!(result, Err(ConfigError::InvalidExcludedFile { .. })),
                 "{bad} must be refused: {result:?}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod option_table_tests {
+    use super::*;
+
+    /// The rule table names the options each rule accepts; a name that is not
+    /// an option `RuleSetting` carries would be refused nowhere and read by
+    /// nothing, so it is checked against the options this module validates.
+    #[test]
+    fn every_option_the_rule_table_names_is_a_known_option() {
+        const OTHER_OPTIONS: &[&str] = &[
+            "indexes",
+            "issue_refs",
+            "allow_extension_prefix",
+            "pending_until_required",
+            "skip_revision_log",
+            "field_levels",
+            "drift_grace_days",
+            "drift_audit_field",
+            "claim_max_age_days",
+        ];
+        for def in crate::rules::RULE_TABLE {
+            for option in def.options {
+                assert!(
+                    OTHER_OPTIONS.contains(option)
+                        || RULE_OPTIONS.iter().any(|o| o.name == *option),
+                    "{} lists the option '{option}', which no option table knows",
+                    def.id
+                );
+            }
         }
     }
 }
