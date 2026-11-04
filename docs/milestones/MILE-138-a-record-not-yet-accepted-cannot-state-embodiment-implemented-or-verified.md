@@ -24,3 +24,4 @@ A planted record with a not-yet-accepted status and `Embodiment: Implemented` (a
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter blocks Implemented or Verified on a record that is not accepted, and urzua's embodiment rule never reads Status. | **substantive** |
+> | 2026-11-04 | Built as the opt-in rule `embodiment.requires-accepted-status`. Accepted means the type's declared `statuses.success` (`MILE-132`); a type declaring none uses the rule's `accepted_statuses` option, and with neither it is not examined, the narrowest reading. **Why:** the rule needs a declared meaning of accepted rather than a guess from status names. | **substantive** |

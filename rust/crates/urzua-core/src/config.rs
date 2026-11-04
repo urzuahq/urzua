@@ -113,6 +113,12 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// The statuses that count as accepted for a type that declares no
+    /// `statuses.success` (`MILE-138`). Only meaningful to
+    /// `embodiment.requires-accepted-status`; a type declaring its own success
+    /// terminals never reads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_statuses: Option<Vec<String>>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -216,6 +222,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             drift_grace_days: Option<u32>,
             #[serde(default)]
             claim_max_age_days: Option<u32>,
+            #[serde(default)]
+            accepted_statuses: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -253,6 +261,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: table.back_pointer_paths,
                 drift_grace_days: table.drift_grace_days,
                 claim_max_age_days: table.claim_max_age_days,
+                accepted_statuses: table.accepted_statuses,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -272,6 +281,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: None,
                 drift_grace_days: None,
                 claim_max_age_days: None,
+                accepted_statuses: None,
             })
         }
     }
@@ -746,6 +756,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "accepted_statuses",
+        owner: crate::rules::RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
+        consequence_if_missing: "reads only the success statuses a type declares",
+        optional: true,
+    },
+    RuleOption {
         name: "fields",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "checks every declared field",
@@ -768,6 +784,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "application_paths" => setting.application_paths.as_ref(),
         "exclude_paths" => setting.exclude_paths.as_ref(),
         "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
+        "accepted_statuses" => setting.accepted_statuses.as_ref(),
         _ => None,
     }
 }
