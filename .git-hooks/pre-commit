@@ -1,19 +1,47 @@
 #!/usr/bin/env bash
-# Opt-in (`make hooks-install`). Runs the diff-aware gate on what is about to
-# be committed: `urzua check --base HEAD` reports on records changed since HEAD
-# (staged and unstaged edits included) and enforces the diff.* rules, the same
-# gate CI runs against the PR base. Needs a built binary; it skips with a notice
-# rather than failing when there is none, since `make records` builds it.
-set -e
+# Versioned hook, wired by `make hooks-install` (core.hooksPath=.git-hooks) and
+# performed by the first `make build`. Runs the diff-aware gate on what is
+# about to be committed: `urzua check --base HEAD` reports on records changed
+# since HEAD (staged and unstaged edits included) and enforces the diff.*
+# rules, the same gate CI runs against the PR base.
+#
+# ADR-71 / MILE-179: a layer that cannot run says so; it never reads as
+# success. When the binary is absent, or `check` itself cannot run (exit 2),
+# this hook WARNS loudly and lets the commit proceed. It does not fail: git
+# cannot force a hook onto a clone, a fresh clone must still be able to commit
+# the build that creates the binary, and only CI is the guarantee. Blocking
+# findings (exit 1) do stop the commit, with the findings shown.
+set -u
 
 root="$(git rev-parse --show-toplevel)"
 bin="$root/rust/target/release/urzua"
 
-if [ ! -x "$bin" ]; then
-  echo "pre-commit: $bin not built -- run 'make rust-build' to enable the urzua gate" >&2
+not_run() {
+  {
+    echo "pre-commit: ************************************************************"
+    echo "pre-commit: urzua gate NOT RUN -- $1"
+    echo "pre-commit: this commit was NOT checked locally. CI is the guarantee and"
+    echo "pre-commit: will check it; run 'make build' to enable this hook."
+    echo "pre-commit: ************************************************************"
+  } >&2
   exit 0
-fi
+}
 
-echo "pre-commit: urzua check --base HEAD"
+[ -x "$bin" ] || not_run "$bin is not built"
+
+echo "pre-commit: urzua check --base HEAD" >&2
 cd "$root"
-"$bin" check --base HEAD >/dev/null
+out="$("$bin" check --base HEAD 2>&1)"
+code=$?
+case "$code" in
+  0) exit 0 ;;
+  1)
+    printf '%s\n' "$out" >&2
+    echo "pre-commit: urzua check reported blocking findings; commit stopped" >&2
+    exit 1
+    ;;
+  *)
+    printf '%s\n' "$out" >&2
+    not_run "urzua check could not run (exit $code)"
+    ;;
+esac
