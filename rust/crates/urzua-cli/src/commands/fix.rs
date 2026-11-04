@@ -63,6 +63,7 @@ pub fn run(
                 urzua_core::rules::back_pointer_evidence(
                     &sources.files,
                     &sources.back_pointer_paths,
+                    &sources.test_paths,
                     &config,
                     &index,
                 )

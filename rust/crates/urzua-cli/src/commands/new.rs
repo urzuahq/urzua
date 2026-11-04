@@ -59,7 +59,33 @@ pub fn run(
             )))
         }
     };
-    let display_number = assign_display_number(&repo_root, &type_config.dir, &filenames);
+    // The type's declared identity pattern, when it has one, decides which
+    // numbers are taken and what a conforming file name is (`MILE-151`): the
+    // generator reads the same grammar the checker does.
+    let declared = match urzua_core::document_model::declared_model(&record_type, type_config) {
+        Ok(model) => model.and_then(|m| m.identity),
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+    };
+    let compiled = match declared
+        .as_ref()
+        .map(urzua_core::document_model::CompiledIdentity::compile)
+        .transpose()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return emit(&CouldNotRun::from(format!(
+                "record type '{record_type}': {e}"
+            )))
+        }
+    };
+    let number_of = |name: &str| -> Option<u32> {
+        match &compiled {
+            Some(identity) => urzua_core::new_record::declared_number(identity, name),
+            None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
+        }
+    };
+    let display_number =
+        assign_display_number(&repo_root, &type_config.dir, &filenames, &number_of);
 
     let title = title.unwrap_or_else(|| "Title".to_string());
     // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
@@ -71,6 +97,39 @@ pub fn run(
             "title '{title}' has no ASCII letters or digits to build a filename slug from -- give it a title containing at least one"
         )));
     }
+    // Type prefix explicit in the filename (ADR-36). The type's configured
+    // `prefix` when it declares one (e.g. `MILE` for `milestone`), otherwise the
+    // type name itself, upper-cased.
+    let type_prefix = type_config
+        .prefix
+        .clone()
+        .unwrap_or_else(|| record_type.to_ascii_uppercase());
+    // Never zero-padded by default (ADR-36 amendment): padding doesn't solve
+    // lexicographic sort order permanently, only defers the break. A declared
+    // pattern that requires padding is the one reason to pad, and the name is
+    // fitted to it before anything is written.
+    let filename = match (&compiled, &declared) {
+        (Some(identity), Some(decl)) => {
+            match urzua_core::new_record::declared_file_name(
+                identity,
+                &decl.pattern,
+                &type_prefix,
+                display_number,
+                &slug,
+            ) {
+                Ok(name) => name,
+                Err(e) => return emit(&CouldNotRun::from(e)),
+            }
+        }
+        _ => format!("{type_prefix}-{display_number}-{slug}.md"),
+    };
+
+    // A closed field set (`known_fields` declared) rejects a field it does not
+    // list, so `Stable-Id` is written only when the type admits it (`BUG-182`).
+    let admits_stable_id = type_config.known_fields.is_none()
+        || type_config
+            .declared_fields()
+            .contains(&urzua_core::values::FieldName::new("Stable-Id"));
     let stable_id = urzua_id::StableId::generate();
     let today = urzua_io::today();
     let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
@@ -82,10 +141,19 @@ pub fn run(
         }
     };
 
+    // The entry state of the type's own vocabulary, not a choice: moving a
+    // record on from it stays a human decision.
+    let status_decl = type_config.status_decl();
     let params = urzua_core::new_record::NewRecordParams {
         display_number,
+        h1_prefix: compiled.as_ref().map(|_| type_prefix.as_str()),
+        initial_status: status_decl
+            .as_ref()
+            .and_then(|d| d.values.first())
+            .map(String::as_str),
+        status_field: type_config.relation_field(urzua_core::config::RelationRole::Status),
         title: &title,
-        stable_id: stable_id.as_str(),
+        stable_id: admits_stable_id.then(|| stable_id.as_str()),
         author: &identity.name,
         today: &today,
     };
@@ -121,17 +189,6 @@ pub fn run(
         }
     };
 
-    // Type prefix explicit in the filename (ADR-36) -- matches how a record
-    // is referenced in prose everywhere else (e.g. "Implements: ADR-36").
-    // Never zero-padded (ADR-36 amendment): padding doesn't solve
-    // lexicographic sort order permanently, only defers the break. The
-    // prefix is the type's configured `prefix` when it declares one (e.g.
-    // `MILE` for `milestone`), otherwise the type name itself, upper-cased.
-    let type_prefix = type_config
-        .prefix
-        .clone()
-        .unwrap_or_else(|| record_type.to_ascii_uppercase());
-    let filename = format!("{type_prefix}-{display_number}-{slug}.md");
     let file_path = dir.join(&filename);
     // `create_new` is atomic (matching `FixLock`'s own pattern) -- a
     // separate `exists()` check followed by `write` would leave a race
@@ -158,7 +215,7 @@ pub fn run(
         }
     }
 
-    let notices = identity
+    let mut notices: Vec<Notice> = identity
         .warning
         .into_iter()
         .map(|message| Notice {
@@ -167,6 +224,16 @@ pub fn run(
             message,
         })
         .collect();
+    if !admits_stable_id {
+        notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: "stable-id".to_string(),
+            message: format!(
+                "record type '{record_type}' declares a closed field set (`known_fields`) that does not list \
+                 `Stable-Id`, so none was written; add `Stable-Id` to its `known_fields` to give new records one"
+            ),
+        });
+    }
 
     emit(&NewReport {
         status: ReportStatus::Ok,
@@ -175,7 +242,7 @@ pub fn run(
             .unwrap_or(&file_path)
             .to_path_buf(),
         display_number,
-        stable_id: stable_id.as_str().to_string(),
+        stable_id: admits_stable_id.then(|| stable_id.as_str().to_string()),
         notices,
     })
 }
@@ -184,7 +251,12 @@ pub fn run(
 /// remote-tracking ref already uses (`MILE-89`). Git only, no network: refs
 /// never fetched into this clone are invisible. A git failure falls back to
 /// the working-tree-only number and says so on stderr.
-fn assign_display_number(repo_root: &std::path::Path, dir: &str, filenames: &[String]) -> u32 {
+fn assign_display_number(
+    repo_root: &std::path::Path,
+    dir: &str,
+    filenames: &[String],
+    number_of: &dyn Fn(&str) -> Option<u32>,
+) -> u32 {
     let claims = match other_ref_claims(repo_root, dir) {
         Ok(c) => c,
         Err(reason) => {
@@ -192,10 +264,11 @@ fn assign_display_number(repo_root: &std::path::Path, dir: &str, filenames: &[St
                 "urzua: numbering from the working tree only; could not read other refs ({reason}). \
                  A number claimed on an unmerged branch will not be seen."
             );
-            return urzua_core::new_record::next_display_number(filenames);
+            return urzua_core::new_record::next_display_number_by(filenames, number_of);
         }
     };
-    let got = urzua_core::new_record::next_display_number_with_claims(filenames, &claims);
+    let got =
+        urzua_core::new_record::next_display_number_with_claims_by(filenames, &claims, number_of);
     for (number, refs) in &got.skipped {
         eprintln!(
             "urzua: skipped {number}: already used on {} (local git refs only; unfetched remotes are not checked)",

@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -26,7 +26,11 @@ template's own placeholder text for a human to pick.
    template, because those are decisions a human makes, not values `new` can compute.
 2. **No template, but the type declares `header_shape = "yaml-frontmatter"` — synthesize one** from
    `required_fields`: every configured field emitted as a blank frontmatter key, so the config alone
-   drives what an author has to fill in, with no template file needing to exist.
+   drives what an author has to fill in, with no template file needing to exist. Two fields are not
+   blank: `Date` and `Author`, which `new` computes, and the type's status field, which starts at the
+   first value of the type's declared `statuses.values` (`MILE-151`). That is the vocabulary's entry
+   state rather than a decision, so moving a record on from it stays a human's; a type that declares
+   no `statuses` leaves the field blank.
 3. **Neither holds — refuse.** A record type with no template and a `blockquote`/`bold-list` shape
    has nothing for `new` to safely generate a header from; guessing a shape is explicitly rejected
    (this is `spec`'s own current state — MILE-74 tracks giving it a template).
@@ -34,6 +38,23 @@ template's own placeholder text for a human to pick.
 **The configured `header_shape` wins unconditionally over path 1 existing** (BUG-3): if a type
 declares `yaml-frontmatter` but also happens to have a leftover template file, the config's
 declared shape still governs, never the template's mere presence.
+
+## The declared identity pattern and field set (`MILE-151`)
+
+`new` reads the same declarations `check` does, so a generated record passes the type's own rules
+without an edit:
+
+- **Identity.** A type that declares `identity` (`SPEC-3`) is numbered by that pattern, not by the
+  `TYPE-NNNN-slug.md` convention: the next number is one past the highest `number` the pattern reads
+  from a file in the directory. The file name is `PREFIX-NUMBER-slug.md` with the number zero-padded
+  to the narrowest width the pattern accepts (`\d+` takes none, `\d{4}` takes four), and the H1 opens
+  `PREFIX-N` with the unpadded number, the title form the declaration implies (`RFC-44`). A regular
+  expression cannot be run backwards, so the name is kept only if the pattern reads it back as the
+  type's prefix and the number; a pattern no such name fits is a refusal naming the pattern, before
+  anything is written. A type with no `identity` is numbered and named exactly as before.
+- **Field set.** `Stable-Id` is written unless the type declares a closed field set (`known_fields`)
+  that does not list it, which `header.field-set-consistency` would report. Then it is left out, the
+  report's `stable_id` is `null`, and a warning notice says how to give new records one.
 
 ## Display-number assignment
 
@@ -63,7 +84,7 @@ one the numbering scan recognises, so the number would be reissued (`BUG-167`).
 
 ## Output
 
-Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id`, plus an optional
+Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id` (`null` when none was written), plus an optional
 `notices` array (ADR-46) carrying non-fatal observations -- e.g. an explicit `--by` diverging from
 the identity `resolve_identity` actually used -- omitted entirely when empty. `new` still does not
 echo the generated content back; the caller reads the file at `path` if it needs to.
@@ -104,3 +125,4 @@ take content and parameters, returning a string.
 > | 2026-09-11 | Corrected §"The three paths"' identity-resolution order, stale since ADR-31's amendment (`gh api user` wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). **Why:** caught by review before merge; the same stale order SPEC-8 was already corrected for elsewhere in this same change. | **substantive** |
 > | 2026-11-02 | §Display-number assignment now also skips numbers used on other local branches and remote-tracking refs, naming them on stderr, and documents that unfetched refs are invisible (`MILE-89`). Bumped to `0.5`. **Why:** `urzua new` re-assigned numbers already claimed by open PR branches. | **substantive** |
 > | 2026-11-02 | Bumped to `0.6`. A title with no slug is refused. **Why:** `new` wrote a slug-less `ADR-N-.md` that its own numbering scan ignored, so the next `new` reissued `N` (`BUG-167`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.7`. A type's declared `identity` now decides numbering, the file name's padding and the H1's `PREFIX-N` form; the status field starts at the first declared status value instead of a literal `null`; `Stable-Id` is left out (report `stable_id: null`, warning notice) when a closed `known_fields` does not list it. A pattern `new` cannot name a file for is refused. **Why:** `MILE-151` and `BUG-182` -- the generator and the checker read two grammars, so its output failed `filename.identity-pattern` and `field.quality`. | **substantive** |

@@ -2,6 +2,8 @@
 //! dependency graph must contain no I/O-capable crate. Ships with a
 //! planted-violation case, since a check never observed failing is
 //! unverified, not passing.
+//!
+//! Verifies: ADR-5
 
 // yaml_serde (RFC-0016/ADR-0017): verified pure Rust before adding -- a
 // libyaml transpilation via c2rust, not a binding to it, so no C toolchain

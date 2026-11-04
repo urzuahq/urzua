@@ -1,5 +1,5 @@
 ---
-Version: '0.20'
+Version: '0.25'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -138,7 +138,8 @@ Two details carry weight:
     pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
     The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
-    finding.
+    finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
+    zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
   - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`,
     `blockquote`, `bold-list` and `none` are the existing shapes, and `prefix-lines` reads bare
     `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
@@ -308,6 +309,34 @@ fail_on: warning   # error (default) | warning
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
 
+## Diff rule path options
+
+`diff.source-requires-record` (`source_paths`, `exclude_paths`) and `diff.source-and-records-mixed`
+(`application_paths`, `exclude_paths`) take path entries that are either a **prefix** or a **glob**
+(`MILE-158`). An entry with none of `*`, `?` or `[` is a prefix, compared by whole path component
+exactly as before, so a prefix-only configuration is unchanged. A glob is anchored to the whole
+repository-relative path with forward slashes:
+
+- `*` matches within one path component, `**` across components (`**/` also matches no directory),
+  `?` one character other than `/`, `[abc]` and `[!abc]` a character class.
+- A glob matches the path itself and anything below it, so `rust/crates/*/tests` covers every file
+  in each crate's `tests` directory, as a prefix would.
+- `exclude_paths` removes matching paths from the rule's source set. A changed path under a source
+  entry that an exclusion also matches is not a trigger. It stays in the rule's population as
+  eligible and unexamined, so a test-only diff shows what was set aside, without
+  `config.scope-matches-nothing` reading a deliberate exclusion as an unreachable configuration.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
+```
+
+A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
+`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
+
 ## Relation pairs
 
 A top-level `relation_pairs` list declares pairs of inverse relation fields (`RFC-47`, `MILE-122`).
@@ -320,6 +349,7 @@ relation_pairs:
     inverse: "Resolved-by"    # the resolved record -> this one
     reciprocity: required     # required | none
     cross_type: true          # optional, default true
+    types: [rfc]              # optional (MILE-155), default: every type declaring a side
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
       level: warn             # warn (default) | error
@@ -345,10 +375,15 @@ level; the engine does not read that field. A status listed that no record type 
 The narrowest reading of what `RFC-47` leaves open, each a decision recorded here until an ADR
 revisits it:
 
-- **Per-type binding.** None. A pair's two names are global: every type that declares a name in
-  `required_fields` or `known_fields` carries that side. A type declaring neither is not that pair's
-  business. A claim to a type that does not declare the echoing field is an unechoed claim.
-  `relation_fields` is unchanged and still binds only the fixed roles.
+- **Per-type binding** (`MILE-155`). Optional. A pair's two names are global by default: every type
+  that declares a name in `required_fields` or `known_fields` carries that side, and a claim to a
+  type that does not declare the echoing field is an unechoed claim. A pair that declares
+  `types: [rfc]` is carried by those record types only: a record of another type is not that pair's
+  business (its fields are not slots), and a claim whose target is another type is excluded as out
+  of scope, counted in the population, not reported as unechoed, because that type cannot hold the
+  inverse field. Each listed type must be a configured record type declaring at least one of the
+  pair's fields; an empty or duplicated list is refused at load. `relation_fields` is unchanged and
+  still binds only the fixed roles.
 - **Config shape.** Top-level `relation_pairs`, not per type.
 - **Fixed `RelationRole` set.** Unchanged. `Supersession` keeps its combined
   `Supersedes / Superseded-by` key and `relation.supersession-reciprocity` stays beside the general
@@ -481,6 +516,57 @@ rules:
 Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
 option-on-a-rule-that-does-not-take-it load error.
 
+### Source back-pointers as evidence (`MILE-128`, `MILE-146`, `MILE-149`)
+
+`embodiment.back-pointer-resolution` reads source comments as realization evidence and takes one
+optional option beside its required `back_pointer_paths`.
+
+```yaml
+rules:
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: ["src", "tests"]
+    test_paths: ["tests"]      # the test class, each entry inside a back_pointer_paths entry
+```
+
+- `Implements: ADR-12` in any file under `back_pointer_paths` is code-tier evidence for the record
+  it cites. `Verifies: ADR-12` in a file under `test_paths` is test-tier evidence, which computes
+  `Verified` exactly as a `test:` locator does, so a record needs no restated `test:` list. A
+  `Verifies:` comment outside `test_paths` is not read, and with no `test_paths` declared none is.
+  One record can be cited at both tiers.
+- Both markers are read the same way: at the start of a comment line or in a trailing comment after
+  code, an id list in which a note may sit between ids (`ADR-1 (why), ADR-2`).
+- A `test_paths` entry that is not inside any `back_pointer_paths` entry is a load error (nothing
+  there would be scanned), and one covering no tracked file is a finding.
+- `embodiment.consistency` judges a record with `Embodiment` but no `Realized-by` field when a
+  back-pointer cites it, computing from the back-pointers alone; the finding says so. A record
+  neither cited nor carrying `Realized-by` is still not judged. `urzua fix` repairs the same
+  records.
+
+The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
+option-on-a-rule-that-does-not-take-it load error.
+
+### Sticky Embodiment states (`MILE-148`)
+
+Some `Embodiment` values are a human's decision that no evidence can reproduce, such as
+`Deprecated` or `Inactive`. The repository declares them; the engine names none.
+
+```yaml
+rules:
+  embodiment.consistency:
+    level: warn
+    sticky_states: [Deprecated, Inactive]
+```
+
+- A record stating a listed value is examined (it counts in the rule's census) and produces no
+  finding: neither a disagreement with the computed tier nor a `claim_max_age_days` warning, since
+  a sticky state is not a verification claim. `urzua fix` does not rewrite it.
+- A listed value that evidence computes (`Verified`, `Implemented`, `Specified`, `Not started`,
+  `Drift detected`) is a load error: it would make that tier's drift unreportable. A blank entry
+  is refused like any other blank option entry.
+- Omitted, every stated value is held to the computed one, as before. The option belongs to
+  `embodiment.consistency` alone.
+
 ### Date fields and the acceptance date (`MILE-137`)
 
 One opt-in rule validates dates, `date.field-valid`. Which fields are dates is a rule option; the
@@ -554,4 +640,10 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.17`. `statuses.require` counts a value in the type's declared `pending` vocabulary as missing, the same list `field.pending` reads. **Why:** `MILE-153` -- an Accepted record whose required field read `Unknown` passed; the vocabulary is declared once, in configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.18`. Documented the per-type `exclude_files` declaration: bare file names directly in a type's `dir` that are not its records, excluded from every rule's population and from `filename.identity-pattern`'s census. **Why:** `MILE-150` and `BUG-183` -- a `README.md` in a record directory was read as a record and failed every rule, with no way to say it is not one. | **substantive** |
 > | 2026-11-04 | Bumped to `0.NEXT`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
-> | 2026-11-04 | Bumped to `0.20`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.20`. Documented the `test_paths` option of `embodiment.back-pointer-resolution` and what source back-pointers compute: `Implements:` is code tier, `Verifies:` in a declared test file is test tier, and a record with no `Realized-by` field that a back-pointer cites is judged on that evidence. **Why:** `MILE-146` and `MILE-149` -- a record whose tests cite it should compute `Verified` without a hand-maintained `test:` list, and a field added only to make a checker look is restated evidence. | **substantive** |
+> | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `provisional: {statuses, level}`: an unechoed claim from a claimant at one of those statuses is reported at the provisional level (default `warn`), any other claimant at the rule's level. **Why:** `MILE-154` / `MILE-127` -- one severity for a claim from a Proposed record and a broken accepted claim was either too loud or too quiet. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
+> | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |
+> | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
+> | 2026-11-04 | Bumped to `0.24`. The diff rules' `source_paths`, `application_paths` and `exclude_paths` entries may be globs, and `exclude_paths` now also narrows `diff.source-requires-record`. **Why:** `MILE-158` -- an exclusion and a pattern are needed to state "all source except tests". Prefix-only configurations behave as before. | **substantive** |
+> | 2026-11-04 | Bumped to `0.25`. Documented the `reference_sections` option of the new opt-in `citation.path-exists` rule: the headings whose backtick-quoted repository paths must exist in the working tree. **Why:** `MILE-143` -- a cited path that no longer exists was never checked; where references live is repository configuration. | **substantive** |

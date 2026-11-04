@@ -134,6 +134,11 @@ record_types:
       - "Blocked-on"
   waiver:
     dir: "docs/waiver"
+    # The padded form, chosen so the declared identity is exercised here
+    # (MILE-151): `urzua new waiver` fits its file name and H1 to this pattern,
+    # and the identity rules read the same grammar back. The one existing
+    # waiver was renamed to it.
+    identity: {from: filename, pattern: '^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$'}
     required_fields:
       - "Rule"
       - "Scope"
@@ -155,7 +160,9 @@ relation_pairs:
     forward: "Amends"
     inverse: "Amended-by"
     reciprocity: required
-    cross_type: false
+    # Only RFCs carry the pair (MILE-155): an RFC that amends an ADR claims
+    # something the ADR cannot echo, since an ADR is amended by a dated section.
+    types: ["rfc"]
     provisional:
       statuses: ["Draft", "Discussion"]
       level: warn
@@ -207,6 +214,9 @@ rules:
   embodiment.consistency:
     level: warn
     drift_grace_days: 14
+    # States a human sets that no evidence can compute (MILE-148): a record
+    # stating one is not reported as drift, and `urzua fix` leaves it alone.
+    sticky_states: ["Deprecated", "Inactive"]
   embodiment.locator-exists: error
   # Off: an advisory suggestion, and several ADRs citing one rule module is
   # expected now that the rule engine is split into modules (MILE-131).
@@ -234,9 +244,20 @@ rules:
   embodiment.back-pointer-decision-accepted:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+  # Source comments are realization evidence (MILE-128): `Implements: ADR-12`
+  # is code tier, and `Verifies: ADR-12` in a file under `test_paths` is test
+  # tier (MILE-146), so a record is computed Verified from the tests that cite
+  # it rather than from a restated `test:` locator.
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/urzua-core/tests"]
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.
+  # Integration tests sit in each crate's tests/ directory, so a change to
+  # them alone is not a change to behaviour needing a record (MILE-158).
   diff.source-requires-record:
     level: error
     source_paths: ["rust/crates"]
+    exclude_paths: ["rust/crates/*/tests"]

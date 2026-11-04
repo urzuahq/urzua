@@ -11,49 +11,150 @@ pub struct BackPointer {
 
 /// Every back-pointer in `content`, in line order.
 ///
-/// A back-pointer is a whole-line comment: a comment leader (`//`, `///`,
-/// `//!`, `#`, `--`, `;`, `/*`, `*`, `<!--`), then the case-sensitive marker
-/// `Implements:`, then one or more record identifiers (a declared type
-/// prefix, a hyphen and a number) separated by commas or spaces. Reading stops
-/// at the first token that is not an identifier, so prose after the ids is
-/// ignored and a marker followed by no identifier is not a back-pointer. A
-/// trailing comment after code is not read, and neither is a marker mid-line:
-/// this matcher is deliberately narrow, because what it matches decides that
-/// a record was realized (`RFC-11` section 3).
+/// A back-pointer is a comment: a comment leader (`//`, `///`, `//!`, `#`,
+/// `--`, `;`, `/*`, `*`, `<!--`), then the case-sensitive marker
+/// `Implements:`, then record identifiers (a declared type prefix, a hyphen
+/// and a number). The leader either opens the line or, after code, is one of
+/// the leaders that cannot appear in code as an operator (`//`, `#`, `--`,
+/// `/*`, `<!--`) and follows whitespace; `;` and `*` are read only at the
+/// start of a line. The marker must follow the leader directly, so prose that
+/// mentions it is not a back-pointer, and neither is a marker in no comment.
+///
+/// The list is a run of segments separated by commas. A segment opens with an
+/// identifier, may list further identifiers separated by spaces, and may then
+/// carry a note (`ADR-1 (why), ADR-2`; a parenthesis may hold commas). Reading
+/// stops at the first segment that does not open with an identifier, so a
+/// marker followed by no identifier is not a back-pointer and prose after an
+/// identifier cannot name one (`ADR-1 and ADR-2` yields `ADR-1`). The matcher
+/// is deliberately narrow, because what it matches decides that a record was
+/// realized (`RFC-11` section 3).
 pub fn scan_back_pointers(
     path: &std::path::Path,
     content: &str,
     prefixes: &[String],
 ) -> Vec<BackPointer> {
+    scan_marker(path, content, prefixes, MARKER_IMPLEMENTS)
+}
+
+/// The comment marker that makes a record's code evidence.
+pub const MARKER_IMPLEMENTS: &str = "Implements:";
+/// The comment marker that makes a record's test evidence (`MILE-146`), read
+/// only in a file of the declared test class.
+pub const MARKER_VERIFIES: &str = "Verifies:";
+
+/// [`scan_back_pointers`] for any marker word; the same reading applies.
+pub fn scan_marker(
+    path: &std::path::Path,
+    content: &str,
+    prefixes: &[String],
+    marker: &str,
+) -> Vec<BackPointer> {
     // Longest first, so `//!` and `///` are not read as `//` plus text.
     const LEADERS: &[&str] = &["<!--", "///", "//!", "//", "/*", "--", "#", ";", "*"];
-    const MARKER: &str = "Implements:";
+    // The leaders that open a trailing comment after code.
+    const TRAILING: &[&str] = &["<!--", "//", "/*", "--", "#"];
 
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
-        let trimmed = line.trim_start();
-        let Some(leader) = LEADERS.iter().find(|l| trimmed.starts_with(**l)) else {
+        let Some(rest) = marker_rest(line, LEADERS, TRAILING, marker) else {
             continue;
         };
-        let Some(rest) = trimmed[leader.len()..].trim_start().strip_prefix(MARKER) else {
-            continue;
-        };
-        for token in rest.split(|c: char| c == ',' || c.is_whitespace()) {
-            if token.is_empty() {
-                continue;
-            }
-            let token = token.strip_suffix('.').unwrap_or(token);
-            if !is_record_id(token, prefixes) {
-                break;
-            }
+        for id in cited_ids(rest, prefixes) {
             out.push(BackPointer {
                 file: path.to_path_buf(),
                 line: i + 1,
-                id: token.to_string(),
+                id,
             });
         }
     }
     out
+}
+
+/// The text after the marker of the first comment on `line` that carries one.
+fn marker_rest<'a>(
+    line: &'a str,
+    leaders: &[&str],
+    trailing: &[&str],
+    marker: &str,
+) -> Option<&'a str> {
+    let trimmed = line.trim_start();
+    if let Some(leader) = leaders.iter().find(|l| trimmed.starts_with(**l)) {
+        if let Some(rest) = trimmed[leader.len()..].trim_start().strip_prefix(marker) {
+            return Some(rest);
+        }
+    }
+    for (at, _) in line.char_indices() {
+        let here = &line[at..];
+        let Some(leader) = trailing.iter().find(|l| here.starts_with(**l)) else {
+            continue;
+        };
+        let after_space = line[..at]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_whitespace);
+        if !after_space {
+            continue;
+        }
+        // `///` and `//!` are `//` plus one more character.
+        let tail = &here[leader.len()..];
+        let tail = if *leader == "//" {
+            tail.strip_prefix(['/', '!']).unwrap_or(tail)
+        } else {
+            tail
+        };
+        if let Some(rest) = tail.trim_start().strip_prefix(marker) {
+            return Some(rest);
+        }
+    }
+    None
+}
+
+/// The identifiers a marker's text cites; see [`scan_back_pointers`].
+// Implements: ADR-66 (a source comment is realization evidence), MILE-147
+fn cited_ids(rest: &str, prefixes: &[String]) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut depth = 0i32; // Implements: MILE-147 (trailing marker, read like a whole-line one)
+    let mut in_note = false;
+    // True at the start of the list and after each top-level comma: the next
+    // word must be an identifier or reading ends.
+    let mut segment_start = true;
+    for token in rest.split_whitespace() {
+        // A word may carry commas (`ADR-1,ADR-2`, `(note),`).
+        let mut words = token.split(',').peekable();
+        while let Some(word) = words.next() {
+            let comma_after = words.peek().is_some();
+            if !word.is_empty() {
+                if depth > 0 || in_note {
+                    depth += paren_delta(word);
+                } else {
+                    let word = word.strip_suffix('.').unwrap_or(word);
+                    if is_record_id(word, prefixes) {
+                        ids.push(word.to_string());
+                        segment_start = false;
+                    } else if segment_start {
+                        return ids;
+                    } else {
+                        in_note = true;
+                        depth += paren_delta(word);
+                    }
+                }
+            }
+            if comma_after && depth <= 0 {
+                depth = 0;
+                in_note = false;
+                segment_start = true;
+            }
+        }
+    }
+    ids
+}
+
+fn paren_delta(word: &str) -> i32 {
+    word.chars().fold(0, |d, c| match c {
+        '(' => d + 1,
+        ')' => d - 1,
+        _ => d,
+    })
 }
 
 /// A declared type prefix, a hyphen and a number, and nothing else.
@@ -69,17 +170,37 @@ fn is_record_id(token: &str, prefixes: &[String]) -> bool {
 /// A source file under a `source_paths` entry, as the caller read it.
 pub type SourceFile = PublishedFile;
 
-/// The paths of the records that at least one back-pointer in `files` (those
-/// under a `source_paths` entry) cites, resolved through `index`. Feeds
-/// `compute_embodiment` as code-tier evidence; pure, the caller read the files.
+/// The records source comments cite, by the tier the citing file gives them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BackPointerEvidence {
+    /// `Implements:` in a file under a `back_pointer_paths` entry: code tier.
+    pub code: HashSet<PathBuf>,
+    /// `Verifies:` in a file under a `test_paths` entry: test tier (`MILE-146`).
+    pub test: HashSet<PathBuf>,
+}
+
+impl BackPointerEvidence {
+    /// Whether any back-pointer, of either tier, cites `record`.
+    pub fn cites(&self, record: &std::path::Path) -> bool {
+        self.code.contains(record) || self.test.contains(record)
+    }
+}
+
+/// The records that at least one back-pointer in `files` (those under a
+/// `source_paths` entry) cites, resolved through `index`, split by tier. A
+/// `Verifies:` comment counts only in a file under a `test_paths` entry; an
+/// `Implements:` comment counts as code wherever it is, so one record can be
+/// cited at both tiers. Feeds `compute_embodiment`; pure, the caller read the
+/// files.
 pub fn back_pointer_evidence(
     files: &[SourceFile],
     source_paths: &[String],
+    test_paths: &[String],
     config: &Config,
     index: &RecordIndex,
-) -> HashSet<PathBuf> {
+) -> BackPointerEvidence {
     let prefixes = declared_prefixes(config);
-    let mut cited = HashSet::new();
+    let mut evidence = BackPointerEvidence::default();
     for file in files {
         if !source_paths
             .iter()
@@ -92,11 +213,22 @@ pub fn back_pointer_evidence(
         };
         for pointer in scan_back_pointers(&file.path, content, &prefixes) {
             if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
-                cited.insert(record.path.clone());
+                evidence.code.insert(record.path.clone());
+            }
+        }
+        if is_test_file(&file.path, test_paths) {
+            for pointer in scan_marker(&file.path, content, &prefixes, MARKER_VERIFIES) {
+                if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
+                    evidence.test.insert(record.path.clone());
+                }
             }
         }
     }
-    cited
+    evidence
+}
+
+fn is_test_file(path: &std::path::Path, test_paths: &[String]) -> bool {
+    test_paths.iter().any(|e| path_is_published(path, e))
 }
 
 /// One finding per declared path covering no tracked file: nothing under it
@@ -106,7 +238,16 @@ fn uncovered_source_paths(
     files: &[SourceFile],
     source_paths: &[String],
 ) -> Vec<Finding> {
-    source_paths
+    uncovered_paths(rule, files, source_paths, "source path")
+}
+
+fn uncovered_paths(
+    rule: &str,
+    files: &[SourceFile],
+    paths: &[String],
+    label: &str,
+) -> Vec<Finding> {
+    paths
         .iter()
         .filter(|entry| !files.iter().any(|f| path_is_published(&f.path, entry)))
         .map(|entry| Finding {
@@ -115,7 +256,7 @@ fn uncovered_source_paths(
             file: PathBuf::from(entry),
             line: None,
             message: format!(
-                "source path '{entry}' covers no tracked file, so nothing under it was \
+                "{label} '{entry}' covers no tracked file, so nothing under it was \
                  checked; remove the entry or correct the path"
             ),
             waived: None,
@@ -131,6 +272,7 @@ fn uncovered_source_paths(
 pub fn embodiment_back_pointer_resolution(
     files: &[SourceFile],
     source_paths: &[String],
+    test_paths: &[String],
     config: &Config,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
@@ -148,7 +290,13 @@ pub fn embodiment_back_pointer_resolution(
         let Some(content) = &file.content else {
             return Outcome::Unreadable;
         };
-        for pointer in scan_back_pointers(&file.path, content, &prefixes) {
+        let verifies = if is_test_file(&file.path, test_paths) {
+            scan_marker(&file.path, content, &prefixes, MARKER_VERIFIES)
+        } else {
+            Vec::new()
+        };
+        let implements = scan_back_pointers(&file.path, content, &prefixes);
+        for pointer in implements.into_iter().chain(verifies) {
             if !index.contains_key(&crate::values::RecordId::new(&pointer.id)) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -168,6 +316,7 @@ pub fn embodiment_back_pointer_resolution(
     });
 
     findings.extend(uncovered_source_paths(RULE_ID, files, source_paths));
+    findings.extend(uncovered_paths(RULE_ID, files, test_paths, "test path"));
 
     (
         RuleExecution {
@@ -302,11 +451,22 @@ mod tests {
         vec!["ADR".to_string(), "RFC".to_string()]
     }
 
+    /// Fixture text writes the markers as `@I` and `@V`, so no fixture line is
+    /// itself a back-pointer that this repository's own `check` would read.
+    fn expand(text: &str) -> String {
+        text.replace("@I", MARKER_IMPLEMENTS)
+            .replace("@V", MARKER_VERIFIES)
+    }
+
     fn ids(content: &str) -> Vec<(usize, String)> {
-        scan_back_pointers(std::path::Path::new("src/a.rs"), content, &prefixes())
-            .into_iter()
-            .map(|b| (b.line, b.id))
-            .collect()
+        scan_back_pointers(
+            std::path::Path::new("src/a.rs"),
+            &expand(content),
+            &prefixes(),
+        )
+        .into_iter()
+        .map(|b| (b.line, b.id))
+        .collect()
     }
 
     #[test]
@@ -323,7 +483,7 @@ mod tests {
         for line in [
             "/// Implements: ADR-1",
             "//! Implements: ADR-1",
-            "    # Implements: ADR-1",
+            "    # @I ADR-1",
             "-- Implements: ADR-1",
             " * Implements: ADR-1 */",
             "/* Implements: ADR-1 */",
@@ -335,24 +495,55 @@ mod tests {
     }
 
     #[test]
-    fn a_marker_that_is_not_a_whole_line_comment_is_not_read() {
+    fn a_marker_that_is_not_a_comment_marker_is_not_read() {
         for line in [
-            "let x = 1; // Implements: ADR-1",
             "Implements: ADR-1",
             "// see Implements: ADR-1",
             "// implements: ADR-1",
             "// Implements:",
             "// Implements: the thing",
             "// Implements: ADR-x",
+            "let s = \"Implements: ADR-1\";",
+            "let x = 1; Implements: ADR-1",
+            "a * Implements: ADR-1",
+            "see http://x Implements: ADR-1 no",
         ] {
             assert!(ids(line).is_empty(), "{line}");
         }
     }
 
     #[test]
-    fn reading_stops_at_the_first_token_that_is_not_an_id() {
+    fn a_marker_after_code_on_the_same_line_is_read_observed_failing() {
+        for line in [
+            "let x = 1; // @I ADR-1",
+            "let x = 1; /// @I ADR-1",
+            "x = 1  # @I ADR-1",
+            "SELECT 1 -- @I ADR-1",
+            "foo(); /* @I ADR-1 */",
+            "<p>x</p> <!-- @I ADR-1 -->",
+        ] {
+            assert_eq!(ids(line), vec![(1, "ADR-1".to_string())], "{line}");
+        }
+    }
+
+    #[test]
+    fn an_id_list_continues_past_a_parenthetical_note_observed_failing() {
+        let want = vec![(1, "ADR-1".to_string()), (1, "ADR-2".to_string())];
+        assert_eq!(ids("// Implements: ADR-1 (the note), ADR-2"), want);
+        assert_eq!(ids("// Implements: ADR-1 (a, b), ADR-2"), want);
+        assert_eq!(ids("// Implements: ADR-1 -- the note, ADR-2"), want);
+        assert_eq!(ids("let a = 1; // @I ADR-1 (n), ADR-2."), want);
+        assert_eq!(ids("// Implements: ADR-1 ADR-2"), want);
+    }
+
+    #[test]
+    fn reading_stops_at_a_segment_that_does_not_open_with_an_id() {
         assert_eq!(
             ids("// Implements: ADR-1 and ADR-2"),
+            vec![(1, "ADR-1".to_string())]
+        );
+        assert_eq!(
+            ids("// Implements: ADR-1 (note), see ADR-2"),
             vec![(1, "ADR-1".to_string())]
         );
         assert_eq!(ids("// Implements: ADR-1."), vec![(1, "ADR-1".to_string())]);
@@ -371,7 +562,7 @@ mod tests {
     fn file(path: &str, content: &str) -> SourceFile {
         SourceFile {
             path: PathBuf::from(path),
-            content: Some(content.to_string()),
+            content: Some(expand(content)),
         }
     }
 
@@ -380,11 +571,85 @@ mod tests {
         let records = vec![adr("docs/adr/ADR-0012-x.md"), adr("docs/adr/ADR-13-y.md")];
         let (index, _) = build_index_reporting_collisions(&records);
         let files = vec![file("src/a.rs", "// Implements: ADR-12\n")];
-        let got = back_pointer_evidence(&files, &["src".to_string()], &config(), &index);
+        let got = back_pointer_evidence(&files, &["src".to_string()], &[], &config(), &index);
         assert_eq!(
-            got,
+            got.code,
             HashSet::from([PathBuf::from("docs/adr/ADR-0012-x.md")])
         );
+        assert!(got.test.is_empty());
+    }
+
+    fn tiers(files: &[SourceFile], tests: &[&str]) -> BackPointerEvidence {
+        let records = vec![adr("docs/adr/ADR-12-x.md"), adr("docs/adr/ADR-13-y.md")];
+        let (index, _) = build_index_reporting_collisions(&records);
+        let tests: Vec<String> = tests.iter().map(|t| t.to_string()).collect();
+        back_pointer_evidence(files, &["src".to_string()], &tests, &config(), &index)
+    }
+
+    #[test]
+    fn a_verifies_comment_in_a_test_file_is_test_tier_and_an_implements_elsewhere_is_code_observed_failing(
+    ) {
+        let files = vec![
+            file("src/tests/a.rs", "// Verifies: ADR-12\n"),
+            file("src/b.rs", "// Implements: ADR-13\n"),
+        ];
+        let got = tiers(&files, &["src/tests"]);
+        assert_eq!(
+            got.test,
+            HashSet::from([PathBuf::from("docs/adr/ADR-12-x.md")])
+        );
+        assert_eq!(
+            got.code,
+            HashSet::from([PathBuf::from("docs/adr/ADR-13-y.md")])
+        );
+    }
+
+    #[test]
+    fn one_record_can_be_cited_at_both_tiers_observed_failing() {
+        let files = vec![
+            file("src/tests/a.rs", "// Verifies: ADR-12\n"),
+            file("src/b.rs", "// Implements: ADR-12\n"),
+        ];
+        let got = tiers(&files, &["src/tests"]);
+        assert_eq!(got.test, got.code);
+        assert_eq!(got.test.len(), 1);
+    }
+
+    #[test]
+    fn a_verifies_comment_outside_the_test_class_or_with_no_class_declared_is_not_read() {
+        let files = vec![file("src/b.rs", "// Verifies: ADR-12\n")];
+        assert!(tiers(&files, &["src/tests"]).test.is_empty());
+        let files = vec![file("src/tests/a.rs", "// Verifies: ADR-12\n")];
+        assert!(tiers(&files, &[]).test.is_empty());
+        assert!(tiers(&files, &[]).code.is_empty());
+    }
+
+    #[test]
+    fn a_verifies_comment_reads_the_same_widened_id_list() {
+        let files = vec![file(
+            "src/tests/a.rs",
+            "let x = 1; // @V ADR-12 (note), ADR-13\n",
+        )];
+        assert_eq!(tiers(&files, &["src/tests"]).test.len(), 2);
+    }
+
+    #[test]
+    fn a_verifies_citation_of_no_record_and_an_uncovered_test_path_are_findings() {
+        let records = vec![adr("docs/adr/ADR-12-x.md")];
+        let (index, _) = build_index_reporting_collisions(&records);
+        let files = vec![file("src/tests/a.rs", "// Verifies: ADR-12, ADR-99\n")];
+        let (_, findings) = embodiment_back_pointer_resolution(
+            &files,
+            &["src".to_string()],
+            &["src/tests".to_string(), "src/gone".to_string()],
+            &config(),
+            &index,
+        );
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(findings.iter().any(|f| f.message.contains("ADR-99")));
+        assert!(findings
+            .iter()
+            .any(|f| f.message.contains("test path 'src/gone'")));
     }
 
     #[test]
@@ -392,8 +657,8 @@ mod tests {
         let records = vec![adr("docs/adr/ADR-12-x.md")];
         let (index, _) = build_index_reporting_collisions(&records);
         let files = vec![file("other/a.rs", "// Implements: ADR-12\n")];
-        let got = back_pointer_evidence(&files, &["src".to_string()], &config(), &index);
-        assert!(got.is_empty());
+        let got = back_pointer_evidence(&files, &["src".to_string()], &[], &config(), &index);
+        assert!(got.code.is_empty() && got.test.is_empty());
     }
 
     #[test]
@@ -401,8 +666,13 @@ mod tests {
         let records = vec![adr("docs/adr/ADR-12-x.md")];
         let (index, _) = build_index_reporting_collisions(&records);
         let files = vec![file("src/a.rs", "ok\n// Implements: ADR-12, ADR-99\n")];
-        let (exec, findings) =
-            embodiment_back_pointer_resolution(&files, &["src".to_string()], &config(), &index);
+        let (exec, findings) = embodiment_back_pointer_resolution(
+            &files,
+            &["src".to_string()],
+            &[],
+            &config(),
+            &index,
+        );
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].line, Some(2));
         assert_eq!(findings[0].file, PathBuf::from("src/a.rs"));
@@ -417,6 +687,7 @@ mod tests {
         let (_, findings) = embodiment_back_pointer_resolution(
             &[file("src/a.rs", "")],
             &["src".to_string(), "gone".to_string()],
+            &[],
             &config(),
             &index,
         );
@@ -431,8 +702,13 @@ mod tests {
             path: PathBuf::from("src/a.bin"),
             content: None,
         }];
-        let (exec, findings) =
-            embodiment_back_pointer_resolution(&files, &["src".to_string()], &config(), &index);
+        let (exec, findings) = embodiment_back_pointer_resolution(
+            &files,
+            &["src".to_string()],
+            &[],
+            &config(),
+            &index,
+        );
         assert!(findings.is_empty());
         let pop = exec.population.unwrap();
         assert_eq!(
@@ -491,6 +767,23 @@ mod tests {
         assert_eq!(findings[0].line, Some(2));
         assert!(findings[0].message.contains("ADR-1") && findings[0].message.contains("Proposed"));
         assert_eq!(exec.population.unwrap().examined(), 1);
+    }
+
+    #[test]
+    fn the_gate_judges_every_id_of_a_noted_list_and_a_trailing_marker_observed_failing() {
+        let records = vec![
+            adr_with("docs/adr/ADR-1-a.md", "Accepted"),
+            adr_with("docs/adr/ADR-2-b.md", "Proposed"),
+            adr_with("docs/adr/ADR-3-c.md", "Proposed"),
+        ];
+        let files = vec![file(
+            "src/a.rs",
+            "// @I ADR-1 (note), ADR-2\nlet x = 1; // @I ADR-3\n",
+        )];
+        let (_, findings) = gate(&records, &files, &[], None, &declared_config());
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-2") && findings[0].line == Some(1));
+        assert!(findings[1].message.contains("ADR-3") && findings[1].line == Some(2));
     }
 
     #[test]

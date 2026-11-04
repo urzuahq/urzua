@@ -25,3 +25,4 @@ A path option may declare an exclusion or glob; a diff touching only an excluded
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented: the diff rules' path options accept globs and `exclude_paths` also narrows `diff.source-requires-record`, leaving excluded paths eligible and unexamined. This repository excludes `rust/crates/*/tests` from `source_paths`, and `diff_gate_integration.rs` runs the shipped config on a test-only and a source change. `Status` stays `Planned`. **Why:** the Done-when contract; status is a human decision. | **substantive** |

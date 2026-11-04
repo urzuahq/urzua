@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6JKNXV24H9XAAQW3NFJ7D5S
-Status: Open
+Status: Fixed
 Found-in: 'a trial run over a real adopter corpus (2026-11-04)'
-Regression-test: 'not yet written -- Status: Open, the fix has not been made'
+Regression-test: 'rust/crates/urzua-cli/tests/new_integration.rs::new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing, rust/crates/urzua-cli/tests/new_integration.rs::new_leaves_out_a_stable_id_the_closed_field_set_does_not_declare_observed_failing, rust/crates/urzua-cli/tests/new_integration.rs::new_refuses_when_the_declared_pattern_cannot_name_the_file, rust/crates/urzua-core/src/new_record.rs::a_declared_file_name_is_padded_to_the_width_the_pattern_requires'
 ---
 # 182 — Urzua new ignores the declared identity pattern and writes a literal null status
 
@@ -18,8 +18,11 @@ No test ran `urzua new` and then `check` over the result for a type with a non-d
 
 BUG-2 of the adopter switchover report. Related gap: the filed `urzua new` honouring the declared pattern milestone; `MILE-134`.
 
+Fixed with `MILE-151`: `urzua new` fits the file name and H1 to the declared pattern, starts the status field at the first declared status value, and omits `Stable-Id` (with a notice) when a closed `known_fields` does not list it. See `SPEC-12`.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this defect. | **substantive** |
+> | 2026-11-04 | Fixed with `MILE-151`. `Regression-test` filled. **Why:** the generator read a different grammar from the checker. | **substantive** |

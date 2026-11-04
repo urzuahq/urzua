@@ -1,6 +1,6 @@
 ---
 Status: Accepted
-Embodiment: Not started
+Embodiment: Verified
 Date: 2026-09-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -66,3 +66,9 @@ code between crates later is a mechanical but real refactor, not a config change
 - `rust/crates/urzua-core/src/lib.rs` — the purity doc comment this ADR makes true by construction.
 - The mechanical purity proof (a `cargo metadata`-based dependency-graph check, with a
   planted-violation test) that verifies this boundary holds once built.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed: `Not started` to `Verified`, by hand with the row `urzua fix` would write. **Why:** the `urzua-io` crate cites this record with an `Implements:` back-pointer and `rust/crates/urzua-core/tests/purity.rs` with a `Verifies:` back-pointer, and `embodiment.consistency` now judges a record with no `Realized-by` field that a back-pointer cites (`MILE-149`) and reads a test-tier pointer (`MILE-146`); the Decision is unchanged. | **structural** |

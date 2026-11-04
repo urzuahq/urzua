@@ -230,3 +230,89 @@ fn a_path_option_that_escapes_the_repository_is_rejected() {
     let (code, _) = check(&dir, &["--base", "base"]);
     assert_eq!(code, 2);
 }
+
+/// MILE-158: tests beside the code, stated as a glob exclusion.
+const REQUIRE_EXCLUDING_TESTS: &str = "  diff.source-requires-record:\n    level: error\n    source_paths: [\"src\"]\n    exclude_paths: [\"**/*.test.*\", \"src/tests\"]\n";
+
+fn add_file(dir: &Path, rel: &str) {
+    std::fs::write(dir.join(rel), "fn t() {}\n").unwrap();
+    git(dir, &["add", rel]);
+}
+
+#[test]
+fn a_diff_touching_only_test_files_beside_the_code_is_not_a_trigger() {
+    let dir = fixture("req-glob-tests-only", REQUIRE_EXCLUDING_TESTS);
+    add_file(&dir, "src/lib.test.rs");
+    edit(&dir, "src/tests/t.rs");
+    let (code, report) = check(&dir, &["--base", "base"]);
+    assert!(findings(&report, R124).is_empty(), "{report}");
+    assert_eq!(code, 0, "{report}");
+    let run = execution(&report, R124);
+    assert_eq!(run["status"], "ran");
+    assert_eq!(run["population"]["eligible"], 2, "{run}");
+    assert_eq!(run["population"]["examined"], 0, "{run}");
+    assert!(
+        findings(&report, "config.scope-matches-nothing").is_empty(),
+        "{report}"
+    );
+}
+
+#[test]
+fn code_changed_beside_its_tests_still_triggers_and_names_the_code() {
+    let dir = fixture("req-glob-code-and-tests", REQUIRE_EXCLUDING_TESTS);
+    add_file(&dir, "src/lib.test.rs");
+    edit(&dir, "src/lib.rs");
+    let (code, report) = check(&dir, &["--base", "base"]);
+    let found = findings(&report, R124);
+    assert_eq!(found.len(), 1, "{report}");
+    assert_eq!(found[0]["file"], "src/lib.rs");
+    assert_eq!(code, 1, "{report}");
+}
+
+#[test]
+fn a_prefix_only_configuration_still_treats_a_test_file_as_source() {
+    let dir = fixture("req-glob-unchanged", REQUIRE);
+    add_file(&dir, "src/lib.test.rs");
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(findings(&report, R124).len(), 1, "{report}");
+}
+
+/// MILE-158, dogfood: this repository's own `diff.source-requires-record`
+/// declaration, run on a throwaway repository with the same layout.
+#[test]
+fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_source() {
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    let dir = std::env::temp_dir().join(format!("urzua-diff-gate-own-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sub in [".urzua", "rust/crates/x/src", "rust/crates/x/tests"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::copy(own, dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(dir.join("rust/crates/x/src/lib.rs"), "fn a() {}\n").unwrap();
+    std::fs::write(dir.join("rust/crates/x/tests/t.rs"), "fn t() {}\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+    git(&dir, &["tag", "base"]);
+
+    edit(&dir, "rust/crates/x/tests/t.rs");
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert!(findings(&report, R124).is_empty(), "{report}");
+    assert_eq!(
+        execution(&report, R124)["population"]["eligible"],
+        1,
+        "{report}"
+    );
+    assert!(
+        findings(&report, "config.scope-matches-nothing").is_empty(),
+        "{report}"
+    );
+
+    edit(&dir, "rust/crates/x/src/lib.rs");
+    let (_, report) = check(&dir, &["--base", "base"]);
+    let found = findings(&report, R124);
+    assert_eq!(found.len(), 1, "{report}");
+    assert_eq!(found[0]["file"], "rust/crates/x/src/lib.rs");
+}

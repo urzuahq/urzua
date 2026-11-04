@@ -5,7 +5,7 @@ Scope: docs/rfc/RFC-25-realized-by-s-identity-is-attribution-not-attestation.md
 Reason: RFC-25 is a Draft that amends RFC-2. RFC-2 is an accepted record and its Amended-by cannot assert an amendment no one has accepted, so the provisional warning is expected until RFC-25 is decided. It becomes an error when RFC-25 is accepted without RFC-2 naming it back.
 Expires: 2027-02-04
 ---
-# 1 — RFC-25 amends RFC-2 while it is a Draft
+# WAIVER-1 — RFC-25 amends RFC-2 while it is a Draft
 
 ## What this covers
 
