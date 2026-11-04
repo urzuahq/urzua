@@ -106,8 +106,9 @@ Two details carry weight:
   `from`, an unknown key, an out-of-range `depth`, a non-boolean `items`, a blank or non-compiling
   `pattern` or a key present with no value is a load-time error naming the record type and key.
 
-  **`identity` and `fields` drive record loading; `sections` is still read by no rule.** A type that
-  declares neither loads exactly as it did before the declaration existed.
+  **`identity` and `fields` drive record loading; `sections` is read by `section.required` and
+  `section.shape` only.** A type that declares none of the three loads, and is checked, exactly as it
+  did before the declaration existed.
 
   - **`identity`.** The pattern, not the `TYPE-N-slug.md` convention, decides a record's identifier:
     `{prefix}-{number}`, with the type's `prefix` and the `number` capture as written, so
@@ -124,6 +125,43 @@ Two details carry weight:
     `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
     letters, digits, `-` or `_`; the colon is followed by a space or ends the line). `none` gates as
     `header_shape: none` does (`RecordTypeConfig::has_no_header`).
+
+  - **`sections.required`** (`MILE-4`, `MILE-5`, `MILE-121`). A list of the `##` sections a record of
+    the type must carry, each `{name: ...}` matched exactly against the heading text after trimming,
+    with an optional content `shape`:
+
+    ```yaml
+    sections:
+      from: headings
+      required:
+        - {name: Context}
+        - {name: Options considered, shape: table-min-rows, min_rows: 2}
+        - {name: Decision, shape: y-statement, marker: 'TL;DR'}
+      exempt_statuses: [Withdrawn]
+    ```
+
+    `section.required` reports a missing section; `section.shape` checks the shape of a present one.
+    Both are opt-in and a type that declares no `required` has nothing eligible. Their population
+    unit is `section`: one `(record, required section)` slot, so a record missing a section is
+    counted. A heading inside a fenced code block is not a section, and sections are the `##` level
+    only (`parse_sections` is not yet driven by `depth`).
+    - `y-statement` reads one block and requires `In the context of`, `facing`, `we decided`,
+      `to achieve` and `accepting` in it, matched case-insensitively on word boundaries (the phrase
+      set is fixed, not declarable). With a `marker`, the block starts at the first line of the
+      section containing it and runs to the next blank line or list item; a section without the
+      marker, and a marker with no block after it, are each their own finding. With no `marker`,
+      the block is the section's first paragraph. Phrases outside the block never count.
+    - `table-min-rows` requires a table with at least `min_rows` (an integer of 1 or more) data rows;
+      a data row with every cell empty does not count, the largest table in the section decides, and
+      a table inside a fenced code block is not read.
+    - `exempt_statuses` lists statuses of a record that made no decision (`MILE-7`). Such a record is
+      counted out of scope by both rules, not asked for the sections. It is matched exactly against
+      the type's declared status field. A record whose header cannot be read is counted unreadable,
+      never assumed exempt, and a record with no status is not exempt. Declaring it without
+      `required`, a blank status, a duplicate section name, an unknown `shape`, `min_rows` missing
+      from or `marker` misplaced on a shape, or an unknown key, is a load-time error.
+    - Presence and shape are all either rule knows: neither judges whether a section's content is
+      true or sufficient.
 
   `section::parse_sections` (`section.rs`) splits a record body into its `##` sections with line
   numbers; it is not yet driven by `sections.depth`.
@@ -302,6 +340,7 @@ indistinguishable in the report from one that ran clean:
 > | 2026-11-03 | Bumped to `0.5`. Documented the per-type document model declaration (`identity`, `fields`, `sections`) as parsed and validated but read by no rule yet. **Why:** first slice of `MILE-98` (`RFC-33` layer 1): a record type can now declare how its parts are found, and a malformed declaration fails the load instead of being ignored. | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. Documented the top-level `relation_pairs` declaration and the narrowest reading of each question `RFC-47` leaves open (global field names, no combined key, no `advisory`, fixed role set unchanged). **Why:** `MILE-122` -- reciprocity was hardcoded to one combined key, so a pair a repository declares itself, including across record types, could not be checked. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. The per-type `identity` and `fields` declarations now drive record loading: the identity pattern is compiled at load and decides a record's identifier and H1 title form (it must capture the type prefix), and `fields.from` decides how the header is read, with `prefix-lines`, `blockquote`, `bold-list` and `none` added beside `yaml-frontmatter`. **Why:** second slice of `MILE-98` (`RFC-33` layer 1, `RFC-44`): a declaration that no code reads is not the founding claim. | **substantive** |
+> | 2026-11-04 | Bumped to `0.8`. Documented `sections.required` (with the `y-statement` and `table-min-rows` shapes) and `sections.exempt_statuses`, now read by `section.required` and `section.shape`; `sections` is no longer read by no rule. **Why:** `MILE-4`, `MILE-5`, `MILE-7` and `MILE-121` -- the declared `sections` model from `MILE-98` had no reader. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.8`. Documented the per-type `statuses` declaration: the status vocabulary, terminal success and failure statuses, fields required or forbidden at a status, and the type's own pending vocabulary. **Why:** `MILE-132` Phase 0: which statuses a type has is repository configuration, not engine policy (`BUG-59`), and the pending vocabulary (`BUG-65`) and finished-status lists (`BUG-178`) were compiled in or hand-copied. | **substantive** |

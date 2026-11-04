@@ -247,6 +247,57 @@ fn read_published_files(
     Ok(out)
 }
 
+/// Reads the index artifacts `index.freshness` compares (`MILE-139`), in the
+/// CLI because `urzua-core` is pure (`ADR-5`). A missing file and one that is
+/// not text are handed over as such, never as empty. A path that resolves
+/// outside the repository, or any other I/O failure, aborts: an artifact the
+/// rule could not read is one it did not compare.
+fn read_index_artifacts(
+    repo_root: &std::path::Path,
+    specs: &[urzua_core::config::IndexSpec],
+) -> Result<Vec<rules::IndexArtifact>, String> {
+    let repo_canonical = repo_root
+        .canonicalize()
+        .map_err(|e| format!("index.freshness: could not resolve the repository root: {e}"))?;
+    let mut out = Vec::new();
+    for spec in specs {
+        let full = repo_root.join(&spec.path);
+        let content = match full.canonicalize() {
+            Ok(resolved) if !path_is_inside_repo(&repo_canonical, &resolved) => {
+                return Err(format!(
+                    "index.freshness: {} resolves outside the repository",
+                    spec.path
+                ))
+            }
+            Ok(resolved) => match urzua_io::read_to_string(&resolved) {
+                Ok(text) => rules::IndexContent::Text(text),
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                    rules::IndexContent::NotText
+                }
+                Err(_) if resolved.is_dir() => rules::IndexContent::NotText,
+                Err(e) => {
+                    return Err(format!(
+                        "index.freshness: could not read {}: {e}",
+                        spec.path
+                    ))
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => rules::IndexContent::Missing,
+            Err(e) => {
+                return Err(format!(
+                    "index.freshness: could not resolve {}: {e}",
+                    spec.path
+                ))
+            }
+        };
+        out.push(rules::IndexArtifact {
+            spec: spec.clone(),
+            content,
+        });
+    }
+    Ok(out)
+}
+
 pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<String>) -> ExitCode {
     let repo_root = match find_repo_root(&paths) {
         Ok(root) => root,
@@ -451,6 +502,17 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
+    let index_specs: Vec<urzua_core::config::IndexSpec> = config
+        .rules
+        .get(rules::RULE_INDEX_FRESHNESS)
+        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+        .and_then(|s| s.indexes.clone())
+        .unwrap_or_default();
+    let index_artifacts = match read_index_artifacts(&repo_root, &index_specs) {
+        Ok(artifacts) => artifacts,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
+
     // `compute_drifted_records` spawns several `git` subprocesses per
     // `Realized-by`-carrying record; skip that work entirely when its only
     // consumer, `embodiment.consistency`, won't read the result (`BUG-115`),
@@ -478,6 +540,12 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     // that rule (`BUG-116`).
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
     notices.extend(rules::identity_collision_notices(&identity_collisions));
+
+    // The diff rules judge the changed set itself, so they get it as data and
+    // `None` on a run with no `--base`.
+    let changed_paths: Option<Vec<PathBuf>> = changed
+        .as_ref()
+        .map(|c| c.changed.iter().cloned().collect());
 
     let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
         crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
@@ -669,6 +737,38 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
             || rules::published_path_reference(&published_files, &published_paths, &config),
         ),
+        crate::gate::gated(&config, rules::RULE_SECTION_REQUIRED, || {
+            rules::section_required(&records, &config, &full_text)
+        }),
+        crate::gate::gated(&config, rules::RULE_SECTION_SHAPE, || {
+            rules::section_shape(&records, &config, &full_text)
+        }),
+        crate::gate::gated(&config, rules::RULE_INDEX_FRESHNESS, || {
+            rules::index_freshness(&records, &full_text, &index_artifacts)
+        }),
+        crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_REQUIRES_RECORD, || {
+            let source = config
+                .rules
+                .get(rules::RULE_DIFF_SOURCE_REQUIRES_RECORD)
+                .and_then(|s| s.source_paths.clone())
+                .unwrap_or_default();
+            rules::source_requires_record(changed_paths.as_deref(), &source, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED, || {
+            let setting = config.rules.get(rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
+            let application = setting
+                .and_then(|s| s.application_paths.clone())
+                .unwrap_or_default();
+            let excluded = setting
+                .and_then(|s| s.exclude_paths.clone())
+                .unwrap_or_default();
+            rules::source_and_records_mixed(
+                changed_paths.as_deref(),
+                &application,
+                &excluded,
+                &config,
+            )
+        }),
     ];
 
     let mut rules_executed = Vec::with_capacity(rule_results.len());

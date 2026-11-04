@@ -3062,6 +3062,11 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "citation.resolution",
             "reads body text only; a header-less record is read whole",
         ),
+        (
+            "section.required",
+            "reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)",
+        ),
+        ("section.shape", "same as section.required"),
         // Claim-level: judges claim files, not records.
         (
             "claim.status-agreement",
@@ -3071,6 +3076,20 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
         (
             "boundary.published-path-reference",
             "population is published files, not records",
+        ),
+        // File-level: judges committed index artifacts against the records.
+        (
+            "index.freshness",
+            "population is index artifacts, not records",
+        ),
+        // Diff-level: judge the changed paths of a `--base` run.
+        (
+            "diff.source-requires-record",
+            "population is changed paths, and only on a --base run",
+        ),
+        (
+            "diff.source-and-records-mixed",
+            "population is changed paths, and only on a --base run",
         ),
     ];
 
@@ -3097,6 +3116,15 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "pointer.target-status" => format!("{id}: {{level: error, not_in: [\"Done\"]}}"),
             "boundary.published-path-reference" => {
                 format!("{id}: {{level: error, published_paths: [\"docs/claims\"]}}")
+            }
+            "index.freshness" => format!(
+                "{id}: {{level: error, indexes: [{{path: \"docs/claims/c.md\", type: note, format: \"{{id}}\"}}]}}"
+            ),
+            "diff.source-requires-record" => {
+                format!("{id}: {{level: error, source_paths: [\"src\"]}}")
+            }
+            "diff.source-and-records-mixed" => {
+                format!("{id}: {{level: error, application_paths: [\"src\"]}}")
             }
             _ => format!("{id}: error"),
         })

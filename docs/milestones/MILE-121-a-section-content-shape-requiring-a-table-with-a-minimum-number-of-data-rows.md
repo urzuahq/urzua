@@ -33,3 +33,4 @@ whether the options are real, per `AGENTS.md` ("Structural presence is not conte
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `RFC-17` names `table-min-rows` as a plausible second shape; a hand-written linter's row-count check needs a declared equivalent, so it is now planned. | **substantive** |
+> | 2026-11-04 | Built as shape `table-min-rows` on a required section, with `min_rows` declared per section (`SPEC-3`), checked by `section.shape`. `Status` stays `Planned`. **Why:** a considered-options table with one row has considered no alternative. The shape counts data rows of the largest table in the section, ignoring fenced code and rows whose every cell is empty; it checks row count only, never whether the options are real. | **substantive** |
