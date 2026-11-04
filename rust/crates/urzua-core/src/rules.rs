@@ -4,7 +4,7 @@
 //! planted-violation test.
 
 use crate::config::Config;
-use crate::field_state::classify;
+use crate::field_state::{classify, classify_with};
 use crate::header::HeaderLayout;
 use crate::record::Record;
 use crate::report::{
@@ -30,6 +30,7 @@ mod pointer;
 mod relation;
 mod revision_log;
 mod shared;
+mod status;
 mod type_scope;
 
 pub use boundary::*;
@@ -47,6 +48,7 @@ pub use pointer::*;
 pub use relation::*;
 pub use revision_log::*;
 pub use shared::*;
+pub use status::*;
 pub use type_scope::*;
 
 /// Fixtures shared by every rule family's tests.
@@ -112,6 +114,7 @@ mod tests {
             identity: None,
             fields: None,
             sections: None,
+            statuses: None,
             required_fields: Vec::new(),
             header_shape: crate::header::HeaderShape::default(),
             prefix: None,
@@ -189,6 +192,7 @@ mod tests {
             identity: None,
             fields: None,
             sections: None,
+            statuses: None,
             required_fields: Vec::new(),
             header_shape: shape,
             prefix: None,
@@ -235,6 +239,7 @@ mod tests {
             identity: None,
             fields: None,
             sections: None,
+            statuses: None,
             required_fields: required_fields.iter().map(|s| s.to_string()).collect(),
             header_shape: crate::header::HeaderShape::default(),
             prefix: None,

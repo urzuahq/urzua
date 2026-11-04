@@ -652,6 +652,15 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         crate::gate::gated(&config, rules::RULE_FILENAME_IDENTITY_PATTERN, || {
             rules::filename_identity_pattern(&records, &config)
         }),
+        crate::gate::gated(&config, rules::RULE_STATUS_UNDECLARED_VALUE, || {
+            rules::status_undeclared_value(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_STATUS_REQUIRED_FIELD_MISSING, || {
+            rules::status_required_field_missing(&records, &config)
+        }),
+        crate::gate::gated(&config, rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT, || {
+            rules::status_forbidden_field_present(&records, &config)
+        }),
         crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
             rules::citation_resolution(&records, &config, &full_text, &record_index)
         }),

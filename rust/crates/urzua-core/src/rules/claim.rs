@@ -74,6 +74,7 @@ pub fn claim_status_agreement(
     let mut findings = Vec::new();
     let declared_by_type = declared_fields_by_type(config);
     let declared_by_type = &declared_by_type;
+    let statuses = statuses_by_type(config);
 
     // Present tense only: a claim is written in the present, while prose
     // *about* a past claim is written in the past. A narrowing, not a fix --
@@ -125,7 +126,7 @@ pub fn claim_status_agreement(
         let Ok(status) = declared_cross_record_value(declared_by_type, target, status_field) else {
             continue;
         };
-        if closed_statuses.iter().any(|s| s == status) {
+        if is_finished(&statuses, &target.record_type, status, closed_statuses) {
             continue;
         }
         findings.push(Finding {
@@ -155,6 +156,24 @@ pub fn claim_status_agreement(
 mod tests {
     use super::*;
     use crate::rules::tests::*;
+
+    /// BUG-178: `WontFix` is a finished bug, but the hand-copied list lacks it,
+    /// so a changeset closing one was an error. Declared terminals fix that.
+    #[test]
+    fn a_claim_against_a_declared_failure_terminal_is_not_an_error_observed_failing() {
+        let yaml = "schema_version: 2\nrecord_types:\n  bug:\n    dir: docs/bugs\n    required_fields: [Status]\n    statuses:\n      values: [Open, Fixed, WontFix]\n      success: [Fixed]\n      failure: [WontFix]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "> Status: WontFix\n");
+        let claims = vec![(
+            ".changeset/x.md".to_string(),
+            "which also closes BUG-36.".to_string(),
+        )];
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let closed = vec!["Fixed".to_string()];
+        let (_, findings) = claim_status_agreement(&claims, &closed, &config, &index);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
 
     /// Observed failing against the real defect: a changeset in this repository
     /// announced it closed `BUG-36` while `BUG-36` said `Open`, and shipped.

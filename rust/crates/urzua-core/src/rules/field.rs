@@ -12,6 +12,7 @@ use super::*;
 pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
     let required_by_type = required_fields_by_type(config);
     let required_by_type = &required_by_type;
+    let statuses = statuses_by_type(config);
     const RULE_ID: &str = RULE_FIELD_PENDING;
     let mut findings = Vec::new();
 
@@ -28,7 +29,8 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
-            if classify(record.header.get(field.as_str())) == FieldState::Pending {
+            let declared = statuses.get(&record.record_type);
+            if classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
@@ -254,6 +256,48 @@ mod tests {
     /// Full builder for the config-level pointer/narrative-field validation
     /// tests (MILE-90) -- the two helpers above default both new fields to
     /// `None`, which isn't useful for testing them directly.
+    /// BUG-65: a type that declares its pending vocabulary is judged by whole
+    /// values; a value merely mentioning the word is a real value.
+    #[test]
+    fn a_declared_pending_vocabulary_matches_whole_values_observed_failing() {
+        let yaml = "schema_version: 2\nrecord_types:\n  bug:\n    dir: docs/bugs\n    header_shape: yaml-frontmatter\n    required_fields: [Status, Regression-test]\n    statuses:\n      values: [Open, Fixed]\n      pending: [\"not yet written\"]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let mk = |v: &str| {
+            Record::parse_with_shape_and_prefix(
+                PathBuf::from("docs/bugs/BUG-1-x.md"),
+                "bug".to_string(),
+                &format!("---\nStatus: Open\nRegression-test: \"{v}\"\n---\n# 1 - X\n"),
+                crate::header::HeaderShape::YamlFrontmatter,
+                "BUG".to_string(),
+            )
+        };
+        let (_, findings) = field_pending(&[mk("Not yet written")], &config);
+        assert_eq!(
+            findings.len(),
+            1,
+            "a declared whole value is pending: {findings:?}"
+        );
+        let (_, findings) =
+            field_pending(&[mk("a_pending_field_belongs_to_field_pending")], &config);
+        assert!(
+            findings.is_empty(),
+            "a mere mention is a real value: {findings:?}"
+        );
+        let (_, findings) = field_pending(&[mk("Pending review")], &config);
+        assert!(
+            findings.is_empty(),
+            "the declared vocabulary replaces the token: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_type_declaring_no_pending_vocabulary_keeps_the_substring_match() {
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let r = record("docs/bugs/BUG-1-x.md", "bug", "> Status: Pending review\n");
+        let (_, findings) = field_pending(&[r], &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
     #[test]
     fn a_slot_behind_an_unparsed_header_is_not_judged_and_not_reported_on() {
         // The record plainly sets `Status`, and the header does not parse, so

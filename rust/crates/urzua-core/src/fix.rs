@@ -224,6 +224,7 @@ mod tests {
                     identity: None,
                     fields: None,
                     sections: None,
+                    statuses: None,
                     required_fields: vec![],
                     header_shape: crate::header::HeaderShape::default(),
                     prefix: None,

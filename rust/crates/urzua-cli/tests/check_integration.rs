@@ -3106,7 +3106,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n",
+            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    header_layout: one-per-line\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    statuses: {{values: [Open, Done], require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
             rules.join(", ")
         ),
     )
@@ -3363,6 +3363,66 @@ fn one_off_pattern_file_among_conforming_ones_is_reported_on_that_file() {
         .find(|f| f["rule"] == "filename.identity-pattern")
         .unwrap();
     assert_eq!(f["file"], "docs/adr/draft.md");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `MILE-132`: a declared status vocabulary is checked end to end through
+/// `check`: an undeclared value, a field a status requires and a field a status
+/// forbids, each reported on the offending record only.
+#[test]
+fn declared_statuses_are_enforced_end_to_end() {
+    let dir = fixture_repo("status-vocabulary");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {status.undeclared-value: error, status.required-field-missing: error, status.forbidden-field-present: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Deciders\", \"Accepted-on\"]\n    header_shape: \"yaml-frontmatter\"\n    statuses:\n      values: [Proposed, Accepted]\n      success: [Accepted]\n      require: [{when: [Accepted], fields: [Deciders]}]\n      forbid: [{when: [Proposed], fields: [Accepted-on]}]\n",
+    )
+    .unwrap();
+    for (name, header) in [
+        ("ADR-1-ok.md", "Status: Accepted\nDeciders: Ana\n"),
+        ("ADR-2-no-deciders.md", "Status: Accepted\n"),
+        ("ADR-3-typo.md", "Status: Acceptd\n"),
+        (
+            "ADR-4-early-date.md",
+            "Status: Proposed\nAccepted-on: 2026-01-01\n",
+        ),
+    ] {
+        std::fs::write(
+            dir.join("docs/adr").join(name),
+            format!("---\n{header}---\n# 1 - X\n"),
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    assert_eq!(out.status.code(), Some(1), "error-level findings block");
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let hits = |rule: &str| -> Vec<String> {
+        parsed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["rule"] == rule)
+            .map(|f| f["file"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(hits("status.undeclared-value"), ["docs/adr/ADR-3-typo.md"]);
+    assert_eq!(
+        hits("status.required-field-missing"),
+        ["docs/adr/ADR-2-no-deciders.md"]
+    );
+    assert_eq!(
+        hits("status.forbidden-field-present"),
+        ["docs/adr/ADR-4-early-date.md"]
+    );
+    let exec = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "status.undeclared-value")
+        .unwrap();
+    assert_eq!(exec["population"]["examined"], 4);
     std::fs::remove_dir_all(&dir).ok();
 }
 
