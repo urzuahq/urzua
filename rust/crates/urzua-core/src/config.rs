@@ -1495,7 +1495,7 @@ pub fn parse_with_document_models(
                     // cannot compile would match nothing, which reads as clean.
                     let diff_option = matches!(
                         option,
-                        "source_paths" | "application_paths" | "exclude_paths"
+                        "source_paths" | "application_paths" | "exclude_paths" | "test_paths"
                     );
                     if diff_option
                         && crate::rules::is_path_glob(&normalised)
@@ -1549,6 +1549,11 @@ pub fn parse_with_document_models(
         }
         let scanned = setting.back_pointer_paths.as_deref().unwrap_or_default();
         for entry in setting.test_paths.iter().flatten() {
+            // A glob names files wherever they sit; the rule reads it only
+            // under a scanned path, and reports one matching none.
+            if crate::rules::is_path_glob(entry) {
+                continue;
+            }
             let covered = scanned
                 .iter()
                 .any(|b| crate::rules::path_is_published(std::path::Path::new(entry), b));

@@ -25,3 +25,4 @@ A `test_paths` entry that contains a glob metacharacter is matched as a glob and
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented: `test_paths` entries with a glob character are matched by the diff rules' matcher and others stay prefixes; a glob matching no scanned file is reported and one that cannot compile is refused at load. This repository's config declares a prefix and the glob `rust/crates/*-core/tests`, and `test_tier_integration.rs` covers both together. `Status` stays `Planned`. **Why:** the Done-when contract. | **substantive** |
