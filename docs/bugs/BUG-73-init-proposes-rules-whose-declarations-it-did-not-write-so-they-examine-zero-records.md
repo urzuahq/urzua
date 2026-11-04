@@ -46,3 +46,4 @@ inert passes every test there is.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Recorded the chosen fix: `init` stops proposing the five declaration-dependent rules until their declarations exist and tells the adopter what to declare first; it infers nothing from the corpus (`ADR-33`). `Status` stays `Open`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `urzua init` on a two-ADR corpus, then `urzua check`, runs `field.quality`, `field.pending`, `header.field-set-consistency` and `header.pointer-field-clean` with `eligible: 0, examined: 0`. The decision of 2026-11-04 is recorded and the fix follows as its own pull request. **Why:** confirming against main before building. | **substantive** |

@@ -64,3 +64,4 @@ Per this project's own workflow, a finding that needs a design decision gets fil
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified by tracing the exact split logic against the failure scenario. Left `Status: Open` -- the fix needs a delimiter/escaping decision this record deliberately doesn't make on its own. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `parse_realized_by` (`rules/embodiment.rs`) still splits on `,` before `:`, so `Realized-by: code:src/weird,name.rs` yields the locator `src/weird` and silently drops `name.rs`. **Why:** the escaping or rejection policy is the open decision the record names. | **substantive** |

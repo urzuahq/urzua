@@ -36,3 +36,4 @@ design (`ADR-6`: never a raw directory walk), which is in tension with the fallb
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture. Left `Status: Open` -- the fix needs a decision, not a quick edit. | **substantive** |
+> | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `urzua check` in a directory with a config and records but no `.git` returns `{"status":"not-run","error":"no .git directory found above the given path"}`, while `SPEC-2` still promises a directory-walk fallback. **Why:** build-the-fallback versus amend-the-spec is the decision the record names. | **substantive** |
