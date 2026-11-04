@@ -1,5 +1,5 @@
 ---
-Version: '0.34'
+Version: '0.35'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -333,7 +333,7 @@ rules:
         end: "<!-- urzua:index:end -->"
       - path: "docs/specs/README.md"
         type: spec
-        format: "- [{id}]({file})\n  {title}"
+        format: "- [{id}]({file}) \u2014 {Status}, {Date}\n  {title}"
         begin: "<!-- urzua:index:begin -->"
         end: "<!-- urzua:index:end -->"
 ```
@@ -342,8 +342,13 @@ rules:
   (a YAML mapping, or a link followed by a description); the artifact's non-blank lines are read
   that many at a time, and a block scalar's trailing newline is ignored. A blank line inside the
   format is refused, since blank lines are skipped when an index is read.
-- Placeholders: `{id}`, `{file}` (the record's file name) and `{title}`. Each appears at most once in
-  the whole entry. An entry must name its record, by `{id}` or, when no id is written, by `{file}`;
+- Placeholders: `{id}`, `{file}` (the record's file name), `{title}` and `{Field}` for a declared
+  header field, written by its exact field name (`{Status}`, `{Date}`; `MILE-164`). A field placeholder
+  is filled from the record's header and checked against the index: a listed value that differs, or a
+  record without the field, is a finding. The field must be in the index type's `required_fields` or
+  `known_fields`: a placeholder naming anything else is a configuration error at load (a typo would
+  otherwise compare nothing), and a name that is `id`, `file` or `title` is always the built-in one.
+  Each placeholder appears at most once in the whole entry. An entry must name its record, by `{id}` or, when no id is written, by `{file}`;
   `{title}` alone is refused as ambiguous.
 - `{title}` is the record's H1 without its identifier: a leading number (`# 12 -- Title`) or the
   record's own id (`# ADR-12: Title`, compared by value) is dropped with the separator after it.
@@ -353,7 +358,7 @@ rules:
   `--apply` rewrites the lines between `begin` and `end` (everything else is kept byte for byte), or
   the whole file when no markers are declared, and creates a missing artifact. Entries are in record
   id order, so a second run changes nothing and reports `current`. A record that cannot fill a
-  placeholder (no H1 for `{title}`), a file that is not text and a marker that is absent are
+  placeholder (no H1 for `{title}`, no `Date` header for `{Date}`), a file that is not text and a marker that is absent are
   failures naming the artifact, never a partial write.
 
 ## Scope declaration
@@ -754,3 +759,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.33`. Documented the opt-in `waiver.matches-nothing` rule (no options). **Why:** `MILE-168` -- a stale or expired waiver stayed on file silently. | **substantive** |
 > | 2026-11-04 | Bumped to `0.34`. Added the per-type `revision_log` declaration (`marker` or `heading`, default the marker `**Revision log**`), matched as the opening line and never by containing the text; `citation.path-exists`'s `skip_tables` marker list became the boolean `skip_revision_log`, which skips the declared revision log (the list was unreleased). **Why:** `MILE-167` -- a hardcoded literal contradicted `ADR-64`, and prose containing it made the parser read the wrong table. | **substantive** |
+> | 2026-11-04 | Bumped to `0.35`. An index `format` may use `{Field}` placeholders naming a declared header field (`{Status}`, `{Date}`), filled from and checked against the record; a placeholder naming no declared field of the type fails the config load. **Why:** `MILE-164` -- real indexes list status and date beside the title, and a misspelled column would otherwise silently compare nothing. | **substantive** |

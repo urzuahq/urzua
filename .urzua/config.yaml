@@ -287,7 +287,8 @@ rules:
     skip_revision_log: true
   # The two generated directory indexes (MILE-152): `urzua index --apply`
   # rewrites them from the records. The ADR list names no id (the file name
-  # identifies the record); the spec list writes each entry over two lines.
+  # identifies the record); the spec list writes each entry over two lines and
+  # shows the declared Status and Date fields beside the id (MILE-164).
   index.freshness:
     level: error
     indexes:
@@ -298,6 +299,6 @@ rules:
         end: "<!-- urzua:index:end -->"
       - path: "docs/specs/README.md"
         type: spec
-        format: "- [{id}]({file})\n  {title}"
+        format: "- [{id}]({file}) \u2014 {Status}, {Date}\n  {title}"
         begin: "<!-- urzua:index:begin -->"
         end: "<!-- urzua:index:end -->"
