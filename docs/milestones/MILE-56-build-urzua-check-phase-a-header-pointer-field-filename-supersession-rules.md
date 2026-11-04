@@ -3,7 +3,7 @@ Status: Done
 Stable-Id: 01M1YNN8V8XTS6CSCEEBAEWR9A
 Phase: '0'
 Track: section-checks
-Implements: ADR-7, ADR-8, ADR-9, ADR-14
+Implements: ADR-23, ADR-8, ADR-9, ADR-14
 Blocked-on: —
 ---
 # 56 — Build urzua check Phase A: header, pointer, field, filename, supersession rules
@@ -21,3 +21,4 @@ SPEC-2's own Phase A: a validator whose first run is green has told you nothing 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Implements: ADR-7` changed to `ADR-23` (`ADR-23` superseded `ADR-7`). **Why:** Maintainer decision, 2026-11-04. | **substantive** |

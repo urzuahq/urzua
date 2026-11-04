@@ -140,7 +140,9 @@ rules:
     terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Done", "WontDo"]
   embodiment.consistency: warn
   embodiment.locator-exists: error
-  embodiment.locator-promotion-candidate: warn
+  # Off: an advisory suggestion, and several ADRs citing one rule module is
+  # expected now that the rule engine is split into modules (MILE-131).
+  embodiment.locator-promotion-candidate: off
   # Superseded only, for now. Draft is available and deliberately not enabled:
   # 28 records point at a Draft target today, and turning it on before deciding
   # whether that is acceptable here would be adopting a policy by accident.
