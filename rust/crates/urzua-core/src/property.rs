@@ -436,6 +436,7 @@ mod tests {
                     &config,
                     &Default::default(),
                     &Default::default(),
+                    &Default::default(),
                 ),
             ),
             (

@@ -10,3 +10,4 @@ publish.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+sha2 = "0.10"

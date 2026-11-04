@@ -103,6 +103,16 @@ pub struct RuleSetting {
     /// `embodiment.back-pointer-resolution`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back_pointer_paths: Option<Vec<String>>,
+    /// Days a locator change must have aged before it counts as drift
+    /// (`MILE-129`). Only meaningful to `embodiment.consistency`; omitted
+    /// means no grace window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_grace_days: Option<u32>,
+    /// Days after which an `Embodiment` claim last verified longer ago than
+    /// this draws a warning (`MILE-129`). Only meaningful to
+    /// `embodiment.consistency`; omitted means no age limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_max_age_days: Option<u32>,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -202,6 +212,10 @@ impl<'de> Deserialize<'de> for RuleSetting {
             allow_extension_prefix: Option<bool>,
             #[serde(default)]
             back_pointer_paths: Option<Vec<String>>,
+            #[serde(default)]
+            drift_grace_days: Option<u32>,
+            #[serde(default)]
+            claim_max_age_days: Option<u32>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -237,6 +251,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 exclude_paths: table.exclude_paths,
                 allow_extension_prefix: table.allow_extension_prefix,
                 back_pointer_paths: table.back_pointer_paths,
+                drift_grace_days: table.drift_grace_days,
+                claim_max_age_days: table.claim_max_age_days,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -254,6 +270,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 exclude_paths: None,
                 allow_extension_prefix: None,
                 back_pointer_paths: None,
+                drift_grace_days: None,
+                claim_max_age_days: None,
             })
         }
     }
@@ -934,6 +952,18 @@ pub fn parse_with_document_models(
                 rule: name.clone(),
                 option: "allow_extension_prefix".to_string(),
             });
+        }
+
+        for (option, present) in [
+            ("drift_grace_days", setting.drift_grace_days.is_some()),
+            ("claim_max_age_days", setting.claim_max_age_days.is_some()),
+        ] {
+            if present && name != crate::rules::RULE_EMBODIMENT_CONSISTENCY {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
         }
 
         // An option-taking rule given no option does not fall back to a sane
