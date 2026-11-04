@@ -23,6 +23,10 @@ pairs of its own, some across types, cannot be checked until this exists, so it 
 `MILE-102`, not a nicety. It is also
 what the config-driven thesis asks for: a hardcoded pair is a type-specific assumption in Rust source.
 
+## Done means
+
+A `relation_pairs` config declaration names any pair of inverse relation fields, including one field on one type and its inverse on another; the rules `relation.pair-reciprocity` and `relation.cross-type-disallowed` report a claim on one side that the other does not reciprocate and a cross-type pair a type disallows; `relation.supersession-reciprocity` is unchanged; the narrowest reading of each question `RFC-47` leaves open is in `SPEC-3`, and fixtures cover a reciprocated pair, a one-sided claim and a cross-type pair.
+
 ## References
 
 - `BUG-41` -- companion-field pairs checked for one pair, hardcoded.
@@ -36,3 +40,4 @@ what the config-driven thesis asks for: a hardcoded pair is a type-specific assu
 > | 2026-11-02 | Filed. **Why:** `BUG-17` and `BUG-41` describe halves of one gap and neither plans the general fix; filed as the milestone that does. | **substantive** |
 > | 2026-11-04 | Built: `relation_pairs` config declaration and the `relation.pair-reciprocity` and `relation.cross-type-disallowed` rules, beside the unchanged `relation.supersession-reciprocity`. The narrowest reading of each question `RFC-47` leaves open is recorded in `SPEC-3`. **Why:** `RFC-47` was accepted on 2026-11-04. `Status` is left for the maintainer. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #163: declared `relation_pairs` with `relation.pair-reciprocity` and `relation.cross-type-disallowed`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

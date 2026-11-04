@@ -27,6 +27,10 @@ tension has to be resolved before `embodiment.consistency` can be promoted past 
 
 All three, each opt-in and off by default: content-hash pins on evidence, a configurable grace window in days, and a warning when a claim exceeds a configured age.
 
+## Done means
+
+The combination is settled or split: opt-in `@sha256:` evidence pins, `drift_grace_days` and `claim_max_age_days` on `embodiment.consistency` (built, `evidence_pins_integration.rs`), and the attributed re-baseline (who and why logged when a pin is re-set) is decided in `ADR-67` once the maintainer accepts it (it is Proposed) and either built or recorded as declined with the reason; the options are exercised in urzua's own `.urzua/config.yaml` and the pins on its own records.
+
 ## References
 
 - `ADR-32` -- drift via git history, not a stored hash.
@@ -41,3 +45,4 @@ All three, each opt-in and off by default: content-hash pins on evidence, a conf
 > | 2026-11-04 | Built: opt-in `@sha256:` evidence pins, `drift_grace_days` and `claim_max_age_days` on `embodiment.consistency` (`SPEC-2`, `SPEC-3`, `SPEC-8`); the attributed re-baseline is left out and the pin is re-set by hand. `Status` stays `Planned`. **Why:** the 2026-11-04 decision names three opt-in pieces and none of them is a re-baseline command. | **substantive** |
 > | 2026-11-04 | Fixed a defect in the built grace window (`BUG-179`): inside `drift_grace_days` a record now agrees with either its tier or a stated `Drift detected`, and `urzua fix` no longer flips a stated `Drift detected` while the drift is only inside the window. `Status` stays `Planned`. **Why:** the window computed the tier value, so it contradicted records that honestly state `Drift detected`. | **substantive** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** pins, the grace window and the claim age are built as opt-in options (`embodiment.rs`, `evidence_pins_integration.rs`, merged in #174), drafted in `ADR-67`, which is still Proposed; the attributed re-baseline is not decided or built. A decision milestone is `Done` once the decision is accepted, which the maintainer owns. `Status` stays Planned. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

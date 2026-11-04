@@ -334,3 +334,40 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
         assert!(!script.contains(word), "draft-record.sh restates `{word}`");
     }
 }
+
+/// The section the milestone type requires comes from the template `urzua new` fills, so
+/// the drafting command carries it without restating it. A draft that loses the section
+/// is refused by the check the command ends in, not accepted for having come from it.
+#[test]
+fn a_milestone_draft_carries_the_required_section_and_check_refuses_one_without_it() {
+    let (dir, record, s) = scaffold("milestone.md", "Throwaway done means record");
+    let path = dir.join(&record);
+    let scaffolded = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        scaffolded.lines().any(|l| l == "## Done means"),
+        "the scaffold must carry the section the milestone type requires:\n{scaffolded}"
+    );
+
+    fill(&path);
+    let kept = std::fs::read_to_string(&path).unwrap();
+    assert!(kept.lines().any(|l| l == "## Done means"), "{kept}");
+    let without: String = kept.replace(
+        "## Done means\n\nA concrete sentence drafted from the conversation.\n\n",
+        "",
+    );
+    assert_ne!(kept, without, "the fixture must have removed the section");
+    std::fs::write(&path, without).unwrap();
+
+    let out = run_step(&dir, &s[1], "", &record);
+    assert!(
+        !out.status.success(),
+        "a milestone without the required section must not finish clean: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("section.required"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

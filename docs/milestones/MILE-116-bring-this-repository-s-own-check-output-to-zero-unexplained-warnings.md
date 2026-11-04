@@ -29,6 +29,10 @@ decision about them, and a new finding on a new record is indistinguishable from
 work"); this milestone is the work of making that rule cheap to follow by clearing the backlog it
 would otherwise be buried in. Counts were taken by running `urzua check` on this branch (`urzua check docs/` gave the same result).
 
+## Done means
+
+`urzua check` over this repository (what `make records` and `checks.yml` run) reports zero unwaived findings: each warning is fixed at its source or waived by a `waiver` record with a reason and an expiry that `check` itself annotates, `embodiment.locator-promotion-candidate` is off in `.urzua/config.yaml` as an advisory-only rule by maintainer decision, and CI fails when a new finding appears.
+
 ## References
 
 - `SPEC-10` -- the `waiver` record type, the sanctioned way to keep a finding visible but non-blocking.
@@ -40,3 +44,4 @@ would otherwise be buried in. Counts were taken by running `urzua check` on this
 > | 2026-11-02 | Filed. **Why:** `check docs/` exits 0 with 69 standing warnings across six rules; filed so a new finding on a new record is visible instead of lost among them. | **substantive** |
 > | 2026-11-04 | Turned `embodiment.locator-promotion-candidate` off in `.urzua/config.yaml` (advisory only; several ADRs citing one rule module is expected after the MILE-131 split), and applied three record fixes (`MILE-56`, `RFC-39`/`ADR-59`, `BUG-38`). **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #161, #159, #139: `urzua check` over this repository reports zero unwaived findings: each warning is fixed or waived by a waiver record with a reason and an expiry. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

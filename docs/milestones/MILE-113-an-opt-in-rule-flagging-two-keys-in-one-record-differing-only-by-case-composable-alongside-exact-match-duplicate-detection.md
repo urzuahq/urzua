@@ -30,6 +30,10 @@ existing exact-match rules, not a change to any of them -- the same pattern `hea
 mismatch` (`RFC-40`/`ADR-58`) already uses for a declared-field case mismatch, generalized to a
 same-record, no-declaration-required case.
 
+## Done means
+
+The opt-in rule `header.case-variant-key` reports a record whose own header writes two keys differing only by case (Unicode `to_lowercase` equality), beside `duplicate_keys()`'s exact-match check which is unchanged, takes no options, is in `rules/catalog.rs` and `SPEC-2`'s generated rule table, and is covered by `case_variant_key_integration.rs` with a case-variant record and a clean one.
+
 ## References
 
 - `BUG-130` -- the investigation that surfaced this, corrected to `Not a bug` rather than folded
@@ -45,3 +49,4 @@ same-record, no-declaration-required case.
 > | 2026-09-23 | Filed. **Why:** the user proposed this as a genuinely separate, composable rule while working through `BUG-130` with me -- filed as its own milestone rather than bundled into that bug's correction, since it's new work, not a fix to a misdiagnosed one. | **substantive** |
 > | 2026-11-03 | Built: `header.case-variant-key` ships in `rules/header.rs`, registered in `rules/catalog.rs` and `check`, with `SPEC-2`'s generated rule table updated. Narrowest readings taken: the rule takes no options; "differing only by case" is Unicode `to_lowercase` equality over the keys a record wrote (so `CAFÉ`/`café` group, `Maße`/`Masse` do not); one finding per group of distinct spellings, never for an exact repeat of one spelling (that stays `header.required-fields`'s); the population is every loaded record (`header_shape: none` out of scope, unreadable headers unreadable). **Why:** this milestone's design left these open and `ADR-57` allows only an additive, non-merging signal. `Status` is untouched. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #157, #117: opt-in rule `header.case-variant-key` reports two keys differing only by case, beside the exact-match duplicate check. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |

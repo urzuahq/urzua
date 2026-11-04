@@ -63,6 +63,10 @@ not*. A rule catches the result; it does not catch the cause. `AGENTS.md` alread
 planted-violation test observed failing before the fix, and the cause each time was skipping that --
 which no rule can enforce.
 
+## Done means
+
+Opt-in rules report a record in which a section heading appears twice, a heading level is skipped (relative to the type's declared `sections.depth`, not an absolute `##`), and sections appear out of the order the type's template gives; a fixture per case and a clean record show each, the rules are declared in urzua's own `.urzua/config.yaml`, and `check` over urzua's own records reports none unwaived; it builds on `MILE-98`'s sections and leaves `MILE-4`'s required-presence policy where it is.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -70,3 +74,4 @@ which no rule can enforce.
 > | 2026-09-19 | Filed. **Why:** none of the twenty-one shipping rules examines section structure, so `SPEC-1` shipped with two `## Open questions` giving contradictory answers and `check` stayed green. Separated from `MILE-4` deliberately: a missing required section is a governance finding, a duplicated one is a broken document, and no configuration makes the second acceptable. | **substantive** |
 > | 2026-09-19 | Order and skipped-level cases specified against their sources. **Why:** both were stated absolutely. *Out of a declared order* had no declaration to read -- `required_fields` is a set, not a sequence -- and *a skipped level* assumed `##` is always the top, which `MILE-98`'s `sections.depth` makes configurable. A milestone that cannot say where its rule reads from is a direction, not a deliverable. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |

@@ -31,6 +31,10 @@ review loop, step 4, says to fix the mechanism. `BUG-125` is the precedent: the 
 states found in three rules was fixed once in the shared mechanism, not three times at the call sites.
 `BUG-128` is adjacent (config-lint coverage of `none` types) and is not counted as an instance.
 
+## Done means
+
+Every header-reading rule is gated through one shared builder (`scoped_census_records` in `rules/shared.rs`), which classifies a `header_shape: none` type, an unreadable header and the other out-of-scope cases as `OutOfScope` once; a table-driven test iterates every shipped rule over a `header_shape: none` type and fails for a rule that examines it.
+
 ## References
 
 - `BUG-98`, `BUG-124`, `BUG-137`, `BUG-142`, `BUG-147` -- the per-rule instances.
@@ -43,3 +47,4 @@ states found in three rules was fixed once in the shared mechanism, not three ti
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `header_shape: none` gating has been fixed per rule five times and each fix covered only the rules a pass looked at; filed to fix the population mechanism once, with a test that covers every rule. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #136: every header-reading rule is gated through `scoped_census_records`, and a table-driven test iterates every shipped rule over a `header_shape: none` type. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
