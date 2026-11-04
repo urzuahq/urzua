@@ -48,6 +48,8 @@ pub const RULE_DIFF_SOURCE_REQUIRES_RECORD: &str = "diff.source-requires-record"
 pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mixed";
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 
+pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
+
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
     RULE_HEADER_LAYOUT_CONSISTENCY,
@@ -89,6 +91,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_DIFF_SOURCE_REQUIRES_RECORD,
     RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
     RULE_FILENAME_IDENTITY_PATTERN,
+    RULE_INDEX_FRESHNESS,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -260,6 +263,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
         id: RULE_FILENAME_IDENTITY_PATTERN,
         description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined.",
     },
+    RuleMeta {
+        id: RULE_INDEX_FRESHNESS,
+        description: "A committed index of one record type (a file, or a marked list inside a README, in a declared `format` with `{id}`, `{file}` and `{title}` placeholders) lists exactly the records: a record with no entry, an entry naming no record, a duplicated entry, an entry whose file or title differs from the record's, and a line the format does not match are each an error (`MILE-139`). A missing artifact, or one whose declared `begin`/`end` markers are absent, is an error too. Needs `indexes` (`path`, `type`, `format`, optional `begin`/`end`); the engine reads the artifacts and compares, it never regenerates one. The population counts the artifacts compared, so a run over none is distinguishable from a clean one.",
+    },
 ];
 
 /// Rules that derive a record's identity from its filename's type prefix
@@ -283,6 +290,7 @@ pub const RULES_REPORTING_OUTSIDE_THE_CORPUS: &[&str] = &[
     RULE_CLAIM_STATUS_AGREEMENT,
     RULE_DIFF_SOURCE_REQUIRES_RECORD,
     RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
+    RULE_INDEX_FRESHNESS,
 ];
 
 /// Rules that need `relation_pairs` declared (`RFC-47`); enabling one with

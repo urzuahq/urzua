@@ -3072,6 +3072,11 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "boundary.published-path-reference",
             "population is published files, not records",
         ),
+        // File-level: judges committed index artifacts against the records.
+        (
+            "index.freshness",
+            "population is index artifacts, not records",
+        ),
         // Diff-level: judge the changed paths of a `--base` run.
         (
             "diff.source-requires-record",
@@ -3107,6 +3112,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             "boundary.published-path-reference" => {
                 format!("{id}: {{level: error, published_paths: [\"docs/claims\"]}}")
             }
+            "index.freshness" => format!(
+                "{id}: {{level: error, indexes: [{{path: \"docs/claims/c.md\", type: note, format: \"{{id}}\"}}]}}"
+            ),
             "diff.source-requires-record" => {
                 format!("{id}: {{level: error, source_paths: [\"src\"]}}")
             }
