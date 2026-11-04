@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6MA7HNPBGVZ1MFY3NJ6A3NG
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -296,3 +297,10 @@ scoped locator at file level, the state the corpus is in today.
 - `MILE-185`: the build this ADR gates; `MILE-84`: line- and commit-anchored locators, which share this grammar.
 - `MILE-181`: attributed re-baselining.
 - `SPEC-2`, `SPEC-3`, `SPEC-8`, `SPEC-22`: the specs the build documents this in and follows.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Drafted as Proposed, then amended after independent review and two re-checks: full locator grammar and parse order, hashed bytes specified, one authoring route, no file-based grace for a scoped pin, unpinned scopes reported, append-only end kinds, and member resolution for Rust (several container spans, direct-child depth, trait impls, a `semicolon` end kind). | **substantive** |
+> | 2026-11-04 | Status changed from Proposed to Accepted, with methods in the first build. **Why:** Maintainer decision, 2026-11-04, conditional on review; the final re-check left one blocker (member span and depth), now resolved. | **substantive** |
