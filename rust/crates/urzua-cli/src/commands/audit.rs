@@ -7,39 +7,23 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use urzua_core::report::{CheckReport, CouldNotRun, ReportStatus, ScopeInfo};
+use urzua_core::report::{CheckReport, ReportStatus, ScopeInfo};
 use urzua_core::rules;
 
-use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::emit;
+use crate::session::{emit_or_not_run, Session};
 
 pub fn run(config_path: Option<PathBuf>) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    emit_or_not_run(run_inner(config_path))
+}
 
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
-    let (records, _full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, String> {
+    let Session {
+        config,
+        discovered,
+        records,
+        ..
+    } = Session::open(config_path)?;
 
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
     let notices = rules::identity_collision_notices(&identity_collisions);
@@ -98,5 +82,5 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         fail_on: config.fail_on,
     };
 
-    emit(&report)
+    Ok(emit(&report))
 }

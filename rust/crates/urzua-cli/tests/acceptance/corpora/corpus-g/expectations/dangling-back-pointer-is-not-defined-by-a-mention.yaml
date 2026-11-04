@@ -1,0 +1,12 @@
+id: dangling-back-pointer-is-not-defined-by-a-mention
+corpus: corpus-g
+# ADR-0001's prose mentions ADR-0099, but no record is identified as ADR-0099.
+# Identifiers must be collected by definition, not by mention, or this
+# back-pointer would validate against itself.
+commits:
+  - write:
+      src/queue.rs: "// Implements: ADR-0099\nfn queue() { push(1); }\n"
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.back-pointer-resolution, file: src/queue.rs, message_contains: ADR-0099}

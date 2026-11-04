@@ -10,10 +10,9 @@ use urzua_core::report::{
 };
 use urzua_core::rules;
 
-use crate::discovery::{
-    compute_drifted_records, find_repo_root, load_config, load_records, scope_to_requested_paths,
-};
+use crate::discovery::{compute_drifted_records, scope_to_requested_paths};
 use crate::emit;
+use crate::session::Session;
 
 /// Whether an already-resolved (canonicalized) path stays inside the
 /// repository -- the one containment test every `claim_paths` check needs,
@@ -247,84 +246,60 @@ pub fn run(
     base: Option<String>,
     fail_on: Option<urzua_core::config::FailOn>,
 ) -> ExitCode {
-    let repo_root = match find_repo_root(&paths) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    // Narrowing happens between discovery and loading, so the corpus a
+    // pointer resolves against stays whole (BUG-60, MILE-123): the requested
+    // scopes and the changed set only narrow what is *reported on*.
+    let mut requested_scopes = Vec::new();
+    let mut changed = None;
+    let Session {
+        repo_root,
+        config_path,
+        config,
+        discovered,
+        records,
+        full_text,
+    } = match Session::open_with(&paths, config_path, |repo_root, _config, discovered| {
+        requested_scopes = crate::discovery::relative_scopes(repo_root, &paths)?;
 
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let mut discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
-    let requested_scopes = match crate::discovery::relative_scopes(&repo_root, &paths) {
-        Ok(s) => s,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    // Argv paths override discovery (SPEC-2, BUG-24) -- see resolve_argv_overrides.
-    if !requested_scopes.is_empty() {
-        let extra = match crate::discovery::resolve_argv_overrides(
-            &repo_root,
-            &requested_scopes,
-            &discovered.paths,
-        ) {
-            Ok(e) => e,
-            Err(e) => return emit(&CouldNotRun::from(e)),
-        };
-        if !extra.is_empty() && base.is_some() {
-            // The diff lists tracked paths only, so a named file outside the
-            // tracked set could never be examined: refusing is the alternative
-            // to dropping it in silence (`BUG-24`'s failure shape).
-            return emit(&CouldNotRun::from(
-                "--base cannot be combined with a named file git does not track; \
+        // Argv paths override discovery (SPEC-2, BUG-24) -- see resolve_argv_overrides.
+        if !requested_scopes.is_empty() {
+            let extra = crate::discovery::resolve_argv_overrides(
+                repo_root,
+                &requested_scopes,
+                &discovered.paths,
+            )?;
+            if !extra.is_empty() && base.is_some() {
+                // The diff lists tracked paths only, so a named file outside the
+                // tracked set could never be examined: refusing is the alternative
+                // to dropping it in silence (`BUG-24`'s failure shape).
+                return Err(
+                    "--base cannot be combined with a named file git does not track; \
                  drop --base or track the file"
-                    .to_string(),
-            ));
-        }
-        if !extra.is_empty() {
-            discovered.paths.extend(extra);
-            discovered.paths.sort();
-            discovered.paths.dedup();
-            discovered.source = urzua_io::DiscoverySource::Argv;
-        }
-    }
-
-    // Computed against the full tracked set, then used only to narrow what is
-    // reported on: the corpus a pointer resolves against stays whole (`MILE-123`).
-    let changed = match &base {
-        Some(base) => match urzua_io::changed_paths_since(&repo_root, base) {
-            Ok(c) => {
-                discovered.source = urzua_io::DiscoverySource::GitDiff;
-                Some(c)
+                        .to_string(),
+                );
             }
-            Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-        },
-        None => None,
+            if !extra.is_empty() {
+                discovered.paths.extend(extra);
+                discovered.paths.sort();
+                discovered.paths.dedup();
+                discovered.source = urzua_io::DiscoverySource::Argv;
+            }
+        }
+
+        // Computed against the full tracked set, then used only to narrow what is
+        // reported on: the corpus a pointer resolves against stays whole (`MILE-123`).
+        if let Some(base) = &base {
+            changed =
+                Some(urzua_io::changed_paths_since(repo_root, base).map_err(|e| e.to_string())?);
+            discovered.source = urzua_io::DiscoverySource::GitDiff;
+        }
+        Ok(())
+    }) {
+        Ok(session) => session,
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let mut scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
-
-    // A path argument narrows what is *reported on*. It must not narrow the
-    // corpus a pointer resolves against: a target outside the requested path
-    // still exists, and judging it absent turns a clean corpus into a failing
-    // one purely by how the check was invoked (BUG-60).
-    let (records, full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
 
     // A diff run examines the changed records and every record a change
     // reaches, not the changed files alone (`MILE-123`): the corpus above is

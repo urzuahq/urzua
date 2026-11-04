@@ -35,6 +35,11 @@ jobs:
   verify:
     if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
     uses: ./.github/workflows/checks.yml
+    # checks.yml's gate can comment on a pull request; a caller must grant
+    # what the called workflow asks for. Nothing comments on a release tag.
+    permissions:
+      contents: read
+      pull-requests: write
     with:
       ref: ${{ github.event.pull_request.merge_commit_sha }}
 

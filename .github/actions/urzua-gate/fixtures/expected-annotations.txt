@@ -1,0 +1,2 @@
+::error file=docs/adr/ADR-9-x.md,title=header.required-fields::missing required header field 'Status' for record type 'adr'
+::warning file=docs/milestones/MILE-3-a.md,line=4,title=pointer.resolution::Implements: ADR-1 | does not resolve,%0Asecond line: 100%25

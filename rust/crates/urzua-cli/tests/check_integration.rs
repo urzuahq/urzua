@@ -3648,3 +3648,268 @@ fn a_config_level_finding_names_a_repository_relative_config_path_observed_faili
     assert_eq!(hits[0]["file"], ".urzua/config.yaml", "{parsed}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---- MILE-179: doctor reports each local hook layer's wiring (ADR-71) ----
+
+fn hook_fixture(name: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    dir
+}
+
+fn plant_hook(path: &Path, body: &str, executable: bool) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, body).unwrap();
+    let mode = if executable { 0o755 } else { 0o644 };
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+}
+
+/// (state, status) of the hook check for one layer.
+fn hook_state(dir: &Path, layer: &str) -> (String, String) {
+    let out = run_urzua(dir, &["doctor"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let c = parsed["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "hook-wired" && c["layer"] == layer)
+        .unwrap_or_else(|| panic!("no hook-wired check for {layer}: {parsed}"));
+    (
+        c["state"].as_str().unwrap().to_string(),
+        c["status"].as_str().unwrap().to_string(),
+    )
+}
+
+#[test]
+fn doctor_reports_a_hook_that_is_not_installed() {
+    let dir = hook_fixture("hook-absent");
+    assert_eq!(
+        hook_state(&dir, "pre-commit"),
+        ("not-installed".into(), "warn".into())
+    );
+    assert_eq!(
+        hook_state(&dir, "pre-push"),
+        ("not-installed".into(), "warn".into())
+    );
+}
+
+#[test]
+fn doctor_reports_a_hook_that_runs_urzua() {
+    let dir = hook_fixture("hook-running");
+    plant_hook(
+        &dir.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nexec urzua check --base HEAD\n",
+        true,
+    );
+    assert_eq!(
+        hook_state(&dir, "pre-commit"),
+        ("installed-running-urzua".into(), "ok".into())
+    );
+}
+
+#[test]
+fn doctor_reports_a_hook_that_does_not_run_urzua() {
+    let dir = hook_fixture("hook-other");
+    plant_hook(
+        &dir.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\necho hello\n",
+        true,
+    );
+    assert_eq!(
+        hook_state(&dir, "pre-commit"),
+        ("installed-not-running-urzua".into(), "warn".into())
+    );
+}
+
+#[test]
+fn doctor_reports_a_non_executable_hook_git_would_ignore() {
+    let dir = hook_fixture("hook-noexec");
+    plant_hook(
+        &dir.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nurzua check\n",
+        false,
+    );
+    assert_eq!(
+        hook_state(&dir, "pre-commit"),
+        ("installed-not-executable".into(), "warn".into())
+    );
+}
+
+#[test]
+fn doctor_follows_core_hooks_path() {
+    let dir = hook_fixture("hook-hookspath");
+    plant_hook(
+        &dir.join(".githooks/pre-commit"),
+        "#!/bin/sh\nurzua check --base HEAD\n",
+        true,
+    );
+    // A hook in .git/hooks is not what git runs once hooksPath is set.
+    plant_hook(&dir.join(".git/hooks/pre-push"), "urzua check\n", true);
+    git(&dir, &["config", "core.hooksPath", ".githooks"]);
+    assert_eq!(
+        hook_state(&dir, "pre-commit"),
+        ("installed-running-urzua".into(), "ok".into())
+    );
+    assert_eq!(
+        hook_state(&dir, "pre-push"),
+        ("not-installed".into(), "warn".into())
+    );
+}
+
+// ---- MILE-179: the repository's own versioned hooks ----
+
+fn repo_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .unwrap()
+}
+
+/// Runs this repository's pre-commit hook in a fixture whose `rust/target`
+/// holds `bin` (or nothing).
+fn run_pre_commit(name: &str, bin: Option<&str>) -> std::process::Output {
+    let dir = hook_fixture(name);
+    if let Some(body) = bin {
+        plant_hook(&dir.join("rust/target/release/urzua"), body, true);
+    }
+    Command::new("bash")
+        .arg(repo_root().join(".git-hooks/pre-commit"))
+        .current_dir(&dir)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn pre_commit_hook_says_loudly_when_the_binary_is_absent() {
+    let out = run_pre_commit("hook-nobin", None);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("NOT RUN"),
+        "must say it did not run: {stderr}"
+    );
+    assert!(
+        stderr.contains("CI"),
+        "must say CI is the guarantee: {stderr}"
+    );
+    assert!(
+        stderr.contains("make build"),
+        "must say how to fix it: {stderr}"
+    );
+    // Warn, not fail: a fresh clone must still be able to make the commit
+    // that builds (ADR-71 option D: hooks cannot be forced).
+    assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
+fn pre_commit_hook_stops_a_commit_on_a_blocking_finding_and_shows_it() {
+    let out = run_pre_commit(
+        "hook-block",
+        Some("#!/bin/sh\necho '{\"findings\":[\"bad header\"]}'\nexit 1\n"),
+    );
+    assert_eq!(out.status.code(), Some(1));
+    let all = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        all.contains("bad header"),
+        "findings must be visible: {all}"
+    );
+}
+
+#[test]
+fn pre_commit_hook_reports_a_check_that_could_not_run() {
+    let out = run_pre_commit("hook-notrun", Some("#!/bin/sh\necho oops >&2\nexit 2\n"));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("NOT RUN"), "{stderr}");
+    assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
+fn pre_commit_hook_passes_silently_on_a_clean_check() {
+    let out = run_pre_commit("hook-clean", Some("#!/bin/sh\necho '{}'\nexit 0\n"));
+    assert_eq!(out.status.code(), Some(0));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("NOT RUN"));
+}
+
+/// The acceptance case: the real binary, a real hook, a planted bad header.
+#[test]
+fn pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary() {
+    let dir = hook_fixture("hook-real");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n  header.required-fields: error\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [Status]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 -- x\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    std::fs::create_dir_all(dir.join("rust/target/release")).unwrap();
+    std::fs::copy(
+        env!("CARGO_BIN_EXE_urzua"),
+        dir.join("rust/target/release/urzua"),
+    )
+    .unwrap();
+    // The planted defect: the required Status field is removed.
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nDate: 2026-01-01\n---\n# 1 -- x\n",
+    )
+    .unwrap();
+    let out = Command::new("bash")
+        .arg(repo_root().join(".git-hooks/pre-commit"))
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn ci_wired_recognises_the_gate_action_as_an_invocation() {
+    // MILE-180: a workflow that runs the checker through urzua's own reusable
+    // action never spells `urzua check`; reporting it unwired would be a false
+    // negative about a repository that is wired in.
+    let dir = fixture_repo("ci-wired-action");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/records.yml"),
+        "name: records\njobs:\n  gate:\n    steps:\n      - uses: urzuahq/urzua/.github/actions/urzua-gate@abc\n",
+    )
+    .unwrap();
+    let out = run_urzua(&dir, &["doctor"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let ci = parsed["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "ci-wired")
+        .unwrap();
+    assert_eq!(ci["status"], "ok", "{ci}");
+}

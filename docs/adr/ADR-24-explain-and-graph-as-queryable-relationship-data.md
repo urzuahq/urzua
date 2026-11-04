@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/graph.rs@sha256:1638485fe98c800c7494d800ea27219c2df5afe525df75d7a0688a66947b702b, code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:b08e0b32fa62fec151a02bebcc6761706881e0fe2b928007d2afc5e64c08682e, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:86de33bf27bc82f3da6783c3d2840c1937d82f6a420586f9d34dabfca28dc851, test:rust/crates/urzua-core/src/graph.rs@sha256:1638485fe98c800c7494d800ea27219c2df5afe525df75d7a0688a66947b702b
+Realized-by: code:rust/crates/urzua-core/src/graph.rs@sha256:33b1c278a9ff74a3979c96028d3841f384c1c0a6c52705c1e24d3ddcf4593a24, code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:42e8ee239a73f4aeea8607492427c3f828f10525c03107100c0b89466746e459, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:41be294e4e7cf37f0df56bc57456c97a40d9332a2de7f001ab98254d87326c2b, test:rust/crates/urzua-core/src/graph.rs@sha256:33b1c278a9ff74a3979c96028d3841f384c1c0a6c52705c1e24d3ddcf4593a24
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -66,3 +66,4 @@ how any existing field is parsed.
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 46535c832. | **structural** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/graph.rs` 1638485fe98c -> 33b1c278a9ff, `rust/crates/urzua-cli/src/commands/explain.rs` b08e0b32fa62 -> 42e8ee239a73, `rust/crates/urzua-cli/src/commands/graph.rs` 86de33bf27bc -> 41be294e4e7c. Reason: MILE-173 moved the shared root, config, discovery and record-load preamble of explain and graph into session.rs; their output and exit codes are unchanged, pinned by could_not_run_integration.rs **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

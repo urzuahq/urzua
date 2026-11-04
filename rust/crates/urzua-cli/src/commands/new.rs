@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use urzua_core::report::{CouldNotRun, NewReport, Notice, NoticeSeverity, ReportStatus};
 
-use crate::discovery::{find_repo_root, load_config};
+use crate::session::Workspace;
 use crate::{emit, NOTICE_IDENTITY};
 
 pub fn run(
@@ -18,15 +18,12 @@ pub fn run(
     title: Option<String>,
     by: Option<String>,
 ) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
+    let Workspace {
+        repo_root,
+        config_path,
+        config,
+    } = match Workspace::open(&[], config_path) {
+        Ok(session) => session,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 

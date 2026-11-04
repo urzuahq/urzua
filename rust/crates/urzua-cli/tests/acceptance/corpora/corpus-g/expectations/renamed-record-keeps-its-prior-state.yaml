@@ -1,0 +1,13 @@
+id: renamed-record-keeps-its-prior-state
+corpus: corpus-g
+# History that stops at a rename reads as "no prior state" and the corpus as
+# clean. The record is renamed, then its cited file changes: drift is found.
+commits:
+  - rename:
+      - {from: records/ADR-0001-queue.md, to: records/ADR-0001-work-queue.md}
+  - write:
+      src/queue.rs: "fn queue() { push(3); }\n"
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.consistency, file: records/ADR-0001-work-queue.md}

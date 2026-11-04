@@ -1,0 +1,13 @@
+id: source-change-with-a-record-change-is-clean
+corpus: corpus-h
+# The positive control for the requires-record rule: the same source change
+# beside a change to a governing record draws no requires-record finding.
+commits:
+  - write:
+      src/tests/t.rs: "fn t() { 1; }\n"
+      records/adr/ADR-0001-clean.md: "---\nStatus: Accepted\n---\n# ADR-0001 — Clean\n\n## Context\n\nThe clean positive control, edited.\n"
+invocation: [--config, .urzua/diff.yaml, check, --base, base]
+expect_exit: 0
+expect_rules_ran: [diff.source-requires-record]
+expect_no_findings:
+  - {rule: diff.source-requires-record}

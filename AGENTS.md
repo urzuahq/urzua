@@ -149,6 +149,13 @@ conversation history. If you're doing multi-step work worth remembering:
   engine's (fixed by `urzua export`).
 - Before assuming something isn't already tracked, run `urzua check docs/`, `urzua explain <path>`,
   or `urzua graph` against the real corpus rather than trusting memory of an earlier turn.
+- **Draft records through the commands, and suggest them.** `/rfc`, `/adr` and `/milestone`
+  (`.claude/commands/`, `ADR-70`) scaffold through `urzua new`, stage the file, run `urzua check`
+  on it and report how many records it examined; they never set a decision status. When you
+  notice a direction being proposed with real tradeoffs but not settled, offer `/rfc`; when you
+  notice a choice actually being made ("let's go with X"), offer `/adr`; when decided work is
+  left unbuilt, offer `/milestone`. Offer, don't draft unprompted, and let the user say no. No
+  tool catches a missed suggestion; this is an instruction.
 - **Before hand-writing a field the tool already computes, run the subcommand that computes it.**
   `urzua fix --apply` derives `Embodiment` from `Realized-by`'s actual tier — don't hand-assert
   `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.

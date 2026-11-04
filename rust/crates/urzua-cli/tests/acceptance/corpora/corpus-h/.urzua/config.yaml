@@ -1,0 +1,20 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records/adr
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]
+      failure: []
+      implementable: [Accepted]
+    sections:
+      from: headings
+      required:
+        - {name: Context}
+rules:
+  header.required-fields: error
+  section.required: error

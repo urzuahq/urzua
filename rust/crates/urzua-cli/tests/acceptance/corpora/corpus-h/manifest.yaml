@@ -1,0 +1,18 @@
+# Never reflow or normalize these fixtures: whitespace and wrapping are the material under test.
+fixtures:
+  - {path: .urzua/config.yaml, irregularity: "the default config: a required Context section; not a record."}
+  - {path: .urzua/diff.yaml, irregularity: "a config declaring the two diff-gate rules; not a record."}
+  - {path: .urzua/boundary.yaml, irregularity: "a config declaring one published path; not a record."}
+  - {path: .urzua/refs.yaml, irregularity: "a config checking cited issue numbers against a snapshot; not a record."}
+  - {path: .urzua/delivery.yaml, irregularity: "a milestone type whose Status is held to its delivery evidence; not a record."}
+  - {path: .urzua/known-refs.json, irregularity: "a fixture snapshot of the issues and pulls that exist; no network is used."}
+  - {path: records/adr/ADR-0001-clean.md, irregularity: "none -- the clean positive control, and the record a diff change touches."}
+  - {path: records/adr/ADR-0002-refs.md, irregularity: "cites #7, which the snapshot lists, and #99, which it does not."}
+  - {path: records/adr/ADR-0003-off-topic.md, irregularity: "a Context section that is present and says nothing about the decision: structure satisfied, content wrong."}
+  - {path: records/milestones/MILE-0001-built.md, irregularity: "Planned while its Realized-by locator computes to Implemented."}
+  - {path: records/milestones/MILE-0002-unevidenced.md, irregularity: "Done with no Realized-by: a success status with nothing behind it."}
+  - {path: records/milestones/MILE-0003-done.md, irregularity: "Done with an Implemented locator: the clean control."}
+  - {path: src/lib.rs, irregularity: "application source a diff case edits; not a record."}
+  - {path: src/tests/t.rs, irregularity: "source excluded from the mixed-change rule; not a record."}
+  - {path: pub/lib.rs, irregularity: "a published file citing ADR-0001 in a comment; not a record."}
+  - {path: pub/clean.rs, irregularity: "a published file citing nothing; not a record."}
