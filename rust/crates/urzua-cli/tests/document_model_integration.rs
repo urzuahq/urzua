@@ -1,5 +1,5 @@
 //! MILE-98 slice 2: a record type's declared `identity` and `fields` drive
-//! record loading. Runs the real binary against a Nygard-style corpus
+//! record loading. Runs the real binary against a prefix-lines corpus
 //! (bare zero-padded filenames, bare `Date:` lines) with a hand-written
 //! config and no code specific to that corpus.
 
@@ -43,7 +43,7 @@ fn run(dir: &Path, args: &[&str]) -> std::process::Output {
         .expect("urzua binary should run")
 }
 
-const NYGARD: &str = "schema_version: 2\nrules: {header.required-fields: error, filename.title-consistency: error}\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    prefix: ADR\n    required_fields: [\"Date\"]\n    identity: {from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: prefix-lines}\n";
+const PREFIX_LINES: &str = "schema_version: 2\nrules: {header.required-fields: error, filename.title-consistency: error}\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    prefix: ADR\n    required_fields: [\"Date\"]\n    identity: {from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: prefix-lines}\n";
 
 fn export(dir: &Path) -> serde_json::Value {
     let out = run(dir, &["export", "--format", "json"]);
@@ -57,10 +57,10 @@ fn export(dir: &Path) -> serde_json::Value {
 }
 
 #[test]
-fn a_nygard_corpus_gets_ids_and_fields_from_its_declaration() {
+fn a_prefix_lines_corpus_gets_ids_and_fields_from_its_declaration() {
     let dir = fixture_repo(
-        "nygard",
-        NYGARD,
+        "prefix-lines",
+        PREFIX_LINES,
         &[
             (
                 "doc/adr/ADR-0001-record-decisions.md",
@@ -109,7 +109,7 @@ fn the_same_corpus_without_a_declaration_has_no_identity_and_no_header() {
 fn a_title_form_mismatch_is_reported_for_a_declaring_type() {
     let dir = fixture_repo(
         "title",
-        NYGARD,
+        PREFIX_LINES,
         &[(
             "doc/adr/ADR-0001-record-decisions.md",
             "# 1 Record decisions\n\nDate: 2016-02-12\n",
@@ -148,18 +148,18 @@ fn an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type() {
     assert!(all.contains("adr") && all.contains("(?P<prefix>"), "{all}");
 }
 
-/// The `MILE-51` shape end to end: bare-numbered file names, a `# N. Title`
+/// A bare-numbered corpus end to end: bare-numbered file names, a `# N. Title`
 /// H1, a bare `Date:` line and `## Status`/`## Context`/`## Decision`/
 /// `## Consequences`, with a hand-written config and no code specific to it.
 #[test]
-fn a_bare_numbered_nygard_corpus_passes_a_hand_written_config() {
+fn a_bare_numbered_corpus_passes_a_hand_written_config() {
     let config = "schema_version: 2\nfail_on: warning\nrules: {header.required-fields: error, section.required: error, field.quality: error, header.field-set-consistency: error}\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    required_fields: [\"Date\"]\n    known_fields: [\"Date\"]\n    fields: {from: prefix-lines}\n    sections:\n      from: headings\n      required: [{name: Status}, {name: Context}, {name: Decision}, {name: Consequences}]\n";
     let record = |n: u32| {
-        format!("# {n}. Decision {n}\n\nDate: 2016-02-{:02}\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\ne\n", 10 + n)
+        format!("# {n}. Decision {n}\n\nDate: 2000-01-{:02}\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\ne\n", 10 + n)
     };
     let (a, b) = (record(1), record(2));
     let dir = fixture_repo(
-        "bare-nygard",
+        "bare-numbered",
         config,
         &[
             ("doc/adr/0001-first.md", &a),

@@ -163,28 +163,80 @@ struct Slot<'a> {
 impl Slot<'_> {
     /// The text before the first `##` heading, as a section with no heading.
     fn preamble(&self, sections: &[Section]) -> Section {
-        let end = sections
-            .iter()
-            .map(|s| s.line)
-            .min()
-            .map_or(usize::MAX, |line| line - 1);
-        let lines: Vec<&str> = self
-            .text
-            .lines()
-            .enumerate()
-            .skip(self.header_end)
-            .take_while(|(i, _)| *i < end)
-            .map(|(_, l)| l)
-            .collect();
-        Section {
-            heading: String::new(),
-            level: 2,
-            parent: None,
-            line: self.header_end,
-            end_line: self.header_end + lines.len(),
-            body: lines.iter().map(|l| format!("{l}\n")).collect(),
-        }
+        preamble_of(self.text, self.header_end, sections)
     }
+}
+
+/// The text between the header region and the first section.
+fn preamble_of(text: &str, header_end: usize, sections: &[Section]) -> Section {
+    let end = sections
+        .iter()
+        .map(|s| s.line)
+        .min()
+        .map_or(usize::MAX, |line| line - 1);
+    let lines: Vec<&str> = text
+        .lines()
+        .enumerate()
+        .skip(header_end)
+        .take_while(|(i, _)| *i < end)
+        .map(|(_, l)| l)
+        .collect();
+    Section {
+        heading: String::new(),
+        level: 2,
+        parent: None,
+        line: header_end,
+        end_line: header_end + lines.len(),
+        body: lines.iter().map(|l| format!("{l}\n")).collect(),
+    }
+}
+
+/// One section of a record as `export` hands it over: the declared name
+/// (an alias resolves to the `required` name it satisfies, `MILE-165`), the
+/// heading as written, and the parsed span and content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportedSection {
+    pub name: String,
+    pub heading: String,
+    pub line: usize,
+    pub end_line: usize,
+    pub content: String,
+}
+
+/// The sections and preamble of a record whose type declares `sections`,
+/// read by the same parser `section.required` uses; `None` when the type
+/// declares none (so the caller can say "no declaration" rather than
+/// "no sections").
+pub fn exported_sections(
+    record: &Record,
+    record_type: &crate::config::RecordTypeConfig,
+    text: &str,
+) -> Option<(Vec<ExportedSection>, String)> {
+    let decl = declared_model(&record.record_type, record_type)
+        .ok()
+        .flatten()?
+        .sections?;
+    let header_end = record.header.region.map_or(0, |(_, end)| end);
+    let sections = record_sections(record, text);
+    let preamble = preamble_of(text, header_end, &sections).body;
+    let exported = sections
+        .into_iter()
+        .map(|s| {
+            let name = decl
+                .required
+                .iter()
+                .find(|r| r.level == s.level && r.headings().any(|h| h == s.heading))
+                .map_or_else(|| s.heading.clone(), |r| r.name.clone());
+            ExportedSection {
+                name,
+                heading: s.heading,
+                line: s.line,
+                end_line: s.end_line,
+                content: s.body,
+            }
+        })
+        .collect();
+    Some((exported, preamble))
 }
 
 /// Whether the declaration reads the preamble and the block's marker sits in

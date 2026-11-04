@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M1Y5JTH1RN024BFKVMV0Q6XF
-Phase: '1'
+Phase: '0'
 Track: review-workflow
 Implements: —
 ---
@@ -17,12 +17,13 @@ Named explicitly in ADR-34/SPEC-6 as deferred until a real case needs it -- Phas
 
 ## Done means
 
-A `Depends-on`/`Blocked-by` relationship is declared in config as a pointer field, `check` reports an unresolved target and a cycle (a planted cycle fixture), and the relationship orders this repository's milestones beyond `Phase` and `Track`; `RFC-48` is Accepted and its design is what is built, and the capability is exercised in urzua's own `.urzua/config.yaml` and milestones.
+`RFC-48` section 1 is built, and no more of `RFC-48` than that. A `relation_pairs` entry declares `Depends-on` and its inverse `Blocks` as a sequencing pair with an `acyclic` key; `Depends-on` is a pointer field. `check` reports a cycle in an acyclic pair (a planted-cycle fixture, including a self-reference and a cycle across record types) and a `Depends-on` value that resolves to no record (a dangling-target fixture), and a pair declared `reciprocity: required` reports a missing inverse through the existing reciprocity rule. A declared acyclic pair that examines no claims is reported, not a silent pass. The behaviour is documented in `SPEC-3`. It is exercised in this repository: `.urzua/config.yaml` declares the pair and at least one committed milestone carries a `Depends-on` value that `check` examines. Out of scope, owned elsewhere: `urzua roadmap` (`MILE-182`), the derived `blocked` value (`MILE-144`), the `condition` record type and the other `sequence.*` rules of `RFC-48`; migrating the existing `Blocked-on` values is a separate decision made after this lands.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | `Phase` `1` -> `0`; Done means narrowed to the sequencing relation, its cycle and dangling-target findings and their use in this repository. **Why:** Maintainer decision, 2026-11-04: `MILE-27` is pulled into Phase 0 because `MILE-182` (`urzua roadmap`) and the derived `blocked` value of `MILE-144` wait on it. The earlier Done means said "`RFC-48`'s design is what is built", which would have absorbed the roadmap command, conditions and derived values that `MILE-182` and `MILE-144` own. | **substantive** |
 > | 2026-11-04 | `Blocked-on: RFC-48` removed. **Why:** `RFC-48` is accepted; this milestone is buildable. | **substantive** |
 > | 2026-11-02 | `Blocked-on` moved from the trigger to `RFC-48`. **Why:** The trigger fired: planning Phase 0 needed an order `Phase`/`Track` could not express; `RFC-48` proposes the design. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
