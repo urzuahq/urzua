@@ -40,6 +40,7 @@ pub const RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING: &str =
     "config.known-fields-declaration-missing";
 pub const RULE_FIELD_LEADING_RESERVED_INDICATOR: &str = "field.leading-reserved-indicator";
 pub const RULE_HEADER_CASE_VARIANT_KEY: &str = "header.case-variant-key";
+pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 
 pub const ALL_RULES: &[&str] = &[
@@ -76,6 +77,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_RELATION_TARGET_STATUS_UNDECLARED,
     RULE_FIELD_LEADING_RESERVED_INDICATOR,
     RULE_HEADER_CASE_VARIANT_KEY,
+    RULE_CITATION_RESOLUTION,
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
 ];
 
@@ -219,6 +221,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_HEADER_CASE_VARIANT_KEY,
         description: "One record's header writes two keys differing only by case (`Status`/`status`), reported as the fact of the difference, never as which spelling is right (`MILE-113`). Opt-in and declaration-free: it reads the keys a record wrote, not a declared vocabulary, and composes beside the exact-match rules without changing them (`ADR-57`). An exact repeat of one spelling stays `header.required-fields`' finding.",
+    },
+    RuleMeta {
+        id: RULE_CITATION_RESOLUTION,
+        description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in and option-free; its population counts the citations examined, so a run over none is distinguishable from a clean one.",
     },
     RuleMeta {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
