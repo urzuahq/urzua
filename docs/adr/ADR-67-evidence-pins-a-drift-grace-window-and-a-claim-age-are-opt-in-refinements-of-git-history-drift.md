@@ -97,3 +97,4 @@ claim age) are built as written.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Amendment added: attributed re-baselining is built (`#238`, `MILE-181`), and `#182`, `MILE-166` and `#214` are recorded. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. `Status` stays `Proposed` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-04 | `Implements: ADR-67` back-pointers added in `rust/crates/urzua-cli/src/discovery.rs` (the pin branch, the grace window, the audit anchor), `rust/crates/urzua-core/src/fix.rs` (`detect_rebaselines`, `apply_rebaseline`) and `rust/crates/urzua-cli/src/commands/fix.rs` (`run_rebaseline`). Comments only; no behaviour changes. **Why:** the drift review of 2026-11-04 found no back-pointer from the code to this record. `Status` stays `Proposed`. | **structural** |
