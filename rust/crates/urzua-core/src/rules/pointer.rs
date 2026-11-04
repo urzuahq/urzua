@@ -292,6 +292,7 @@ mod tests {
             (
                 "rfc",
                 crate::config::RecordTypeConfig {
+                    exclude_files: Vec::new(),
                     relation_fields: Some(crate::config::RelationFields {
                         status: Some("State".to_string()),
                         ..Default::default()
@@ -526,6 +527,7 @@ mod tests {
         let config = config_with_types(vec![(
             "code",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 known_fields: Some(vec!["Derives-from".to_string()]),
                 pointer_fields: Some(vec!["Derives-from".to_string()]),
                 narrative_fields: Some(vec![]),

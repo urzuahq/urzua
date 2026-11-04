@@ -174,6 +174,7 @@ mod tests {
             record_types: [(
                 record_type.to_string(),
                 crate::config::RecordTypeConfig {
+                    exclude_files: Vec::new(),
                     dir: "docs/x".to_string(),
                     identity: None,
                     fields: None,
