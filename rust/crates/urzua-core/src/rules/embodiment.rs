@@ -713,6 +713,7 @@ mod tests {
         let config = config_with_types(vec![(
             "adr",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     embodiment_locator: Some("Evidence".to_string()),
                     ..Default::default()
@@ -778,6 +779,7 @@ mod tests {
         let config = config_with_types(vec![(
             "adr",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     embodiment_state: Some("Phase".to_string()),
                     embodiment_locator: Some("Evidence".to_string()),

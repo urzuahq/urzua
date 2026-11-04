@@ -575,6 +575,7 @@ mod tests {
         let config = config_with_types(vec![(
             "adr",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     supersession: Some("Replaces".to_string()),
                     ..Default::default()

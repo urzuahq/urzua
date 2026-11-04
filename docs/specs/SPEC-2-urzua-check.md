@@ -1,5 +1,5 @@
 ---
-Version: '0.28'
+Version: '0.29'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -133,6 +133,10 @@ directory argument still scopes the tracked-only sweep rather than walking the f
 (`BUG-24`): the "never a raw directory walk" guarantee above governs a directory argument the same as
 the default sweep, and only a path naming one file precisely bypasses the tracked-set filter.
 
+A file named in its type's `exclude_files` (`SPEC-3`, `MILE-150`) is dropped at this step: it is never
+loaded as a record, so it is in no rule's population, `files_examined` and the type's file census for
+`filename.identity-pattern`.
+
 | `scope.source` | Meaning | `base` | Produced today |
 |---|---|---|---|
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
@@ -265,7 +269,7 @@ which stays only for what genuinely isn't built yet.
 | `section.shape` | A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning. |
 | `diff.source-requires-record` | A `--base` diff changes a path under a declared `source_paths` prefix but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`). One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. |
 | `diff.source-and-records-mixed` | A `--base` diff changes both a governed record and a path under a declared `application_paths` prefix (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean. |
-| `filename.identity-pattern` | A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined. |
+| `filename.identity-pattern` | A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined, and omits a file the type declares in `exclude_files` (`MILE-150`). |
 | `status.undeclared-value` | A record's `Status` is not one of the values its type declares in `statuses.values` (`MILE-132`). A type declaring no `statuses` is not examined, and a record with no `Status` is left to `header.required-fields`. |
 | `status.required-field-missing` | A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. |
 | `status.forbidden-field-present` | A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined. |
@@ -362,6 +366,10 @@ while some rule is enabled and ran: that is `"ok"` with `files_examined: 0` and 
 is non-fatal observations (`Info`/`Warning` only) that never affect `status` or the exit code, omitted
 entirely when empty -- the same is true of a `Finding`'s own `waived` field, omitted unless a waiver
 covers it.
+
+Every finding's `file` is relative to the repository root, including a finding about the configuration
+(`.urzua/config.yaml`), so a report compares and baselines across checkouts (`BUG-185`). A `--config`
+outside the repository has no relative form and is named as given.
 
 ## Exit codes
 
@@ -479,3 +487,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.26`. `embodiment.requires-accepted-status` also allows the claim at the type's declared `statuses.claim_retained`, not only `success`. Rule id unchanged. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a record may keep an Implemented or Verified claim in a status reached only after acceptance. | **substantive** |
 > | 2026-11-04 | Bumped to `0.27`. Inside `drift_grace_days`, `embodiment.consistency` accepts either the tier value or a stated `Drift detected` (the window only holds back reporting, so it never contradicts a record that already says so) and `urzua fix` leaves such a record alone; drift outside the window still computes `Drift detected`. The generated rule table row says so. **Why:** `BUG-179`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.28`. Exit code 1 also covers an unwaived warning when `fail_on: warning` or `--fail-on warning` is in force; the report itself is unchanged. **Why:** `MILE-145` -- a repository at zero warnings needs warnings to fail its own build. | **substantive** |
+> | 2026-11-04 | Bumped to `0.29`. Documented that a file a type lists in `exclude_files` is dropped at discovery, and that every finding's `file`, a config-level one included, is repository-relative. `filename.identity-pattern`'s generated row says its census omits an excluded file. **Why:** `MILE-150`, `BUG-183` and `BUG-185`. | **substantive** |

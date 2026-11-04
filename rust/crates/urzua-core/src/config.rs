@@ -325,6 +325,14 @@ impl<'de> Deserialize<'de> for RuleSetting {
     }
 }
 
+impl RecordTypeConfig {
+    /// Whether `file_name` is declared a non-record file of this type
+    /// (`exclude_files`): it is not loaded and no rule examines it.
+    pub fn excludes(&self, file_name: &str) -> bool {
+        self.exclude_files.iter().any(|f| f == file_name)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordTypeConfig {
@@ -379,6 +387,14 @@ pub struct RecordTypeConfig {
     /// `dir` already decouples the type name from its directory name.
     #[serde(default)]
     pub prefix: Option<String>,
+    /// File names directly in `dir` that are not this type's records (an index
+    /// `README.md`, a `_template.md`). A named file is never loaded as a
+    /// record, so it is in no rule's population and not in the type's file
+    /// census; an unnamed stray file is still reported by
+    /// `filename.identity-pattern`. Bare file names only, matched exactly
+    /// (MILE-150): a path or a glob would be a second selection language.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude_files: Vec<String>,
     /// The expected line layout (MILE-0075) within `Blockquote`'s own
     /// tolerance for how fields are laid out -- one field per line, or
     /// several pipe-delimited on one line. Declared, not voted, the same
@@ -650,6 +666,8 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("record type '{record_type}' declares exclude_files entry '{entry}', which is not a bare file name -- it would exclude nothing")]
+    InvalidExcludedFile { record_type: String, entry: String },
     #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
@@ -954,6 +972,18 @@ pub fn parse_with_document_models(
                 record_type: name.clone(),
                 dir: rt.dir.clone(),
             });
+        }
+        for entry in &rt.exclude_files {
+            let bare = !entry.is_empty()
+                && entry != "."
+                && entry != ".."
+                && !entry.contains(['/', '\\', '*', '?', '[']);
+            if !bare {
+                return Err(ConfigError::InvalidExcludedFile {
+                    record_type: name.clone(),
+                    entry: entry.clone(),
+                });
+            }
         }
         // The effective prefix, not only a declared one: a type named
         // `my_type` with no `prefix` defaults to `MY_TYPE`, which no filename
@@ -1428,6 +1458,7 @@ mod tests {
     #[test]
     fn declared_fields_unions_required_and_known() {
         let t = RecordTypeConfig {
+            exclude_files: Vec::new(),
             dir: "docs/adr".to_string(),
             identity: None,
             fields: None,
@@ -2102,6 +2133,43 @@ record_types:
         ] {
             let err = parse(&format!("{base}{bad}")).unwrap_err().to_string();
             assert!(err.contains(needle), "{bad}: {err}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod exclude_files_tests {
+    use super::*;
+
+    fn with(entry: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    exclude_files: {entry}\nrules:\n  identity.collision: error\n"
+        )
+    }
+
+    #[test]
+    fn plain_file_names_load() {
+        let config = parse(&with("[\"README.md\", \"_template.md\"]")).unwrap();
+        assert_eq!(
+            config.record_types["adr"].exclude_files,
+            vec!["README.md", "_template.md"]
+        );
+    }
+
+    #[test]
+    fn an_entry_that_is_not_a_bare_file_name_is_refused_at_load() {
+        for bad in [
+            "\"\"",
+            "\"docs/adr/README.md\"",
+            "\"../README.md\"",
+            "\"*.md\"",
+            "\".\"",
+        ] {
+            let result = parse(&with(&format!("[{bad}]")));
+            assert!(
+                matches!(result, Err(ConfigError::InvalidExcludedFile { .. })),
+                "{bad} must be refused: {result:?}"
+            );
         }
     }
 }

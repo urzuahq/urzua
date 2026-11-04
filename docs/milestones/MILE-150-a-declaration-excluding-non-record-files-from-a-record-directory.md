@@ -25,3 +25,4 @@ A declared exclusion removes the file from every rule's population and from the 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | Implemented in the discovery PR (not flipped to Done): per-type `exclude_files` (bare file names), dropped at record loading so the file is in no rule's population or census; documented in `SPEC-3` 0.16 and `SPEC-2` 0.29; exercised by `docs/adr/README.md` and the `adr` type's `exclude_files` in `.urzua/config.yaml`, with `filename.identity-pattern` enabled there. **Why:** the Done-when asks for a declaration, a still-reported stray file, the spec and an own-repository exercise. | **substantive** |

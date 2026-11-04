@@ -373,6 +373,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 required_fields: vec!["Status".to_string()],
                 ..type_config(None)
@@ -392,6 +393,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 ..type_config(None)
             },
@@ -414,6 +416,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 known_fields: Some(vec!["Status".to_string()]),
                 ..type_config(None)
@@ -432,6 +435,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 pointer_fields: Some(vec!["Parent".to_string()]),
                 ..type_config(None)
@@ -450,6 +454,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 narrative_fields: Some(vec!["Blocked-on".to_string()]),
                 ..type_config(None)
@@ -468,6 +473,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 relation_fields: Some(crate::config::RelationFields {
                     status: Some("Status".to_string()),
@@ -489,6 +495,7 @@ mod tests {
         let config = config_with_types(vec![(
             "dec",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 header_shape: crate::header::HeaderShape::None,
                 pointer_fields: Some(vec![]),
                 narrative_fields: Some(vec![]),
@@ -555,6 +562,7 @@ mod tests {
         let config = config_with_types(vec![(
             "rfc",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     status: Some("State".to_string()),
                     ..Default::default()
@@ -574,6 +582,7 @@ mod tests {
         let config = config_with_types(vec![(
             "rfc",
             crate::config::RecordTypeConfig {
+                exclude_files: Vec::new(),
                 relation_fields: Some(crate::config::RelationFields {
                     status: Some("State".to_string()),
                     ..Default::default()

@@ -1,5 +1,5 @@
 ---
-Version: '0.15'
+Version: '0.16'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -87,6 +87,25 @@ Two details carry weight:
   needs no change. `"yaml-frontmatter"` (RFC-16) is genuinely structured data, deserialized rather
   than line-recognized, and is what a from-scratch record generates by default; the other shapes stay
   what an adopted, pre-existing corpus is read as.
+- **A record type may declare the files in its directory that are not its records:
+  `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
+  directly in the type's `dir`, for a file that lives beside the records without being one (an index
+  `README.md`, a `_template.md`):
+
+  ```yaml
+  record_types:
+    adr:
+      dir: docs/adr
+      exclude_files: ["README.md"]
+  ```
+
+  A named file is never loaded as a record, so it is in no rule's population and not in
+  `filename.identity-pattern`'s file census, and a change to it is not a change to a governed record
+  for the diff gate. Only the named file is excluded: any other file in the directory that is not a
+  record is still a record that failed to match, and `filename.identity-pattern` still reports it.
+  An entry that is empty, `.`, `..`, or holds a path separator or a glob character (`/`, `\`, `*`,
+  `?`, `[`) is a load-time error naming the record type, because it would exclude nothing. Omitted
+  or empty, the type loads as it always did.
 - **A record type may declare its document model: `identity`, `fields` and `sections`**
   (`RFC-33` layer 1, `MILE-98`). Three optional keys under a record type, each a mapping with a
   required `from`:
@@ -467,3 +486,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.13`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documented the top-level `fail_on` key (`error` or `warning`, default `error`) and `urzua check --fail-on`. **Why:** `MILE-145` -- warnings could never fail a build, so a repository at zero warnings had nothing to keep it there. | **substantive** |
+> | 2026-11-04 | Bumped to `0.16`. Documented the per-type `exclude_files` declaration: bare file names directly in a type's `dir` that are not its records, excluded from every rule's population and from `filename.identity-pattern`'s census. **Why:** `MILE-150` and `BUG-183` -- a `README.md` in a record directory was read as a record and failed every rule, with no way to say it is not one. | **substantive** |
