@@ -59,3 +59,4 @@ This bug closes once `RFC-44` is decided and its `identity` type is implemented.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed, not fixed. **Why:** the user asked directly whether generated records were consistent; verified by running the actual generator for every type in a scratch repo rather than trusting memory, and the divergence turned out to be between the corpus's existing specs and the generator's own template, not between the tool's handling of different types. The fix direction is a real editorial/design decision, not an obvious patch. | **substantive** |
+> | 2026-11-04 | Unblocked by `RFC-44`'s outcome ("declared per type"): each type declares its title form through `MILE-98`'s identity pattern, and this repository declares the `SPEC-` prefix for specs and the bare number for every other type. `Status` is unchanged. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

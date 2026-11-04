@@ -23,6 +23,10 @@ records pull in opposite directions and neither has been reconciled. A corpus of
 is large enough that unconditional drift would block constantly with no sanctioned way to re-baseline, so the
 tension has to be resolved before `embodiment.consistency` can be promoted past `warn` on it.
 
+## Decision (2026-11-04)
+
+All three, each opt-in and off by default: content-hash pins on evidence, a configurable grace window in days, and a warning when a claim exceeds a configured age.
+
 ## References
 
 - `ADR-32` -- drift via git history, not a stored hash.
@@ -33,3 +37,4 @@ tension has to be resolved before `embodiment.consistency` can be promoted past 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** `ADR-32` (no stored hash, unconditional drift) and `RFC-2` (hash, grace window, attributed refresh) conflict and the tension needs resolving before drift can be promoted past `warn`. | **substantive** |
+> | 2026-11-04 | Decision recorded: all three, each opt-in and off by default: content-hash pins on evidence, a configurable grace window in days, and a warning when a claim exceeds a configured age. `Status` stays `Planned`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
