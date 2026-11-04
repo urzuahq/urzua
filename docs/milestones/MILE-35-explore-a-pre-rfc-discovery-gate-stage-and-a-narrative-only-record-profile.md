@@ -1,7 +1,7 @@
 ---
 Status: Planned
 Stable-Id: 01M1Y5JYW47SYHYNYVFXDEFE12
-Phase: '0'
+Phase: '1'
 Track: schema-governance
 Implements: RFC-1
 Blocked-on: —
@@ -33,3 +33,4 @@ smallest real case rather than in the abstract.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Re-scoped from exploring a discovery gate and a narrative profile to proving a new record kind needs only config, and moved from Phase 1 to Phase 0. **Why:** product-level tracking is moving into urzua's own records, so the config-only claim is now on the critical path; the original questions are kept as sub-questions. | **substantive** |
+> | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |

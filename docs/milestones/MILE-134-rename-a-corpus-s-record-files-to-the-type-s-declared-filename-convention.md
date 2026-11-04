@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M6DEN9P605CKC9GV4VVTE0PV
 Status: Planned
-Phase: '2'
+Phase: '1'
 Track: write-path
 ---
 # 134 — Rename a corpus's record files to the type's declared filename convention
@@ -26,3 +26,4 @@ Track: write-path
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** A gap the Phase 0 roadmap found with no record. | **substantive** |
 > | 2026-11-02 | Target follows the declared pattern. **Why:** The tool must not hardcode one filename shape. | **substantive** |
+> | 2026-11-04 | Re-phased from Phase 2 to Phase 1; `Status` unchanged. The switchover (`MILE-102`) renames the adopter's files with a one-off script instead, so the reusable tool is no longer on the Phase 0 path. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
