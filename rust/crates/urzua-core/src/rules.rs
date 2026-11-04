@@ -15,6 +15,7 @@ use crate::FieldState;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+mod back_pointer;
 mod boundary;
 mod catalog;
 mod citation;
@@ -36,6 +37,7 @@ mod shared;
 mod status;
 mod type_scope;
 
+pub use back_pointer::*;
 pub use boundary::*;
 pub use catalog::*;
 pub use citation::*;

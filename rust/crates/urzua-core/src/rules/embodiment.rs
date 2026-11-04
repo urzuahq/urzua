@@ -79,12 +79,19 @@ pub fn realized_by_locator_paths(value: &str) -> Vec<String> {
 /// (ADR-0032) overrides every tier unconditionally -- `DriftDetected` is an
 /// alarm state reachable from any other state, per the schema's own
 /// description, not just another tier to rank against the others.
-pub(crate) fn compute_embodiment(realized_by: &RealizedBy, drifted: bool) -> &'static str {
+/// `back_pointed` (`MILE-128`): a source comment cites the record, which is
+/// code-tier evidence -- it lifts `Specified` or `Not started` to
+/// `Implemented`, and never outranks a `test` locator or drift.
+pub(crate) fn compute_embodiment(
+    realized_by: &RealizedBy,
+    drifted: bool,
+    back_pointed: bool,
+) -> &'static str {
     if drifted {
         "Drift detected"
     } else if !realized_by.test.is_empty() {
         "Verified"
-    } else if !realized_by.code.is_empty() {
+    } else if !realized_by.code.is_empty() || back_pointed {
         "Implemented"
     } else if !realized_by.spec.is_empty() {
         "Specified"
@@ -200,11 +207,14 @@ pub fn embodiment_locator_exists(
 /// a record with no `Realized-by` at all is eligible and unexamined on a
 /// corpus that hasn't adopted the field, not a defect in the rule. `drifted` is
 /// precomputed by the caller (git history is I/O, this function isn't --
-/// same shape as `full_text` elsewhere in this module).
+/// same shape as `full_text` elsewhere in this module); so is `back_pointed`,
+/// the records a source comment cites (`MILE-128`), from
+/// [`back_pointer_evidence`].
 pub fn embodiment_consistency(
     records: &[Record],
     config: &Config,
     drifted: &HashSet<PathBuf>,
+    back_pointed: &HashSet<PathBuf>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
@@ -249,6 +259,7 @@ pub fn embodiment_consistency(
             let computed = compute_embodiment(
                 &parse_realized_by(realized_by_value),
                 drifted.contains(&record.path),
+                back_pointed.contains(&record.path),
             );
             if stated.trim() != computed {
                 findings.push(Finding {
@@ -392,7 +403,8 @@ mod tests {
             type_config_pointer(&["Embodiment", "Realized-by"], None, None, None),
         )]);
 
-        let (exec, findings) = embodiment_consistency(&[r], &config, &HashSet::new());
+        let (exec, findings) =
+            embodiment_consistency(&[r], &config, &HashSet::new(), &HashSet::new());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -513,7 +525,8 @@ mod tests {
             "adr",
             "> Embodiment: Verified\n> Realized-by: code:src/lib.rs\n",
         );
-        let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
+        let (exec, findings) =
+            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Verified"));
@@ -527,7 +540,8 @@ mod tests {
             "adr",
             "> Embodiment: Implemented\n> Realized-by: code:src/lib.rs\n",
         );
-        let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
+        let (_, findings) =
+            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -549,7 +563,8 @@ mod tests {
             "adr",
             "> Phase: Verified\n> Evidence: code:src/lib.rs\n",
         );
-        let (exec, findings) = embodiment_consistency(&[r], &config, &HashSet::new());
+        let (exec, findings) =
+            embodiment_consistency(&[r], &config, &HashSet::new(), &HashSet::new());
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Phase"));
@@ -559,13 +574,13 @@ mod tests {
     #[test]
     fn a_test_locator_outranks_a_code_locator() {
         let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
-        assert_eq!(compute_embodiment(&realized, false), "Verified");
+        assert_eq!(compute_embodiment(&realized, false, false), "Verified");
     }
 
     #[test]
     fn a_drifted_record_computes_to_drift_detected_regardless_of_tier() {
         let realized = parse_realized_by("code:src/lib.rs, test:tests/it.rs");
-        assert_eq!(compute_embodiment(&realized, true), "Drift detected");
+        assert_eq!(compute_embodiment(&realized, true, false), "Drift detected");
     }
 
     #[test]
@@ -577,7 +592,8 @@ mod tests {
         );
         let mut drifted = HashSet::new();
         drifted.insert(r.path.clone());
-        let (_, findings) = embodiment_consistency(&[r], &embodiment_config(), &drifted);
+        let (_, findings) =
+            embodiment_consistency(&[r], &embodiment_config(), &drifted, &HashSet::new());
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Drift detected"));
     }
@@ -585,7 +601,8 @@ mod tests {
     #[test]
     fn a_record_missing_half_the_pair_is_handed_to_the_rule_and_not_judged() {
         let r = record("docs/adr/0001-x.md", "adr", "> Embodiment: Not started\n");
-        let (exec, findings) = embodiment_consistency(&[r], &embodiment_config(), &HashSet::new());
+        let (exec, findings) =
+            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -650,5 +667,43 @@ mod tests {
         );
         let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
         assert!(findings.is_empty());
+    }
+
+    fn back_pointer_record(embodiment: &str, realized_by: &str) -> Record {
+        record(
+            "docs/adr/0001-x.md",
+            "adr",
+            &format!("> Embodiment: {embodiment}\n> Realized-by: {realized_by}\n"),
+        )
+    }
+
+    #[test]
+    fn a_back_pointer_lifts_a_specified_record_to_implemented_observed_failing() {
+        let r = back_pointer_record("Implemented", "spec:docs/x.md");
+        let cited = HashSet::from([r.path.clone()]);
+        let (_, findings) =
+            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &cited);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn without_a_back_pointer_the_same_record_still_computes_specified() {
+        let r = back_pointer_record("Implemented", "spec:docs/x.md");
+        let (_, findings) =
+            embodiment_consistency(&[r], &embodiment_config(), &HashSet::new(), &HashSet::new());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("Specified"));
+    }
+
+    #[test]
+    fn a_back_pointer_never_outranks_a_test_locator_or_a_drift() {
+        let none = RealizedBy::default();
+        assert_eq!(compute_embodiment(&none, false, true), "Implemented");
+        let verified = RealizedBy {
+            test: vec!["t.rs".into()],
+            ..Default::default()
+        };
+        assert_eq!(compute_embodiment(&verified, false, true), "Verified");
+        assert_eq!(compute_embodiment(&none, true, true), "Drift detected");
     }
 }
