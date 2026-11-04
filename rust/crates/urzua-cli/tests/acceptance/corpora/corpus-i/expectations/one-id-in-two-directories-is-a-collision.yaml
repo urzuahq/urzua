@@ -1,0 +1,8 @@
+id: one-id-in-two-directories-is-a-collision
+corpus: corpus-i
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: identity.collision
+    severity: error
+    message_contains: "ADR-5"

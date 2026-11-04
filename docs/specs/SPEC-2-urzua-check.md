@@ -1,5 +1,5 @@
 ---
-Version: '0.64'
+Version: '0.65'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -137,6 +137,10 @@ A file named in its type's `exclude_files` (`SPEC-3`, `MILE-150`) is dropped at 
 loaded as a record, so it is in no rule's population, `files_examined` and the type's file census for
 `filename.identity-pattern`.
 
+A type owns its `dir` and each of its `extra_dirs` (`SPEC-3`, `MILE-130`): discovery loads the files
+directly in any of them as that type's records, so the type's ids form one namespace for pointer
+resolution, `identity.collision` and `filename.identity-pattern`.
+
 | `scope.source` | Meaning | `base` | Produced today |
 |---|---|---|---|
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
@@ -254,7 +258,7 @@ which stays only for what genuinely isn't built yet.
 | `header.field-case-mismatch` | A declared field written under a different case than its declaration (`RFC-40`/`ADR-58`) — the one place a case-only miss is distinguished from genuine non-adoption. |
 | `header.case-variant-key` | One record's header writes two keys differing only by case (`Status`/`status`), reported as the fact of the difference, never as which spelling is right (`MILE-113`). Opt-in and declaration-free: it reads the keys a record wrote, not a declared vocabulary, and composes beside the exact-match rules without changing them (`ADR-57`). An exact repeat of one spelling stays `header.required-fields`' finding. |
 | `narrative-field.stale` | A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44). `terminal_statuses` is declared per repository. |
-| `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. |
+| `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`). |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
@@ -532,3 +536,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.62`. The rule table, `urzua rules` and `rules_executed` list rules in one order: the order `check` runs them, with `config.scope-matches-nothing` and `waiver.matches-nothing` last. `check` output is unchanged. **Why:** `MILE-171` step 2: `check` now runs the table, so the table's order is its execution order. | **structural** |
 > | 2026-11-04 | Bumped to `0.63`. A path argument and `--base` keep or drop a finding by the anchor its rule's table entry declares (a record, the configuration, a file outside the corpus, a tracked path, a type's directory, or a record plus a file the rule's options declare), replacing the rule ids `check` named. No finding is kept or dropped differently. **Why:** `MILE-171` step 3: each new rule that reported on a non-record path had to be added to a list by hand or be silently dropped from a narrowed run. | **structural** |
 > | 2026-11-04 | Bumped to `0.64`. `config.relation-field-not-known` also checks the `date` and `author` fields a type declares under `relation_fields` (`MILE-176`): one not in the type's `required_fields` or `known_fields` is a finding, as an undeclared relation role already was. **Why:** `urzua new` fills those fields by name, so an undeclared one was written to a header the rest of the engine never examines. | **substantive** |
+> | 2026-11-04 | Bumped to `0.65`. A type's records are the files directly in its `dir` and each `extra_dirs` entry; `type.dir-matches-nothing` also reports an `extra_dirs` entry that does not exist. Rule table regenerated. **Why:** `MILE-130` -- one identity namespace across several directories. | **substantive** |

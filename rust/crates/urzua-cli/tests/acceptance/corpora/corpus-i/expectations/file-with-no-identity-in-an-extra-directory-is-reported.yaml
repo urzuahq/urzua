@@ -1,0 +1,9 @@
+id: file-with-no-identity-in-an-extra-directory-is-reported
+corpus: corpus-i
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: filename.identity-pattern
+    file: archive/misc-notes.md
+    severity: error
+    message_contains: "no identity"

@@ -59,8 +59,7 @@ fn deleted_record_facts(
         }
         for type_name in config.sorted_type_names() {
             let type_config = &config.record_types[type_name];
-            if path.parent() != Some(Path::new(&type_config.dir)) || type_config.excludes(file_name)
-            {
+            if !type_config.owns_dir(path.parent()) || type_config.excludes(file_name) {
                 continue;
             }
             let content = urzua_io::read_at_commit(repo_root, &changes.merge_base, path)
@@ -106,7 +105,7 @@ fn touched_waiver_scopes(
                 continue;
             };
             if !urzua_core::record::is_governed_record_filename(file_name)
-                || path.parent() != Some(Path::new(&type_config.dir))
+                || !type_config.owns_dir(path.parent())
                 || type_config.excludes(file_name)
             {
                 continue;

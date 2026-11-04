@@ -93,12 +93,7 @@ fn first_record_outside_repo(
     let root = repo_root.canonicalize().ok()?;
     paths
         .iter()
-        .filter(|p| {
-            config
-                .record_types
-                .values()
-                .any(|t| p.parent() == Some(Path::new(&t.dir)))
-        })
+        .filter(|p| config.record_types.values().any(|t| t.owns_dir(p.parent())))
         .find(|p| match repo_root.join(p).canonicalize() {
             Ok(real) => !real.starts_with(&root),
             Err(_) => false,

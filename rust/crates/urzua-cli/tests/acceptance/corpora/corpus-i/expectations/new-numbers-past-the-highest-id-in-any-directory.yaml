@@ -1,0 +1,10 @@
+id: new-numbers-past-the-highest-id-in-any-directory
+corpus: corpus-i
+invocation: [new, adr, "Next one"]
+expect_exit: 0
+# The highest id in `decisions` is 5 and in `archive` is 8: only a scan of
+# both directories reaches 9.
+expect_json:
+  - {at: /display_number, equals: 9}
+mutation_exempt: >-
+  numbering is not a rule; the case proves `urzua new` scans every directory of the type.

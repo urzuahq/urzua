@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-08-20
 Status: Draft
 Author: beauwilliams
@@ -262,6 +262,11 @@ built, and where it differs from the sketch:
   ceiling: a required `Context` section holding off-topic text passes `section.required`, because no
   mechanical check can say the text is about the decision. That case records the limit; it does not claim
   the gap is handled.
+- **`corpus-i` (one namespace across directories).** One `adr` type declaring `extra_dirs`: a pointer
+  resolving into the other directory, an id shared by records in both (`identity.collision`), a file
+  with no identity in the extra directory, a declared extra directory that does not exist, and
+  `urzua new` numbering past the highest id in either (`MILE-130`). urzua's own `.urzua/config.yaml`
+  has no type spanning directories, so no natural own-config use exists and the corpus is the exercise.
 - **Coverage.** Every rule in `ALL_RULES` now has a case whose mutation proof holds, and the report lists
   none uncovered.
 
@@ -302,3 +307,4 @@ through the record's blame history; the `-S`/`-G` case through the value-only ed
 > | 2026-11-02 | Bumped to `0.4`. **Why:** MILE-101 built the first runner; the spec now records the shape that met a real case: the runner location, the case fields actually supported, `known_gap` markers, a read `manifest.yaml`, and the `URZUA_ACCEPTANCE_EXTRA` private-corpus hook. | **substantive** |
 > | 2026-11-04 | Bumped to `0.5`. **Why:** `MILE-170` built the rest of the harness: mutation proof of every case, the coverage report of rules with no case, the "Nth record type" case, the generative property, corpora `corpus-d` to `corpus-f` and one corpus-zero case per rule family. Recorded under "Added by MILE-170"; the success criteria are unchanged and criterion 2 now holds for every case by construction. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. **Why:** `MILE-170` finished the harness: cases can make commits, pass `--base` and run shallow; `corpus-g` and `corpus-h` add the git-history, drift, derived-value, diff-gate, boundary, issue-snapshot, delivery and permanent-ceiling cases; every shipped rule now has a proven case. Recorded under "Added by the rest of MILE-170". | **substantive** |
+> | 2026-11-04 | Bumped to `0.7`. `corpus-i` (one type over two directories) added: pointer resolution, collision, identity filename and missing-directory cases, and `urzua new` numbering across both. **Why:** `MILE-130` -- urzua's own repository has no type spanning directories, so the corpus is where the feature is exercised. | **substantive** |
