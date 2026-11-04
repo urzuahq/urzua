@@ -327,3 +327,27 @@ fn new_keeps_the_templates_declared_non_required_header_fields_observed_failing(
     check_is_clean(&dir);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// MILE-176: the fields `new` fills with the date and the author are the ones
+/// the type declares, not the literals `Date` and `Author`.
+#[test]
+fn new_fills_differently_named_date_and_author_fields_from_the_declaration() {
+    let dir = fixture_repo("date-author-roles");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Created\", \"Owner\"]\n    header_shape: \"yaml-frontmatter\"\n    relation_fields:\n      date: \"Created\"\n      author: \"Owner\"\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let output = run_urzua(&dir, &["new", "adr", "Named fields", "--by", "somebody"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let content = std::fs::read_to_string(dir.join(v["path"].as_str().unwrap())).unwrap();
+    assert!(!content.contains("Created: null"), "{content}");
+    assert!(!content.contains("Owner: null"), "{content}");
+    assert!(content.contains("Owner:"), "{content}");
+}

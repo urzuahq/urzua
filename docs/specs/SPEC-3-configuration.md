@@ -1,5 +1,5 @@
 ---
-Version: '0.46'
+Version: '0.47'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -858,3 +858,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.44`. `citation.resolution` takes the optional `skip_revision_log` option, with the meaning it has for `citation.path-exists`. **Why:** `MILE-156` -- revision logs are append-only history, so an id they cite as it was must not be reported or rewritten. | **substantive** |
 > | 2026-11-04 | Bumped to `0.45`. `field.pending` takes the optional `pending_until_required` option, off unless declared `true`: a pending value in a field the type's `statuses.require` ties to certain statuses is not reported before the record reaches one of them, and the skipped slot stays eligible and unexamined. **Why:** `MILE-169` -- a placeholder `Regression-test` is legitimate on an `Open` bug and a gap on a `Fixed` one; `status.required-field-missing` already judges the latter. | **substantive** |
 > | 2026-11-04 | Bumped to `0.46`. Documented the opt-in `citation.issue-exists` rule and its structured `issue_refs` option (`snapshot`, `repository`, `forms: [number, url]`); `reference_sections` and `skip_revision_log` are also accepted by it. **Why:** `MILE-143` -- the issue and pull request half; `SPEC-1` documents the `urzua refs refresh` command that writes the snapshot. | **substantive** |
+> | 2026-11-04 | Bumped to `0.47`. `relation_fields` takes `date` and `author`, the fields `urzua new` fills with today's date and the author, defaulting to `Date` and `Author`. **Why:** `MILE-176` -- `new` named them by literal, so a type calling them `Created` and `Owner` got `null`. | **substantive** |

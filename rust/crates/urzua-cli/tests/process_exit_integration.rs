@@ -35,7 +35,12 @@ fn a_closed_stdout_does_not_panic() {
     // Close the read end before the child writes.
     drop(child.stdout.take());
     let mut err = String::new();
-    child.stderr.take().unwrap().read_to_string(&mut err).unwrap();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut err)
+        .unwrap();
     let status = child.wait().unwrap();
     assert!(!err.contains("panicked"), "{err}");
     assert_ne!(status.code(), Some(101));

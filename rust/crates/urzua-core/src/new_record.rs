@@ -728,9 +728,16 @@ mod tests {
             author: "beau",
             today: "2026-11-04",
         };
-        let required = vec!["Created".to_string(), "Owner".to_string(), "Date".to_string()];
+        let required = vec![
+            "Created".to_string(),
+            "Owner".to_string(),
+            "Date".to_string(),
+        ];
         let rendered = render_synthetic_yaml(&params, &required, &[]);
-        assert!(rendered.contains("Created: '2026-11-04'") || rendered.contains("Created: 2026-11-04"), "{rendered}");
+        assert!(
+            rendered.contains("Created: '2026-11-04'") || rendered.contains("Created: 2026-11-04"),
+            "{rendered}"
+        );
         assert!(rendered.contains("Owner: beau"), "{rendered}");
         assert!(rendered.contains("Date: null"), "{rendered}");
     }
