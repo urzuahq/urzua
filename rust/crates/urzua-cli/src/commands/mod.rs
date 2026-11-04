@@ -5,6 +5,7 @@ pub mod audit;
 pub mod check;
 pub mod doctor;
 pub mod explain;
+pub mod export;
 pub mod fix;
 pub mod graph;
 pub mod init;
