@@ -44,7 +44,7 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let artifacts = match super::check::read_index_artifacts(&repo_root, &specs) {
+    let artifacts = match crate::discovery::read_index_artifacts(&repo_root, &specs) {
         Ok(a) => a,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
