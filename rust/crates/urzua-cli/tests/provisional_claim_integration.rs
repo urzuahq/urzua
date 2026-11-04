@@ -79,3 +79,35 @@ fn an_echoed_draft_amendment_is_not_reported() {
     );
     assert!(pair_severities(&report).is_empty(), "{report}");
 }
+
+/// MILE-163: the peer's declared acknowledgement field settles a provisional
+/// claim, and only a provisional one.
+#[test]
+fn a_draft_amendment_the_peer_acknowledges_is_not_reported_observed_failing() {
+    let report = run_with_own_config(
+        "acknowledged",
+        &[
+            (
+                "RFC-1-base.md",
+                &rfc("Accepted", "Amended-by-pending: RFC-2\n"),
+            ),
+            ("RFC-2-amender.md", &rfc("Draft", "Amends: RFC-1\n")),
+        ],
+    );
+    assert!(pair_severities(&report).is_empty(), "{report}");
+}
+
+#[test]
+fn an_accepted_amendment_is_not_settled_by_an_acknowledgement_observed_failing() {
+    let report = run_with_own_config(
+        "accepted-acknowledged",
+        &[
+            (
+                "RFC-1-base.md",
+                &rfc("Accepted", "Amended-by-pending: RFC-2\n"),
+            ),
+            ("RFC-2-amender.md", &rfc("Accepted", "Amends: RFC-1\n")),
+        ],
+    );
+    assert_eq!(pair_severities(&report), vec!["error"], "{report}");
+}
