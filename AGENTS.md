@@ -120,8 +120,11 @@ much as to a change's own author. The loop:
    per PR describing what an adopter would care about — skip it for the same cases "Before calling
    anything done" already exempts (CI config, internal refactors, docs-only changes) — then `gh pr
    comment <n> --body "@coderabbitai review"` after pushing, `gh pr checks <n>` polled until
-   resolved. **Never merge or force-push** —
-   that action belongs to the human running the session, every time, with no standing exception.
+   resolved. **Never force-push.** Merging
+   belongs to the human running the session, with one exception: when the maintainer has authorized
+   merging for the session, an agent may squash-merge (or enable squash auto-merge on) a PR once CI
+   is green on the current head and an agent review found nothing blocking. Without that
+   authorization, merging belongs to the human, every time.
 
 ## Use the tool on itself
 
