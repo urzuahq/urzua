@@ -3148,7 +3148,11 @@ record_types:
             format!("schema_version: 2\nrecord_types:\n  spec:\n    dir: \"docs/specs\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - {pair}\n")
         };
         assert!(parse(&cfg("[embodiment_state, embodiment_locator]")).is_ok());
-        for bad in ["[embodiment_state, Realized-by]", "[status, status]", "[status]"] {
+        for bad in [
+            "[embodiment_state, Realized-by]",
+            "[status, status]",
+            "[status]",
+        ] {
             assert!(parse(&cfg(bad)).is_err(), "{bad} must be refused");
         }
     }
