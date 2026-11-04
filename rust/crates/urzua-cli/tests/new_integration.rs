@@ -274,34 +274,26 @@ fn new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// A closed field set that does not declare `Stable-Id` rejects it, so `new`
-/// leaves it out and says so rather than writing a record its own type rejects.
+/// `ADR-21`: every record type gets a `Stable-Id`. A closed field set that does
+/// not list it is a configuration inconsistency, so `new` still writes it and
+/// warns naming the inconsistency, never omitting it silently.
 #[test]
-fn new_leaves_out_a_stable_id_the_closed_field_set_does_not_declare_observed_failing() {
+fn new_always_writes_a_stable_id_and_warns_when_the_closed_field_set_omits_it_observed_failing() {
     let dir = padded_repo("closed-set", "[]", PADDED_PATTERN);
     let report = new_report(&dir, "Second thing");
-    assert!(report["stable_id"].is_null(), "{report}");
+    let id = report["stable_id"].as_str().expect("stable_id populated");
+    assert!(!id.is_empty(), "{report}");
     let content = std::fs::read_to_string(dir.join("docs/adr/ADR-0004-second-thing.md")).unwrap();
-    assert!(!content.contains("Stable-Id"), "{content}");
+    assert!(content.contains(&format!("Stable-Id: {id}")), "{content}");
     let notices = report["notices"]
         .as_array()
-        .expect("a notice names the omission");
+        .expect("a notice names the inconsistency");
     assert!(
-        notices
-            .iter()
-            .any(|n| n["message"].as_str().unwrap().contains("Stable-Id")),
+        notices.iter().any(|n| n["severity"] == "warning"
+            && n["message"].as_str().unwrap().contains("Stable-Id")
+            && n["message"].as_str().unwrap().contains("known_fields")),
         "{report}"
     );
-    // The seeded record carries a Stable-Id its closed set rejects, so only the
-    // new record is asserted clean.
-    commit_all(&dir);
-    let out = run_urzua(&dir, &["check"]);
-    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert!(parsed["findings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|f| f["file"] != "docs/adr/ADR-0004-second-thing.md"));
     std::fs::remove_dir_all(&dir).ok();
 }
 

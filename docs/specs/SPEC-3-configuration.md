@@ -1,5 +1,5 @@
 ---
-Version: '0.23'
+Version: '0.24'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -104,8 +104,10 @@ Two details carry weight:
   for the diff gate. Only the named file is excluded: any other file in the directory that is not a
   record is still a record that failed to match, and `filename.identity-pattern` still reports it.
   An entry that is empty, `.`, `..`, or holds a path separator or a glob character (`/`, `\`, `*`,
-  `?`, `[`) is a load-time error naming the record type, because it would exclude nothing. Omitted
-  or empty, the type loads as it always did.
+  `?`, `[`) is a load-time error naming the record type, because it would exclude nothing. An entry that
+  names no file directly in the type's `dir` is reported by `type.dir-matches-nothing` as a warning
+  naming the type and the entry, so a stale exclusion is visible. Omitted or empty, the type loads
+  as it always did.
 - **A record type may declare its document model: `identity`, `fields` and `sections`**
   (`RFC-33` layer 1, `MILE-98`). Three optional keys under a record type, each a mapping with a
   required `from`:
@@ -594,3 +596,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.21`. A relation pair may declare `types`, the record types that carry it; a claim to a type outside the list is out of scope instead of an unechoed claim. **Why:** `MILE-155` -- a pair is global, so a claim to a type that cannot carry the inverse field could only error. Off unless written. | **substantive** |
 > | 2026-11-04 | Bumped to `0.22`. Documented the `sticky_states` option of `embodiment.consistency`: `Embodiment` values a human sets that no evidence computes are declared in configuration, are not reported as drift, and may not name a computed tier. **Why:** `MILE-148` -- the set of sticky states is repository vocabulary, not engine policy. | **substantive** |
 > | 2026-11-04 | Bumped to `0.23`. Noted that `urzua new` numbers, names and titles a record by the type's declared `identity`. **Why:** `MILE-151` -- the generator must read the grammar the checker reads. | **substantive** |
+> | 2026-11-04 | Bumped to `0.24`. An `exclude_files` entry that matches no file directly in the type's `dir` is reported as a `type.dir-matches-nothing` warning. **Why:** `MILE-150` -- an exclusion that silently does nothing hides a renamed or removed file and violates the no-silent-no-op principle. | **substantive** |

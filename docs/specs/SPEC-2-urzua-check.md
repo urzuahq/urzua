@@ -1,5 +1,5 @@
 ---
-Version: '0.36'
+Version: '0.37'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -232,7 +232,7 @@ which stays only for what genuinely isn't built yet.
 | `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
 | `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
-| `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. |
+| `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
 | `header.deprecated-shape` | Which configured types still declare a deprecated `header_shape` (`blockquote`/`bold-list`) instead of `yaml-frontmatter` (ADR-33). Parsing support for the deprecated shapes stays; this rule only surfaces which types haven't migrated. |
@@ -495,3 +495,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.34`. `embodiment.back-pointer-resolution` gains the optional `test_paths` option and reads `Verifies:` in those files as test-tier evidence; `embodiment.consistency` computes `Verified` from it, judges a record with no `Realized-by` field that a back-pointer cites (the finding names the evidence), and `urzua fix` repairs the same records. Rule table regenerated. **Why:** `MILE-146` and `MILE-149` -- evidence is read from the artifact instead of restated beside it. | **substantive** |
 > | 2026-11-04 | Bumped to `0.35`. `relation.pair-reciprocity` excludes a claim to a record type outside a pair's declared `types` as out of scope. **Why:** `MILE-155` -- a pair between one type's records erred on a claim to a type that cannot hold the inverse field. | **substantive** |
 > | 2026-11-04 | Bumped to `0.36`. `embodiment.consistency` gains the optional `sticky_states` option: a record stating a listed `Embodiment` value is examined and not reported as drift or as an old claim, and `urzua fix` leaves it alone. Rule table regenerated. **Why:** `MILE-148` -- `Deprecated` and `Inactive` are states a human sets and nothing can compute, so a finding the author cannot resolve by changing the artifact only trains readers to ignore the rule. | **substantive** |
+> | 2026-11-04 | Bumped to `0.37`. `type.dir-matches-nothing` also reports a type's `exclude_files` entry that names no tracked file directly in its `dir`. Rule table regenerated. **Why:** `MILE-150` -- a stale exclusion is a declaration that silently does nothing. | **substantive** |
