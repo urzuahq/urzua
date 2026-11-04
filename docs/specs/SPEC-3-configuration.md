@@ -1,5 +1,5 @@
 ---
-Version: '0.45'
+Version: '0.46'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -315,6 +315,45 @@ rules:
   read a declared external id as a configuration that fails to reach its candidates (`BUG-186`). An id the list does not name is still resolved against the
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
+
+## Cited issues and pull requests: `citation.issue-exists`
+
+`citation.issue-exists` (`MILE-143`) checks that an issue or pull request number cited in a record's
+references is in a snapshot file committed to the repository, so `check` never needs the network.
+It requires `reference_sections` (as for `citation.path-exists`) and the structured option
+`issue_refs`; there is no string mini-language (`ADR-64`):
+
+```yaml
+rules:
+  citation.issue-exists:
+    level: warn
+    reference_sections: ["References"]
+    skip_revision_log: true   # optional
+    issue_refs:
+      snapshot: ".urzua/known-refs.json"
+      repository: "owner/name"
+      forms: [number, url]
+```
+
+- `snapshot` is the file, relative to the repository root. `repository` is the GitHub repository it
+  describes, `owner/name`, compared without regard to case. Both are load-time errors when absent,
+  empty, absolute, containing `..`, or malformed; `forms` must be non-empty with no repeat, and
+  only `number` and `url` exist. The option belongs to this rule alone.
+- `number` reads `#123` in the section's prose outside inline code, not `owner/repo#123` (another
+  repository), not an anchor link `[x](#123)`. `url` reads `https://github.com/owner/name/issues/123`
+  and `/pull/123` of the declared repository only; another repository's link is not read. A form
+  not listed is not read. Fenced blocks are never read.
+- A number is held to the snapshot's issues and pull requests together, since GitHub shares one
+  number space and redirects either kind of URL to the other.
+- `skip_revision_log` behaves as for `citation.path-exists`.
+- The snapshot is `{schema_version, repository, generated_at, issues, pulls}`, written by
+  `urzua refs refresh` (`SPEC-1`) and committed. If it is absent, unparsable, of another
+  `schema_version` or of another repository, the rule reports one finding on the snapshot path and
+  counts every citation eligible and unexamined: it does not pass for want of its input.
+- Staleness is visible, not silent: each finding names the snapshot's `generated_at` date and
+  suggests the refresh, and `check` adds an info notice giving the date and the snapshot's size. A
+  number cited before it exists in the snapshot is the expected case after opening an issue; refresh
+  and commit.
 
 ## Cited paths: `citation.path-exists`
 
@@ -818,3 +857,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.43`. `sections.required` entries take `aliases` (other headings satisfying the requirement, disclosed as an info notice per alias) and `preamble: true` (a `y-statement` with a `marker` read from the text before the first `##` when its section is absent). **Why:** `MILE-165` -- adopter records name a section differently or carry the Y-statement in the preamble. | **substantive** |
 > | 2026-11-04 | Bumped to `0.44`. `citation.resolution` takes the optional `skip_revision_log` option, with the meaning it has for `citation.path-exists`. **Why:** `MILE-156` -- revision logs are append-only history, so an id they cite as it was must not be reported or rewritten. | **substantive** |
 > | 2026-11-04 | Bumped to `0.45`. `field.pending` takes the optional `pending_until_required` option, off unless declared `true`: a pending value in a field the type's `statuses.require` ties to certain statuses is not reported before the record reaches one of them, and the skipped slot stays eligible and unexamined. **Why:** `MILE-169` -- a placeholder `Regression-test` is legitimate on an `Open` bug and a gap on a `Fixed` one; `status.required-field-missing` already judges the latter. | **substantive** |
+> | 2026-11-04 | Bumped to `0.46`. Documented the opt-in `citation.issue-exists` rule and its structured `issue_refs` option (`snapshot`, `repository`, `forms: [number, url]`); `reference_sections` and `skip_revision_log` are also accepted by it. **Why:** `MILE-143` -- the issue and pull request half; `SPEC-1` documents the `urzua refs refresh` command that writes the snapshot. | **substantive** |

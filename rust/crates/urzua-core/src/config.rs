@@ -198,6 +198,33 @@ pub struct RuleSetting {
     /// names a path or an id as it was. Only meaningful to those rules; optional, and `false` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_revision_log: Option<bool>,
+    /// The committed snapshot of issue and pull request numbers
+    /// `citation.issue-exists` checks citations against, the repository it
+    /// describes and the citation forms it reads (`MILE-143`). Only meaningful
+    /// to that rule, and read by `urzua refs refresh`, the one command that
+    /// writes the snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_refs: Option<IssueRefs>,
+}
+
+/// `citation.issue-exists`'s structured option (`MILE-143`, `ADR-64`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IssueRefs {
+    /// The snapshot file, relative to the repository root.
+    pub snapshot: String,
+    /// The GitHub repository the snapshot describes, `owner/name`.
+    pub repository: String,
+    /// The citation forms read: `number` is `#123`, `url` is a full link to an
+    /// issue or pull request of `repository`. A form not listed is not read.
+    pub forms: Vec<RefForm>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RefForm {
+    Number,
+    Url,
 }
 
 /// One `date_order` entry (`MILE-157`, `ADR-64`): two header field names, the
@@ -331,6 +358,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             reference_sections: Option<Vec<String>>,
             #[serde(default)]
             skip_revision_log: Option<bool>,
+            #[serde(default)]
+            issue_refs: Option<IssueRefs>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -379,6 +408,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 external_ids: table.external_ids,
                 reference_sections: table.reference_sections,
                 skip_revision_log: table.skip_revision_log,
+                issue_refs: table.issue_refs,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -409,6 +439,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 external_ids: None,
                 reference_sections: None,
                 skip_revision_log: None,
+                issue_refs: None,
             })
         }
     }
@@ -839,6 +870,8 @@ pub enum ConfigError {
         path: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'issue_refs' {reason}")]
+    InvalidIssueRefs { rule: String, reason: String },
     #[error("rule '{rule}' option 'date_order' entry '{entry}' {reason}")]
     InvalidDateOrder {
         rule: String,
@@ -1024,7 +1057,10 @@ const RULE_OPTIONS: &[RuleOption] = &[
     },
     RuleOption {
         name: "reference_sections",
-        owners: &[crate::rules::RULE_CITATION_PATH_EXISTS],
+        owners: &[
+            crate::rules::RULE_CITATION_PATH_EXISTS,
+            crate::rules::RULE_CITATION_ISSUE_EXISTS,
+        ],
         consequence_if_missing: "reads no section and can never report",
         optional: false,
     },
@@ -1136,6 +1172,45 @@ fn option_field<'a>(
 pub fn rule_requires_options(rule: &str) -> bool {
     rule == crate::rules::RULE_INDEX_FRESHNESS
         || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
+}
+
+/// Why an `issue_refs` declaration cannot work, or `None` when it can.
+fn issue_refs_problem(refs: &IssueRefs) -> Option<String> {
+    let snapshot = refs.snapshot.trim();
+    if snapshot.is_empty() {
+        return Some("has an empty snapshot path".to_string());
+    }
+    if let Some(reason) = published_path_problem(snapshot) {
+        return Some(format!("snapshot path {reason}"));
+    }
+    if snapshot.ends_with('/') {
+        return Some("snapshot path names a directory, not a file".to_string());
+    }
+    let mut parts = refs.repository.split('/');
+    let valid = |p: &str| {
+        !p.is_empty()
+            && p.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    };
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(o), Some(n), None) if valid(o) && valid(n) => {}
+        _ => {
+            return Some(format!(
+                "repository '{}' is not of the form owner/name",
+                refs.repository
+            ))
+        }
+    }
+    if refs.forms.is_empty() {
+        return Some("declares no forms; give 'number', 'url' or both".to_string());
+    }
+    let mut seen = refs.forms.clone();
+    seen.sort();
+    seen.dedup();
+    if seen.len() != refs.forms.len() {
+        return Some("declares a form twice".to_string());
+    }
+    None
 }
 
 /// Why an `indexes` entry cannot be compared, or `None` when it can. Every
@@ -1349,6 +1424,32 @@ pub fn parse_with_document_models(
             }
         }
     }
+    // `issue_refs` is structured too (`MILE-143`).
+    for (name, setting) in &config.rules {
+        let owner = name == crate::rules::RULE_CITATION_ISSUE_EXISTS;
+        if setting.issue_refs.is_some() && !owner {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "issue_refs".to_string(),
+            });
+        }
+        if !owner || setting.level == RuleLevel::Off {
+            continue;
+        }
+        let Some(refs) = setting.issue_refs.as_ref() else {
+            return Err(ConfigError::OptionRequired {
+                rule: name.clone(),
+                option: "issue_refs".to_string(),
+                consequence: "names no snapshot and can never report",
+            });
+        };
+        if let Some(reason) = issue_refs_problem(refs) {
+            return Err(ConfigError::InvalidIssueRefs {
+                rule: name.clone(),
+                reason,
+            });
+        }
+    }
     // A list of blanks is an empty list wearing a value.
     let declared =
         |v: std::borrow::Cow<'_, [String]>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
@@ -1365,6 +1466,7 @@ pub fn parse_with_document_models(
         }
         if setting.skip_revision_log.is_some()
             && name != crate::rules::RULE_CITATION_PATH_EXISTS
+            && name != crate::rules::RULE_CITATION_ISSUE_EXISTS
             && name != crate::rules::RULE_CITATION_RESOLUTION
         {
             return Err(ConfigError::OptionNotApplicable {
@@ -3024,6 +3126,65 @@ record_types:
             .contains("does not take the option 'indexes'"));
         let off = index_config("[]").replace("level: error", "level: off");
         assert!(parse(&off).is_ok());
+    }
+
+    fn issue_config(extra: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  citation.issue-exists:\n    level: warn\n    reference_sections: [References]\n{extra}"
+        )
+    }
+
+    #[test]
+    fn issue_refs_is_required_by_the_issue_rule_and_by_no_other() {
+        let good = "    issue_refs: {snapshot: .urzua/known-refs.json, repository: urzuahq/urzua, forms: [number, url]}\n";
+        assert!(parse(&issue_config(good)).is_ok());
+        let missing = parse(&issue_config("")).unwrap_err().to_string();
+        assert!(missing.contains("issue_refs"), "{missing}");
+        for bad in [
+            "{snapshot: '', repository: o/r, forms: [number]}",
+            "{snapshot: /abs.json, repository: o/r, forms: [number]}",
+            "{snapshot: ../x.json, repository: o/r, forms: [number]}",
+            "{snapshot: dir/, repository: o/r, forms: [number]}",
+            "{snapshot: s.json, repository: orr, forms: [number]}",
+            "{snapshot: s.json, repository: o/r/x, forms: [number]}",
+            "{snapshot: s.json, repository: o/r, forms: []}",
+            "{snapshot: s.json, repository: o/r, forms: [number, number]}",
+        ] {
+            let err = parse(&issue_config(&format!("    issue_refs: {bad}\n")))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("issue_refs"), "{bad}: {err}");
+        }
+        // An unknown form, an unknown key and a missing key are all refused.
+        for bad in [
+            "{snapshot: s.json, repository: o/r, forms: [hash]}",
+            "{snapshot: s.json, repository: o/r, forms: [number], extra: 1}",
+            "{snapshot: s.json, forms: [number]}",
+        ] {
+            assert!(
+                parse(&issue_config(&format!("    issue_refs: {bad}\n"))).is_err(),
+                "{bad}"
+            );
+        }
+        let other = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  field.quality:\n    level: error\n    issue_refs: {snapshot: s.json, repository: o/r, forms: [number]}\n";
+        assert!(parse(other)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'issue_refs'"));
+        let off = issue_config("").replace("level: warn", "level: off");
+        assert!(parse(&off).is_ok());
+    }
+
+    #[test]
+    fn the_issue_rule_needs_reference_sections_and_takes_skip_revision_log() {
+        let refs = "    issue_refs: {snapshot: s.json, repository: o/r, forms: [number]}\n";
+        let no_sections = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  citation.issue-exists:\n    level: warn\n".to_string() + refs;
+        assert!(parse(&no_sections)
+            .unwrap_err()
+            .to_string()
+            .contains("reference_sections"));
+        let ok = issue_config(&format!("{refs}    skip_revision_log: true\n"));
+        assert!(parse(&ok).is_ok());
     }
 
     /// `MILE-140`: `field_levels` loads on the rules that report per field and

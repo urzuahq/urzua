@@ -173,10 +173,21 @@ enum Command {
         apply: bool,
     },
 
+    /// Maintain the committed snapshot of issue and pull request numbers that
+    /// `citation.issue-exists` checks citations against.
+    Refs {
+        #[command(subcommand)]
+        target: RefsTarget,
+    },
+
     /// Detect fields whose stated value disagrees with what the tool
     /// computes (ADR-0015). Read-only by default. Only Tier 1 (Embodiment)
     /// exists.
     Fix {
+        /// Examine and repair only these records: a record file, or a
+        /// directory holding records. A path that matches no record is
+        /// reported as a failure. With none, the whole corpus.
+        paths: Vec<PathBuf>,
         #[arg(long, default_value_t = 1)]
         tier: u8,
         /// Write the computed values back. Requires --ids or --force, and
@@ -194,6 +205,18 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum RefsTarget {
+    /// Fetch every issue and pull request number of the declared repository
+    /// from the GitHub REST API and rewrite the snapshot file.
+    ///
+    /// The only command that uses the network (`check` never does). Reads a
+    /// token from GITHUB_TOKEN or GH_TOKEN when one is set, and needs `curl`.
+    /// A failed fetch writes nothing and exits 2. Run it when `check` reports
+    /// a citation the snapshot predates, then commit the file.
+    Refresh,
 }
 
 #[derive(Subcommand)]
@@ -293,13 +316,17 @@ fn main() -> ExitCode {
         Command::Doctor => commands::doctor::run(),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(cli.config, apply),
+        Command::Refs {
+            target: RefsTarget::Refresh,
+        } => commands::refs::run_refresh(cli.config),
         Command::Fix {
+            paths,
             tier,
             apply,
             ids,
             by,
             force,
-        } => commands::fix::run(cli.config, tier, apply, ids, by, force),
+        } => commands::fix::run(cli.config, paths, tier, apply, ids, by, force),
     }
 }
 
