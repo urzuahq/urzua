@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6K40SNCNT3C891H8MNEMD1J
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/rules.rs
 ---
 # 175 — Test fixtures build RecordTypeConfig through Default
 
@@ -25,3 +26,4 @@ The three fixtures name only the fields a test varies; adding a field to `Record
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
+> | 2026-11-04 | `Status` Planned -> Done, `Realized-by` added. `RecordTypeConfig` and `Config` derive `Default`; `type_config`, `type_config_with_shape`, `type_config_pointer` and `config_with_types` name only the fields a test varies. **Why:** checked against Done means: the fixtures no longer list all 14 fields, and `cargo test --workspace` is unchanged. The stale "two seed rules" comment was already gone when this was built (the file was reorganised by `MILE-171`), so nothing was left to correct. | **structural** |
