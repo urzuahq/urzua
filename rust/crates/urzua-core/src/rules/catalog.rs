@@ -60,6 +60,8 @@ pub const RULE_DATE_FIELD_ORDER: &str = "date.field-order";
 pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
+pub const RULE_WAIVER_MATCHES_NOTHING: &str = "waiver.matches-nothing";
+
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
     RULE_HEADER_FIELD_SET_CONSISTENCY,
@@ -111,6 +113,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_DATE_FIELD_VALID,
     RULE_DATE_FIELD_ORDER,
     RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+    RULE_WAIVER_MATCHES_NOTHING,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -321,6 +324,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
         description: "A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not one at which implementation is permitted is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Permitted means the cited type's declared `statuses.implementable` (a terminal `success` status is not assumed to permit it); a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision.",
+    },
+    RuleMeta {
+        id: RULE_WAIVER_MATCHES_NOTHING,
+        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Three cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
     },
 ];
 
