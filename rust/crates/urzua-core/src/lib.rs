@@ -23,6 +23,7 @@ pub mod new_record;
 #[cfg(test)]
 mod property;
 pub mod record;
+pub mod refs_snapshot;
 pub mod report;
 pub mod rules;
 pub mod section;
