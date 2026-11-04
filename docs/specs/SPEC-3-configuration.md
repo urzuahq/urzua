@@ -1,5 +1,5 @@
 ---
-Version: '0.49'
+Version: '0.50'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -906,3 +906,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.47`. A type's `revision_log` takes `required: true|false` (default `true`), which `urzua fix --apply` reads; it may stand alone. **Why:** `MILE-159` -- records without a revision log section could never be written by `fix --apply`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.48`. A type's `statuses` declaration gains an optional `delivery` mapping (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`), validated at load, and the opt-in rule `status.delivery-agreement` reads it. This repository declares it on `milestone`, which now knows `Realized-by`, and its `implementable` list gains `Done`. **Why:** `MILE-183` -- no rule compared a stated `Status` with delivery evidence, so about thirty built milestones read `Planned`; the mapping is the type's declaration, not engine policy. | **substantive** |
 > | 2026-11-04 | Bumped to `0.49`. `citation.issue-exists`'s `issue_refs` takes the optional `fields` list of header field names to read for citations, off unless declared, validated against the types' declared fields. **Why:** `MILE-184` -- a wrong number in a header field such as a BUG's `Found-in` went unchecked. | **substantive** |
+> | 2026-11-04 | Bumped to `0.50`. `relation_fields` takes `date` and `author`, the fields `urzua new` fills with today's date and the author, defaulting to `Date` and `Author`. **Why:** `MILE-176` -- `new` named them by literal, so a type calling them `Created` and `Owner` got `null`. | **substantive** |
