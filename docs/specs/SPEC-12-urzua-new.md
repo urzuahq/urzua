@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -30,7 +30,7 @@ the field blank. Every other field is a decision a human makes and stays blank.
 
 If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
 sections beneath the header) is appended under the synthesized header; the template's own header, in
-whatever shape, is never used (`BUG-3`: the configured `header_shape` wins unconditionally over a
+whatever shape, is never used as the header, but the field names it lists are read (see below) (`BUG-3`: the configured `header_shape` wins unconditionally over a
 leftover template).
 
 A type declaring `header_shape: none` has nowhere to write a `Stable-Id`, so `new` refuses it
@@ -45,10 +45,15 @@ without an edit:
   `TYPE-NNNN-slug.md` convention: the next number is one past the highest `number` the pattern reads
   from a file in the directory. The file name is `PREFIX-NUMBER-slug.md` with the number zero-padded
   to the narrowest width the pattern accepts (`\d+` takes none, `\d{4}` takes four), and the H1 opens
-  `PREFIX-N` with the unpadded number, the title form the declaration implies (`RFC-44`). A regular
+  `PREFIX-N` with the number padded to that same width (`ADR-0044`), derived from the file name written
+  beside it so the two ids agree (`BUG-188`); the title form the declaration implies (`RFC-44`). A regular
   expression cannot be run backwards, so the name is kept only if the pattern reads it back as the
   type's prefix and the number; a pattern no such name fits is a refusal naming the pattern, before
   anything is written. A type with no `identity` is numbered and named exactly as before.
+- **Template fields.** A field the template's header names beyond the type's `required_fields` is written
+  blank when the type declares it (`known_fields`, or any field when none is declared), so the record starts
+  with the fields the template meant it to carry (`BUG-188`). A template field the type does not declare is
+  left out, since it would only trip `header.field-set-consistency`.
 - **Field set.** `Stable-Id` is always written (ADR-21: every record type gets one). When the type
   declares a closed field set (`known_fields`) that does not list it, the declaration contradicts
   ADR-21 and `header.field-set-consistency` will report the new record; `new` does not hide that by
@@ -126,3 +131,4 @@ take content and parameters, returning a string.
 > | 2026-11-04 | Bumped to `0.7`. A type's declared `identity` now decides numbering, the file name's padding and the H1's `PREFIX-N` form; the status field starts at the first declared status value instead of a literal `null`; `Stable-Id` is left out (report `stable_id: null`, warning notice) when a closed `known_fields` does not list it. A pattern `new` cannot name a file for is refused. **Why:** `MILE-151` and `BUG-182` -- the generator and the checker read two grammars, so its output failed `filename.identity-pattern` and `field.quality`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. `Stable-Id` is always written and the report's `stable_id` always populated; a closed `known_fields` that omits it yields a warning notice naming the inconsistency instead of an omitted identity. **Why:** `MILE-151` omitted it, contradicting ADR-21 (every record type gets a Stable-Id) and leaving a record with no identity. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. `new` always synthesizes a YAML frontmatter header and appends a template's body scaffolding when one exists; the "fill the template in" path for a `blockquote` or `bold-list` template is gone. **Why:** `MILE-85` removed those shapes. | **substantive** |
+> | 2026-11-04 | Bumped to `0.10`. The H1 id is padded to the file name's width; the header fields a template names that the type declares are kept, blank. **Why:** `BUG-188` -- an unpadded H1 beside a padded file name, and optional template fields dropped. | **substantive** |
