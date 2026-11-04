@@ -274,14 +274,14 @@ fn narrow(
 /// A `claim_paths` entry that is absent is a `Notice` (the rule has no input);
 /// one that is actively wrong aborts. Either is visible, where a silent
 /// `ran` with zero findings read as a clean corpus (`BUG-56`).
-fn claim_path_notices(repo_root: &Path, setting: &RuleSetting) -> Result<Vec<Notice>, String> {
+fn claim_path_notices(repo_root: &Path, opts: &rules::ClaimOpts) -> Result<Vec<Notice>, String> {
     let mut notices = Vec::new();
     // Both sides canonicalised: the repo root may itself reach through a link
     // (macOS `/tmp`).
     let root = repo_root
         .canonicalize()
         .unwrap_or_else(|_| repo_root.to_path_buf());
-    for prefix in setting.claim_paths.iter().flatten() {
+    for prefix in &opts.claim_paths {
         let resolved = repo_root.join(prefix).canonicalize();
         match &resolved {
             // Only `NotFound` is absence: git keeps no empty directory, so
@@ -346,19 +346,21 @@ fn load_context<'a>(
         (&session.repo_root, &session.config, &session.discovered);
     let mut notices: Vec<Notice> = Vec::new();
 
-    let claim_setting = enabled_setting(config, rules::RULE_CLAIM_STATUS_AGREEMENT);
-    if let Some(setting) = claim_setting {
-        notices.extend(claim_path_notices(repo_root, setting)?);
+    let claim_opts =
+        config.enabled_rule_opts::<rules::ClaimOpts>(rules::RULE_CLAIM_STATUS_AGREEMENT);
+    if let Some(opts) = &claim_opts {
+        notices.extend(claim_path_notices(repo_root, opts)?);
     }
-    let claim_paths = claim_setting
-        .and_then(|s| s.claim_paths.clone())
-        .unwrap_or_default();
-    let claims = read_claim_files(repo_root, &claim_paths)?;
+    let claims = read_claim_files(
+        repo_root,
+        &claim_opts.map_or_else(Vec::new, |o| o.claim_paths),
+    )?;
 
-    let published_paths: Vec<String> =
-        enabled_setting(config, rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
-            .and_then(|s| s.published_paths.clone())
-            .unwrap_or_default();
+    let published_paths: Vec<String> = config
+        .enabled_rule_opts::<rules::PublishedPathOpts>(
+            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        )
+        .map_or_else(Vec::new, |o| o.published_paths);
     let published_files = crate::discovery::read_files_under(
         repo_root,
         discovered,
@@ -366,10 +368,9 @@ fn load_context<'a>(
         rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     )?;
 
-    let index_specs: Vec<urzua_core::config::IndexSpec> =
-        enabled_setting(config, rules::RULE_INDEX_FRESHNESS)
-            .and_then(|s| s.indexes.clone())
-            .unwrap_or_default();
+    let index_specs: Vec<urzua_core::config::IndexSpec> = config
+        .enabled_rule_opts::<rules::IndexOpts>(rules::RULE_INDEX_FRESHNESS)
+        .map_or_else(Vec::new, |o| o.indexes);
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
 
     let back_pointer_sources =

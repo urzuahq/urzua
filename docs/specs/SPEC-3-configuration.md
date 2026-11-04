@@ -1,5 +1,5 @@
 ---
-Version: '0.51'
+Version: '0.52'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -908,3 +908,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.49`. `citation.issue-exists`'s `issue_refs` takes the optional `fields` list of header field names to read for citations, off unless declared, validated against the types' declared fields. **Why:** `MILE-184` -- a wrong number in a header field such as a BUG's `Found-in` went unchecked. | **substantive** |
 > | 2026-11-04 | Bumped to `0.50`. `relation_fields` takes `date` and `author`, the fields `urzua new` fills with today's date and the author, defaulting to `Date` and `Author`. **Why:** `MILE-176` -- `new` named them by literal, so a type calling them `Created` and `Owner` got `null`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.51`. A field named under `relation_fields.date` or `relation_fields.author` must be in the type's `required_fields` or `known_fields`, reported by `config.relation-field-not-known` as the four relation roles already were. Which rules accept which options is declared on the rule's table entry, not in a list of owners in the config loader; the load errors are unchanged. **Why:** `MILE-176` left the two new fields unchecked, and `MILE-171` moved option ownership to the rule table. | **substantive** |
+> | 2026-11-04 | Bumped to `0.52`. No change to the option reference. The `RuleSetting` option set is one definition (`accepted_statuses` now carries the `serde(default)` its siblings did), and a rule reads its options as a typed value. An option that is declared in the option tables but not accepted by the struct, or the reverse, fails a test. **Why:** `MILE-174` -- the set was defined four times, so a new option could be silently ignored. | **structural** |

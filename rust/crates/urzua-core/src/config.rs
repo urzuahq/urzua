@@ -52,7 +52,34 @@ impl FailOn {
     }
 }
 
+/// A rule's options as a typed value, built from its `RuleSetting` in one
+/// place (`crate::rules::options`). Implemented per rule that reads options.
+pub trait RuleOpts: Sized {
+    fn from_setting(setting: &RuleSetting) -> Self;
+}
+
 impl Config {
+    /// The typed options of `rule` when the repository declared it and it is
+    /// not `off`; `None` otherwise. The one place that decides a rule is "on"
+    /// for a caller that gathers a rule's inputs (`check` reading claim files),
+    /// so it cannot disagree with the rule about whether it runs.
+    pub fn enabled_rule_opts<T: RuleOpts>(&self, rule: &str) -> Option<T> {
+        self.rules
+            .get(rule)
+            .filter(|s| s.level != RuleLevel::Off)
+            .map(T::from_setting)
+    }
+
+    /// The typed options of `rule` as declared, whatever its level, and the
+    /// options of an undeclared rule when it is not (every option absent). For
+    /// a rule's own run, which the runner only starts for a rule that is on.
+    pub fn rule_opts<T: RuleOpts>(&self, rule: &str) -> T {
+        match self.rules.get(rule) {
+            Some(setting) => T::from_setting(setting),
+            None => T::from_setting(&RuleSetting::default()),
+        }
+    }
+
     /// Every declared record type's name, in `record_types`' own (sorted)
     /// order.
     pub fn sorted_type_names(&self) -> Vec<&String> {
@@ -62,7 +89,16 @@ impl Config {
 
 /// What a repository declared about one rule. Written either as a bare level
 /// (`field.quality: error`) or as a table when a rule takes options.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+///
+/// This struct is the one definition of the option set: the table form is read
+/// straight into it (`deny_unknown_fields`, so an unknown key is refused), and
+/// the bare-level shorthand is the only thing the hand-written `Deserialize`
+/// below adds. A new option is a field here plus, for a list-valued one, an
+/// entry in `RULE_OPTIONS`; `option_table_tests` fails when the two disagree.
+/// Rules read their options through a typed `RuleOpts` value
+/// (`Config::rule_opts`), never by re-reading these fields.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct RuleSetting {
     pub level: RuleLevel,
     /// Statuses a reference's target may not be in. Only meaningful to
@@ -266,8 +302,9 @@ pub struct IndexSpec {
     pub end: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum RuleLevel {
+    #[default]
     Off,
     Warn,
     Error,
@@ -306,68 +343,17 @@ impl<'de> Deserialize<'de> for RuleLevel {
     }
 }
 
+impl Serialize for RuleSetting {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        RuleSetting::serialize(self, s)
+    }
+}
+
 impl<'de> Deserialize<'de> for RuleSetting {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Table {
-            level: RuleLevel,
-            #[serde(default)]
-            not_in: Option<Vec<String>>,
-            #[serde(default)]
-            claim_paths: Option<Vec<String>>,
-            #[serde(default)]
-            closed_statuses: Option<Vec<String>>,
-            #[serde(default)]
-            terminal_statuses: Option<Vec<String>>,
-            #[serde(default)]
-            fields: Option<Vec<String>>,
-            #[serde(default)]
-            published_paths: Option<Vec<String>>,
-            #[serde(default)]
-            indexes: Option<Vec<IndexSpec>>,
-            #[serde(default)]
-            source_paths: Option<Vec<String>>,
-            #[serde(default)]
-            application_paths: Option<Vec<String>>,
-            #[serde(default)]
-            exclude_paths: Option<Vec<String>>,
-            #[serde(default)]
-            allow_extension_prefix: Option<bool>,
-            #[serde(default)]
-            pending_until_required: Option<bool>,
-            #[serde(default)]
-            back_pointer_paths: Option<Vec<String>>,
-            #[serde(default)]
-            test_paths: Option<Vec<String>>,
-            #[serde(default)]
-            drift_grace_days: Option<u32>,
-            #[serde(default)]
-            drift_audit_field: Option<String>,
-            #[serde(default)]
-            claim_max_age_days: Option<u32>,
-            #[serde(default)]
-            sticky_states: Option<Vec<String>>,
-            #[serde(default)]
-            date_fields: Option<Vec<String>>,
-            #[serde(default)]
-            date_order: Option<Vec<DateOrder>>,
-            #[serde(default)]
-            field_levels: Option<BTreeMap<String, RuleLevel>>,
-            accepted_statuses: Option<Vec<String>>,
-            #[serde(default)]
-            external_ids: Option<Vec<String>>,
-            #[serde(default)]
-            reference_sections: Option<Vec<String>>,
-            #[serde(default)]
-            skip_revision_log: Option<bool>,
-            #[serde(default)]
-            issue_refs: Option<IssueRefs>,
-        }
-
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
         // Untagged discards each variant's error, so every malformed setting --
         // a bad level, a bad level in table form, an unknown key -- collapsed
@@ -386,66 +372,12 @@ impl<'de> Deserialize<'de> for RuleSetting {
                     )));
                 }
             }
-            let table = Table::deserialize(value).map_err(serde::de::Error::custom)?;
-            Ok(RuleSetting {
-                level: table.level,
-                not_in: table.not_in,
-                claim_paths: table.claim_paths,
-                closed_statuses: table.closed_statuses,
-                terminal_statuses: table.terminal_statuses,
-                fields: table.fields,
-                published_paths: table.published_paths,
-                indexes: table.indexes,
-                source_paths: table.source_paths,
-                application_paths: table.application_paths,
-                exclude_paths: table.exclude_paths,
-                allow_extension_prefix: table.allow_extension_prefix,
-                pending_until_required: table.pending_until_required,
-                back_pointer_paths: table.back_pointer_paths,
-                test_paths: table.test_paths,
-                drift_grace_days: table.drift_grace_days,
-                drift_audit_field: table.drift_audit_field,
-                claim_max_age_days: table.claim_max_age_days,
-                sticky_states: table.sticky_states,
-                date_fields: table.date_fields,
-                date_order: table.date_order,
-                field_levels: table.field_levels,
-                accepted_statuses: table.accepted_statuses,
-                external_ids: table.external_ids,
-                reference_sections: table.reference_sections,
-                skip_revision_log: table.skip_revision_log,
-                issue_refs: table.issue_refs,
-            })
+            RuleSetting::deserialize(value).map_err(serde::de::Error::custom)
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
             Ok(RuleSetting {
                 level,
-                not_in: None,
-                claim_paths: None,
-                closed_statuses: None,
-                terminal_statuses: None,
-                fields: None,
-                published_paths: None,
-                indexes: None,
-                source_paths: None,
-                application_paths: None,
-                exclude_paths: None,
-                allow_extension_prefix: None,
-                pending_until_required: None,
-                back_pointer_paths: None,
-                test_paths: None,
-                drift_grace_days: None,
-                drift_audit_field: None,
-                claim_max_age_days: None,
-                sticky_states: None,
-                date_fields: None,
-                date_order: None,
-                field_levels: None,
-                accepted_statuses: None,
-                external_ids: None,
-                reference_sections: None,
-                skip_revision_log: None,
-                issue_refs: None,
+                ..RuleSetting::default()
             })
         }
     }
@@ -1117,84 +1049,32 @@ const RULE_OPTIONS: &[RuleOption] = &[
     },
 ];
 
-/// `RULE_OPTIONS`'s field, by name -- the one place that knows which
-/// `RuleSetting` field an option name maps to, so every check below reads it
-/// once instead of re-matching the name itself.
-fn option_field<'a>(
-    name: &str,
-    setting: &'a RuleSetting,
-) -> Option<std::borrow::Cow<'a, [String]>> {
-    match name {
-        "not_in" => setting.not_in.as_deref().map(std::borrow::Cow::Borrowed),
-        "claim_paths" => setting
-            .claim_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "closed_statuses" => setting
-            .closed_statuses
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "terminal_statuses" => setting
-            .terminal_statuses
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "fields" => setting.fields.as_deref().map(std::borrow::Cow::Borrowed),
-        "date_fields" => setting
-            .date_fields
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        // Structured entries (`ADR-64`): presented as their two names each, so
-        // the shared "non-empty, no blank value" check reads them too.
-        "date_order" => setting.date_order.as_ref().map(|orders| {
-            std::borrow::Cow::Owned(
-                orders
-                    .iter()
-                    .flat_map(|o| [o.earlier.clone(), o.later.clone()])
+/// A list-valued option's declared entries, by name, read from the setting's
+/// own serialized form so no second per-field table exists: an option the
+/// setting does not carry is `None`, one it carries is its entries. A
+/// structured entry (`ADR-64`, `date_order`'s `{earlier, later}`) is presented
+/// as its string values, so the shared "non-empty, no blank value" check reads
+/// it too.
+fn option_field(name: &str, setting: &RuleSetting) -> Option<Vec<String>> {
+    let yaml_serde::Value::Mapping(map) = yaml_serde::to_value(setting).ok()? else {
+        return None;
+    };
+    let yaml_serde::Value::Sequence(entries) = map.get(name)? else {
+        return None;
+    };
+    Some(
+        entries
+            .iter()
+            .flat_map(|entry| match entry {
+                yaml_serde::Value::String(s) => vec![s.clone()],
+                yaml_serde::Value::Mapping(m) => m
+                    .values()
+                    .filter_map(|v| v.as_str().map(str::to_string))
                     .collect(),
-            )
-        }),
-        "accepted_statuses" => setting
-            .accepted_statuses
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "published_paths" => setting
-            .published_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "source_paths" => setting
-            .source_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "application_paths" => setting
-            .application_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "exclude_paths" => setting
-            .exclude_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "back_pointer_paths" => setting
-            .back_pointer_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "external_ids" => setting
-            .external_ids
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "reference_sections" => setting
-            .reference_sections
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "test_paths" => setting
-            .test_paths
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        "sticky_states" => setting
-            .sticky_states
-            .as_deref()
-            .map(std::borrow::Cow::Borrowed),
-        _ => None,
-    }
+                _ => Vec::new(),
+            })
+            .collect(),
+    )
 }
 
 /// Rules that cannot be declared without their options. Adopt mode skips these
@@ -1509,8 +1389,7 @@ pub fn parse_with_document_models(
         }
     }
     // A list of blanks is an empty list wearing a value.
-    let declared =
-        |v: std::borrow::Cow<'_, [String]>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
+    let declared = |v: Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
 
     for (name, setting) in &config.rules {
         for opt in RULE_OPTIONS {
@@ -3373,31 +3252,107 @@ mod exclude_files_tests {
 mod option_table_tests {
     use super::*;
 
+    /// Options that are not list-valued, so `RULE_OPTIONS` (which carries the
+    /// "required list" consequence text) does not describe them.
+    const OTHER_OPTIONS: &[&str] = &[
+        "indexes",
+        "issue_refs",
+        "allow_extension_prefix",
+        "pending_until_required",
+        "skip_revision_log",
+        "field_levels",
+        "drift_grace_days",
+        "drift_audit_field",
+        "claim_max_age_days",
+    ];
+
+    /// The option names `RuleSetting` accepts, read from the derived
+    /// deserializer itself: its unknown-field error lists every field it knows,
+    /// so the struct is the source and this test keeps no list of its own.
+    fn struct_options() -> Vec<String> {
+        let err = yaml_serde::from_str::<RuleSetting>("level: off\nzz_unknown: 1\n")
+            .expect_err("an unknown key is refused")
+            .to_string();
+        let listed = err
+            .split("expected one of ")
+            .nth(1)
+            .unwrap_or_else(|| panic!("no field list in: {err}"));
+        listed
+            .split('`')
+            .skip(1)
+            .step_by(2)
+            .filter(|f| *f != "level")
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn known_options() -> Vec<&'static str> {
+        OTHER_OPTIONS
+            .iter()
+            .copied()
+            .chain(RULE_OPTIONS.iter().map(|o| o.name))
+            .collect()
+    }
+
+    /// An option the struct accepts but no table describes would be read by
+    /// nothing; one a table names but the struct lacks would be refused at
+    /// load. Either way is a silently ignored option (`ADR-55`, `ADR-64`).
+    #[test]
+    fn the_struct_and_the_option_tables_name_the_same_options() {
+        let mut in_struct = struct_options();
+        let mut in_tables: Vec<String> = known_options().iter().map(|s| s.to_string()).collect();
+        in_struct.sort();
+        in_tables.sort();
+        assert_eq!(
+            in_struct, in_tables,
+            "RuleSetting's fields and RULE_OPTIONS + OTHER_OPTIONS must list the same options"
+        );
+    }
+
     /// The rule table names the options each rule accepts; a name that is not
     /// an option `RuleSetting` carries would be refused nowhere and read by
-    /// nothing, so it is checked against the options this module validates.
+    /// nothing, and an option no rule accepts is dead.
     #[test]
-    fn every_option_the_rule_table_names_is_a_known_option() {
-        const OTHER_OPTIONS: &[&str] = &[
-            "indexes",
-            "issue_refs",
-            "allow_extension_prefix",
-            "pending_until_required",
-            "skip_revision_log",
-            "field_levels",
-            "drift_grace_days",
-            "drift_audit_field",
-            "claim_max_age_days",
-        ];
+    fn every_option_the_rule_table_names_is_a_struct_option_and_every_option_has_an_owner() {
+        let in_struct = struct_options();
         for def in crate::rules::RULE_TABLE {
             for option in def.options {
                 assert!(
-                    OTHER_OPTIONS.contains(option)
-                        || RULE_OPTIONS.iter().any(|o| o.name == *option),
-                    "{} lists the option '{option}', which no option table knows",
+                    in_struct.iter().any(|f| f == option),
+                    "{} lists the option '{option}', which RuleSetting does not accept",
                     def.id
                 );
             }
         }
+        for option in &in_struct {
+            assert!(
+                crate::rules::RULE_TABLE
+                    .iter()
+                    .any(|d| d.options.contains(&option.as_str())),
+                "RuleSetting accepts '{option}', which no rule in the rule table takes"
+            );
+        }
+    }
+
+    /// An option present on a rule that does not take it is refused at load.
+    #[test]
+    fn an_option_on_a_rule_that_does_not_take_it_is_refused() {
+        let cfg = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  filename.title-consistency:\n    level: error\n    claim_paths: [docs]\n";
+        let err = parse(cfg)
+            .expect_err("an option the rule does not take")
+            .to_string();
+        assert!(err.contains("claim_paths"), "{err}");
+    }
+
+    /// A rule setting reads back through the typed accessor, and a list option
+    /// declared empty stays distinguishable from one not declared.
+    #[test]
+    fn serialization_round_trip_keeps_absent_apart_from_empty() {
+        let absent: RuleSetting = yaml_serde::from_str("level: warn\n").unwrap();
+        let empty: RuleSetting = yaml_serde::from_str("level: warn\nfields: []\n").unwrap();
+        assert_eq!(absent.fields, None);
+        assert_eq!(empty.fields, Some(Vec::new()));
+        assert!(option_field("fields", &absent).is_none());
+        assert_eq!(option_field("fields", &empty), Some(Vec::new()));
     }
 }
