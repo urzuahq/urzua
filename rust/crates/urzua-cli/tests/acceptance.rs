@@ -50,6 +50,18 @@ struct Case {
     /// by the same rules (SPEC-4's "Nth record type" claim).
     #[serde(default)]
     expect_mirrored: Vec<Mirror>,
+    /// Notices that must appear in the output's `notices` array.
+    #[serde(default)]
+    expect_notices: Vec<NoticeMatcher>,
+    /// Commits made after the fixture commit (which is tagged `base`), in
+    /// order, so a case can run `check --base base` or exercise git history.
+    /// Not allowed with `corpus: "@repo"`.
+    #[serde(default)]
+    commits: Vec<Commit>,
+    /// Run in a `--depth 1` clone of the corpus repository once `commits` are
+    /// made, so a case can assert how a truncated history is reported.
+    #[serde(default)]
+    shallow: bool,
     /// Rules that must appear in `rules_executed` with status `ran` and a
     /// non-empty examined population. Only the first is switched off for the
     /// mutation proof (the assertion is the same for each), which keeps a case
@@ -64,6 +76,33 @@ struct Case {
     /// case with neither a rule to prove nor this reason is rejected.
     mutation_exempt: Option<String>,
     known_gap: Option<KnownGap>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NoticeMatcher {
+    subject: String,
+    message_contains: Option<String>,
+}
+
+/// One commit made on top of the fixture commit. `write` maps a path to its
+/// whole new content, `rename` moves a tracked file, `remove` deletes one.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Commit {
+    #[serde(default)]
+    write: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    rename: Vec<Rename>,
+    #[serde(default)]
+    remove: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Rename {
+    from: String,
+    to: String,
 }
 
 #[derive(Deserialize)]
@@ -301,7 +340,46 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
         git(&t, &["config", "user.name", "acceptance"])?;
         git(&t, &["add", "-A"])?;
         git(&t, &["commit", "-q", "-m", "fixture"])?;
-        (t, Some(guard))
+        git(&t, &["tag", "base"])?;
+        for (n, c) in case.commits.iter().enumerate() {
+            for r in &c.rename {
+                if let Some(parent) = t.join(&r.to).parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                git(&t, &["mv", &r.from, &r.to])?;
+            }
+            for p in &c.remove {
+                git(&t, &["rm", "-q", p])?;
+            }
+            for (p, text) in &c.write {
+                let to = t.join(p);
+                std::fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
+                std::fs::write(&to, text).map_err(|e| e.to_string())?;
+            }
+            git(&t, &["add", "-A"])?;
+            git(&t, &["commit", "-q", "-m", &format!("change {}", n + 1)])?;
+        }
+        if case.shallow {
+            let clone = PathBuf::from(format!("{}-shallow", t.display()));
+            let _ = std::fs::remove_dir_all(&clone);
+            let guard_clone = TempDir(clone.clone());
+            let url = format!("file://{}", t.display());
+            git(
+                &std::env::temp_dir(),
+                &[
+                    "clone",
+                    "-q",
+                    "--depth",
+                    "1",
+                    &url,
+                    &clone.to_string_lossy(),
+                ],
+            )?;
+            drop(guard);
+            (clone, Some(guard_clone))
+        } else {
+            (t, Some(guard))
+        }
     };
     let run = |args: &[String]| {
         Command::new(env!("CARGO_BIN_EXE_urzua"))
@@ -388,6 +466,7 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
         || !case.expect_findings.is_empty()
         || !case.expect_no_findings.is_empty()
         || !case.expect_rules_ran.is_empty()
+        || !case.expect_notices.is_empty()
         || !case.expect_mirrored.is_empty();
     if needs_json && json.is_none() {
         unmet.push("stdout is not JSON".to_string());
@@ -459,6 +538,28 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
             if status != Some("ran") || examined == 0 {
                 unmet.push(format!(
                     "rule {rule} did not run over a non-empty population (status {status:?}, examined {examined})"
+                ));
+            }
+        }
+        let notices = j
+            .get("notices")
+            .and_then(|n| n.as_array())
+            .cloned()
+            .unwrap_or_default();
+        for n in &case.expect_notices {
+            let field = |v: &serde_json::Value, k: &str| {
+                v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string()
+            };
+            let found = notices.iter().any(|v| {
+                field(v, "subject") == n.subject
+                    && n.message_contains
+                        .as_deref()
+                        .is_none_or(|t| field(v, "message").contains(t))
+            });
+            if !found {
+                unmet.push(format!(
+                    "no notice with subject {:?} containing {:?}",
+                    n.subject, n.message_contains
                 ));
             }
         }

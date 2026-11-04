@@ -1,0 +1,12 @@
+id: no-drift-without-a-change-to-the-cited-file
+corpus: corpus-g
+# The positive control: history with no change to a cited file is clean, and
+# the rule ran over every record.
+commits:
+  - write:
+      README.md: "unrelated\n"
+invocation: [check]
+expect_exit: 0
+expect_rules_ran: [embodiment.consistency]
+expect_no_findings:
+  - {rule: embodiment.consistency}

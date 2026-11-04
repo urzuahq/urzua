@@ -1,0 +1,15 @@
+id: neighbouring-file-change-is-not-drift-of-the-cited-file
+corpus: corpus-g
+# A value derived from a near-neighbour query: src/queue.rs.bak and
+# src/queue_ext.rs change, src/queue.rs does not. A prefix or stem match would
+# compute drift for ADR-0001 from a file it does not cite, which is a
+# well-formed, plausible and wrong answer.
+commits:
+  - write:
+      src/queue.rs.bak: "fn queue_backup() { old(); }\n"
+      src/queue_ext.rs: "fn queue_ext() { more(); }\n"
+invocation: [check]
+expect_exit: 0
+expect_rules_ran: [embodiment.consistency]
+expect_no_findings:
+  - {rule: embodiment.consistency}

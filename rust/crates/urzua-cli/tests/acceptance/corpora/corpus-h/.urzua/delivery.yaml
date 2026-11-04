@@ -1,0 +1,22 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  milestone:
+    dir: records/milestones
+    prefix: MILE
+    required_fields: [Status]
+    known_fields: [Realized-by]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Planned, InProgress, Done]
+      success: [Done]
+      failure: []
+      implementable: [Planned, InProgress, Done]
+      delivery:
+        delivered_tiers: [Implemented, Verified]
+        unevidenced_tiers: ["Not started"]
+        not_done: [Planned, InProgress]
+        set_status: Done
+rules:
+  header.required-fields: error
+  status.delivery-agreement: error

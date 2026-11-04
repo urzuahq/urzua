@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-08-20
 Status: Draft
 Author: beauwilliams
@@ -241,9 +241,33 @@ built, and where it differs from the sketch:
   round-trip to the reference that begins each entry. Each property is also run with its rule off (or,
   for invariance, against an input that really changes the verdict) and must then fail.
 
-Not built: the cases in the tables above that no rule family detects today (the "silent zeros" git-history
-cases, drift reported while exiting 0, the permanent-ceiling case), the rules with no case (the report names
-them), and mutation of a defect reintroduced into the source rather than a rule switched off.
+### Added by the rest of MILE-170
+
+- **Commits, `--base` and shallow runs.** A case may list `commits`, each writing, renaming or removing
+  files and committing; the fixture commit is tagged `base`, so `check --base base` gives the changed-path
+  rules a diff. `shallow: true` runs the case in a `--depth 1` clone made after the commits.
+  `expect_notices` matches the report's notices by `subject` and `message_contains`. Git history is part
+  of the fixture, so a case's commits are written in its own file, not in the corpus.
+- **`corpus-g` (git history).** A shallow clone yields the `embodiment-drift-git` notice and not a clean
+  zero; a value-only edit of a cited file (same length, same token counts, so invisible to an
+  occurrence-count query) is drift; a renamed record keeps its prior state; drift at warning severity under
+  `fail_on: warning` is a blocking exit, never exit 0; a change to `src/queue.rs.bak` and `src/queue_ext.rs`
+  is not drift of the cited `src/queue.rs` (the derived-value case: a near-neighbour query computes a
+  plausible wrong answer); a `Implements:` back-pointer to an identifier that only a record's prose
+  mentions is dangling (identifiers are defined by role, not mention); a locator two records cite is a
+  promotion candidate.
+- **`corpus-h` (gates and ceiling).** `diff.source-requires-record` and `diff.source-and-records-mixed`
+  over a second commit; `boundary.published-path-reference`; `citation.issue-exists` against a snapshot
+  checked into the corpus (no network); `status.delivery-agreement` in both directions; and the permanent
+  ceiling: a required `Context` section holding off-topic text passes `section.required`, because no
+  mechanical check can say the text is about the decision. That case records the limit; it does not claim
+  the gap is handled.
+- **Coverage.** Every rule in `ALL_RULES` now has a case whose mutation proof holds, and the report lists
+  none uncovered.
+
+Not built: mutation of a defect reintroduced into the source rather than a rule switched off, and the
+"silent zeros" cases whose defect lives in a git query this build does not make (the rename case is covered
+through the record's blame history; the `-S`/`-G` case through the value-only edit).
 
 ## Success criteria
 
@@ -277,3 +301,4 @@ them), and mutation of a defect reintroduced into the source rather than a rule 
 > | 2026-09-18 | Stays `Draft`, deliberately. **Why:** unlike `SPEC-1`/`2`/`3`, this spec's subject does not exist. No code reads `manifest.yaml` or a per-case `<case-id>.yaml`, and the only test files in the workspace are `check_integration.rs`, `new_integration.rs` and `purity.rs`. `Draft` is the accurate status, and flipping it with the others would have been the bulk edit `BUG-26` warned against. | **structural** |
 > | 2026-11-02 | Bumped to `0.4`. **Why:** MILE-101 built the first runner; the spec now records the shape that met a real case: the runner location, the case fields actually supported, `known_gap` markers, a read `manifest.yaml`, and the `URZUA_ACCEPTANCE_EXTRA` private-corpus hook. | **substantive** |
 > | 2026-11-04 | Bumped to `0.5`. **Why:** `MILE-170` built the rest of the harness: mutation proof of every case, the coverage report of rules with no case, the "Nth record type" case, the generative property, corpora `corpus-d` to `corpus-f` and one corpus-zero case per rule family. Recorded under "Added by MILE-170"; the success criteria are unchanged and criterion 2 now holds for every case by construction. | **substantive** |
+> | 2026-11-04 | Bumped to `0.6`. **Why:** `MILE-170` finished the harness: cases can make commits, pass `--base` and run shallow; `corpus-g` and `corpus-h` add the git-history, drift, derived-value, diff-gate, boundary, issue-snapshot, delivery and permanent-ceiling cases; every shipped rule now has a proven case. Recorded under "Added by the rest of MILE-170". | **substantive** |

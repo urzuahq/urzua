@@ -1,0 +1,13 @@
+id: shallow-clone-is-a-notice-never-a-clean-zero
+corpus: corpus-g
+# A shallow clone truncates the history drift reads. The run must say so
+# instead of reporting no drift.
+commits:
+  - write:
+      src/queue.rs: "fn queue() { push(4); }\n"
+shallow: true
+invocation: [check]
+expect_exit: 0
+expect_notices:
+  - {subject: embodiment-drift-git, message_contains: shallow clone}
+proves: [embodiment.consistency]

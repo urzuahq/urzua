@@ -1,0 +1,13 @@
+id: drift-is-reported-with-a-blocking-exit
+corpus: corpus-g
+# The gate must not print drift and exit 0: a drift finding at warning severity
+# under `fail_on: warning` makes the run blocking and the exit code 1.
+commits:
+  - write:
+      src/queue.rs: "fn queue() { push(1); pop(); }\n"
+invocation: [check]
+expect_exit: 1
+expect_json:
+  - {at: /status, equals: findings-present}
+expect_findings:
+  - {rule: embodiment.consistency, file: records/ADR-0001-queue.md, severity: warning}

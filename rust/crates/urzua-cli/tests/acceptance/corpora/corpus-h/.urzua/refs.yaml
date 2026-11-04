@@ -1,0 +1,19 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records/adr
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+
+rules:
+  header.required-fields: error
+  citation.issue-exists:
+    level: warn
+    reference_sections: [References]
+    skip_revision_log: true
+    issue_refs:
+      snapshot: .urzua/known-refs.json
+      repository: example/corpus
+      forms: [number]
