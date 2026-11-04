@@ -1,5 +1,5 @@
 ---
-Version: '0.14'
+Version: '0.15'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -226,7 +226,7 @@ which stays only for what genuinely isn't built yet.
 |---|---|
 | `header.required-fields` | Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here. |
 | `header.layout-consistency` | A record's header line layout (one-per-line vs. pipe-delimited) matches its type's declared `header_layout`, when one is declared (ADR-38). |
-| `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). |
+| `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
 | `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
@@ -276,10 +276,6 @@ Design language from this spec's original Phase B scope, with no shipped rule be
   detection: an author is not their own reviewer of record.
 - **Required sections** per profile, generalized beyond `change_class` on revision entries (the one
   instance that's actually built).
-- **Header closure's `x-` escape hatch** (RFC-10): a declared-and-justified extra key, distinct from
-  `header.field-set-consistency`'s per-type `known_fields` list. Not implemented — today an unlisted
-  field is either invisible (no `known_fields` declared for the type) or a finding (declared), with
-  no third "explicitly excused" state.
 - **Declared scope** (RFC-11 §6) and **boundaries** (RFC-11 §1) — neither is built; RFC-11's own
   open questions (nested-scope inheritance, glob-vs-subject width) are still unresolved.
 
@@ -442,3 +438,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | `git-diff` scope also treats as dependents the records covered by a changed or deleted waiver's old and new `Scope`; splits header values on commas when finding references; keeps `type.record-outside-declared-dir` findings for changed files; treats a symlinked configuration as changed by either path; an empty diff with no rule enabled is `not-run`. §Output `status` states the empty git-diff exception. **Why:** late review of `MILE-123` reproduced each as a case where `check --base` hid or mis-stated what a full check reports. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Bumped to `0.15`. `header.field-set-consistency` gains the optional `allow_extension_prefix` option, off unless declared `true`: a header key beginning `x-` in any case is exempt from the rule, and an unprefixed undeclared key is still a finding. The option is declared per rule, not per type, so a type's `known_fields` still lists every field the rule judges by default; `pointer.resolution` and `narrative-field.stale` read only declared pointer and narrative fields, so a prefixed key is never one of them unless declared. The 'Not yet built' entry for the `x-` escape hatch is removed, and the rule-table row is regenerated from `RULE_METADATA`. **Why:** `MILE-141` -- the adopter's linter admits `x-` keys through its closed key set, so without an equivalent a repository either declares every local extension in config or loses typo detection on real keys. | **substantive** |
