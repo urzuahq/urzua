@@ -452,20 +452,44 @@ pub(crate) fn read_back_pointer_sources(
     discovered: &urzua_io::DiscoveredFiles,
     config: &Config,
 ) -> Result<Option<BackPointerSources>, String> {
+    read_sources_for_rule(
+        repo_root,
+        discovered,
+        config,
+        rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    )
+}
+
+/// The same read for `embodiment.back-pointer-decision-accepted`, which
+/// declares its own `back_pointer_paths` (`MILE-133`).
+pub(crate) fn read_decision_gate_sources(
+    repo_root: &Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    config: &Config,
+) -> Result<Option<BackPointerSources>, String> {
+    read_sources_for_rule(
+        repo_root,
+        discovered,
+        config,
+        rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+    )
+}
+
+fn read_sources_for_rule(
+    repo_root: &Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    config: &Config,
+    rule: &str,
+) -> Result<Option<BackPointerSources>, String> {
     let Some(source_paths) = config
         .rules
-        .get(rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
+        .get(rule)
         .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
         .and_then(|s| s.back_pointer_paths.clone())
     else {
         return Ok(None);
     };
-    let files = read_files_under(
-        repo_root,
-        discovered,
-        &source_paths,
-        rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
-    )?;
+    let files = read_files_under(repo_root, discovered, &source_paths, rule)?;
     Ok(Some(BackPointerSources {
         files,
         back_pointer_paths: source_paths,

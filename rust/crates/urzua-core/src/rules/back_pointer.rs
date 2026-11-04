@@ -99,6 +99,31 @@ pub fn back_pointer_evidence(
     cited
 }
 
+/// One finding per declared path covering no tracked file: nothing under it
+/// was checked, and an empty set of files reads exactly like a clean one.
+fn uncovered_source_paths(
+    rule: &str,
+    files: &[SourceFile],
+    source_paths: &[String],
+) -> Vec<Finding> {
+    source_paths
+        .iter()
+        .filter(|entry| !files.iter().any(|f| path_is_published(&f.path, entry)))
+        .map(|entry| Finding {
+            rule: rule.to_string(),
+            severity: FindingSeverity::Error,
+            file: PathBuf::from(entry),
+            line: None,
+            message: format!(
+                "source path '{entry}' covers no tracked file, so nothing under it was \
+                 checked; remove the entry or correct the path"
+            ),
+            waived: None,
+            declared_severity: None,
+        })
+        .collect()
+}
+
 /// Rule (`MILE-128`): a back-pointer comment citing a record that does not
 /// exist. The population is the source files under the declared paths; a
 /// declared path covering no file fails closed, as a prohibition does
@@ -142,22 +167,106 @@ pub fn embodiment_back_pointer_resolution(
         Outcome::Examined
     });
 
-    for entry in source_paths {
-        if !files.iter().any(|f| path_is_published(&f.path, entry)) {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: PathBuf::from(entry),
-                line: None,
-                message: format!(
-                    "source path '{entry}' covers no tracked file, so nothing under it was \
-                     checked; remove the entry or correct the path"
-                ),
-                waived: None,
-                declared_severity: None,
-            });
+    findings.extend(uncovered_source_paths(RULE_ID, files, source_paths));
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
+/// Rule (`MILE-133`): a back-pointer comment citing a record whose `Status`
+/// is not an accepted one. A comment `Implements: ADR-12` says the code
+/// implements that decision, so landing it while the decision is still
+/// `Proposed` puts implementation ahead of the decision.
+///
+/// "Accepted" is the cited type's declared `statuses.success`; a type that
+/// declares none falls back to `accepted_fallback` (the rule's
+/// `accepted_statuses`), and with neither the status cannot be judged, which
+/// is a finding rather than a pass. With `changed` (a `--base` run) only the
+/// back-pointers in files the diff changed are judged. File granularity: a
+/// changed file's untouched back-pointers are judged too.
+pub fn embodiment_back_pointer_decision_accepted(
+    files: &[SourceFile],
+    source_paths: &[String],
+    accepted_fallback: &[String],
+    changed: Option<&[PathBuf]>,
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED;
+    let prefixes = declared_prefixes(config);
+    let declared = super::status::statuses_by_type(config);
+    let mut findings = Vec::new();
+    let mut push = |pointer: &BackPointer, message: String| {
+        findings.push(Finding {
+            rule: RULE_ID.to_string(),
+            severity: FindingSeverity::Error,
+            file: pointer.file.clone(),
+            line: Some(pointer.line),
+            message,
+            waived: None,
+            declared_severity: None,
+        });
+    };
+
+    let population = census(PopulationUnit::File, files.iter().collect(), |file| {
+        if !source_paths
+            .iter()
+            .any(|e| path_is_published(&file.path, e))
+            || changed.is_some_and(|c| !c.contains(&file.path))
+        {
+            return Outcome::OutOfScope;
         }
-    }
+        let Some(content) = &file.content else {
+            return Outcome::Unreadable;
+        };
+        for pointer in scan_back_pointers(&file.path, content, &prefixes) {
+            // A citation of no record is `embodiment.back-pointer-resolution`'s.
+            let Some(target) = index.get(&crate::values::RecordId::new(&pointer.id)) else {
+                continue;
+            };
+            let status_field = relation_field_name(
+                config,
+                &target.record_type,
+                crate::config::RelationRole::Status,
+            );
+            let status = target.header.get(status_field).map(str::trim).unwrap_or("");
+            let accepted: Option<bool> = match declared.get(&target.record_type) {
+                Some(decl) => Some(decl.success.iter().any(|s| s == status)),
+                None if accepted_fallback.is_empty() => None,
+                None => Some(accepted_fallback.iter().any(|s| s == status)),
+            };
+            match accepted {
+                Some(true) => {}
+                Some(false) => push(
+                    &pointer,
+                    format!(
+                        "back-pointer cites {}, whose {status_field} is '{status}', not an \
+                         accepted status; the decision must be accepted before the code that \
+                         implements it lands",
+                        pointer.id
+                    ),
+                ),
+                None => push(
+                    &pointer,
+                    format!(
+                        "back-pointer cites {}, but type '{}' declares no success statuses and \
+                         the rule declares no accepted_statuses, so its status cannot be judged",
+                        pointer.id, target.record_type
+                    ),
+                ),
+            }
+        }
+        Outcome::Examined
+    });
+
+    findings.extend(uncovered_source_paths(RULE_ID, files, source_paths));
 
     (
         RuleExecution {
@@ -316,5 +425,107 @@ mod tests {
             (pop.eligible(), pop.examined(), pop.unreadable()),
             (1, 0, 1)
         );
+    }
+
+    fn adr_with(path: &str, status: &str) -> Record {
+        record_with_prefix(
+            path,
+            "adr",
+            "ADR",
+            &format!("# t\n\n> **Status:** {status}\n"),
+        )
+    }
+
+    fn gate(
+        records: &[Record],
+        files: &[SourceFile],
+        fallback: &[&str],
+        changed: Option<&[PathBuf]>,
+        config: &Config,
+    ) -> (RuleExecution, Vec<Finding>) {
+        let (index, _) = build_index_reporting_collisions(records);
+        let fallback: Vec<String> = fallback.iter().map(|s| s.to_string()).collect();
+        embodiment_back_pointer_decision_accepted(
+            files,
+            &["src".to_string()],
+            &fallback,
+            changed,
+            config,
+            &index,
+        )
+    }
+
+    fn declared_config() -> Config {
+        let mut t = type_config(None);
+        t.prefix = Some("ADR".to_string());
+        t.statuses = Some(
+            yaml_serde::from_str("values: [Proposed, Accepted, Rejected]\nsuccess: [Accepted]\nfailure: [Rejected]\n")
+                .unwrap(),
+        );
+        config_with_types(vec![("adr", t)])
+    }
+
+    #[test]
+    fn a_back_pointer_to_an_unaccepted_record_is_reported_observed_failing() {
+        let records = vec![
+            adr_with("docs/adr/ADR-1-a.md", "Proposed"),
+            adr_with("docs/adr/ADR-2-b.md", "Accepted"),
+        ];
+        let files = vec![file("src/a.rs", "ok\n// Implements: ADR-1, ADR-2\n")];
+        let (exec, findings) = gate(&records, &files, &[], None, &declared_config());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].line, Some(2));
+        assert!(findings[0].message.contains("ADR-1") && findings[0].message.contains("Proposed"));
+        assert_eq!(exec.population.unwrap().examined(), 1);
+    }
+
+    #[test]
+    fn a_rejected_record_is_not_accepted() {
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Rejected")];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1\n")];
+        let (_, findings) = gate(&records, &files, &[], None, &declared_config());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn a_type_without_declared_statuses_uses_the_fallback_observed_failing() {
+        let records = vec![
+            adr_with("docs/adr/ADR-1-a.md", "Accepted"),
+            adr_with("docs/adr/ADR-2-b.md", "Draft"),
+        ];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1, ADR-2\n")];
+        let (_, findings) = gate(&records, &files, &["Accepted"], None, &config());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-2"));
+    }
+
+    #[test]
+    fn with_no_declared_or_fallback_statuses_the_status_cannot_be_judged_not_passed() {
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Accepted")];
+        let files = vec![file("src/a.rs", "// Implements: ADR-1\n")];
+        let (_, findings) = gate(&records, &files, &[], None, &config());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("cannot be judged"));
+    }
+
+    #[test]
+    fn a_citation_of_no_record_is_left_to_the_resolution_rule() {
+        let files = vec![file("src/a.rs", "// Implements: ADR-9\n")];
+        let (_, findings) = gate(&[], &files, &[], None, &declared_config());
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn on_a_diff_only_changed_files_are_judged_observed_failing() {
+        let records = vec![adr_with("docs/adr/ADR-1-a.md", "Proposed")];
+        let files = vec![
+            file("src/a.rs", "// Implements: ADR-1\n"),
+            file("src/b.rs", "// Implements: ADR-1\n"),
+        ];
+        let changed = vec![PathBuf::from("src/b.rs")];
+        let (exec, findings) = gate(&records, &files, &[], Some(&changed), &declared_config());
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].file, PathBuf::from("src/b.rs"));
+        assert_eq!(exec.population.unwrap().examined(), 1);
     }
 }
