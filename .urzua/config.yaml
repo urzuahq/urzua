@@ -207,3 +207,9 @@ rules:
   embodiment.back-pointer-decision-accepted:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+  # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
+  # Rust sources must change a governing record in the same diff (MILE-124).
+  # Inert on a whole-repo run, where it reports not-applicable.
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]

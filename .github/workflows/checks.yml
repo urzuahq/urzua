@@ -50,3 +50,16 @@ jobs:
       - name: urzua check (SPEC-0002 Phase A exit criterion -- self-hosting)
         working-directory: .
         run: rust/target/release/urzua check
+      # The diff-aware gate (MILE-123/124): on a PR, report only on what the PR
+      # changed against its base, and enforce the diff.* rules, which have
+      # nothing to judge on a whole-repo run. fetch-depth: 0 above brings the
+      # history; the explicit fetch guarantees the base branch ref exists.
+      # Only the `ci` workflow's pull_request trigger sets base_ref.
+      - name: urzua check --base (diff gate, pull requests only)
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          rust/target/release/urzua check --base "origin/${BASE_REF}"
