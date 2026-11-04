@@ -55,7 +55,7 @@ pub fn run(
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let drifted = crate::discovery::compute_drifted_records(&repo_root, &records, &config);
+    let drift = crate::discovery::compute_drifted_records(&repo_root, &records, &config);
     let back_pointed =
         match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
             Ok(Some(sources)) => {
@@ -70,8 +70,13 @@ pub fn run(
             Ok(None) => Default::default(),
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
-    let (population, repairs) =
-        urzua_core::fix::detect_repairs(&records, &config, &drifted, &back_pointed);
+    let (population, repairs) = urzua_core::fix::detect_repairs(
+        &records,
+        &config,
+        &drift.drifted,
+        &drift.fresh,
+        &back_pointed,
+    );
 
     if !apply {
         return emit(&build_fix_report(

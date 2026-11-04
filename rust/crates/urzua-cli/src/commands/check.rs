@@ -477,14 +477,14 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     // `Realized-by`-carrying record; skip that work entirely when its only
     // consumer, `embodiment.consistency`, won't read the result (`BUG-115`),
     // matching the `claim_paths` gate just above.
-    let drifted = if config
+    let drift = if config
         .rules
         .get(rules::RULE_EMBODIMENT_CONSISTENCY)
         .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
     {
         compute_drifted_records(&repo_root, &records, &config)
     } else {
-        std::collections::HashSet::new()
+        Default::default()
     };
 
     let claim_ages = if config
@@ -577,7 +577,14 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             || rules::revision_log_change_class(&records, &full_text),
         ),
         crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
-            rules::embodiment_consistency(&records, &config, &drifted, &back_pointed, &claim_ages)
+            rules::embodiment_consistency(
+                &records,
+                &config,
+                &drift.drifted,
+                &drift.fresh,
+                &back_pointed,
+                &claim_ages,
+            )
         }),
         crate::gate::gated(
             &config,

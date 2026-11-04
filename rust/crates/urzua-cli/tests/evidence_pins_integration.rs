@@ -46,8 +46,12 @@ fn config(consistency: &str) -> String {
 }
 
 fn record(realized_by: &str) -> String {
+    record_stating("Implemented", realized_by)
+}
+
+fn record_stating(state: &str, realized_by: &str) -> String {
     format!(
-        "# ADR-1: First\n\n> Embodiment: Implemented\n> Realized-by: {realized_by}\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        "# ADR-1: First\n\n> Embodiment: {state}\n> Realized-by: {realized_by}\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
     )
 }
 
@@ -284,5 +288,67 @@ fn the_new_options_belong_to_embodiment_consistency_only() {
     assert!(
         String::from_utf8_lossy(&out.stdout).contains("drift_grace_days"),
         "{out:?}"
+    );
+}
+
+/// The record is committed first and the locator changes after, so the drift
+/// is fresh. The record already says `Drift detected`.
+fn stated_drift_repo(name: &str, locator_date: Option<&str>) -> PathBuf {
+    let dir = repo(name, "{level: error, drift_grace_days: 7}");
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        record_stating("Drift detected", "code:src/a.rs"),
+    )
+    .unwrap();
+    commit_all(&dir, Some(OLD));
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, locator_date);
+    dir
+}
+
+#[test]
+fn a_stated_drift_detected_is_not_contradicted_by_fresh_drift_inside_the_grace_window_observed_failing(
+) {
+    let dir = stated_drift_repo("grace-stated", None);
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert_eq!(
+        consistency_messages(&parsed),
+        Vec::<String>::new(),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn a_stated_tier_is_still_accepted_for_fresh_drift_inside_the_grace_window() {
+    let dir = drifted_repo("grace-tier", "{level: error, drift_grace_days: 7}", None);
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert_eq!(
+        consistency_messages(&parsed),
+        Vec::<String>::new(),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn a_stated_drift_detected_agrees_with_drift_older_than_the_grace_window() {
+    let dir = stated_drift_repo("grace-stated-old", Some("2021-01-01T00:00:00"));
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert_eq!(
+        consistency_messages(&parsed),
+        Vec::<String>::new(),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn fix_does_not_flip_a_stated_drift_detected_while_the_drift_is_inside_the_grace_window_observed_failing(
+) {
+    let dir = stated_drift_repo("grace-fix", None);
+    let parsed = json(&run_urzua(&dir, &["fix"]));
+    assert_eq!(
+        parsed["repairs"].as_array().map(Vec::len),
+        Some(0),
+        "{parsed}"
     );
 }
