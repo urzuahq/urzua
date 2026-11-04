@@ -1,0 +1,165 @@
+name: urzua gate
+description: >-
+  Installs a pinned urzua release (checksum and build provenance verified),
+  checks the checkout has the history drift reads, runs `urzua check` and, on a
+  pull request, `urzua check --base`, and reports the findings as inline
+  annotations and one summary comment that is updated rather than stacked.
+# Implements: MILE-180, ADR-71
+#
+# Adopting repositories:
+#
+#   - uses: actions/checkout@<sha>
+#     with:
+#       fetch-depth: 0
+#   - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
+#     with:
+#       version: v0.3.0
+#       base-ref: ${{ github.base_ref }}
+#
+# The job needs `pull-requests: write` for the comment. A comment that cannot be
+# posted (a fork's read-only token) is a warning and never changes the verdict.
+# This action only consumes urzua's JSON; the engine prints nothing else.
+
+inputs:
+  version:
+    description: >-
+      The exact release tag to install (for example v0.3.0). Not a branch and
+      not "latest": the gate is only as stable as its pin. Ignored when `binary`
+      is set.
+    required: false
+    default: ""
+  sha256:
+    description: Optional SHA-256 of the release archive for this platform, checked in addition to the build provenance attestation.
+    required: false
+    default: ""
+  repository:
+    description: The repository the release and its attestation come from.
+    required: false
+    default: urzuahq/urzua
+  binary:
+    description: >-
+      Path to an already-built urzua binary, used instead of installing a
+      release. For urzua's own CI, which gates with the binary it just built.
+    required: false
+    default: ""
+  base-ref:
+    description: >-
+      The pull request's base branch name. When set, also runs
+      `urzua check --base origin/<base-ref>`. Leave empty outside pull requests.
+    required: false
+    default: ""
+  working-directory:
+    description: The directory holding the checkout to check.
+    required: false
+    default: "."
+  annotate:
+    description: Emit inline annotations for findings ("true" or "false").
+    required: false
+    default: "true"
+  comment:
+    description: >-
+      Post findings as one updated pull request comment ("true" or "false").
+      Only acts when `pr-number` is set.
+    required: false
+    default: "true"
+  pr-number:
+    description: The pull request number to comment on.
+    required: false
+    default: ${{ github.event.pull_request.number }}
+  github-token:
+    description: Token for the attestation check and the comment.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: install the pinned release
+      id: install
+      if: inputs.binary == ''
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        SHA256: ${{ inputs.sha256 }}
+        REPO: ${{ inputs.repository }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        bin="$("$GITHUB_ACTION_PATH/install.sh")"
+        echo "bin=$bin" >> "$GITHUB_OUTPUT"
+
+    - name: check the checkout has the history the gate reads
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+      run: |
+        "$GITHUB_ACTION_PATH/check-history.sh"
+
+    - name: run urzua check
+      id: run
+      shell: bash
+      env:
+        BIN: ${{ inputs.binary != '' && inputs.binary || steps.install.outputs.bin }}
+        BASE_REF: ${{ inputs.base-ref }}
+        WORKDIR: ${{ inputs.working-directory }}
+      run: |
+        set -uo pipefail
+        # Relative paths are relative to the workspace, whatever job-level
+        # defaults.run.working-directory a caller set.
+        cd "$GITHUB_WORKSPACE"
+        BIN="$(realpath "$BIN")"
+        out="$RUNNER_TEMP/urzua-gate"
+        mkdir -p "$out"
+        cd "$WORKDIR"
+        # Exit codes: 0 pass, 1 blocking findings, 2 could not run. Every run
+        # is kept and reported before the verdict is given.
+        "$BIN" check >"$out/check.json"
+        echo "check_code=$?" >> "$GITHUB_OUTPUT"
+        if [ -n "$BASE_REF" ]; then
+          "$BIN" check --base "origin/$BASE_REF" >"$out/base.json"
+          echo "base_code=$?" >> "$GITHUB_OUTPUT"
+        fi
+        echo "dir=$out" >> "$GITHUB_OUTPUT"
+
+    - name: report findings
+      shell: bash
+      env:
+        DIR: ${{ steps.run.outputs.dir }}
+        CHECK_CODE: ${{ steps.run.outputs.check_code }}
+        BASE_CODE: ${{ steps.run.outputs.base_code }}
+        BASE_REF: ${{ inputs.base-ref }}
+        ANNOTATE: ${{ inputs.annotate }}
+        COMMENT: ${{ inputs.comment }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REPO: ${{ github.repository }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -uo pipefail
+        args=(check "$DIR/check.json" "$CHECK_CODE")
+        [ -n "$BASE_REF" ] && args+=("check --base origin/$BASE_REF" "$DIR/base.json" "$BASE_CODE")
+        annotations="$("$GITHUB_ACTION_PATH/render.sh" "$DIR/comment.md" "${args[@]}")"
+        [ "$ANNOTATE" = "true" ] && [ -n "$annotations" ] && printf '%s\n' "$annotations"
+        cat "$DIR/comment.md" >> "$GITHUB_STEP_SUMMARY"
+        if [ "$COMMENT" = "true" ] && [ -n "$PR_NUMBER" ]; then
+          "$GITHUB_ACTION_PATH/post-comment.sh" "$DIR/comment.md"
+        fi
+
+    - name: verdict
+      shell: bash
+      env:
+        CHECK_CODE: ${{ steps.run.outputs.check_code }}
+        BASE_CODE: ${{ steps.run.outputs.base_code }}
+      run: |
+        # A run that could not run (2) fails the gate with that said, never
+        # passes; blocking findings (1) fail it.
+        for entry in "check:$CHECK_CODE" "check --base:$BASE_CODE"; do
+          name="${entry%%:*}" code="${entry##*:}"
+          [ -z "$code" ] && continue
+          case "$code" in
+            0) ;;
+            1) echo "::error::urzua $name reported blocking findings"; failed=1 ;;
+            *) echo "::error::urzua $name could not run (exit $code); a gate that did not run is not a pass"; failed=1 ;;
+          esac
+        done
+        exit "${failed:-0}"

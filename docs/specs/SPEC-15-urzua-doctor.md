@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -58,7 +58,7 @@ empty, same as every other command's report.
 | `rules-enabled` | At least one rule is enabled (level other than `off`). `error` if none is: every rule is opt-in (`ADR-53`), so `check` would report not-run and examine nothing (`BUG-174`). |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
 | `record-type-required-fields` | One check per declared type with an empty `required_fields`. `warn`, not `error` — a type with no required fields is unusual, not necessarily wrong. |
-| `ci-wired` | `.github/workflows/ci.yml` contains `urzua check` or `make records`. `warn` if not — a check that exists but is never run reports nothing to anyone. |
+| `ci-wired` | Some workflow under `.github/workflows/` contains `urzua check`, `make records` or a reference to urzua's reusable `actions/urzua-gate` action (`MILE-180`), which runs the checker for the caller. `warn` if not — a check that exists but is never run reports nothing to anyone. |
 
 | `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer` and a machine-readable `state` (`MILE-179`, `ADR-71`). The hooks directory is `core.hooksPath` (relative to the working tree root) when set, else the repository's own `hooks`. `state` is `not-installed`, `installed-running-urzua` (the file mentions `urzua` or `make records`), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee. `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. Hook-manager configuration (lefthook, pre-commit framework) is not read; a manager that installs real hook files, or sets `core.hooksPath`, is seen. |
 
@@ -95,4 +95,5 @@ than compounded:
 > | 2026-09-11 | Added `notices` to the documented shape and explained why the 2/1/0 exit-code split lives on a separate field rather than being derived from `status` (ADR-46). | **substantive** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-02 | Bumped to `0.5`. Added the `rules-enabled` check and corrected the "which rules are off" paragraph, which still said there is no per-rule config (stale since `ADR-53`). **Why:** `doctor` exited 0 for a config where `check` exits 2 not-run (`BUG-174`). Also noted that config load now rejects an invalid record-type `prefix` or `dir` (`BUG-173`), surfaced through `config-parses`. | **substantive** |
-> | 2026-11-04 | Bumped to `0.6`. Added the `hook-wired` check and its `layer` and `state` fields. **Why:** `ADR-71` makes wiring verifiable and `MILE-179` builds it; `doctor` examined the config and workflows but not hooks, so a repository could not verify its own hook. | **substantive** |
+> | 2026-11-04 | Bumped to `0.6`. `ci-wired` also accepts a workflow that uses urzua's reusable `urzua-gate` action. **Why:** a workflow wired in through the action never spells `urzua check`, so doctor would have reported a wired repository as unwired (`MILE-180`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.7`. Added the `hook-wired` check and its `layer` and `state` fields. **Why:** `ADR-71` makes wiring verifiable and `MILE-179` builds it; `doctor` examined the config and workflows but not hooks, so a repository could not verify its own hook. | **substantive** |

@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M6DEN9B38Y4CFPV1W98X0WRE
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: governance-process
-Realized-by: code:rust/crates/urzua-core/src/rules/back_pointer.rs, test:rust/crates/urzua-cli/tests/back_pointer_integration.rs
 ---
 # 133 — A gate that holds an implementation change until a decision record for it is Accepted
 
@@ -28,3 +27,4 @@ A gate that reports a change to implementation paths (for example `rust/`) when 
 > | 2026-11-04 | Narrowest buildable reading shipped as `embodiment.back-pointer-decision-accepted` (`SPEC-2` 0.21): a source back-pointer citing a record not in an accepted status is reported, file-granular on `--base`. Detecting a change that implements a proposal with no back-pointer, and classifying a change as a mechanical fix, remain open. **Why:** a back-pointer is the only machine-readable claim that code implements a record. | **substantive** |
 > | 2026-11-04 | The gate judges a back-pointer against the cited type's declared `statuses.implementable` (falling back to the rule's `accepted_statuses`, else unjudgeable) instead of its terminal `success`; this repository declares the lists and enables the gate. `Status` unchanged. **Why:** maintainer decision of 2026-11-04: no type knowledge is hardcoded, so terminal success cannot mean implementation is allowed. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #181, #176: opt-in rule `embodiment.back-pointer-decision-accepted` judges a back-pointer against the cited type's `statuses.implementable`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-04 | `Status` Done -> InProgress, and the partial evidence moved out of `Realized-by` into this row. **Why:** the closure audit of #234 checked the What against the code. The What asks for a gate that reports a change implementing a proposal whose change set names no decision record, or one that is not yet Accepted. Built: `embodiment.back-pointer-decision-accepted` (a back-pointer citing a record that is not implementable), with `diff.source-requires-record` (`MILE-124`) requiring some governed record in the diff. Not built, as the 2026-11-04 row above already said: detecting a change that implements a proposal and carries no back-pointer, and classifying a change as a mechanical fix. The earlier Done contradicted this record's own log. Evidence of the partial delivery, no longer claimed as complete: rust/crates/urzua-core/src/rules/back_pointer.rs, rust/crates/urzua-cli/tests/back_pointer_integration.rs. What remains is real Phase 0 scope and stays open. | **structural** |

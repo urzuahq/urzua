@@ -3965,3 +3965,34 @@ fn pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+#[test]
+fn ci_wired_recognises_the_gate_action_as_an_invocation() {
+    // MILE-180: a workflow that runs the checker through urzua's own reusable
+    // action never spells `urzua check`; reporting it unwired would be a false
+    // negative about a repository that is wired in.
+    let dir = fixture_repo("ci-wired-action");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/records.yml"),
+        "name: records\njobs:\n  gate:\n    steps:\n      - uses: urzuahq/urzua/.github/actions/urzua-gate@abc\n",
+    )
+    .unwrap();
+    let out = run_urzua(&dir, &["doctor"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let ci = parsed["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "ci-wired")
+        .unwrap();
+    assert_eq!(ci["status"], "ok", "{ci}");
+}
