@@ -1,0 +1,15 @@
+fixtures:
+- path: .urzua/config.yaml
+  irregularity: 'an adr lifecycle graph: Proposed to Accepted to Superseded, starting at Proposed; not a record.'
+- path: .urzua/unreachable.yaml
+  irregularity: the same graph with a declared status, Lost, that no edge reaches; not a record.
+- path: .urzua/bad-graph.yaml
+  irregularity: a graph whose edge names Approved, which statuses.values does not declare; not a record.
+- path: records/ADR-0001-proposed.md
+  irregularity: 'Proposed: a case accepts it, an allowed edge.'
+- path: records/ADR-0002-accepted.md
+  irregularity: 'Accepted: a case sends it back to Proposed, an edge the graph does not list.'
+- path: records/ADR-0003-superseded.md
+  irregularity: 'Superseded, a terminal status: a case sets it back to Accepted.'
+- path: records/ADR-0004-untouched.md
+  irregularity: none -- never edited; eligible and left unexamined by a diff run.

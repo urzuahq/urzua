@@ -59,6 +59,15 @@ pub struct StatusDecl {
     /// How the type's `Status` is held to its delivery evidence (`MILE-183`).
     #[serde(default)]
     pub delivery: Option<DeliveryDecl>,
+    /// The statuses a new record may start at (`MILE-144`, `ADR-72`). Required
+    /// with `transitions`, and the roots `unreachable` walks from.
+    #[serde(default)]
+    pub initial: Vec<String>,
+    /// Which statuses may follow each status (`ADR-72`). A declared status with
+    /// no entry is terminal: nothing may follow it. Empty means the type
+    /// declares no lifecycle and no transition is judged.
+    #[serde(default)]
+    pub transitions: BTreeMap<String, Vec<String>>,
 }
 
 /// `statuses.delivery` (`MILE-183`): which computed evidence tiers mean the work
@@ -161,6 +170,47 @@ impl StatusDecl {
         let pending = self.pending.as_ref()?;
         let value = value.trim();
         Some(pending.iter().any(|p| p.matches(value)))
+    }
+
+    /// Whether the type declares a lifecycle graph (`ADR-72`).
+    pub fn has_transitions(&self) -> bool {
+        !self.transitions.is_empty()
+    }
+
+    /// Whether `to` may follow `from`. Only meaningful when
+    /// [`has_transitions`](Self::has_transitions).
+    pub fn allows(&self, from: &str, to: &str) -> bool {
+        self.transitions
+            .get(from)
+            .is_some_and(|next| next.iter().any(|n| n == to))
+    }
+
+    /// Whether a new record may start at `status`.
+    pub fn is_initial(&self, status: &str) -> bool {
+        self.initial.iter().any(|s| s == status)
+    }
+
+    /// Declared statuses no path of `transitions` reaches from `initial`, in
+    /// `values` order. Empty for a type declaring no graph.
+    pub fn unreachable(&self) -> Vec<&str> {
+        if !self.has_transitions() {
+            return Vec::new();
+        }
+        let mut reached: Vec<&str> = self.initial.iter().map(String::as_str).collect();
+        let mut i = 0;
+        while i < reached.len() {
+            for next in self.transitions.get(reached[i]).into_iter().flatten() {
+                if !reached.contains(&next.as_str()) {
+                    reached.push(next);
+                }
+            }
+            i += 1;
+        }
+        self.values
+            .iter()
+            .map(String::as_str)
+            .filter(|v| !reached.contains(v))
+            .collect()
     }
 
     pub fn required_at(&self, status: &str) -> Vec<&str> {
@@ -282,6 +332,7 @@ fn validate_one(
     if let Some(v) = d.success.iter().find(|v| d.failure.contains(v)) {
         return Err(format!("'{v}' is in both `success` and `failure`"));
     }
+    validate_transitions(d)?;
     if let Some(delivery) = &d.delivery {
         validate_delivery(rt, d, delivery, embodiment)?;
     }
@@ -317,6 +368,49 @@ fn validate_one(
         {
             return Err(format!(
                 "'{f}' is both required and forbidden at '{status}'"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A lifecycle graph names only declared statuses, starts somewhere, and never
+/// lists a status as following itself (`ADR-72`). Half a graph is refused: with
+/// no `initial` nothing is reachable, and `initial` with no graph judges
+/// nothing, which would be a silent no-op (`ADR-7`).
+fn validate_transitions(d: &StatusDecl) -> Result<(), String> {
+    if d.transitions.is_empty() && d.initial.is_empty() {
+        return Ok(());
+    }
+    if d.transitions.is_empty() {
+        return Err(
+            "`initial` is declared without `transitions`; declare the graph or remove it".into(),
+        );
+    }
+    if d.initial.is_empty() {
+        return Err(
+            "`transitions` is declared without `initial`; name where a new record may start".into(),
+        );
+    }
+    check_list("initial", &d.initial, false)?;
+    if let Some(v) = d.initial.iter().find(|v| !d.declares(v)) {
+        return Err(format!("`initial` names '{v}', which is not in `values`"));
+    }
+    for (from, to) in &d.transitions {
+        if !d.declares(from) {
+            return Err(format!(
+                "`transitions` has '{from}', which is not in `values`"
+            ));
+        }
+        check_list(&format!("transitions.{from}"), to, true)?;
+        if let Some(v) = to.iter().find(|v| !d.declares(v)) {
+            return Err(format!(
+                "`transitions.{from}` names '{v}', which is not in `values`"
+            ));
+        }
+        if to.contains(from) {
+            return Err(format!(
+                "`transitions.{from}` lists '{from}' itself; a status that stays is not a transition"
             ));
         }
     }
@@ -550,5 +644,62 @@ mod tests {
             ),
             "{e}"
         );
+    }
+
+    fn decl(statuses: &str) -> super::StatusDecl {
+        let c = parse(&cfg(statuses)).unwrap();
+        c.record_types["bug"].status_decl().unwrap()
+    }
+
+    const GRAPH: &str = "      values: [Open, Fixed, WontFix, Lost]\n      success: [Fixed]\n      failure: [WontFix]\n      initial: [Open]\n      transitions:\n        Open: [Fixed, WontFix]\n        Fixed: [Open]\n";
+
+    #[test]
+    fn a_declared_graph_answers_what_may_follow_and_what_is_unreachable() {
+        let d = decl(GRAPH);
+        assert!(d.has_transitions());
+        assert!(d.allows("Open", "Fixed"));
+        assert!(d.allows("Fixed", "Open"));
+        assert!(!d.allows("Fixed", "WontFix"));
+        // A status with no entry is terminal: nothing follows it.
+        assert!(!d.allows("WontFix", "Open"));
+        assert!(d.is_initial("Open") && !d.is_initial("Fixed"));
+        assert_eq!(d.unreachable(), ["Lost"]);
+    }
+
+    #[test]
+    fn a_type_declaring_no_graph_has_no_transitions() {
+        let d = decl("      values: [Open, Fixed]\n");
+        assert!(!d.has_transitions());
+        assert!(d.unreachable().is_empty());
+    }
+
+    #[test]
+    fn an_invalid_graph_fails_the_load() {
+        let base = "      values: [Open, Fixed]\n";
+        assert!(err(&format!(
+            "{base}      transitions:\n        Open: [Fixed]\n"
+        ))
+        .contains("initial"));
+        assert!(err(&format!("{base}      initial: [Open]\n")).contains("transitions"));
+        assert!(err(&format!(
+            "{base}      initial: [Gone]\n      transitions:\n        Open: [Fixed]\n"
+        ))
+        .contains("Gone"));
+        assert!(err(&format!(
+            "{base}      initial: [Open]\n      transitions:\n        Gone: [Fixed]\n"
+        ))
+        .contains("Gone"));
+        assert!(err(&format!(
+            "{base}      initial: [Open]\n      transitions:\n        Open: [Gone]\n"
+        ))
+        .contains("Gone"));
+        assert!(err(&format!(
+            "{base}      initial: [Open]\n      transitions:\n        Open: [Open]\n"
+        ))
+        .contains("itself"));
+        assert!(err(&format!(
+            "{base}      initial: [Open]\n      transitions:\n        Open: [Fixed, Fixed]\n"
+        ))
+        .contains("twice"));
     }
 }

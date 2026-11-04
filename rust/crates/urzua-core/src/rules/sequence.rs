@@ -136,11 +136,26 @@ pub fn sequence_unresolved_blocker(
         slots,
         |slot| slot.record,
         |slot| {
-            let references = match pair_slot_claims(slot) {
-                Ok(references) => references,
-                Err(outcome) => return outcome,
-            };
+            if let Err(outcome) = pair_slot_claims(slot) {
+                return outcome;
+            }
             let field = slot.own_field();
+            // A claim a pointer rule already reports is not reported twice: the
+            // field is one of the type's `pointer_fields` and the rule that
+            // judges that shape is enabled.
+            let is_pointer = config
+                .record_types
+                .get(&slot.record.record_type)
+                .and_then(|t| t.pointer_fields.as_ref())
+                .is_some_and(|fields| fields.iter().any(|f| f == field));
+            let enabled = |rule: &str| {
+                config
+                    .rules
+                    .get(rule)
+                    .is_some_and(|s| s.level != crate::config::RuleLevel::Off)
+            };
+            let resolution_reported = is_pointer && enabled(RULE_POINTER_RESOLUTION);
+            let prose_reported = is_pointer && enabled(RULE_HEADER_POINTER_FIELD_CLEAN);
             let mut push = |message: String| {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -152,21 +167,21 @@ pub fn sequence_unresolved_blocker(
                     message,
                 });
             };
-            for reference in &references {
-                if !index.contains_key(&crate::values::RecordId::new(reference)) {
-                    push(format!(
-                        "{field}: {reference} does not resolve to any discovered record (pair '{}')",
-                        slot.pair.name
-                    ));
-                }
-            }
             let value = slot.record.header.get(field).unwrap_or("");
-            let mut remaining = references.iter();
+            // An entry is a reference only when the whole trimmed entry is one
+            // record reference; `MILE-4 MILE-5` and `MILE-5 (see note)` are
+            // prose, not a reference followed by commentary.
             for entry in value.split(',').map(str::trim).filter(|e| !e.is_empty()) {
-                let is_reference = extract_references(entry).len() == 1;
-                if is_reference {
-                    remaining.next();
-                } else {
+                if is_record_reference(entry) {
+                    if !resolution_reported
+                        && !index.contains_key(&crate::values::RecordId::new(entry))
+                    {
+                        push(format!(
+                            "{field}: {entry} does not resolve to any discovered record (pair '{}')",
+                            slot.pair.name
+                        ));
+                    }
+                } else if !prose_reported {
                     push(format!(
                         "{field}: '{entry}' is not a record reference, so it orders nothing (pair '{}')",
                         slot.pair.name
@@ -484,5 +499,64 @@ mod tests {
         let (exec, findings) = unresolved(&records, &config);
         assert!(findings.is_empty(), "{findings:?}");
         assert_eq!(exec.population.unwrap().eligible(), 0);
+    }
+
+    #[test]
+    fn an_entry_that_starts_with_a_reference_but_is_not_one_is_prose() {
+        let config = seq_config(&["milestone"]);
+        let records = [
+            mile(1, "Depends-on: MILE-2 MILE-3"),
+            mile(2, "Depends-on: MILE-3 (see the note)"),
+            mile(3, "Title: x"),
+        ];
+        let (_, findings) = unresolved(&records, &config);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(findings
+            .iter()
+            .all(|f| f.message.contains("not a record reference")));
+    }
+
+    fn with_rule(mut config: Config, rule: &str) -> Config {
+        let setting: crate::config::RuleSetting =
+            yaml_serde::from_str("error").expect("a level parses");
+        config.rules.insert(rule.to_string(), setting);
+        config
+    }
+
+    fn pointer_config() -> Config {
+        let mut config = seq_config(&["milestone"]);
+        for t in config.record_types.values_mut() {
+            t.pointer_fields = Some(vec!["Depends-on".into(), "Blocks".into()]);
+        }
+        config
+    }
+
+    #[test]
+    fn a_claim_the_pointer_rules_report_is_not_reported_again() {
+        let records = [mile(1, "Depends-on: MILE-99, waiting on an adopter")];
+        // Neither pointer rule enabled: the sequence rule is the only reporter.
+        let (_, findings) = unresolved(&records, &pointer_config());
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        // pointer.resolution enabled: the dangling target is its report.
+        let config = with_rule(pointer_config(), RULE_POINTER_RESOLUTION);
+        let (exec, findings) = unresolved(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("not a record reference"));
+        assert_eq!(examined(&exec), 1, "the claim is still examined");
+        // Both enabled: nothing is left for the sequence rule.
+        let config = with_rule(config, RULE_HEADER_POINTER_FIELD_CLEAN);
+        let (_, findings) = unresolved(&records, &config);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn a_pair_field_that_is_not_a_pointer_field_is_always_reported() {
+        let config = with_rule(
+            with_rule(seq_config(&["milestone"]), RULE_POINTER_RESOLUTION),
+            RULE_HEADER_POINTER_FIELD_CLEAN,
+        );
+        let records = [mile(1, "Depends-on: MILE-99")];
+        let (_, findings) = unresolved(&records, &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
     }
 }

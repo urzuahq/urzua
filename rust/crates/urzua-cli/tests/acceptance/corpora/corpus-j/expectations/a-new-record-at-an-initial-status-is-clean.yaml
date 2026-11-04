@@ -1,0 +1,11 @@
+id: a-new-record-at-an-initial-status-is-clean
+corpus: corpus-j
+commits:
+  - write:
+      records/ADR-0005-new.md: "---\nStatus: Proposed\n---\n# ADR-0005 \u2014 Starts open\n\nEdited.\n"
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - status.transition-allowed
+expect_no_findings:
+  - {rule: status.transition-allowed}
