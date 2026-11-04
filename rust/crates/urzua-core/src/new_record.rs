@@ -111,11 +111,71 @@ pub(crate) fn is_prefix_segment(s: &str) -> bool {
 /// (BUG-37). Miscounting from a stale legacy file is recoverable; writing a
 /// duplicate number into someone else's corpus is not.
 pub fn next_display_number(filenames: &[String]) -> u32 {
+    next_display_number_by(filenames, &|name| {
+        parse_record_filename(name).map(|(_, number)| number)
+    })
+}
+
+/// [`next_display_number`] with the notion of "a record's number" supplied by
+/// the caller, so a type that declares an `identity` pattern is numbered by
+/// that pattern rather than by the `TYPE-NNNN-slug.md` convention (`MILE-151`):
+/// two readers of one filename grammar would disagree about which numbers are
+/// taken.
+pub fn next_display_number_by(
+    filenames: &[String],
+    number_of: &dyn Fn(&str) -> Option<u32>,
+) -> u32 {
     filenames
         .iter()
-        .filter_map(|name| parse_record_filename(name).map(|(_, number)| number))
+        .filter_map(|name| number_of(name))
         .max()
         .map_or(1, |highest| highest + 1)
+}
+
+/// The record number a declared identity pattern reads from a file name, when
+/// it fits a `u32`.
+pub fn declared_number(
+    identity: &crate::document_model::CompiledIdentity,
+    file_name: &str,
+) -> Option<u32> {
+    identity.identify(file_name).number?.parse().ok()
+}
+
+/// The widest zero-padding tried when fitting a declared pattern.
+const MAX_PADDING: usize = 12;
+
+/// The file name (with `.md`) that a declared identity pattern reads back as
+/// this type's prefix and this number (`MILE-151`).
+///
+/// A regular expression cannot be run backwards, so this builds the
+/// `PREFIX-NUMBER-slug` shape the project writes, zero-padding the number to
+/// the narrowest width the pattern accepts (`\d+` takes none, `\d{4}` takes
+/// four), and keeps it only if [`CompiledIdentity::identify`] gives back the
+/// same prefix and the same number. A pattern no such name fits (a different
+/// separator, a date in the name) is an `Err` naming the pattern, because
+/// writing a name the type's own pattern does not read would mint a record no
+/// identity-reading rule can see.
+pub fn declared_file_name(
+    identity: &crate::document_model::CompiledIdentity,
+    pattern: &str,
+    type_prefix: &str,
+    number: u32,
+    slug: &str,
+) -> Result<String, String> {
+    for width in 1..=MAX_PADDING {
+        let name = format!("{type_prefix}-{number:0width$}-{slug}.md");
+        let found = identity.identify(&name);
+        if found.title_prefix.as_deref() == Some(type_prefix)
+            && found.number.as_deref().and_then(|n| n.parse::<u32>().ok()) == Some(number)
+        {
+            return Ok(name);
+        }
+    }
+    Err(format!(
+        "the declared identity pattern '{pattern}' does not read a '{type_prefix}-{number}-{slug}.md' \
+         style file name back as prefix '{type_prefix}' and number {number}, so `urzua new` cannot \
+         name a record for it -- the pattern must accept the 'PREFIX-NNNN-slug' form"
+    ))
 }
 
 /// The outcome of numbering with other refs' claims taken into account.
@@ -134,11 +194,23 @@ pub fn next_display_number_with_claims(
     local: &[String],
     claims: &[(String, Vec<String>)],
 ) -> NumberAssignment {
-    let local_next = next_display_number(local);
+    next_display_number_with_claims_by(local, claims, &|name| {
+        parse_record_filename(name).map(|(_, number)| number)
+    })
+}
+
+/// [`next_display_number_with_claims`] with the caller's reading of a record's
+/// number; see [`next_display_number_by`].
+pub fn next_display_number_with_claims_by(
+    local: &[String],
+    claims: &[(String, Vec<String>)],
+    number_of: &dyn Fn(&str) -> Option<u32>,
+) -> NumberAssignment {
+    let local_next = next_display_number_by(local, number_of);
     let mut by_number: std::collections::BTreeMap<u32, Vec<String>> = Default::default();
     for (ref_name, names) in claims {
         for name in names {
-            if let Some((_, n)) = parse_record_filename(name) {
+            if let Some(n) = number_of(name) {
                 if n >= local_next {
                     let refs = by_number.entry(n).or_default();
                     if !refs.contains(ref_name) {
@@ -177,10 +249,34 @@ pub fn slugify(title: &str) -> String {
 
 pub struct NewRecordParams<'a> {
     pub display_number: u32,
+    /// The type prefix the H1 opens with (`ADR-4 -- Title`), set when the type
+    /// declares an `identity` pattern, whose title form is `PREFIX-N`
+    /// (`RFC-44`). `None` keeps the bare number.
+    pub h1_prefix: Option<&'a str>,
+    /// The status a new record starts at: the first value of the type's
+    /// declared `statuses.values`. `None` when the type declares none, and the
+    /// field stays blank for a human.
+    pub initial_status: Option<&'a str>,
+    /// The field that holds the status, as the type declares it
+    /// (`RecordTypeConfig::relation_field`), not a literal.
+    pub status_field: &'a str,
     pub title: &'a str,
-    pub stable_id: &'a str,
+    /// `None` when the type's closed field set does not declare `Stable-Id`,
+    /// which would reject it.
+    pub stable_id: Option<&'a str>,
     pub author: &'a str,
     pub today: &'a str,
+}
+
+impl NewRecordParams<'_> {
+    /// What stands for the number in the H1: `ADR-4` for a type with a declared
+    /// identity, the bare number otherwise.
+    fn h1_number(&self) -> String {
+        match self.h1_prefix {
+            Some(prefix) => format!("{prefix}-{}", self.display_number),
+            None => self.display_number.to_string(),
+        }
+    }
 }
 
 /// Render from an existing `.urzua/templates/<type>.md` (blockquote/bold-list
@@ -190,7 +286,7 @@ pub struct NewRecordParams<'a> {
 /// Deciders, Embodiment) stays the template's own placeholder text for a
 /// human to pick, same as it always has been.
 pub fn render_from_template(template: &str, params: &NewRecordParams) -> String {
-    let number = format!("{}", params.display_number);
+    let number = params.h1_number();
     let mut lines: Vec<String> = template.lines().map(|l| l.to_string()).collect();
 
     // Only the H1 names *this* record's number -- a template's own body can
@@ -221,12 +317,14 @@ pub fn render_from_template(template: &str, params: &NewRecordParams) -> String 
         .iter()
         .position(|l| l.trim_start().starts_with('>') || l.trim_start().starts_with("- **"));
     if let Some(idx) = first_header_line {
-        let stable_id_line = if lines[idx].trim_start().starts_with('>') {
-            format!("> Stable-Id: {}", params.stable_id)
-        } else {
-            format!("- **Stable-Id:** {}", params.stable_id)
-        };
-        lines.insert(idx + 1, stable_id_line);
+        if let Some(stable_id) = params.stable_id {
+            let stable_id_line = if lines[idx].trim_start().starts_with('>') {
+                format!("> Stable-Id: {stable_id}")
+            } else {
+                format!("- **Stable-Id:** {stable_id}")
+            };
+            lines.insert(idx + 1, stable_id_line);
+        }
     }
 
     lines.join("\n") + "\n"
@@ -257,14 +355,19 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
     use yaml_serde::Value;
 
     let mut mapping = yaml_serde::Mapping::new();
-    mapping.insert(
-        Value::String("Stable-Id".to_string()),
-        Value::String(params.stable_id.to_string()),
-    );
+    if let Some(stable_id) = params.stable_id {
+        mapping.insert(
+            Value::String("Stable-Id".to_string()),
+            Value::String(stable_id.to_string()),
+        );
+    }
     for field in required_fields {
         let value = match field.as_str() {
             "Date" => Value::String(params.today.to_string()),
             "Author" => Value::String(params.author.to_string()),
+            f if f == params.status_field => params
+                .initial_status
+                .map_or(Value::Null, |s| Value::String(s.to_string())),
             _ => Value::Null,
         };
         mapping.insert(Value::String(field.clone()), value);
@@ -277,7 +380,7 @@ pub fn render_synthetic_yaml(params: &NewRecordParams, required_fields: &[String
         out.push('\n');
     }
     out.push_str("---\n");
-    out.push_str(&format!("# {} — {}\n", params.display_number, params.title));
+    out.push_str(&format!("# {} — {}\n", params.h1_number(), params.title));
     out
 }
 
@@ -299,9 +402,12 @@ mod tests {
     fn render_from_template_fills_number_title_date_author_and_stable_id() {
         let template = "# NNNN — Title\n\n> Status: Proposed\n> Date: YYYY-MM-DD\n> Author: name\n";
         let params = NewRecordParams {
+            h1_prefix: None,
+            initial_status: None,
+            status_field: "Status",
             display_number: 42,
             title: "Use a real title",
-            stable_id: "01ABC",
+            stable_id: Some("01ABC"),
             author: "beau",
             today: "2026-09-06",
         };
@@ -316,9 +422,12 @@ mod tests {
     fn render_from_template_does_not_touch_an_nnnn_placeholder_outside_the_h1() {
         let template = "# NNNN — Title\n\n> Derives-from: RFC-NNNN (optional)\n> Author: name\n";
         let params = NewRecordParams {
+            h1_prefix: None,
+            initial_status: None,
+            status_field: "Status",
             display_number: 28,
             title: "X",
-            stable_id: "01ABC",
+            stable_id: Some("01ABC"),
             author: "beau",
             today: "2026-09-06",
         };
@@ -331,9 +440,12 @@ mod tests {
     fn render_from_template_preserves_status_choices_untouched() {
         let template = "# NNNN — Title\n\n> Status: Proposed | Accepted | Rejected\n";
         let params = NewRecordParams {
+            h1_prefix: None,
+            initial_status: None,
+            status_field: "Status",
             display_number: 1,
             title: "X",
-            stable_id: "01ABC",
+            stable_id: Some("01ABC"),
             author: "beau",
             today: "2026-09-06",
         };
@@ -512,9 +624,12 @@ mod tests {
     #[test]
     fn render_synthetic_yaml_lists_required_fields_as_blank() {
         let params = NewRecordParams {
+            h1_prefix: None,
+            initial_status: None,
+            status_field: "Status",
             display_number: 1,
             title: "X",
-            stable_id: "01ABC",
+            stable_id: Some("01ABC"),
             author: "beau",
             today: "2026-09-06",
         };
@@ -540,9 +655,12 @@ mod tests {
         // hand-edited string, so this proves the escaping `render_synthetic_
         // yaml` itself performs, not `yaml_serde`'s parser in isolation.
         let params = NewRecordParams {
+            h1_prefix: None,
+            initial_status: None,
+            status_field: "Status",
             display_number: 4,
             title: "X",
-            stable_id: "01ABC",
+            stable_id: Some("01ABC"),
             author: "Doe, J: Platform",
             today: "2026-09-06",
         };
@@ -558,9 +676,12 @@ mod tests {
         // reparse, not silently become a YAML number -- checked through the
         // real parser `check`/`urzua new` themselves use.
         let params = NewRecordParams {
+            h1_prefix: None,
+            initial_status: None,
+            status_field: "Status",
             display_number: 1,
             title: "X",
-            stable_id: "01ABC",
+            stable_id: Some("01ABC"),
             author: "0.2",
             today: "2026-09-06",
         };
@@ -582,5 +703,69 @@ mod tests {
     #[test]
     fn template_body_is_none_without_a_section_heading() {
         assert_eq!(template_body("# NNNN — Title\n\n> Status: Planned\n"), None);
+    }
+
+    fn compiled(pattern: &str) -> crate::document_model::CompiledIdentity {
+        crate::document_model::CompiledIdentity::compile(&crate::document_model::IdentityDecl {
+            from: crate::document_model::IdentitySource::Filename,
+            pattern: pattern.to_string(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_declared_file_name_is_padded_to_the_width_the_pattern_requires() {
+        let four = compiled(r"^(?P<prefix>ADR)-(?P<number>\d{4})-(?P<slug>.+)$");
+        assert_eq!(
+            declared_file_name(&four, "p", "ADR", 4, "x-y").unwrap(),
+            "ADR-0004-x-y.md"
+        );
+        let open = compiled(r"^(?P<prefix>ADR)-(?P<number>\d+)-(?P<slug>.+)$");
+        assert_eq!(
+            declared_file_name(&open, "p", "ADR", 4, "x").unwrap(),
+            "ADR-4-x.md",
+            "an open-ended pattern keeps the unpadded default"
+        );
+    }
+
+    #[test]
+    fn a_pattern_no_name_fits_is_refused_naming_the_pattern() {
+        let other = compiled(r"^(?P<prefix>ADR)_(?P<number>\d+)_(?P<slug>.+)$");
+        let err = declared_file_name(&other, "the-pattern", "ADR", 4, "x").unwrap_err();
+        assert!(err.contains("the-pattern"), "{err}");
+        // A prefix the pattern pins to something else is not this type's.
+        let pinned = compiled(r"^(?P<prefix>DOC)-(?P<number>\d+)-(?P<slug>.+)$");
+        assert!(declared_file_name(&pinned, "p", "ADR", 4, "x").is_err());
+    }
+
+    #[test]
+    fn numbering_by_a_declared_pattern_reads_only_what_it_matches() {
+        let four = compiled(r"^(?P<prefix>ADR)-(?P<number>\d{4})-(?P<slug>.+)$");
+        let names: Vec<String> = ["ADR-0007-a.md", "README.md", "ADR-9-short.md"]
+            .map(String::from)
+            .to_vec();
+        let n = next_display_number_by(&names, &|name| declared_number(&four, name));
+        assert_eq!(n, 8, "ADR-9-short.md is off-pattern and takes no number");
+    }
+
+    #[test]
+    fn the_status_field_starts_at_the_initial_status_and_stays_blank_without_one() {
+        let mut params = NewRecordParams {
+            display_number: 4,
+            h1_prefix: Some("ADR"),
+            initial_status: Some("Proposed"),
+            status_field: "State",
+            title: "T",
+            stable_id: None,
+            author: "a",
+            today: "2026-11-04",
+        };
+        let rendered = render_synthetic_yaml(&params, &["State".to_string()]);
+        assert!(rendered.contains("State: Proposed\n"), "{rendered}");
+        assert!(!rendered.contains("Stable-Id"), "{rendered}");
+        assert!(rendered.contains("# ADR-4 — T\n"), "{rendered}");
+        params.initial_status = None;
+        let rendered = render_synthetic_yaml(&params, &["State".to_string()]);
+        assert!(rendered.contains("State: null"), "{rendered}");
     }
 }
