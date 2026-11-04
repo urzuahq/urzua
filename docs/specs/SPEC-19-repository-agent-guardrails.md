@@ -2,9 +2,9 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.9'
+Version: '0.10'
 Author: beauwilliams
-Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` alone.'
+Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
 Parent: —
 ---
@@ -133,4 +133,5 @@ same pattern applied to a different feature area).
 > | 2026-11-02 | Added two bullets to `AGENTS.md`. "Verify before trusting" gains "Verify against a real corpus, not only fixtures": changes to how records are read or identified must also run read-only against a real corpus, because an init header-shape fix passed every fixture test yet chose the wrong shape for 444 of 444 records on a real adopter corpus. "Use the tool on itself" gains "Every finding improves both our own workflow configuration and the engine": each gap is recorded as a milestone or bug for both the repo's config and the engine capability. **Why:** both were maintainer-approved after a week of findings showing fixture-only verification and engine-only fixes each left the real gap open. | **substantive** |
 > | 2026-11-02 | The "every finding" bullet now asks both questions but records only the follow-ups a yes answer calls for. **Why:** review found the earlier wording required a milestone or bug even when no change is needed, which no record type represents. | **structural** |
 > | 2026-11-04 | `AGENTS.md`'s "The review loop" no longer says an agent never merges with no standing exception: with the maintainer's authorization for the session, an agent may squash-merge (or enable squash auto-merge on) a PR once CI is green on the current head and an agent review found nothing blocking; force-push stays forbidden, and without that authorization the human merges as before. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `AGENTS.md`'s "Use the tool on itself" gains the rule that an agent offers `/rfc`, `/adr` or `/milestone` when it notices a proposal, a made decision or decided unbuilt work, and drafts records through those commands. The commands in `.claude/commands/` are a second guardrail mechanism, governed by `ADR-70`: they scaffold through `urzua new`, hold no schema knowledge, and end in `urzua check`. **Why:** `MILE-177`; hand-written records were rejected by `check` for headers `urzua new` would have produced (`MILE-103`). | **substantive** |
 > | 2026-11-04 | `AGENTS.md`'s Status rule now says who sets it: the PR that fully delivers a milestone sets its `Realized-by` and `Status: Done` in that PR (`status.delivery-agreement` fails when they disagree), while an ADR's or RFC's `Status` stays the maintainer's; `Version` `0.8` -> `0.9`. **Why:** maintainer decision of 2026-11-04, `MILE-183`: about thirty built milestones still read `Planned` because agents were told never to move a `Status`. | **substantive** |
