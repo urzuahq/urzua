@@ -13,20 +13,15 @@ use urzua_core::report::{
 };
 use urzua_core::rules::{regenerate_index, render_index_entries, IndexContent};
 
-use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::emit;
+use crate::session::{Session, Workspace};
 
 pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
+    let workspace = match Workspace::open(&[], config_path) {
+        Ok(session) => session,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    let config = &workspace.config;
     let specs: Vec<urzua_core::config::IndexSpec> = config
         .rules
         .get(urzua_core::rules::RULE_INDEX_FRESHNESS)
@@ -39,17 +34,13 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         ));
     }
 
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-    let (records, full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
+    let Session {
+        repo_root,
+        records,
+        full_text,
+        ..
+    } = match Session::load(workspace, |_, _, _| Ok(())) {
+        Ok(session) => session,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 

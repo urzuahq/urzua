@@ -6,52 +6,37 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::report::{
-    CouldNotRun, ExportReport, ExportTypeCount, ExportedField, ExportedRecord, ReportStatus,
+    ExportReport, ExportTypeCount, ExportedField, ExportedRecord, ReportStatus,
 };
 
 use urzua_core::config::Config;
 
-use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::emit;
+use crate::session::{emit_or_not_run, Session};
 
 pub fn run(config_path: Option<PathBuf>) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    emit_or_not_run(run_inner(config_path))
+}
 
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
+fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, String> {
     // `raw_text` publishes a file's contents, so a tracked record that is a
     // symlink resolving outside the repository must not be read: the export
     // would otherwise disclose an arbitrary file under a repository path.
     // Refuse the whole export rather than drop the record silently.
-    if let Some(escaping) = first_record_outside_repo(&repo_root, &discovered.paths, &config) {
-        return emit(&CouldNotRun::from(format!(
-            "{} resolves outside the repository; export refuses to read it",
-            escaping.display()
-        )));
-    }
-
-    let (records, full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    let Session {
+        config,
+        records,
+        full_text,
+        ..
+    } = Session::open_with(&[], config_path, |repo_root, config, discovered| {
+        match first_record_outside_repo(repo_root, &discovered.paths, config) {
+            Some(escaping) => Err(format!(
+                "{} resolves outside the repository; export refuses to read it",
+                escaping.display()
+            )),
+            None => Ok(()),
+        }
+    })?;
 
     let mut exported: Vec<ExportedRecord> = records
         .iter()
@@ -89,13 +74,13 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
         })
         .collect();
 
-    emit(&ExportReport {
+    Ok(emit(&ExportReport {
         status: ReportStatus::Ok,
         record_count: exported.len(),
         types,
         records: exported,
         notices: Vec::new(),
-    })
+    }))
 }
 
 /// The first tracked file in a record directory whose real location is

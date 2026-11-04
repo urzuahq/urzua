@@ -7,10 +7,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::header::HeaderShape;
-use urzua_core::report::{CouldNotRun, MigrateSchemaReport, Notice, Report, ReportStatus};
+use urzua_core::report::{MigrateSchemaReport, Notice, Report, ReportStatus};
 
-use crate::discovery::{find_repo_root, load_config, load_records};
 use crate::emit;
+use crate::session::{emit_or_not_run, Session};
 
 /// `urzua migrate ids`'s report (SPEC-14).
 #[derive(serde::Serialize)]
@@ -65,32 +65,17 @@ impl Report for MigrateIdsReport {
 /// lacking one. Dry-run by default. Never touches the filename or any
 /// cross-reference -- the display number stays exactly what it already is.
 pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    emit_or_not_run(run_ids_inner(config_path, apply))
+}
 
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
-    let (records, full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, String> {
+    let Session {
+        repo_root,
+        config,
+        records,
+        full_text,
+        ..
+    } = Session::open(config_path)?;
     let missing: Vec<_> = records
         .iter()
         // Reserved (Header::get_reserved): a record spelling this
@@ -100,13 +85,13 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         .collect();
 
     if missing.is_empty() || !apply {
-        return emit(&MigrateIdsReport {
+        return Ok(emit(&MigrateIdsReport {
             status: ReportStatus::Ok,
             apply,
             missing: missing.into_iter().map(|r| r.path.clone()).collect(),
             results: Vec::new(),
             notices: Vec::new(),
-        });
+        }));
     }
 
     let missing_paths: Vec<PathBuf> = missing.iter().map(|r| r.path.clone()).collect();
@@ -170,13 +155,13 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         }
     }
 
-    emit(&MigrateIdsReport {
+    Ok(emit(&MigrateIdsReport {
         status: ReportStatus::Ok,
         apply,
         missing: missing_paths,
         results,
         notices: Vec::new(),
-    })
+    }))
 }
 
 /// A preview of which existing records would newly fail if `field` were
@@ -186,46 +171,28 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
 /// waiver, the latter needs `urzua fix` to know a field is tool-writable,
 /// which almost none are.
 pub fn run_schema_report(config_path: Option<PathBuf>, field: String) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    emit_or_not_run(run_schema_report_inner(config_path, field))
+}
 
-    let config_path =
-        config_path.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
-    let config = match load_config(&config_path) {
-        Ok(c) => c,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
-    let (records, _full_text) = match load_records(
-        &repo_root,
-        &discovered.paths,
-        &discovered.staged_deletions,
-        &config,
-    ) {
-        Ok(r) => r,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+fn run_schema_report_inner(
+    config_path: Option<PathBuf>,
+    field: String,
+) -> Result<ExitCode, String> {
+    let Session {
+        config, records, ..
+    } = Session::open(config_path)?;
     if records.is_empty() {
-        return emit(&CouldNotRun::from(
-            "no records discovered -- nothing to check",
-        ));
+        return Err("no records discovered -- nothing to check".to_string());
     }
 
     let (population, would_fail, notices) =
         urzua_core::migrate::schema_report(&records, &field, &config);
 
-    emit(&MigrateSchemaReport {
+    Ok(emit(&MigrateSchemaReport {
         status: ReportStatus::Ok,
         field,
         population,
         would_fail,
         notices,
-    })
+    }))
 }
