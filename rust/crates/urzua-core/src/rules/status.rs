@@ -40,6 +40,7 @@ fn run_status_rule(
     records: &[Record],
     config: &Config,
     rule_id: &'static str,
+    variant: &'static str,
     eligible: impl Fn(&StatusDecl) -> bool,
     judge: impl Fn(&Judged) -> Vec<(Option<String>, String)>,
 ) -> (RuleExecution, Vec<Finding>) {
@@ -77,6 +78,12 @@ fn run_status_rule(
                 let declared_severity = field
                     .as_deref()
                     .and_then(|f| declared_field_severity(config, rule_id, f));
+                // The edit lands on the field the finding names; one that names
+                // none (an undeclared status, a forbidden field) is about the
+                // status field or the field the message quotes.
+                let action_field = field
+                    .clone()
+                    .unwrap_or_else(|| judged.status_field.to_string());
                 findings.push(Finding {
                     rule: rule_id.to_string(),
                     severity: declared_severity.unwrap_or(FindingSeverity::Error),
@@ -84,6 +91,8 @@ fn run_status_rule(
                     line: None,
                     waived: None,
                     declared_severity,
+                    suggested_action: None,
+                    action_source: ActionSource::new(variant).field(action_field),
                     message,
                 });
             }
@@ -220,15 +229,31 @@ pub fn status_delivery_agreement(
                 Ok(j) => j,
                 Err(outcome) => return outcome,
             };
-            let message = match &judged.disagreement {
+            let (message, action_source) = match &judged.disagreement {
                 None => return Outcome::Examined,
-                Some(DeliveryDisagreement::DeliveredButNotDone { set_status }) => format!(
-                    "{} is '{}', but the evidence computes to '{}', from {}: the work reads as delivered; set {} to '{set_status}' (`urzua fix --apply` does)",
-                    judged.status_field, judged.status, judged.tier, judged.evidence, judged.status_field
+                // `urzua fix --apply` writes this repair (`SPEC-8`), so the
+                // command is offered.
+                Some(DeliveryDisagreement::DeliveredButNotDone { set_status }) => (
+                    format!(
+                        "{} is '{}', but the evidence computes to '{}', from {}: the work reads as delivered; set {} to '{set_status}' (`urzua fix --apply` does)",
+                        judged.status_field, judged.status, judged.tier, judged.evidence, judged.status_field
+                    ),
+                    ActionSource::new("delivery-not-done").argv([
+                        "urzua",
+                        "fix",
+                        "--apply",
+                        "--ids",
+                        &record.path.display().to_string(),
+                    ]),
                 ),
-                Some(DeliveryDisagreement::SuccessWithoutEvidence) => format!(
-                    "{} is '{}', but the evidence computes to '{}', from {}: add the evidence that delivered it",
-                    judged.status_field, judged.status, judged.tier, judged.evidence
+                // No single correct value exists and `fix` writes nothing for it,
+                // so no command is offered.
+                Some(DeliveryDisagreement::SuccessWithoutEvidence) => (
+                    format!(
+                        "{} is '{}', but the evidence computes to '{}', from {}: add the evidence that delivered it",
+                        judged.status_field, judged.status, judged.tier, judged.evidence
+                    ),
+                    ActionSource::new("delivery-without-evidence"),
                 ),
             };
             findings.push(Finding {
@@ -238,6 +263,8 @@ pub fn status_delivery_agreement(
                 line: None,
                 waived: None,
                 declared_severity: None,
+                suggested_action: None,
+                action_source,
                 message,
             });
             Outcome::Examined
@@ -263,6 +290,7 @@ pub fn status_undeclared_value(
         records,
         config,
         RULE_STATUS_UNDECLARED_VALUE,
+        "status-undeclared-value",
         |_| true,
         |j| {
             if j.decl.declares(j.status) {
@@ -292,6 +320,7 @@ pub fn status_required_field_missing(
         records,
         config,
         RULE_STATUS_REQUIRED_FIELD_MISSING,
+        "status-required-field-missing",
         |d| !d.require.is_empty(),
         |j| {
             j.decl
@@ -331,6 +360,7 @@ pub fn status_forbidden_field_present(
         records,
         config,
         RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+        "status-forbidden-field-present",
         |d| !d.forbid.is_empty(),
         |j| {
             j.decl
@@ -339,7 +369,9 @@ pub fn status_forbidden_field_present(
                 .filter(|field| classify(j.record.header.get(field)) != FieldState::Blank)
                 .map(|field| {
                     (
-                        None,
+                        // This rule takes no `field_levels`, so naming the field
+                        // sets no severity; it tells the action which to remove.
+                        Some(field.to_string()),
                         format!(
                             "{} is {}, which forbids '{field}', but the record carries it",
                             j.status_field, j.status

@@ -106,6 +106,7 @@ pub fn gate_and_run(
                 RuleLevel::Off => unreachable!("handled above"),
             };
             let (exec, mut findings) = run();
+            resolve_actions(id, &mut findings);
             for f in &mut findings {
                 // A level the rule declared for this finding's own field
                 // (`field_levels`, `MILE-140`) outranks the rule level; every
@@ -187,6 +188,8 @@ mod tests {
             line: None,
             waived: None,
             declared_severity: declared,
+            suggested_action: None,
+            action_source: ActionSource::default(),
             message: String::new(),
         }
     }

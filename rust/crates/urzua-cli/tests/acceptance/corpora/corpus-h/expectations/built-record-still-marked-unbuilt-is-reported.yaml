@@ -3,7 +3,7 @@ corpus: corpus-h
 invocation: [--config, .urzua/delivery.yaml, check]
 expect_exit: 1
 expect_findings:
-  - {rule: status.delivery-agreement, file: records/milestones/MILE-0001-built.md}
-  - {rule: status.delivery-agreement, file: records/milestones/MILE-0002-unevidenced.md}
+  - {rule: status.delivery-agreement, file: records/milestones/MILE-0001-built.md, suggested_action: {kind: run-command, target: {argv: [urzua, fix, --apply, --ids, records/milestones/MILE-0001-built.md]}}}
+  - {rule: status.delivery-agreement, file: records/milestones/MILE-0002-unevidenced.md, no_suggested_action: true}
 expect_no_findings:
   - {rule: status.delivery-agreement, file: records/milestones/MILE-0003-done.md}

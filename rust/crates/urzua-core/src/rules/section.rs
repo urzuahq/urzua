@@ -40,6 +40,9 @@ pub fn section_required(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("section-missing")
+                        .section(slot.required.name.as_str()),
                     message: if slot.required.aliases.is_empty() {
                         format!("required section `## {}` is missing", slot.required.name)
                     } else {
@@ -106,6 +109,8 @@ pub fn section_shape(
                     line: Some(line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("section-shape").section(slot.required.name.as_str()),
                     message: if outside {
                         format!(
                             "the preamble (before the first `##` section, where `## {}` is absent): {message}",

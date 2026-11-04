@@ -7,3 +7,4 @@ expect_findings:
     file: records/docs/DOC-0006-cross-type.md
     severity: error
     message_contains: "NOT-0001"
+    suggested_action: {kind: edit-field, op: remove, value: NOT-0001}

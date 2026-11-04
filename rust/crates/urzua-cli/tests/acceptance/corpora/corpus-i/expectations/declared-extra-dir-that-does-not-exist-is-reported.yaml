@@ -8,3 +8,4 @@ expect_findings:
   - rule: type.dir-matches-nothing
     severity: error
     message_contains: "vanished"
+    suggested_action: {kind: edit-config, op: set}

@@ -136,6 +136,8 @@ pub fn claim_status_agreement(
             line: Some(line),
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("claim-status-disagrees"),
             message: format!(
                 "claims to close {reference}, but {reference} has {status_field} {status}"
             ),

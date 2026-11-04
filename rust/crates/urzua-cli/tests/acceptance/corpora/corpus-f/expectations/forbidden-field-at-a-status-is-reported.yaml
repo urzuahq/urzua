@@ -7,3 +7,4 @@ expect_findings:
     file: records/docs/DOC-0002-forbidden.md
     severity: error
     message_contains: "Accepted-on"
+    suggested_action: {kind: edit-field, op: remove, target: {file: records/docs/DOC-0002-forbidden.md, field: Accepted-on}}

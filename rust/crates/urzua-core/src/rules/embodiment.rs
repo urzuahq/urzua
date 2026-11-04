@@ -207,6 +207,8 @@ pub fn embodiment_locator_exists(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("locator-empty").field(field),
                         message: format!("{field} has an empty locator"),
                     });
                     continue;
@@ -221,6 +223,8 @@ pub fn embodiment_locator_exists(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("locator-missing").field(field),
                     message: format!("{field} names '{locator}', which is not in the working tree"),
                 });
             }
@@ -325,6 +329,8 @@ pub fn embodiment_consistency(
                             line: None,
                             waived: None,
                             declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("last-audit-date-invalid").field(field),
                             message: format!(
                                 "last-audit field {field} value '{}' {problem}, so drift_grace_days counts from the cited file's last change for this record",
                                 value.trim()
@@ -371,6 +377,8 @@ pub fn embodiment_consistency(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: if realized_by_value.is_some() || cited_by_code || cited_by_test { ActionSource::new("embodiment-drift").argv(["urzua", "fix", "--apply", "--ids", &record.path.display().to_string()]) } else { ActionSource::new("embodiment-unevidenced").field(state_field) },
                     message: format!(
                     "stated {state_field} '{}' disagrees with '{computed}', computed from {evidence}",
                     stated.trim()
@@ -386,6 +394,8 @@ pub fn embodiment_consistency(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("claim-too-old"),
                         message: format!(
                             "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
                         ),
@@ -525,6 +535,8 @@ pub fn embodiment_locator_promotion_candidate(
             line: None,
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("locator-promotion-candidate"),
             message: format!(
                 "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
                 paths.len(),
@@ -609,6 +621,8 @@ pub fn embodiment_requires_accepted_status(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("embodiment-state-not-accepted").field(state_field),
                     message: format!(
                         "{state_field} '{stated}' cannot be stated while {status_field} is '{status}' (accepted: {})",
                         accepted.join(", ")
