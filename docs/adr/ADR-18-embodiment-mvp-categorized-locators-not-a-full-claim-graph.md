@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-core/src/rules/embodiment.rs
 Date: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -71,3 +71,9 @@ growing into composites later is additive to the schema, not a breaking change t
 - RFC-5 — the proposal this scopes into a first shippable slice.
 - ADR-11 — the `waiver`-as-first-class-record precedent this reuses for `claim`.
 - RFC-8/ADR-15 — the eligibility test that explains why promotion isn't tool-authored.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

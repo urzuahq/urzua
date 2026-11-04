@@ -2,7 +2,7 @@
 Version: '0.12'
 Date: 2026-08-20
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -377,3 +377,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-02 | `pointer.target-status` gains the optional `fields` option, restricting the rule to named declared pointer/narrative fields; the rule's row in the generated table is updated. **Why:** one `not_in` list judged lineage (`Derives-from`) and dependency (`Implements`) fields alike, so a Superseded lineage target warned as stale (`BUG-172`). Omitted, the rule is unchanged. | **substantive** |
 > | 2026-11-03 | `header.case-variant-key` added to the generated rule table: an opt-in, declaration-free rule reporting two keys in one record's header that differ only by case. **Why:** `MILE-113` -- a type declaring no vocabulary had nothing that flagged a `Status`/`status` pair, and `ADR-57` rules out making `duplicate_keys()` case-insensitive, so the signal is a separate rule that changes no exact-match verdict. | **substantive** |
 > | 2026-11-04 | Criterion 5 now reads "one adopter's codebase" and "that adopter's hand-written linter" in place of "one source codebase"; criterion 6 is marked as part of the Phase 1 exit, so "all five hold" is now the full Phase 0 set (`SPEC-1`, Exit bar); `Version` `0.11` -> `0.12`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

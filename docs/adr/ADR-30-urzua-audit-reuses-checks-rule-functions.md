@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/src/main.rs
+Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Date: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -55,3 +55,9 @@ tested (`rules.rs`'s own planted-violation tests cover both). Nothing new to mai
 - ADR-18/19 — the decision that moved Embodiment out of `audit` and into `check`/`fix`, which is
   why `audit` only has these two rules left.
 - `rust/crates/urzua-core/src/rules.rs` — `pointer_resolution`, `supersession_reciprocity`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

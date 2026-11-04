@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-io/src/lib.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/fix.rs
+Realized-by: code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-io/src/lib.rs, test:rust/crates/urzua-core/src/fix.rs
 Date: 2026-09-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -70,3 +70,9 @@ and why" is answerable without git at all.
 - ADR-15/RFC-8 — the eligibility test and tier model this apply path implements.
 - ADR-14 — the revision-log shape every applied write appends to.
 - RFC-2 §2 — the identity-resolution tiering reused here.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |

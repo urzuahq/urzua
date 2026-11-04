@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M2MP1F6VY4TNSH7J1QFMES1R
 Status: Accepted
-Embodiment: Implemented
+Embodiment: Drift detected
 Realized-by: code:.github/workflows/checks.yml, code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml
 Date: 2026-09-16
 Author: beauwilliams
@@ -106,6 +106,7 @@ than merely tedious.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** shipping `v0.2.1` showed `verify-ci` could only ever report whether a human clicked approve, and that it checked a commit other than the one being tagged. Both were invisible until the flow ran end to end without a defect consuming the run. | **structural** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/workflows/checks.yml, code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |
 
 ## Amendment (2026-09-16): two Consequences corrected by the first real release
 
@@ -132,3 +133,4 @@ job-level `if:` never evaluates because the hold precedes job selection), and a 
 check would assert a verification that did not occur.
 
 The decision itself is unchanged and is working. Only its description of the aftermath was wrong.
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Implemented`; the Decision is unchanged. | **substantive** |

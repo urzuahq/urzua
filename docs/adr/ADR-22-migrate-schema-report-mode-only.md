@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/migrate.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/migrate.rs
+Realized-by: code:rust/crates/urzua-core/src/migrate.rs, code:rust/crates/urzua-cli/src/commands/migrate.rs, test:rust/crates/urzua-core/src/migrate.rs
 Date: 2026-09-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -49,3 +49,9 @@ implementation doesn't exist yet.
 - SPEC-1 — the three-tier design this ADR ships one slice of.
 - ADR-11 — the waiver-as-record precedent waiver-assist would need to respect.
 - ADR-19/20 — the eligibility question apply mode would delegate to.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
