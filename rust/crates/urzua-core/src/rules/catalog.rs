@@ -46,6 +46,7 @@ pub const RULE_CITATION_RESOLUTION: &str = "citation.resolution";
 pub const RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE: &str = "boundary.published-path-reference";
 pub const RULE_SECTION_REQUIRED: &str = "section.required";
 pub const RULE_SECTION_SHAPE: &str = "section.shape";
+pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 
 pub const ALL_RULES: &[&str] = &[
     RULE_HEADER_REQUIRED_FIELDS,
@@ -87,6 +88,7 @@ pub const ALL_RULES: &[&str] = &[
     RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     RULE_SECTION_REQUIRED,
     RULE_SECTION_SHAPE,
+    RULE_FILENAME_IDENTITY_PATTERN,
 ];
 
 /// One rule's id and its adopter-facing description -- the single place this
@@ -108,7 +110,7 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     },
     RuleMeta {
         id: RULE_HEADER_FIELD_SET_CONSISTENCY,
-        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39).",
+        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding.",
     },
     RuleMeta {
         id: RULE_TYPE_NO_DECLARED_SPEC,
@@ -253,6 +255,10 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_SECTION_SHAPE,
         description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning.",
+    },
+    RuleMeta {
+        id: RULE_FILENAME_IDENTITY_PATTERN,
+        description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined.",
     },
 ];
 
