@@ -319,7 +319,9 @@ pub fn header_references(record: &Record) -> Vec<crate::values::RecordId> {
         .header
         .fields
         .iter()
-        .flat_map(|f| scan_references(&f.value))
+        // Split on commas first: `ADR-1,ADR-3` is two references, and as one
+        // token neither is recognised.
+        .flat_map(|f| f.value.split(',').flat_map(scan_references))
         .map(|r| crate::values::RecordId::new(&r))
         .collect()
 }
