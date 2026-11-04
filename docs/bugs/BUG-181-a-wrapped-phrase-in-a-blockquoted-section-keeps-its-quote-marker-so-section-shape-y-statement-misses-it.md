@@ -16,7 +16,7 @@ No test wrapped a required phrase across lines of a blockquote; the fixtures kep
 
 ## References
 
-BUG-1 of the adopter switchover report. Fix in `rules/section.rs` `y_statement`.
+BUG-1 of the adopter switchover report. Fix in `rust/crates/urzua-core/src/rules/section.rs` `y_statement`.
 
 > **Revision log**
 >
@@ -24,3 +24,4 @@ BUG-1 of the adopter switchover report. Fix in `rules/section.rs` `y_statement`.
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this defect. | **substantive** |
 > | 2026-11-04 | Fixed. `y_statement` strips a leading `>` from each line before matching (`SPEC-3` 0.27). **Why:** the quote marker no longer sits between two words of a phrase. | **substantive** |
+> | 2026-11-04 | References corrected: the fix location is now the full repository path of `section.rs`, which `citation.path-exists` (`MILE-143`) could not find under its shortened form. `Status` is untouched. **Why:** the rule is now enabled in this repository. | **structural** |

@@ -75,5 +75,5 @@ disappoint if something about the release shape needs to change before public la
 ## References
 
 - SPEC-1 — the cross-compilation and `rust/`-not-root requirements this ADR satisfies.
-- `.github/workflows/release.yml`, `rust/release.toml` — the implementation.
+- `.github/workflows/prepare-release.yml`, `.github/workflows/publish-release.yml`, `rust/release.toml` — the implementation (the single `release.yml` workflow this first named no longer exists; the two workflows replaced it).
 - `.github/workflows/ci.yml`'s `ci` job — the release-gating check this ADR depends on by name.

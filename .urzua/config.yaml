@@ -269,6 +269,15 @@ rules:
     level: error
     source_paths: ["rust/crates"]
     exclude_paths: ["rust/crates/*/tests"]
+  # Prose citations of decision ids resolve (MILE-136). RFC-822 and RFC-4122
+  # are public standards that share the RFC prefix, not records (MILE-156).
+  citation.resolution:
+    level: warn
+    external_ids: ["RFC-822", "RFC-4122"]
+  # Paths cited under a References heading exist (MILE-143).
+  citation.path-exists:
+    level: warn
+    reference_sections: ["References"]
   # The two generated directory indexes (MILE-152): `urzua index --apply`
   # rewrites them from the records. The ADR list names no id (the file name
   # identifies the record); the spec list writes each entry over two lines.
