@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M2VHJHA4F5PMMA9DGW0CM6Y5
 Status: Accepted
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Date: 2026-09-19
 Author: beauwilliams
@@ -89,3 +89,5 @@ Removing it is cheap to undo. Keeping it is what compounds.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Initial decision, `Status: Accepted`. **Why:** a review fix added a legacy-config detector, and the question of whether to carry it turned on how many repositories it serves. v0.3.0 has one asset download three days after release, so the population is this repository and its config was converted by hand. Decided as a general rule rather than a one-off, because `MILE-98` and `RFC-33` are each a candidate for the same shim and "we kept the last one" is what makes the second inevitable. | **substantive** |
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |

@@ -67,6 +67,11 @@ pub struct RuleSetting {
     /// Superseded target is permanently true history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<String>>,
+    /// Path prefixes that publish beyond the repository (`RFC-11` section 1).
+    /// Only meaningful to `boundary.published-path-reference`. The rule's own
+    /// `level` is the boundary's severity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_paths: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +133,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             terminal_statuses: Option<Vec<String>>,
             #[serde(default)]
             fields: Option<Vec<String>>,
+            #[serde(default)]
+            published_paths: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -156,6 +163,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 closed_statuses: table.closed_statuses,
                 terminal_statuses: table.terminal_statuses,
                 fields: table.fields,
+                published_paths: table.published_paths,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -166,6 +174,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 closed_statuses: None,
                 terminal_statuses: None,
                 fields: None,
+                published_paths: None,
             })
         }
     }
@@ -482,6 +491,12 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("rule '{rule}' option 'published_paths' entry '{entry}' {reason}")]
+    InvalidPublishedPath {
+        rule: String,
+        entry: String,
+        reason: &'static str,
+    },
     #[error("record type '{record_type}' declares an invalid `{key}`: {reason}")]
     InvalidDocumentModel {
         record_type: String,
@@ -585,6 +600,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "published_paths",
+        owner: crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        consequence_if_missing: "declares no boundary and can never report",
+        optional: false,
+    },
+    RuleOption {
         name: "fields",
         owner: crate::rules::RULE_POINTER_TARGET_STATUS,
         consequence_if_missing: "checks every declared field",
@@ -602,6 +623,7 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
         "closed_statuses" => setting.closed_statuses.as_ref(),
         "terminal_statuses" => setting.terminal_statuses.as_ref(),
         "fields" => setting.fields.as_ref(),
+        "published_paths" => setting.published_paths.as_ref(),
         _ => None,
     }
 }
@@ -610,6 +632,37 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
     RULE_OPTIONS.iter().any(|o| o.owner == rule)
+}
+
+/// A `published_paths` entry in the one form the rule compares: whitespace
+/// trimmed, any leading `./` and trailing `/` removed. Entries are path
+/// prefixes, never globs, so a `*` is kept literally.
+pub fn normalize_published_path(entry: &str) -> String {
+    let mut s = entry.trim();
+    loop {
+        let before = s;
+        s = s.strip_prefix("./").unwrap_or(s);
+        s = s.strip_suffix('/').unwrap_or(s);
+        if s == before {
+            break;
+        }
+    }
+    s.to_string()
+}
+
+/// Why a `published_paths` entry cannot name a path inside the repository.
+fn published_path_problem(entry: &str) -> Option<&'static str> {
+    let trimmed = entry.trim();
+    if trimmed.contains('\\') {
+        return Some("contains a backslash; write the path with forward slashes");
+    }
+    if trimmed.starts_with('/') {
+        return Some("is absolute; write a path relative to the repository root");
+    }
+    if trimmed.split('/').any(|c| c == "..") {
+        return Some("contains a `..` component; a published path must stay inside the repository");
+    }
+    None
 }
 
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
@@ -625,7 +678,7 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
 pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
-    let config: Config = yaml_serde::from_str(content)?;
+    let mut config: Config = yaml_serde::from_str(content)?;
     if config.schema_version != CURRENT_SCHEMA_VERSION {
         return Err(ConfigError::UnrecognizedSchemaVersion {
             found: config.schema_version,
@@ -721,6 +774,27 @@ pub fn parse_with_document_models(
                     consequence: opt.consequence_if_missing,
                 });
             }
+        }
+    }
+    // Published paths: reject what cannot name a path inside the repository,
+    // then store the normalised form so the rule, its messages and its
+    // findings all use the same spelling.
+    for (name, setting) in config.rules.iter_mut() {
+        let Some(paths) = setting.published_paths.as_mut() else {
+            continue;
+        };
+        for entry in paths.iter_mut() {
+            let normalised = normalize_published_path(entry);
+            if setting.level != RuleLevel::Off {
+                if let Some(reason) = published_path_problem(&normalised) {
+                    return Err(ConfigError::InvalidPublishedPath {
+                        rule: name.clone(),
+                        entry: entry.clone(),
+                        reason,
+                    });
+                }
+            }
+            *entry = normalised;
         }
     }
     // `fields` must name something the repository declared: a name matching no
@@ -995,6 +1069,38 @@ rules:
             "{base}  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n    closed_statuses: [\"Fixed\"]\n"
         );
         assert!(parse(&complete).is_ok());
+    }
+
+    #[test]
+    fn published_paths_is_required_by_the_boundary_rule_and_by_no_other() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        for bad in ["[]", "[\"\"]"] {
+            let cfg = format!(
+                "{base}  boundary.published-path-reference:\n    level: error\n    published_paths: {bad}\n"
+            );
+            assert!(
+                parse(&cfg)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("published_paths"),
+                "{bad} should be rejected"
+            );
+        }
+        assert!(parse(&format!(
+            "{base}  boundary.published-path-reference: error\n"
+        ))
+        .is_err());
+        assert!(parse(&format!("{base}  boundary.published-path-reference: off\n")).is_ok());
+        assert!(parse(&format!(
+            "{base}  boundary.published-path-reference:\n    level: error\n    published_paths: [\"pkg\"]\n"
+        ))
+        .is_ok());
+        let elsewhere =
+            format!("{base}  field.quality:\n    level: error\n    published_paths: [\"pkg\"]\n");
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'published_paths'"));
     }
 
     #[test]
@@ -1308,5 +1414,44 @@ record_types:
             "{:?}",
             parse(&yaml)
         );
+    }
+
+    fn published_config(entry: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  boundary.published-path-reference:\n    level: error\n    published_paths: [{entry}]\n"
+        )
+    }
+
+    #[test]
+    fn published_paths_are_normalised_at_parse() {
+        let c = parse(&published_config(
+            "\"./pkg/sdk\", \"  pkg/lib/ \", \"a/b//\"",
+        ))
+        .unwrap();
+        assert_eq!(
+            c.rules["boundary.published-path-reference"]
+                .published_paths
+                .as_deref(),
+            Some(
+                [
+                    "pkg/sdk".to_string(),
+                    "pkg/lib".to_string(),
+                    "a/b".to_string()
+                ]
+                .as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn published_paths_that_are_absolute_parent_relative_or_backslashed_are_rejected() {
+        for entry in ["/etc", "../x", "a/../b", "a\\\\b", "./.."] {
+            let err = parse(&published_config(&format!("\"{entry}\""))).unwrap_err();
+            assert!(
+                matches!(err, ConfigError::InvalidPublishedPath { .. }),
+                "entry {entry:?}: {err}"
+            );
+            assert!(err.to_string().contains("published_paths"), "{err}");
+        }
     }
 }

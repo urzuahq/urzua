@@ -320,6 +320,21 @@ pub(crate) fn scan_references(line: &str) -> Vec<String> {
     out
 }
 
+/// Every record a header field of `record` names, normalized: any field, not
+/// only the declared pointer and narrative ones, so a relation field such as
+/// supersession is included. What `check --base` uses to find the records a
+/// change reaches (`MILE-123`); over-including a record that merely mentions
+/// another in a header is safe there, missing one is the defect.
+pub fn header_references(record: &Record) -> Vec<crate::values::RecordId> {
+    record
+        .header
+        .fields
+        .iter()
+        .flat_map(|f| scan_references(&f.value))
+        .map(|r| crate::values::RecordId::new(&r))
+        .collect()
+}
+
 pub(crate) fn extract_references(value: &str) -> Vec<String> {
     value
         .split(',')

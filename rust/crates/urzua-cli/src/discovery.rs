@@ -19,6 +19,7 @@ pub(crate) fn scope_source(source: urzua_io::DiscoverySource) -> ScopeSource {
     match source {
         urzua_io::DiscoverySource::GitTracked => ScopeSource::TrackedSweep,
         urzua_io::DiscoverySource::Argv => ScopeSource::Argv,
+        urzua_io::DiscoverySource::GitDiff => ScopeSource::GitDiff,
     }
 }
 

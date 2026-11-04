@@ -1,6 +1,6 @@
 ---
 Status: Superseded
-Embodiment: Verified
+Embodiment: Drift detected
 Realized-by: code:knope.toml, code:.github/workflows/ci.yml, code:.github/workflows/prepare-release.yml
 Date: 2026-09-06
 Author: beauwilliams
@@ -82,3 +82,10 @@ no format lock-in, since the output is plain Markdown.
 - ADR-28 — the verification-only decision this supersedes.
 - `.changeset/README.md` — the fragment format, for contributors.
 - `knope.toml`, `.github/workflows/ci.yml`, `.github/workflows/prepare-release.yml`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:knope.toml, code:.github/workflows/ci.yml, code:.github/workflows/prepare-release.yml` -- stated `Verified` disagreed with the computed value. | **structural** |
