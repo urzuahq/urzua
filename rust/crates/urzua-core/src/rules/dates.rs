@@ -100,8 +100,7 @@ pub fn date_field_order(records: &[Record], config: &Config) -> (RuleExecution, 
         .and_then(|s| s.date_order.as_ref())
         .into_iter()
         .flatten()
-        .filter_map(|e| crate::config::parse_date_order(e))
-        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .map(|e| (e.earlier.trim().to_string(), e.later.trim().to_string()))
         .collect();
     let declared = declared_fields_by_type(config);
     let statuses = statuses_by_type(config);
@@ -246,7 +245,7 @@ mod tests {
     }
 
     const ORDER: &str =
-        "  date.field-order:\n    level: error\n    date_order: [\"Date <= Accepted-on\"]\n";
+        "  date.field-order:\n    level: error\n    date_order: [{earlier: Date, later: Accepted-on}]\n";
 
     #[test]
     fn an_acceptance_date_before_the_record_date_is_reported_observed_failing() {
@@ -312,17 +311,17 @@ mod tests {
         assert!(bad("  date.field-order: error\n")
             .unwrap()
             .contains("date_order"));
-        assert!(bad("  date.field-valid:\n    level: error\n    date_fields: [Date]\n    date_order: [\"Date <= Accepted-on\"]\n").unwrap().contains("date_order"));
+        assert!(bad("  date.field-valid:\n    level: error\n    date_fields: [Date]\n    date_order: [{earlier: Date, later: Accepted-on}]\n").unwrap().contains("date_order"));
         for entry in [
-            "Date",
-            "Date <= ",
-            "Date <= Date",
-            "Date <= Nope",
-            "Date < Accepted-on",
-            "A <= B <= C",
+            "\"Date <= Accepted-on\"",
+            "{earlier: Date}",
+            "{earlier: Date, later: \"\"}",
+            "{earlier: Date, later: Date}",
+            "{earlier: Date, later: Nope}",
+            "{earlier: Date, later: Accepted-on, extra: x}",
         ] {
             let rules =
-                format!("  date.field-order:\n    level: error\n    date_order: [\"{entry}\"]\n");
+                format!("  date.field-order:\n    level: error\n    date_order: [{entry}]\n");
             assert!(bad(&rules).is_some(), "{entry} must be refused");
         }
         assert!(bad(ORDER).is_none());

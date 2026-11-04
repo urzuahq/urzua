@@ -53,7 +53,7 @@ fn pair_findings(report: &serde_json::Value) -> usize {
 }
 
 #[test]
-fn an_rfc_amending_an_adr_is_out_of_scope_under_the_scoped_pair() {
+fn an_rfc_amending_an_adr_is_eligible_and_unexamined_under_the_scoped_pair_observed_failing() {
     let report = run("scoped", &own_config());
     assert_eq!(pair_findings(&report), 0, "{report}");
     let rule = report["rules_executed"]
@@ -62,7 +62,22 @@ fn an_rfc_amending_an_adr_is_out_of_scope_under_the_scoped_pair() {
         .iter()
         .find(|r| r["rule"] == "relation.pair-reciprocity")
         .expect("rule executed");
-    assert_eq!(rule["population"]["out_of_scope"], 1, "{rule}");
+    assert_eq!(rule["population"]["out_of_scope"], 0, "{rule}");
+    // A legitimate cross-type claim is not a configuration the tool cannot
+    // reach, so the config-level rule has nothing to warn about.
+    let scope_warnings: Vec<_> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| {
+            f["rule"] == "config.scope-matches-nothing"
+                && f["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("relation.pair-reciprocity")
+        })
+        .collect();
+    assert!(scope_warnings.is_empty(), "{report}");
 }
 
 #[test]

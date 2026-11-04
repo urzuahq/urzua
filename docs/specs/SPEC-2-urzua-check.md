@@ -1,5 +1,5 @@
 ---
-Version: '0.42'
+Version: '0.43'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -506,4 +506,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.39`. Added `date.field-order` to the generated rule table: an opt-in rule over a `date_order` entry (`Earlier <= Later`). **Why:** `MILE-157` -- cross-field date ordering, with well-formedness left to `date.field-valid`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.40`. `index.freshness` reads multi-line entries (a `format` of several lines), accepts a `format` with `{file}` and no `{id}`, and `{title}` now excludes the record's own id as well as a leading number; the rule table is regenerated. A new `urzua index [--apply]` command regenerates the declared indexes. **Why:** `MILE-152` -- index checking read one line per entry and required a visible id, and nothing regenerated an index. | **substantive** |
 > | 2026-11-04 | Bumped to `0.41`. `type.dir-matches-nothing` also reports a type's `exclude_files` entry that names no tracked file directly in its `dir`. Rule table regenerated. **Why:** `MILE-150` -- a stale exclusion is a declaration that silently does nothing. | **substantive** |
-> | 2026-11-04 | Bumped to `0.42`. `citation.path-exists` takes an optional `skip_tables` option (a table whose rows are history is not read), and `citation.resolution` counts a declared external id as eligible and unexamined rather than out of scope; the rule table is regenerated, and the `citation.resolution` row no longer writes its numeric-range example as a citable id. **Why:** `MILE-143` -- revision-log rows name paths as they were; `BUG-186` -- a declared external id was reported as a misconfiguration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.42`. `relation.pair-reciprocity` counts a claim to a record type outside a pair's declared `types` as eligible and unexamined instead of out of scope, so `config.scope-matches-nothing` no longer warns on it. **Why:** `MILE-155` -- the claim is legitimate; the configuration is not what failed to reach it. | **substantive** |
+> | 2026-11-04 | Bumped to `0.43`. `citation.path-exists` takes an optional `skip_tables` option (a table whose rows are history is not read), and `citation.resolution` counts a declared external id as eligible and unexamined rather than out of scope; the rule table is regenerated, and the `citation.resolution` row no longer writes its numeric-range example as a citable id. **Why:** `MILE-143` -- revision-log rows name paths as they were; `BUG-186` -- a declared external id was reported as a misconfiguration. | **substantive** |
