@@ -136,6 +136,12 @@ pub struct RuleSetting {
     /// means no grace window.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_grace_days: Option<u32>,
+    /// A declared field holding the date a record's evidence was last audited
+    /// (`YYYY-MM-DD`). Where present, the `drift_grace_days` window counts from
+    /// it instead of from the cited file's last change (`MILE-166`). Only
+    /// meaningful to `embodiment.consistency`, and only with `drift_grace_days`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_audit_field: Option<String>,
     /// Days after which an `Embodiment` claim last verified longer ago than
     /// this draws a warning (`MILE-129`). Only meaningful to
     /// `embodiment.consistency`; omitted means no age limit.
@@ -299,6 +305,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             drift_grace_days: Option<u32>,
             #[serde(default)]
+            drift_audit_field: Option<String>,
+            #[serde(default)]
             claim_max_age_days: Option<u32>,
             #[serde(default)]
             sticky_states: Option<Vec<String>>,
@@ -352,6 +360,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: table.back_pointer_paths,
                 test_paths: table.test_paths,
                 drift_grace_days: table.drift_grace_days,
+                drift_audit_field: table.drift_audit_field,
                 claim_max_age_days: table.claim_max_age_days,
                 sticky_states: table.sticky_states,
                 date_fields: table.date_fields,
@@ -380,6 +389,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 back_pointer_paths: None,
                 test_paths: None,
                 drift_grace_days: None,
+                drift_audit_field: None,
                 claim_max_age_days: None,
                 sticky_states: None,
                 date_fields: None,
@@ -781,6 +791,8 @@ pub enum ConfigError {
     TestPathOutsideBackPointerPaths { rule: String, entry: String },
     #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
     StickyStateIsComputed { rule: String, state: String },
+    #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
+    InvalidDriftAuditField { rule: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -1427,8 +1439,44 @@ pub fn parse_with_document_models(
             }
         }
 
+        // The audit field only moves where the grace window counts from, so it
+        // is meaningless without a window, and a field no type declares would
+        // never be present (`MILE-166`).
+        if setting.level != RuleLevel::Off {
+            if let Some(field) = setting.drift_audit_field.as_deref() {
+                let field = field.trim();
+                let reason = if name != crate::rules::RULE_EMBODIMENT_CONSISTENCY {
+                    None
+                } else if setting.drift_grace_days.is_none() {
+                    Some(
+                        "needs 'drift_grace_days': it only changes where that window counts from"
+                            .to_string(),
+                    )
+                } else if field.is_empty() {
+                    Some("is blank".to_string())
+                } else if !config
+                    .record_types
+                    .values()
+                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field))
+                {
+                    Some(format!(
+                        "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                    ))
+                } else {
+                    None
+                };
+                if let Some(reason) = reason {
+                    return Err(ConfigError::InvalidDriftAuditField {
+                        rule: name.clone(),
+                        reason,
+                    });
+                }
+            }
+        }
+
         for (option, present) in [
             ("drift_grace_days", setting.drift_grace_days.is_some()),
+            ("drift_audit_field", setting.drift_audit_field.is_some()),
             ("claim_max_age_days", setting.claim_max_age_days.is_some()),
         ] {
             if present && name != crate::rules::RULE_EMBODIMENT_CONSISTENCY {
@@ -2094,6 +2142,43 @@ rules:
             "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [\" \"]\n"
         ));
         assert!(blank.is_err(), "a blank entry is not a declaration");
+    }
+
+    #[test]
+    fn drift_audit_field_needs_a_window_a_declared_field_and_the_consistency_rule() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [Audited]\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    drift_grace_days: 7\n    drift_audit_field: Audited\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["embodiment.consistency"]
+                .drift_audit_field
+                .as_deref(),
+            Some("Audited")
+        );
+        let err = |extra: &str, rule: &str| {
+            parse(&format!("{base}  {rule}:\n    level: warn\n{extra}"))
+                .unwrap_err()
+                .to_string()
+        };
+        let no_window = err("    drift_audit_field: Audited\n", "embodiment.consistency");
+        assert!(no_window.contains("drift_grace_days"), "{no_window}");
+        let undeclared = err(
+            "    drift_grace_days: 7\n    drift_audit_field: Nope\n",
+            "embodiment.consistency",
+        );
+        assert!(undeclared.contains("'Nope'"), "{undeclared}");
+        let blank = err(
+            "    drift_grace_days: 7\n    drift_audit_field: \" \"\n",
+            "embodiment.consistency",
+        );
+        assert!(blank.contains("blank"), "{blank}");
+        let elsewhere = err("    drift_audit_field: Audited\n", "field.quality");
+        assert!(
+            elsewhere.contains("does not take the option 'drift_audit_field'"),
+            "{elsewhere}"
+        );
     }
 
     #[test]

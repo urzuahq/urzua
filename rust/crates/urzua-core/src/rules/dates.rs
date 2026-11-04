@@ -25,6 +25,26 @@ fn date_problem(value: &str) -> Option<&'static str> {
     (day < 1 || day > days).then_some("is not a real calendar date")
 }
 
+/// The Unix time at the start of a `YYYY-MM-DD` date (UTC), or why the value
+/// is not one. Shared by the CLI, which dates a record's last audit from it
+/// (`MILE-166`), and by `embodiment.consistency`, which reports a bad one.
+pub fn date_unix(value: &str) -> Result<i64, &'static str> {
+    let value = value.trim();
+    if let Some(problem) = date_problem(value) {
+        return Err(problem);
+    }
+    let num = |r: std::ops::Range<usize>| i64::from(value[r].parse::<u32>().unwrap_or(0));
+    let (year, month, day) = (num(0..4), num(5..7), num(8..10));
+    // Days from civil (proleptic Gregorian), 1970-01-01 = 0.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Ok((era * 146_097 + doe - 719_468) * 86_400)
+}
+
 /// `date.field-valid` (`MILE-137`): every declared date field that carries a
 /// value must hold a real `YYYY-MM-DD` date. Blank, placeholder and pending
 /// values are not date values and are not examined.
@@ -343,5 +363,14 @@ mod tests {
                 .contains("date_fields")
         );
         assert!(bad("  date.field-valid: off\n").is_none());
+    }
+
+    #[test]
+    fn date_unix_converts_real_dates_and_refuses_the_rest() {
+        assert_eq!(date_unix("1970-01-01"), Ok(0));
+        assert_eq!(date_unix("2000-03-01"), Ok(951_868_800));
+        assert_eq!(date_unix(" 2026-11-04 "), Ok(1_793_750_400));
+        assert!(date_unix("2026-02-30").is_err());
+        assert!(date_unix("soon").is_err());
     }
 }
