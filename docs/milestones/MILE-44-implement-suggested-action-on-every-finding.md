@@ -18,7 +18,7 @@ SPEC-2's own contract and RFC-8 both already describe `suggestedAction` as part 
 
 ## Done means
 
-`Finding` carries a `suggested_action` that appears in the JSON output as `suggestedAction` as `SPEC-2` documents, every rule whose fix is mechanically obvious (including `field.quality`'s blank and placeholder cases) populates it, a rule without one omits it, and a test asserts it on each populated rule; `SPEC-2` and the rule table agree and `urzua check` over urzua's own corpus emits it.
+`Finding` carries a `suggested_action` in the shape `ADR-73` decides, in the JSON output as `suggested_action`; every finding variant of every shipped rule declares an action or a reasoned exemption in the rule table, as `ADR-73`'s appendix lists; a coverage test fails a variant with neither; `SPEC-2` reproduces `ADR-73`'s per-kind table and agrees with the rule table; and `urzua check` over urzua's own corpus emits it.
 
 > **Revision log**
 >
@@ -26,3 +26,4 @@ SPEC-2's own contract and RFC-8 both already describe `suggestedAction` as part 
 > |---|---|---|
 > | 2026-11-04 | Re-phased from Phase 1 to Phase 0 (pulled into Phase 0 as foundation work); `Status` unchanged. **Why:** Maintainer decision of 2026-11-04 defining Phase 0 as parity on a solid codebase (`SPEC-1`'s Phase 0 exit): `SPEC-2` documents `suggestedAction` on a finding and the `Finding` struct lacks it; the structured-output gap is cheapest to close while few consumers exist, and it touches every rule constructor, so it belongs before more rules land. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-04 | Done means rewritten to `ADR-73`'s accepted shape. **Why:** `ADR-73` widens scope from "rules where a fix is mechanically obvious" to every finding variant, with a declared exemption in place of silent omission, and spells the field `suggested_action` as `SPEC-2`'s snake_case does. | **substantive** |

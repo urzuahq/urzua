@@ -1,7 +1,7 @@
 use super::*;
 use crate::config::RelationRole;
 use crate::document_model::{declared_model, RequiredSection, SectionShape, SectionsDecl};
-use crate::section::{parse_sections, Section};
+use crate::section::{parse_sections, parse_sections_to_depth, Section};
 
 /// `section.required` (`MILE-4`) and `section.shape` (`MILE-5`, `MILE-121`):
 /// what a record type's declared `sections.required` demands of a record.
@@ -41,17 +41,20 @@ pub fn section_required(
                     waived: None,
                     declared_severity: None,
                     message: if slot.required.aliases.is_empty() {
-                        format!("required section `## {}` is missing", slot.required.name)
+                        format!(
+                            "required section {} is missing",
+                            label(slot.required, &slot.required.name)
+                        )
                     } else {
                         let aliases: Vec<String> = slot
                             .required
                             .aliases
                             .iter()
-                            .map(|a| format!("`## {a}`"))
+                            .map(|a| label(slot.required, a))
                             .collect();
                         format!(
-                            "required section `## {}` is missing, and so is every alias ({})",
-                            slot.required.name,
+                            "required section {} is missing, and so is every alias ({})",
+                            label(slot.required, &slot.required.name),
                             aliases.join(", ")
                         )
                     },
@@ -108,11 +111,14 @@ pub fn section_shape(
                     declared_severity: None,
                     message: if outside {
                         format!(
-                            "the preamble (before the first `##` section, where `## {}` is absent): {message}",
-                            slot.required.name
+                            "the preamble (before the first `##` section, where {} is absent): {message}",
+                            label(slot.required, &slot.required.name)
                         )
                     } else {
-                        format!("section `## {}`: {message}", slot.required.name)
+                        format!(
+                            "section {}: {message}",
+                            label(slot.required, &slot.required.name)
+                        )
                     },
                 });
             }
@@ -130,6 +136,19 @@ pub fn section_shape(
     )
 }
 
+/// A required section as the messages name it: the heading at its level, and
+/// the parent it must sit under when declared, e.g. `### Pros` under `## Options`.
+fn label(required: &RequiredSection, heading: &str) -> String {
+    let hashes = "#".repeat(usize::from(required.level));
+    match &required.under {
+        None => format!("`{hashes} {heading}`"),
+        Some(under) => format!(
+            "`{hashes} {heading}` under `{} {under}`",
+            "#".repeat(usize::from(required.level) - 1)
+        ),
+    }
+}
+
 /// One `(record, required section)` candidate.
 struct Slot<'a> {
     record: &'a Record,
@@ -144,22 +163,80 @@ struct Slot<'a> {
 impl Slot<'_> {
     /// The text before the first `##` heading, as a section with no heading.
     fn preamble(&self, sections: &[Section]) -> Section {
-        let end = sections.first().map_or(usize::MAX, |s| s.line - 1);
-        let lines: Vec<&str> = self
-            .text
-            .lines()
-            .enumerate()
-            .skip(self.header_end)
-            .take_while(|(i, _)| *i < end)
-            .map(|(_, l)| l)
-            .collect();
-        Section {
-            heading: String::new(),
-            line: self.header_end,
-            end_line: self.header_end + lines.len(),
-            body: lines.iter().map(|l| format!("{l}\n")).collect(),
-        }
+        preamble_of(self.text, self.header_end, sections)
     }
+}
+
+/// The text between the header region and the first section.
+fn preamble_of(text: &str, header_end: usize, sections: &[Section]) -> Section {
+    let end = sections
+        .iter()
+        .map(|s| s.line)
+        .min()
+        .map_or(usize::MAX, |line| line - 1);
+    let lines: Vec<&str> = text
+        .lines()
+        .enumerate()
+        .skip(header_end)
+        .take_while(|(i, _)| *i < end)
+        .map(|(_, l)| l)
+        .collect();
+    Section {
+        heading: String::new(),
+        level: 2,
+        parent: None,
+        line: header_end,
+        end_line: header_end + lines.len(),
+        body: lines.iter().map(|l| format!("{l}\n")).collect(),
+    }
+}
+
+/// One section of a record as `export` hands it over: the declared name
+/// (an alias resolves to the `required` name it satisfies, `MILE-165`), the
+/// heading as written, and the parsed span and content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportedSection {
+    pub name: String,
+    pub heading: String,
+    pub line: usize,
+    pub end_line: usize,
+    pub content: String,
+}
+
+/// The sections and preamble of a record whose type declares `sections`,
+/// read by the same parser `section.required` uses; `None` when the type
+/// declares none (so the caller can say "no declaration" rather than
+/// "no sections").
+pub fn exported_sections(
+    record: &Record,
+    record_type: &crate::config::RecordTypeConfig,
+    text: &str,
+) -> Option<(Vec<ExportedSection>, String)> {
+    let decl = declared_model(&record.record_type, record_type)
+        .ok()
+        .flatten()?
+        .sections?;
+    let header_end = record.header.region.map_or(0, |(_, end)| end);
+    let sections = record_sections(record, text);
+    let preamble = preamble_of(text, header_end, &sections).body;
+    let exported = sections
+        .into_iter()
+        .map(|s| {
+            let name = decl
+                .required
+                .iter()
+                .find(|r| r.level == s.level && r.headings().any(|h| h == s.heading))
+                .map_or_else(|| s.heading.clone(), |r| r.name.clone());
+            ExportedSection {
+                name,
+                heading: s.heading,
+                line: s.line,
+                end_line: s.end_line,
+                content: s.body,
+            }
+        })
+        .collect();
+    Some((exported, preamble))
 }
 
 /// Whether the declaration reads the preamble and the block's marker sits in
@@ -240,7 +317,7 @@ fn run_slots(
             };
             let sections = parsed
                 .entry(&slot.record.path)
-                .or_insert_with(|| record_sections(slot.record, text));
+                .or_insert_with(|| record_section_tree(slot.record, text, slot.decl.depth));
             judge(slot, sections)
         },
     )
@@ -276,12 +353,21 @@ fn exempt(record: &Record, decl: &SectionsDecl, config: &Config) -> Result<bool,
 /// after the header region.
 pub(super) fn record_sections(record: &Record, text: &str) -> Vec<Section> {
     let skip = record.header.region.map_or(0, |(_, end)| end);
-    let body: String = text
-        .split_inclusive('\n')
+    parse_sections(&after_header(text, skip), skip + 1)
+}
+
+/// The record's sections down to the type's declared `depth`, nested ones
+/// included, with file-relative line numbers.
+fn record_section_tree(record: &Record, text: &str, depth: u8) -> Vec<Section> {
+    let skip = record.header.region.map_or(0, |(_, end)| end);
+    parse_sections_to_depth(&after_header(text, skip), skip + 1, depth)
+}
+
+fn after_header(text: &str, skip: usize) -> String {
+    text.split_inclusive('\n')
         .skip(skip)
         .collect::<Vec<_>>()
-        .concat();
-    parse_sections(&body, skip + 1)
+        .concat()
 }
 
 /// The section satisfying `required`, with the heading it was found under:
@@ -293,7 +379,14 @@ fn find_section<'a>(
     required.headings().find_map(|h| {
         sections
             .iter()
-            .find(|s| s.heading == h)
+            .find(|s| {
+                s.heading == h
+                    && s.level == required.level
+                    && required
+                        .under
+                        .as_deref()
+                        .is_none_or(|under| s.parent.is_some_and(|p| sections[p].heading == under))
+            })
             .map(|section| (section, h))
     })
 }
@@ -320,8 +413,8 @@ pub fn section_alias_notices(
                 if heading != slot.required.name {
                     used.entry((
                         slot.record.record_type.clone(),
-                        slot.required.name.clone(),
-                        heading.to_string(),
+                        label(slot.required, &slot.required.name),
+                        label(slot.required, heading),
                     ))
                     .or_default()
                     .push(slot.record.path.display().to_string());
@@ -337,7 +430,7 @@ pub fn section_alias_notices(
                 severity: NoticeSeverity::Info,
                 subject: RULE_SECTION_REQUIRED.to_string(),
                 message: format!(
-                    "{} {record_type} record(s) satisfy required section `## {name}` through its alias `## {alias}`: {}",
+                    "{} {record_type} record(s) satisfy required section {name} through its alias {alias}: {}",
                     paths.len(),
                     paths.join(", ")
                 ),
@@ -945,6 +1038,78 @@ mod tests {
         // A marker after the first `##` heading is not the preamble.
         let late = doc("Accepted", &format!("## Context\n\nY-statement: {Y}\n"));
         let (_, f) = run(section_required, PRE, &late);
+        assert_eq!(f.len(), 1, "{f:?}");
+    }
+
+    const NESTED: &str = "{from: headings, depth: 2, required: [{name: Options}, {name: 'Pros and cons', level: 3, under: Options}]}";
+
+    #[test]
+    fn a_required_h3_under_its_h2_is_found_and_counted_observed_failing() {
+        let body = "## Options\n\n### Pros and cons\n\nx\n";
+        let (e, f) = run(section_required, NESTED, &doc("Accepted", body));
+        assert!(f.is_empty(), "{f:?}");
+        assert_eq!(counts(&e), (2, 2));
+    }
+
+    #[test]
+    fn a_missing_required_h3_is_a_finding_naming_its_level_and_parent() {
+        let (_, f) = run(
+            section_required,
+            NESTED,
+            &doc("Accepted", "## Options\n\nplain\n"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(
+            f[0].message.contains("### Pros and cons") && f[0].message.contains("## Options"),
+            "{}",
+            f[0].message
+        );
+    }
+
+    #[test]
+    fn an_h3_of_the_right_name_under_the_wrong_h2_does_not_satisfy_under() {
+        let body = "## Options\n\n## Other\n\n### Pros and cons\n";
+        let (_, f) = run(section_required, NESTED, &doc("Accepted", body));
+        assert_eq!(f.len(), 1, "{f:?}");
+    }
+
+    #[test]
+    fn an_h2_of_the_same_name_does_not_satisfy_an_h3_requirement_and_the_reverse() {
+        let (_, f) = run(
+            section_required,
+            NESTED,
+            &doc("Accepted", "## Options\n\n## Pros and cons\n"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        let (_, f) = run(
+            section_required,
+            "{from: headings, depth: 2, required: [{name: Context}]}",
+            &doc("Accepted", "### Context\n"),
+        );
+        assert_eq!(
+            f.len(),
+            1,
+            "an h3 does not satisfy a level-2 requirement: {f:?}"
+        );
+    }
+
+    #[test]
+    fn a_depth_two_declaration_with_only_h2_requirements_behaves_as_depth_one() {
+        let body = "## Context\n\n### Sub\n\n## Decision\n";
+        let (e1, f1) = run(section_required, REQ, &doc("Accepted", body));
+        let two = REQ.replace("from: headings,", "from: headings, depth: 2,");
+        let (e2, f2) = run(section_required, &two, &doc("Accepted", body));
+        assert_eq!((f1.len(), counts(&e1)), (f2.len(), counts(&e2)));
+    }
+
+    #[test]
+    fn a_required_h3_can_carry_a_shape_and_it_is_judged_inside_the_h3() {
+        let decl = "{from: headings, depth: 2, required: [{name: Rows, level: 3, under: Options, shape: table-min-rows, min_rows: 1}]}";
+        let ok = "## Options\n\n### Rows\n\n| a |\n|---|\n| 1 |\n";
+        let (_, f) = run(section_shape, decl, &doc("Accepted", ok));
+        assert!(f.is_empty(), "{f:?}");
+        let bad = "## Options\n\n### Rows\n\nno table\n\n## Later\n\n| a |\n|---|\n| 1 |\n";
+        let (_, f) = run(section_shape, decl, &doc("Accepted", bad));
         assert_eq!(f.len(), 1, "{f:?}");
     }
 }
