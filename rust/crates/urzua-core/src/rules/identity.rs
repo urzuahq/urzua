@@ -16,7 +16,7 @@ pub fn build_normalized_index(records: &[Record]) -> HashMap<crate::values::Reco
 /// tool knows both records are there (BUG-79).
 pub fn identity_collision(
     records: &[Record],
-    collisions: Vec<IdentifierCollision<'_>>,
+    collisions: &[IdentifierCollision<'_>],
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_IDENTITY_COLLISION;
 
@@ -42,7 +42,7 @@ pub fn identity_collision(
             .map(|r| r.path.display().to_string())
             .collect();
         paths.sort();
-        for record in &claimants {
+        for record in claimants.iter() {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Error,

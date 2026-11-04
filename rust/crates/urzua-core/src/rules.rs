@@ -1,7 +1,6 @@
-//! The two seed rules (SPEC-0002 Phase A), chosen because both fire on this
-//! project's own corpus today -- a validator whose first run is green has
-//! told you nothing about itself. Plus the Phase 6 rules, each with its own
-//! planted-violation test.
+//! Every rule, each with its own planted-violation test, and the table
+//! (`RULE_TABLE`) and runner that register and execute them: one `RuleDef` per
+//! rule is the only place a rule is named outside its own module.
 
 use crate::config::Config;
 use crate::field_state::{classify, classify_with};
@@ -32,9 +31,11 @@ mod narrative;
 mod pointer;
 mod relation;
 mod revision_log;
+mod runner;
 mod section;
 mod shared;
 mod status;
+mod table;
 mod type_scope;
 mod waiver;
 
@@ -56,9 +57,11 @@ pub use narrative::*;
 pub use pointer::*;
 pub use relation::*;
 pub use revision_log::*;
+pub use runner::*;
 pub use section::*;
 pub use shared::*;
 pub use status::*;
+pub use table::*;
 pub use type_scope::*;
 pub use waiver::*;
 

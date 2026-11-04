@@ -1,12 +1,10 @@
 //! `urzua check` (SPEC-2): the validator.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::report::{
-    CheckReport, CouldNotRun, Finding, Notice, NoticeSeverity, ReportStatus, RuleExecution,
-    ScopeInfo,
+    CheckReport, CouldNotRun, Finding, Notice, NoticeSeverity, ReportStatus, ScopeInfo,
 };
 use urzua_core::rules;
 
@@ -555,335 +553,62 @@ pub fn run(
         });
     }
 
-    let rule_results: Vec<(RuleExecution, Vec<Finding>)> = vec![
-        crate::gate::gated(&config, rules::RULE_HEADER_REQUIRED_FIELDS, || {
-            rules::header_required_fields(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-            rules::pointer_resolution(&records, &config, &record_index)
-        }),
-        crate::gate::gated(&config, rules::RULE_POINTER_TARGET_STATUS, || {
-            let setting = config.rules.get(rules::RULE_POINTER_TARGET_STATUS);
-            let not_in = setting.and_then(|s| s.not_in.clone()).unwrap_or_default();
-            let fields = setting.and_then(|s| s.fields.as_deref());
-            rules::pointer_target_status(&records, &config, &not_in, fields, &record_index)
-        }),
-        crate::gate::gated(&config, rules::RULE_FIELD_QUALITY, || {
-            rules::field_quality(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_FIELD_PENDING, || {
-            rules::field_pending(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_CLAIM_STATUS_AGREEMENT, || {
-            let setting = config.rules.get(rules::RULE_CLAIM_STATUS_AGREEMENT);
-            let closed = setting
-                .and_then(|s| s.closed_statuses.clone())
-                .unwrap_or_default();
-            rules::claim_status_agreement(&claims, &closed, &config, &record_index)
-        }),
-        crate::gate::gated(&config, rules::RULE_FILENAME_TITLE_CONSISTENCY, || {
-            rules::filename_title_consistency(&records, &full_text)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-            || rules::supersession_reciprocity(&records, &config, &record_index),
-        ),
-        crate::gate::gated(&config, rules::RULE_RELATION_PAIR_RECIPROCITY, || {
-            rules::relation_pair_reciprocity(&records, &config, &record_index)
-        }),
-        crate::gate::gated(&config, rules::RULE_RELATION_CROSS_TYPE_DISALLOWED, || {
-            rules::relation_cross_type_disallowed(&records, &config, &record_index)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_RELATION_TARGET_STATUS_UNDECLARED,
-            || rules::relation_target_status_undeclared(&records, &config, &record_index),
-        ),
-        crate::gate::gated(
-            &config,
-            rules::RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
-            || rules::revision_log_change_class(&records, &config, &full_text),
-        ),
-        crate::gate::gated(&config, rules::RULE_EMBODIMENT_CONSISTENCY, || {
-            rules::embodiment_consistency(
-                &records,
-                &config,
-                &drift.drifted,
-                &drift.fresh,
-                &back_pointed,
-                &claim_ages,
-            )
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
-            || rules::embodiment_requires_accepted_status(&records, &config),
-        ),
-        crate::gate::gated(
-            &config,
-            rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
-            || {
-                let (files, paths, tests): (&[_], &[String], &[String]) =
-                    match &back_pointer_sources {
-                        Some(s) => (&s.files, &s.back_pointer_paths, &s.test_paths),
-                        None => (&[], &[], &[]),
-                    };
-                rules::embodiment_back_pointer_resolution(
-                    files,
-                    paths,
-                    tests,
-                    &config,
-                    &record_index,
-                )
-            },
-        ),
-        crate::gate::gated(
-            &config,
-            rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
-            || {
-                let (files, paths): (&[_], &[String]) = match &decision_gate_sources {
-                    Some(s) => (&s.files, &s.back_pointer_paths),
-                    None => (&[], &[]),
-                };
-                let fallback = config
-                    .rules
-                    .get(rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED)
-                    .and_then(|s| s.accepted_statuses.clone())
-                    .unwrap_or_default();
-                rules::embodiment_back_pointer_decision_accepted(
-                    files,
-                    paths,
-                    &fallback,
-                    changed_paths.as_deref(),
-                    &config,
-                    &record_index,
-                )
-            },
-        ),
-        crate::gate::gated(&config, rules::RULE_EMBODIMENT_LOCATOR_EXISTS, || {
-            // Tracked *and* on disk: tracked alone passes a staged deletion,
-            // since discovery unions `ls-files` with the cached diff, and on
-            // disk alone passes a gitignored file that then fails in CI.
-            let tracked: std::collections::HashSet<&std::path::Path> =
-                discovered.paths.iter().map(|p| p.as_path()).collect();
-            let present = |p: &str| {
-                let path = std::path::Path::new(p);
-                if !tracked.contains(path) {
-                    return false;
-                }
-                // `is_file()` folds every error into `false`, so an unreadable
-                // path would be reported as missing. This rule is declared
-                // `error` in repositories that enable it, and a blocking
-                // finding the tool cannot substantiate is worse than silence --
-                // so only a definite absence counts.
-                repo_root.join(path).try_exists().unwrap_or(true)
-            };
-            rules::embodiment_locator_exists(&records, &config, &present)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
-            || rules::embodiment_locator_promotion_candidate(&records, &config),
-        ),
-        crate::gate::gated(&config, rules::RULE_HEADER_FIELD_SET_CONSISTENCY, || {
-            rules::header_field_set_consistency(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_FIELD_UNTRIMMED_VALUE, || {
-            rules::field_untrimmed_value(&records, &config)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_FIELD_LEADING_RESERVED_INDICATOR,
-            || rules::field_leading_reserved_indicator(&records, &config),
-        ),
-        crate::gate::gated(&config, rules::RULE_HEADER_FIELD_CASE_MISMATCH, || {
-            rules::header_field_case_mismatch(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_HEADER_CASE_VARIANT_KEY, || {
-            rules::header_case_variant_key(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_NARRATIVE_FIELD_STALE, || {
-            let terminal = config
-                .rules
-                .get(rules::RULE_NARRATIVE_FIELD_STALE)
-                .and_then(|s| s.terminal_statuses.clone())
-                .unwrap_or_default();
-            rules::narrative_field_stale(&records, &config, &terminal, &record_index)
-        }),
-        crate::gate::gated(&config, rules::RULE_TYPE_DIR_MATCHES_NOTHING, || {
-            let mut matched: HashMap<String, usize> = HashMap::new();
-            for r in &records {
-                *matched.entry(r.record_type.clone()).or_insert(0) += 1;
-            }
-            let dir_exists = |d: &str| repo_root.join(d).is_dir();
-            let live: Vec<std::path::PathBuf> = discovered
-                .paths
-                .iter()
-                .filter(|p| !discovered.staged_deletions.contains(*p))
-                .cloned()
-                .collect();
-            rules::type_dir_matches_nothing(&config, &config_path, &matched, &dir_exists, &live)
-        }),
-        crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
-            rules::identity_collision(&records, identity_collisions)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
-            || {
-                // A staged deletion is going away, not a real ownership
-                // question to raise (`BUG-71`/`BUG-82`'s shape, one level up:
-                // those fixed a staged deletion being wrongly judged *inside*
-                // its dir; this is the same file wrongly judged *outside* one
-                // it's leaving).
-                let live_paths: Vec<std::path::PathBuf> = discovered
-                    .paths
-                    .iter()
-                    .filter(|p| !discovered.staged_deletions.contains(*p))
-                    .cloned()
-                    .collect();
-                rules::type_record_outside_declared_dir(&config, &live_paths)
-            },
-        ),
-        crate::gate::gated(&config, rules::RULE_TYPE_NO_DECLARED_SPEC, || {
-            rules::type_no_declared_spec(&config, &config_path)
-        }),
-        crate::gate::gated(&config, rules::RULE_HEADER_POINTER_FIELD_CLEAN, || {
-            rules::header_pointer_field_clean(&records, &config)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_CONFIG_POINTER_DECLARATION_MISSING,
-            || rules::config_pointer_declaration_missing(&config, &config_path),
-        ),
-        crate::gate::gated(&config, rules::RULE_CONFIG_POINTER_FIELD_NOT_KNOWN, || {
-            rules::config_pointer_field_not_known(&config, &config_path)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
-            || rules::config_pointer_narrative_overlap(&config, &config_path),
-        ),
-        crate::gate::gated(
-            &config,
-            rules::RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
-            || rules::config_header_none_has_no_required_fields(&config, &config_path),
-        ),
-        crate::gate::gated(&config, rules::RULE_CONFIG_RELATION_FIELD_NOT_KNOWN, || {
-            rules::config_relation_field_not_known(&config, &config_path)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
-            || rules::config_known_fields_declaration_missing(&config, &config_path),
-        ),
-        crate::gate::gated(&config, rules::RULE_FILENAME_IDENTITY_PATTERN, || {
-            rules::filename_identity_pattern(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_STATUS_UNDECLARED_VALUE, || {
-            rules::status_undeclared_value(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_STATUS_REQUIRED_FIELD_MISSING, || {
-            rules::status_required_field_missing(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT, || {
-            rules::status_forbidden_field_present(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_STATUS_DELIVERY_AGREEMENT, || {
-            rules::status_delivery_agreement(&records, &config, &back_pointed)
-        }),
-        crate::gate::gated(&config, rules::RULE_DATE_FIELD_VALID, || {
-            rules::date_field_valid(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_DATE_FIELD_ORDER, || {
-            rules::date_field_order(&records, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_CITATION_RESOLUTION, || {
-            rules::citation_resolution(&records, &config, &full_text, &record_index)
-        }),
-        crate::gate::gated(&config, rules::RULE_CITATION_PATH_EXISTS, || {
-            // A file is present when tracked and on disk (as for
-            // `embodiment.locator-exists`); a directory when a tracked file
-            // sits below it.
-            let tracked: std::collections::HashSet<&std::path::Path> =
-                discovered.paths.iter().map(|p| p.as_path()).collect();
-            let directories: std::collections::HashSet<&std::path::Path> = discovered
-                .paths
-                .iter()
-                .flat_map(|p| p.ancestors().skip(1))
-                .filter(|a| !a.as_os_str().is_empty())
-                .collect();
-            let present = |p: &str| {
-                let path = std::path::Path::new(p);
-                if directories.contains(path) {
-                    return true;
-                }
-                // Only a definite absence counts, as for `embodiment.locator-exists`.
-                tracked.contains(path) && repo_root.join(path).try_exists().unwrap_or(true)
-            };
-            rules::citation_path_exists(&records, &config, &full_text, &present)
-        }),
-        crate::gate::gated(&config, rules::RULE_CITATION_ISSUE_EXISTS, || {
-            rules::citation_issue_exists(&records, &config, &full_text, &refs_snapshot)
-        }),
-        crate::gate::gated(
-            &config,
-            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
-            || rules::published_path_reference(&published_files, &published_paths, &config),
-        ),
-        crate::gate::gated(&config, rules::RULE_SECTION_REQUIRED, || {
-            rules::section_required(&records, &config, &full_text)
-        }),
-        crate::gate::gated(&config, rules::RULE_SECTION_SHAPE, || {
-            rules::section_shape(&records, &config, &full_text)
-        }),
-        crate::gate::gated(&config, rules::RULE_INDEX_FRESHNESS, || {
-            rules::index_freshness(&records, &full_text, &index_artifacts)
-        }),
-        crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_REQUIRES_RECORD, || {
-            let setting = config.rules.get(rules::RULE_DIFF_SOURCE_REQUIRES_RECORD);
-            let source = setting
-                .and_then(|s| s.source_paths.clone())
-                .unwrap_or_default();
-            let excluded = setting
-                .and_then(|s| s.exclude_paths.clone())
-                .unwrap_or_default();
-            rules::source_requires_record(changed_paths.as_deref(), &source, &excluded, &config)
-        }),
-        crate::gate::gated(&config, rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED, || {
-            let setting = config.rules.get(rules::RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
-            let application = setting
-                .and_then(|s| s.application_paths.clone())
-                .unwrap_or_default();
-            let excluded = setting
-                .and_then(|s| s.exclude_paths.clone())
-                .unwrap_or_default();
-            rules::source_and_records_mixed(
-                changed_paths.as_deref(),
-                &application,
-                &excluded,
-                &config,
-            )
-        }),
-    ];
+    let may_exist = |p: &std::path::Path| repo_root.join(p).try_exists().unwrap_or(true);
+    let dir_exists = |d: &str| repo_root.join(d).is_dir();
+    let live_paths: Vec<PathBuf> = discovered
+        .paths
+        .iter()
+        .filter(|p| !discovered.staged_deletions.contains(*p))
+        .cloned()
+        .collect();
+    let base_ctx = rules::RuleCtx {
+        config: &config,
+        config_path: &config_path,
+        records: &records,
+        full_text: &full_text,
+        index: &record_index,
+        collisions: &identity_collisions,
+        claims: &claims,
+        published_files: &published_files,
+        published_paths: &published_paths,
+        index_artifacts: &index_artifacts,
+        back_pointer_sources: back_pointer_sources.as_ref(),
+        decision_gate_sources: decision_gate_sources.as_ref(),
+        back_pointed: &back_pointed,
+        drifted: &drift.drifted,
+        fresh: &drift.fresh,
+        claim_ages: &claim_ages,
+        changed_paths: changed_paths.as_deref(),
+        refs_snapshot: &refs_snapshot,
+        tracked_paths: &discovered.paths,
+        live_paths: &live_paths,
+        may_exist: &may_exist,
+        dir_exists: &dir_exists,
+        run: rules::RunState::empty(),
+    };
 
-    let mut rules_executed = Vec::with_capacity(rule_results.len());
+    let mut rules_executed = Vec::new();
     let mut findings = Vec::new();
-    for (exec, rule_findings) in rule_results {
+    for (exec, rule_findings) in rules::run_phase(rules::Phase::Main, &base_ctx) {
         rules_executed.push(exec);
         findings.extend(rule_findings);
     }
 
-    // Last, and over the executions rather than the corpus: it judges whether
-    // the configuration reached what it declared (MILE-106), which is only
+    // Over the executions rather than the corpus: it judges whether the
+    // configuration reached what it declared (MILE-106), which is only
     // answerable once every other rule has reported.
-    let (scope_exec, scope_findings) =
-        crate::gate::gated(&config, rules::RULE_CONFIG_SCOPE_MATCHES_NOTHING, || {
-            rules::config_scope_matches_nothing(&rules_executed, &config_path)
-        });
-    rules_executed.push(scope_exec);
-    findings.extend(scope_findings);
+    let after_rules = rules::RuleCtx {
+        run: rules::RunState {
+            executions: &rules_executed,
+            ..rules::RunState::empty()
+        },
+        ..base_ctx
+    };
+    let after_rules_results = rules::run_phase(rules::Phase::AfterRules, &after_rules);
+    for (exec, rule_findings) in after_rules_results {
+        rules_executed.push(exec);
+        findings.extend(rule_findings);
+    }
 
     // Scoped against the requested prefixes themselves, never against the
     // discovered set: that set holds the *tracked* files under the scope, and a
@@ -962,19 +687,23 @@ pub fn run(
     // and after every scope filter: a waiver is stale only against a run that
     // could have produced its finding (MILE-168).
     let whole_corpus = requested_scopes.is_empty() && diff_scope.is_none();
-    let (waiver_exec, waiver_findings) =
-        crate::gate::gated(&config, rules::RULE_WAIVER_MATCHES_NOTHING, || {
-            rules::waiver_matches_nothing(
-                &waivers,
-                &findings,
-                &rules_executed,
-                whole_corpus,
-                |p| whole_corpus || in_scope.contains(p),
-                &today,
-            )
-        });
-    rules_executed.push(waiver_exec);
-    findings.extend(waiver_findings);
+    let reached = |p: &std::path::Path| whole_corpus || in_scope.contains(p);
+    let after_scoping = rules::RuleCtx {
+        run: rules::RunState {
+            executions: &rules_executed,
+            findings: &findings,
+            waivers: &waivers,
+            whole_corpus,
+            reached: &reached,
+            today: &today,
+        },
+        ..base_ctx
+    };
+    let after_scoping_results = rules::run_phase(rules::Phase::AfterScoping, &after_scoping);
+    for (exec, rule_findings) in after_scoping_results {
+        rules_executed.push(exec);
+        findings.extend(rule_findings);
+    }
 
     urzua_core::waiver::apply_waivers(&mut findings, &waivers, &today);
 

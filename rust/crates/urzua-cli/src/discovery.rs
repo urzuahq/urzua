@@ -683,14 +683,7 @@ pub(crate) fn read_files_under(
     Ok(out)
 }
 
-/// The source files `embodiment.back-pointer-resolution` scans, with the
-/// declared `back_pointer_paths` (`MILE-128`).
-pub(crate) struct BackPointerSources {
-    pub(crate) files: Vec<rules::PublishedFile>,
-    pub(crate) back_pointer_paths: Vec<String>,
-    /// The declared test class, a subset of `back_pointer_paths` (`MILE-146`).
-    pub(crate) test_paths: Vec<String>,
-}
+pub(crate) use rules::BackPointerSources;
 
 /// Reads the back-pointer sources, or `None` when the rule is absent or off:
 /// evidence is collected only while the rule is enabled, so a repository that

@@ -428,7 +428,7 @@ mod tests {
                 "identity.collision",
                 rules::identity_collision(
                     &records,
-                    rules::build_index_reporting_collisions(&records).1,
+                    &rules::build_index_reporting_collisions(&records).1,
                 ),
             ),
             (
