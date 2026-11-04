@@ -37,7 +37,10 @@ pub(crate) fn gated(
             };
             let (exec, mut findings) = run();
             for f in &mut findings {
-                f.severity = severity;
+                // A level the rule declared for this finding's own field
+                // (`field_levels`, MILE-140) outranks the rule level; every
+                // other finding takes the rule level as before.
+                f.severity = f.declared_severity.unwrap_or(severity);
             }
             (exec, findings)
         }

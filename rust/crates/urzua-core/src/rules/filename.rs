@@ -29,6 +29,7 @@ pub fn filename_title_consistency(
                     file: record.path.clone(),
                     line,
                     waived: None,
+                    declared_severity: None,
                     message,
                 });
             };
@@ -295,6 +296,7 @@ pub fn filename_identity_pattern(
                 file: dir,
                 line: None,
                 waived: None,
+                declared_severity: None,
                 message: format!(
                     "none of record type '{type_name}''s {} file(s) matches {convention}, so \
                      no identity-reading rule can examine any of them; rename each: {}",
@@ -313,6 +315,7 @@ pub fn filename_identity_pattern(
                     file: record.path.clone(),
                     line: None,
                     waived: None,
+                    declared_severity: None,
                     message: format!(
                         "file name does not match {convention} for record type '{type_name}', \
                          so it has no identity and identity-reading rules skip it; rename: {}",
