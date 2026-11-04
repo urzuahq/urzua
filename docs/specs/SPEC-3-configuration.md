@@ -1,5 +1,5 @@
 ---
-Version: '0.54'
+Version: '0.55'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -264,6 +264,10 @@ Two details carry weight:
         failure: [WontFix]                # terminal, it ended without being done
         implementable: [Open]             # statuses at which code may implement the record
         claim_retained: []                # statuses that may keep an Implemented/Verified claim
+        initial: [Open]                   # where a new record may start (with transitions)
+        transitions:                      # which statuses may follow each status
+          Open: [Fixed, WontFix]
+          Fixed: [Open]
         pending: [pending, "not yet written", {pattern: "^\\(pending"}]
         require: [{when: [Fixed], fields: [Regression-test]}]
         forbid:  [{when: [Open], fields: [Fixed-in]}]
@@ -277,8 +281,21 @@ Two details carry weight:
   [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
   `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
   required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
-  with no value is a load-time error naming the record type and `statuses`. Transitions between
-  statuses are not declared here (`MILE-144`).
+  with no value is a load-time error naming the record type and `statuses`.
+
+  `transitions` and `initial` (`MILE-144`, `ADR-72`) declare the type's lifecycle. `transitions`
+  maps a declared status to the declared statuses that may follow it; a status with no entry is
+  terminal, nothing may follow it. `initial` is the list of statuses a new record may start at, and
+  is also where the engine starts when it asks which declared statuses can be reached. The two come
+  together: either without the other is a load error, as is a status that is not in `values`, a list
+  that repeats an entry, or a status listed as following itself. A type that declares neither has no
+  lifecycle and no transition is judged. Two opt-in rules read it: `status.transition-allowed`
+  compares a changed record's `Status` at the merge base with its `Status` in the change under check
+  and reports an edge the graph does not list, or a new record outside `initial`; it needs `--base`
+  and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
+  path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
+  committed status is no longer declared is counted unreadable by the first rule, not judged. The
+  derived `blocked` value is not part of this declaration (`MILE-27`).
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -960,3 +977,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.52`. No change to the option reference. The `RuleSetting` option set is one definition (`accepted_statuses` now carries the `serde(default)` its siblings did), and a rule reads its options as a typed value. An option that is declared in the option tables but not accepted by the struct, or the reverse, fails a test. **Why:** `MILE-174` -- the set was defined four times, so a new option could be silently ignored. | **structural** |
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.55`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |

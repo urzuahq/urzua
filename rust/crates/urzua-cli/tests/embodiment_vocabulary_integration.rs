@@ -191,9 +191,14 @@ fn a_built_claiming_declared_state_needs_an_accepted_status() {
 #[test]
 fn a_bad_declaration_is_refused_at_load() {
     for (name, decl, needle) in [
-        ("dup", "embodiment:\n  drift: A\n  tiers: [{state: A, evidence: test}]\n  none: B\n", "twice"),
-        ("ev", "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test}, {state: C, evidence: test}]\n  none: D\n", "evidence"),
+        ("dup", "embodiment:\n  drift: A\n  tiers: [{state: A, evidence: test, claims_built: true}]\n  none: B\n", "twice"),
+        ("ev", "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test, claims_built: true}, {state: C, evidence: test}]\n  none: D\n", "evidence"),
         ("empty", "embodiment:\n  drift: A\n  tiers: []\n  none: D\n", "tiers"),
+        (
+            "claims",
+            "embodiment:\n  drift: A\n  tiers: [{state: B, evidence: test}]\n  none: D\n",
+            "claims_built",
+        ),
     ] {
         let dir = repo(name, decl);
         let out = run_urzua(&dir, &["check"]);

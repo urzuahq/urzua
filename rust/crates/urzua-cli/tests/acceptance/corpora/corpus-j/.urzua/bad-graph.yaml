@@ -1,0 +1,14 @@
+schema_version: 2
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted]
+      initial: [Proposed]
+      transitions:
+        Proposed: [Approved]
+rules:
+  status.transition-allowed: error
