@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2Q5574E1HVXH4TNDGXP8YT5
 Status: Fixed
-Found-in: 'MILE-80 -- reviewing its own recorded consequences before merge; the flattening was written down as intended and `Pending`''s definition contradicts that'
-Regression-test: 'rust/crates/urzua-core/src/rules/field.rs::a_pending_field_belongs_to_field_pending_not_field_quality -- a Pending field belongs to field.pending, a Blank one stays with field.quality, and neither claims the other'
+Found-in: '366220e -- the MILE-80 change (#56), which made one rule id carry both the forgotten-field and the deliberately-unfinished arms'
+Regression-test: 'rust/crates/urzua-core/src/rules/field.rs::a_pending_field_belongs_to_field_pending_not_field_quality -- an unfinished-work marker belongs to field.pending, a blank one stays with field.quality, and neither claims the other'
 ---
 # 38 — `field.quality` conflates a forgotten field with a deliberately pending one
 
@@ -58,3 +58,4 @@ means is what changed the verdict.
 > | 2026-09-17 | `Status: Open` → `Fixed` in the same change that filed it. **Why:** this record's own `Regression-test` value is a `Pending` marker, so filing it made `urzua check docs/` exit non-zero on this repo -- the bug reproduced itself in the record describing it, which settled that it was not deferrable. `field.pending` split out; `field.quality` keeps `Blank`/`Placeholder`. | **substantive** |
 > | 2026-09-19 | `Regression-test` now names the test that exists. **Why:** the field still read *"not yet written"* after the test was written and observed failing, so this record claimed the work was undone while the work was done. One of eight such records, found by the audit that filed `BUG-57`. | **structural** |
 > | 2026-11-04 | `Regression-test` path updated to `rules/field.rs`, where the test now lives. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-04 | `Found-in` and `Regression-test` filled with the verifiable commit and the existing test. **Why:** both fields were prose that tripped `field.pending`; they now name `366220e` and the test in `rules/field.rs`. | **substantive** |
