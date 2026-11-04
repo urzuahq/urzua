@@ -5,7 +5,7 @@ Phase: '0'
 Track: embodiment-model
 Implements: ADR-67
 Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs
-Blocked-on: ADR-67 (Proposed; the pin and the grace window it describes)
+Blocked-on: —
 ---
 # 181 — fix re-pins a drifted evidence pin on review with an attributed revision row
 
@@ -27,3 +27,4 @@ A planted change to a pinned file in this repository's corpus is listed by `urzu
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's attributed evidence refresh has no counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Built: `urzua fix --rebaseline` (`SPEC-8`) lists stale `@sha256:` pins with recorded and current hash and, with `--apply --ids`/`--force`, `--by` and a required `--reason`, re-pins the chosen records and appends an attributed revision row; exercised on a clone of this repository's own corpus (`ADR-18`). Heuristic drift on an unpinned locator is not re-baselined, so `ADR-20`, `ADR-42` and `ADR-45` are untouched. `Realized-by` added and `Status` Planned -> Done: the Done-when is met (listed, cleared by `--apply --ids` with a row carrying name and reason, second run a no-op, no identity or reason refused, exercised on this corpus). `ADR-67` stays Proposed and its "not built" line is the maintainer's to amend. **Why:** the milestone's Done-when asks for the capability and its exercise on this corpus. | **substantive** |
+> | 2026-11-04 | `Blocked-on` cleared. **Why:** it named `ADR-67` as Proposed, and the maintainer accepted it on 2026-11-04; this milestone was already `Done`. | **structural** |

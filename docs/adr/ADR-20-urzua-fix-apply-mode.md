@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a, code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:772cef0da7b4a891a4bdb88c2778fc69e1f8e25d4981fb63c9ed667bde27bd62, code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/fix.rs@sha256:772cef0da7b4a891a4bdb88c2778fc69e1f8e25d4981fb63c9ed667bde27bd62
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -100,3 +100,4 @@ re-read before writing, the corpus lock and the single-line edit are unchanged.
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/fix.rs`, `rust/crates/urzua-io/src/lib.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-pinned with the amendment above: the identity order and Revision log requirement are recorded as built; the hard gates the Decision lists are unchanged. | **structural** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a, code:rust/crates/urzua-io/src/lib.rs@sha256:671f9e9b0ff5bc3afc72a7ef898610551f4bb00ed91179bd1a0d35d24b57602d, test:rust/crates/urzua-core/src/fix.rs@sha256:bc5037c801aaea61e15d8997187f705fce7d92c39e90c4e96679cc5a5c88524a` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/fix.rs` bc5037c801aa -> 772cef0da7b4. Reason: Re-verified: the only change to the pinned file is an Implements: ADR-67 comment; behaviour is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

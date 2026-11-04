@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZYQQ4ZT1R16B9JVYZ90W
-Status: Planned
+Status: Done
 Phase: '0'
 Track: embodiment-model
+Realized-by: code:rust/crates/urzua-cli/src/discovery.rs, code:rust/crates/urzua-core/src/rules/embodiment.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/evidence_pins_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs
 ---
 # 129 — Decide whether drifted evidence may carry a hash pin, a grace window, and an attributed re-baseline
 
@@ -27,6 +28,10 @@ tension has to be resolved before `embodiment.consistency` can be promoted past 
 
 All three, each opt-in and off by default: content-hash pins on evidence, a configurable grace window in days, and a warning when a claim exceeds a configured age.
 
+## Done means
+
+The decision is accepted as `ADR-67` and each decided piece is built, opt-in and off by default: a `@sha256:` pin on a locator drifts when the file's content hash changes, whatever git history says; `drift_grace_days` holds back drift newer than the window; `claim_max_age_days` warns on a claim older than the configured age; and an attributed re-baseline re-pins by reviewed id with a revision row (`urzua fix --rebaseline`). A repository that declares none of them behaves as before, and this repository exercises the pins, the window and the re-baseline in its own corpus.
+
 ## References
 
 - `ADR-32` -- drift via git history, not a stored hash.
@@ -42,3 +47,4 @@ All three, each opt-in and off by default: content-hash pins on evidence, a conf
 > | 2026-11-04 | Fixed a defect in the built grace window (`BUG-179`): inside `drift_grace_days` a record now agrees with either its tier or a stated `Drift detected`, and `urzua fix` no longer flips a stated `Drift detected` while the drift is only inside the window. `Status` stays `Planned`. **Why:** the window computed the tier value, so it contradicted records that honestly state `Drift detected`. | **substantive** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** pins, the grace window and the claim age are built as opt-in options (`embodiment.rs`, `evidence_pins_integration.rs`, merged in #174), drafted in `ADR-67`, which is still Proposed; the attributed re-baseline is not decided or built. A decision milestone is `Done` once the decision is accepted, which the maintainer owns. `Status` stays Planned. | **substantive** |
 > | 2026-11-04 | Checked against its Done condition after re-baselining shipped (#238, `MILE-181`): the three decided opt-ins are built and match `ADR-67`, and so is the attributed re-baseline the earlier row left out. `Status` stays `Planned`, with no `Realized-by`. **Why:** a decision milestone is `Done` once the decision is accepted, and `ADR-67` is still `Proposed`; acceptance is the maintainer's. What remains: accepting `ADR-67` (with its amendment of 2026-11-04), then setting `Realized-by` and `Done` here. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the maintainer accepted `ADR-67` on 2026-11-04, which is this record's Done condition; pins, the grace window, the claim age and the attributed re-baseline are built (#174, #182, #238). Checked against the Done means and the code. | **substantive** |
