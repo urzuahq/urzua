@@ -1,5 +1,5 @@
 ---
-Version: '0.16'
+Version: '0.17'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -214,6 +214,29 @@ Two details carry weight:
   - `embodiment.back-pointer-decision-accepted`: a source back-pointer is judged against the cited
     type's `implementable` list. A type that omits it uses the rule's `accepted_statuses` option;
     with neither, the status is reported as unjudgeable, never passed (`MILE-133`).
+
+## External ids: `citation.resolution`'s `external_ids`
+
+A public standard number can share a record prefix (`RFC-4122` against an `RFC` record prefix) and
+would otherwise be reported as a dangling citation. `citation.resolution` takes an optional
+`external_ids` list of ids that are not records of this repository (`MILE-156`):
+
+```yaml
+rules:
+  citation.resolution:
+    level: error
+    external_ids: ["RFC-4122", "RFC-4000..4999"]
+```
+
+- An entry is an exact id (`PREFIX-N`) or an inclusive numeric range (`PREFIX-LOW..HIGH`); numbers
+  compare by value, so `RFC-04122` matches `RFC-4122`.
+- The prefix must be one a record type declares. An entry under no declared prefix, a malformed
+  entry, or a range whose start is after its end is a load-time error: it could never match, and a
+  declaration that cannot fire is a silent no-op.
+- A matching citation is counted in the rule's population as out of scope, not examined, so it is
+  visible in the report and never hidden. An id the list does not name is still resolved against the
+  records and reported when it resolves to none. A declared external id wins over a record of the
+  same id, so declare only ids no record answers to.
 
 ## Scope declaration
 
@@ -468,4 +491,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.13`. A type's `statuses` declaration gains an optional `implementable` list: the statuses at which implementation of the record is permitted, validated as a subset of `values`. `embodiment.back-pointer-decision-accepted` judges a back-pointer against it, falling back to the rule's `accepted_statuses`. **Why:** the engine holds no type knowledge, so terminal success cannot stand for "implementation allowed" (maintainer decision of 2026-11-04, `MILE-133`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. A type's `statuses` declaration gains an optional `claim_retained` list: statuses reached only after acceptance (such as `Superseded`) that may still carry an `Implemented` or `Verified` claim, validated as a subset of `values`. **Why:** maintainer decision of 2026-11-04, `MILE-138`: a superseded record's embodiment claim stays true history. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documented the top-level `fail_on` key (`error` or `warning`, default `error`) and `urzua check --fail-on`. **Why:** `MILE-145` -- warnings could never fail a build, so a repository at zero warnings had nothing to keep it there. | **substantive** |
-> | 2026-11-04 | Bumped to `0.16`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.16`. Documented the optional `external_ids` option of `citation.resolution`: exact ids or inclusive numeric ranges under a declared record prefix that are skipped (counted out of scope) instead of resolved. **Why:** `MILE-156` -- a public standard number such as `RFC-4122` shares a record prefix and was reported as a dangling citation, with no way to say it is not ours. | **substantive** |
+> | 2026-11-04 | Bumped to `0.17`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
