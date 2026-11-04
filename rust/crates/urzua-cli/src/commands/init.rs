@@ -293,6 +293,11 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         if urzua_core::config::rule_requires_options(id) {
             continue;
         }
+        // Pairs are declared, never inferred: enabling these with none
+        // declared is a load error, so adopt mode cannot propose them.
+        if urzua_core::rules::RULES_REQUIRING_RELATION_PAIRS.contains(id) {
+            continue;
+        }
         // A corpus whose filenames carry no type prefix has no identity for
         // these rules to read (ADR-36 declined the bare `NNNN-slug` shape), so
         // they would load, report `ran`, and examine zero records. Declining to

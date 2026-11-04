@@ -26,6 +26,10 @@ pub struct Config {
     /// not depend on `HashMap`'s randomized order.
     #[serde(default)]
     pub rules: BTreeMap<String, RuleSetting>,
+    /// Declared inverse relation-field pairs (`RFC-47`, `MILE-122`); see
+    /// `RelationPair`. Absent means none declared.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relation_pairs: Vec<RelationPair>,
 }
 
 impl Config {
@@ -477,6 +481,8 @@ pub enum ConfigError {
         option: String,
         consequence: &'static str,
     },
+    #[error("relation_pairs: {reason}")]
+    InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
     InvalidPrefix {
         record_type: String,
@@ -685,6 +691,7 @@ pub fn parse_with_document_models(
         });
     }
     let models = crate::document_model::validate_declarations(&config.record_types)?;
+    validate_relation_pairs(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
@@ -821,6 +828,100 @@ pub fn parse_with_document_models(
         }
     }
     Ok((config, models))
+}
+
+/// What a relation pair requires of its two sides (`RFC-47`). `required` and
+/// `none` only: the declared rule level already is the repository's severity
+/// (`MILE-80`), so a per-pair `advisory` would have nothing to set. It is
+/// refused at load rather than read as `required`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PairReciprocity {
+    /// A claim on one side must be echoed on the other.
+    Required,
+    /// Direction is declared; reciprocity is not checked.
+    None,
+}
+
+fn default_cross_type() -> bool {
+    true
+}
+
+/// One declared pair of inverse relation fields (`RFC-47`, `MILE-122`): a
+/// claim `A.forward = B` is echoed by `B.inverse = A`, and the reverse.
+/// The two names are global to the repository: every type that declares a
+/// name carries that side, so a pair cannot spell itself differently per type.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelationPair {
+    pub name: String,
+    pub forward: String,
+    pub inverse: String,
+    pub reciprocity: PairReciprocity,
+    /// May the two ends be different record types. Defaults to `true`.
+    #[serde(default = "default_cross_type")]
+    pub cross_type: bool,
+}
+
+/// Load-time checks for `relation_pairs`: every misdeclaration is refused,
+/// because a pair that cannot run reads as a clean corpus.
+fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
+    let bad = |reason: String| Err(ConfigError::InvalidRelationPair { reason });
+    let declared: std::collections::BTreeSet<&str> = config
+        .record_types
+        .values()
+        .flat_map(|t| {
+            t.required_fields
+                .iter()
+                .chain(t.known_fields.iter().flatten())
+        })
+        .map(String::as_str)
+        .collect();
+    let mut names = std::collections::BTreeSet::new();
+    let mut fields: BTreeMap<&str, &str> = BTreeMap::new();
+    for pair in &config.relation_pairs {
+        let label = pair.name.as_str();
+        if pair.name.trim().is_empty() || pair.name != pair.name.trim() {
+            return bad(format!(
+                "pair name '{label}' is blank or has surrounding whitespace"
+            ));
+        }
+        if !names.insert(label) {
+            return bad(format!("pair '{label}' is declared twice"));
+        }
+        for (side, field) in [("forward", &pair.forward), ("inverse", &pair.inverse)] {
+            if field.trim().is_empty() || *field != field.trim() {
+                return bad(format!(
+                    "pair '{label}' {side} field '{field}' is blank or has surrounding whitespace"
+                ));
+            }
+            if !declared.contains(field.as_str()) {
+                return bad(format!(
+                    "pair '{label}' {side} field '{field}' is not in the required_fields or known_fields of any record type, so the pair could never examine a record"
+                ));
+            }
+            if let Some(other) = fields.insert(field.as_str(), label) {
+                return bad(format!(
+                    "field '{field}' is used by pair '{other}' and pair '{label}' (or twice by one pair); each field belongs to exactly one side of one pair"
+                ));
+            }
+        }
+    }
+    // A pair rule with nothing to pair is a check that ran on nothing.
+    if config.relation_pairs.is_empty() {
+        for rule in crate::rules::RULES_REQUIRING_RELATION_PAIRS.iter().copied() {
+            if config
+                .rules
+                .get(rule)
+                .is_some_and(|s| s.level != RuleLevel::Off)
+            {
+                return bad(format!(
+                    "rule '{rule}' is enabled but no relation_pairs are declared, so it would examine nothing"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1414,6 +1515,69 @@ record_types:
             "{:?}",
             parse(&yaml)
         );
+    }
+
+    fn pair_cfg(rules: &str, pairs: &str) -> String {
+        format!(
+            "schema_version: 2\n{rules}{pairs}record_types:\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Amends\", \"Amended-by\"]\n"
+        )
+    }
+
+    const AMEND_PAIR: &str = "relation_pairs:\n  - {name: amendment, forward: Amends, inverse: Amended-by, reciprocity: required, cross_type: false}\n";
+
+    #[test]
+    fn a_declared_relation_pair_loads_and_cross_type_defaults_to_true() {
+        let c = parse(&pair_cfg("", AMEND_PAIR)).unwrap();
+        assert_eq!(c.relation_pairs.len(), 1);
+        assert!(!c.relation_pairs[0].cross_type);
+        let y = "relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: none}\n";
+        let c = parse(&pair_cfg("", y)).unwrap();
+        assert!(c.relation_pairs[0].cross_type);
+        assert_eq!(c.relation_pairs[0].reciprocity, PairReciprocity::None);
+    }
+
+    #[test]
+    fn a_config_without_relation_pairs_loads_unchanged() {
+        assert!(parse(&pair_cfg("", "")).unwrap().relation_pairs.is_empty());
+    }
+
+    #[test]
+    fn a_misdeclared_relation_pair_is_refused_at_load() {
+        let bad = |pairs: &str| {
+            matches!(
+                parse(&pair_cfg("", pairs)),
+                Err(ConfigError::InvalidRelationPair { .. }) | Err(ConfigError::Parse(_))
+            )
+        };
+        // advisory is not a level this build has
+        assert!(bad("relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: advisory}\n"));
+        // a combined key is not a declaration (RFC-47 leaves it open)
+        assert!(bad("relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required, combined: x}\n"));
+        // a field no type declares
+        assert!(bad("relation_pairs:\n  - {name: a, forward: Amends, inverse: Nope, reciprocity: required}\n"));
+        // forward == inverse
+        assert!(bad("relation_pairs:\n  - {name: a, forward: Amends, inverse: Amends, reciprocity: required}\n"));
+        // duplicate pair name
+        assert!(bad("relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required}\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: required}\n"));
+        // blank name
+        assert!(bad("relation_pairs:\n  - {name: ' ', forward: Amends, inverse: Amended-by, reciprocity: required}\n"));
+    }
+
+    #[test]
+    fn enabling_a_pair_rule_with_no_pairs_declared_is_refused() {
+        for rule in [
+            "relation.pair-reciprocity",
+            "relation.cross-type-disallowed",
+        ] {
+            let e = parse(&pair_cfg(&format!("rules: {{{rule}: error}}\n"), "")).unwrap_err();
+            assert!(matches!(e, ConfigError::InvalidRelationPair { .. }), "{e}");
+            assert!(parse(&pair_cfg(&format!("rules: {{{rule}: off}}\n"), "")).is_ok());
+            assert!(parse(&pair_cfg(
+                &format!("rules: {{{rule}: error}}\n"),
+                AMEND_PAIR
+            ))
+            .is_ok());
+        }
     }
 
     fn published_config(entry: &str) -> String {
