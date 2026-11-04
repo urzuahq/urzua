@@ -166,6 +166,46 @@ Two details carry weight:
   `section::parse_sections` (`section.rs`) splits a record body into its `##` sections with line
   numbers; it is not yet driven by `sections.depth`.
 
+- **A record type may declare its status vocabulary: `statuses`** (`MILE-132`, `BUG-59`, `BUG-65`,
+  `BUG-178`). An optional mapping under a record type. The field it describes is the type's `Status`
+  role field (`relation_fields.status`, default `Status`):
+
+  ```yaml
+  record_types:
+    bug:
+      statuses:
+        values:  [Open, Fixed, WontFix]   # every status the type allows; required
+        success: [Fixed]                  # terminal, the work was done
+        failure: [WontFix]                # terminal, it ended without being done
+        pending: [pending, "not yet written"]
+        require: [{when: [Fixed], fields: [Regression-test]}]
+        forbid:  [{when: [Open], fields: [Fixed-in]}]
+  ```
+
+  `values` must list at least one status; `success` and `failure` are optional, must be subsets of
+  `values` and must not overlap. `require` and `forbid` are lists of `{when: [status, ...], fields:
+  [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
+  `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
+  required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
+  with no value is a load-time error naming the record type and `statuses`. Transitions between
+  statuses are not declared here (`MILE-144`).
+
+  A type that declares no `statuses` behaves exactly as before. A declaration is read by:
+
+  - `status.undeclared-value`: a `Status` outside `values`.
+  - `status.required-field-missing` / `status.forbidden-field-present`: a `require` field that is
+    blank or unedited template text at the record's status, and a `forbid` field that carries a
+    value. Both read the status by exact comparison, as every other rule does.
+  - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
+    case-insensitive) equals one of the entries. It **replaces** the compiled-in match, which treats
+    any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
+    real value. A type that omits `pending` keeps the compiled-in match.
+  - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
+    `statuses`, `success` and `failure` together are the finished statuses, in place of the rule's
+    `terminal_statuses` / `closed_statuses` list, which stays the vocabulary for every target whose
+    type declares none (`BUG-178`). `pointer.target-status`'s `not_in` is a separate policy and is
+    unchanged.
+
 ## Scope declaration
 
 Per RFC-11 §6, a record's scope is a declared field on the record, not a config key — config
@@ -303,3 +343,4 @@ indistinguishable in the report from one that ran clean:
 > | 2026-11-04 | Bumped to `0.8`. Documented `sections.required` (with the `y-statement` and `table-min-rows` shapes) and `sections.exempt_statuses`, now read by `section.required` and `section.shape`; `sections` is no longer read by no rule. **Why:** `MILE-4`, `MILE-5`, `MILE-7` and `MILE-121` -- the declared `sections` model from `MILE-98` had no reader. | **substantive** |
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
+> | 2026-11-04 | Bumped to `0.8`. Documented the per-type `statuses` declaration: the status vocabulary, terminal success and failure statuses, fields required or forbidden at a status, and the type's own pending vocabulary. **Why:** `MILE-132` Phase 0: which statuses a type has is repository configuration, not engine policy (`BUG-59`), and the pending vocabulary (`BUG-65`) and finished-status lists (`BUG-178`) were compiled in or hand-copied. | **substantive** |

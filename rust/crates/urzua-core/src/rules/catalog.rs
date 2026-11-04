@@ -49,6 +49,9 @@ pub const RULE_SECTION_SHAPE: &str = "section.shape";
 pub const RULE_DIFF_SOURCE_REQUIRES_RECORD: &str = "diff.source-requires-record";
 pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mixed";
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
+pub const RULE_STATUS_UNDECLARED_VALUE: &str = "status.undeclared-value";
+pub const RULE_STATUS_REQUIRED_FIELD_MISSING: &str = "status.required-field-missing";
+pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-present";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
@@ -96,6 +99,9 @@ pub const ALL_RULES: &[&str] = &[
     RULE_DIFF_SOURCE_REQUIRES_RECORD,
     RULE_DIFF_SOURCE_AND_RECORDS_MIXED,
     RULE_FILENAME_IDENTITY_PATTERN,
+    RULE_STATUS_UNDECLARED_VALUE,
+    RULE_STATUS_REQUIRED_FIELD_MISSING,
+    RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
     RULE_INDEX_FRESHNESS,
     RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
 ];
@@ -276,6 +282,18 @@ pub const RULE_METADATA: &[RuleMeta] = &[
     RuleMeta {
         id: RULE_FILENAME_IDENTITY_PATTERN,
         description: "A file directly in a type's `dir` whose name does not match the type's declared `identity.pattern` (or, for a type declaring none, the `TYPE-NNNN-slug.md` convention) is reported rather than left out of every rule's population (`MILE-120`). When every file in the directory is off-pattern, such as a bare-number corpus (`0001-slug.md`), it is one finding per type naming the expected file name for each file, since renaming is the supported route (`RFC-46` was rejected). The census counts each file examined.",
+    },
+    RuleMeta {
+        id: RULE_STATUS_UNDECLARED_VALUE,
+        description: "A record's `Status` is not one of the values its type declares in `statuses.values` (`MILE-132`). A type declaring no `statuses` is not examined, and a record with no `Status` is left to `header.required-fields`.",
+    },
+    RuleMeta {
+        id: RULE_STATUS_REQUIRED_FIELD_MISSING,
+        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank or unedited template text (`MILE-132`), for example `Deciders` on an `Accepted` record. A type declaring no `require` entries is not examined.",
+    },
+    RuleMeta {
+        id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+        description: "A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined.",
     },
     RuleMeta {
         id: RULE_INDEX_FRESHNESS,

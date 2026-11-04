@@ -26,6 +26,7 @@ pub mod record;
 pub mod report;
 pub mod rules;
 pub mod section;
+pub mod status_model;
 pub mod values;
 pub mod waiver;
 

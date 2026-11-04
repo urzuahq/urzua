@@ -218,6 +218,7 @@ mod tests {
                         identity: None,
                         fields: None,
                         sections: None,
+                        statuses: None,
                         required_fields: Vec::new(),
                         header_shape: Default::default(),
                         prefix: None,
@@ -342,6 +343,12 @@ mod tests {
                     identity: None,
                     fields: None,
                     sections: None,
+                    statuses: Some(
+                        yaml_serde::from_str(
+                            "{values: [Open, Done], require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
+                        )
+                        .unwrap(),
+                    ),
                     required_fields: declared.clone(),
                     header_shape: Default::default(),
                     prefix: None,
@@ -397,6 +404,18 @@ mod tests {
             (
                 "revision-log.change-class-required",
                 rules::revision_log_change_class(&records, &full_text),
+            ),
+            (
+                "status.undeclared-value",
+                rules::status_undeclared_value(&records, &config),
+            ),
+            (
+                "status.required-field-missing",
+                rules::status_required_field_missing(&records, &config),
+            ),
+            (
+                "status.forbidden-field-present",
+                rules::status_forbidden_field_present(&records, &config),
             ),
             (
                 "identity.collision",
@@ -514,6 +533,7 @@ mod tests {
                         identity: None,
                         fields: None,
                         sections: None,
+                        statuses: None,
                         required_fields: Vec::new(),
                         header_shape: Default::default(),
                         prefix: None,

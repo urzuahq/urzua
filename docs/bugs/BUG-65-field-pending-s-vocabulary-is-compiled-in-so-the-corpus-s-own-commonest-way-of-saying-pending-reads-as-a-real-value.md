@@ -2,7 +2,7 @@
 Stable-Id: 01M2WDKAQJMAQYP0TD4ZN02W2Z
 Status: Open
 Found-in: "A reviewer noticed five records claiming no regression test existed while the same branch added them; field.pending had examined every one of those fields and passed them"
-Regression-test: "not yet written -- a required field whose value is the corpus's own pending phrasing must classify as pending"
+Regression-test: "rust/crates/urzua-core/src/rules/field.rs::a_declared_pending_vocabulary_matches_whole_values_observed_failing"
 Blocked-on: MILE-98
 ---
 # 65 — field.pending's vocabulary is compiled in so the corpus's own commonest way of saying pending reads as a real value
@@ -44,3 +44,4 @@ grep and it had never been run.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-04 | A type now declares its own pending values beside its status vocabulary (`statuses.pending`, `SPEC-3`), matched as whole values and replacing the compiled-in token for that type; a type declaring none keeps today's match. `Regression-test` now names the test. `Status` unchanged. **Why:** maintainer decision of 2026-11-04 (`MILE-132`); the substring match was the defect, so this repository's `BUG-38` and `BUG-65` values, which mention the word, no longer read as pending. | **substantive** |
