@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -13,7 +13,7 @@ Derives-from: RFC-1
 
 ## Purpose
 
-Ship the smallest thing that is **genuinely used in two real codebases** and proves the founding
+Ship the smallest thing that is **genuinely used in real codebases** (its own repository and one adopter's in Phase 0, two adopters' by the Phase 1 exit) and proves the founding
 claim — one implementation instead of three — with documented bug histories from independently
 built tooling as its acceptance test.
 
@@ -58,24 +58,27 @@ anything. v0 is mechanical, offline, and deterministic.
 
 ## Exit bar
 
-The four criteria are **the standard**, which is current truth and belongs here. Reaching them is
+The exit bars below are **the standard**, which is current truth and belongs here. Reaching them is
 backlog, which does not -- a spec has no `Status` and no `Blocked-on`, so a completion condition
 stored here surfaces nothing, which is how two of them sat unmet and untracked.
 
-v0 is done when, and only when:
+Phase 0 has a single exit. Phase 0 is done when, and only when:
+
+1. urzua governs its own repository in CI with zero standing warnings.
+2. It replaces one adopter's hand-written linter, which is then deleted. -- `MILE-102`.
+
+**Criterion 2 is the real bar.** A tool that runs *alongside* the thing it was meant to replace has
+not replaced it.
+
+Phase 1 is done when, and only when:
 
 1. It runs green in **at least two** real target codebases, with different primary languages, via
    pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the hook),
-   `MILE-100` (the second codebase). Self-hosting via CI is met.
+   `MILE-100` (the second codebase).
 2. It reproduces **every documented bug** in the acceptance suite against real corpora. Not synthetic
    tests only -- fixtures engineered to exhibit the same variance a real corpus does. -- `MILE-101`.
-3. It replaces the hand-written linter in at least one codebase outright, with that linter deleted.
-   -- `MILE-102`.
-4. `urzua new` is what people and agents actually invoke, because hand-authoring is now the slower
+3. `urzua new` is what people and agents actually invoke, because hand-authoring is now the slower
    path. -- `MILE-103`.
-
-**Criterion 3 is the real bar.** A tool that runs *alongside* the thing it was meant to replace has
-not replaced it.
 
 ## Commands
 
@@ -266,3 +269,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-09-19 | Retitled from *`urzua` v0 CLI* to *The `urzua` CLI*, and the file renamed to match. **Why:** the subject is the CLI, not one version of it. v0's exit bar is stated here because that is current truth about the standard, but the spec outlives it -- a spec whose number is permanent per subject (`ADR-14`) should not carry a version in its name. | **structural** |
 > | 2026-11-02 | `urzua export --format json` implemented (`MILE-115`); `Version` `0.4` → `0.5`. **Why:** `export` declared only `agdr` and was unimplemented, so `scripts/generate-dashboard.py` grew a second parser of the corpus that could disagree with `check` (the published dashboard once showed 3 bugs against roughly 145 in the corpus). Added the command section and an "Export contract" naming every JSON field, including that the body is a single `raw_text` string because no type declares sections (`MILE-98`), and `ExportReport` in the report list. `--format agdr` and the no-flag default are unchanged (not implemented; `MILE-21`). | **substantive** |
 > | 2026-11-02 | Export refuses a record symlinked outside the repository; `header_shape: none` records are `header_readable: true`. **Why:** review found `raw_text` could disclose an outside file, and headerless records were indistinguishable from malformed ones. | **substantive** |
+> | 2026-11-04 | Exit bar restated: Phase 0 has a single exit (urzua governs its own repository in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the second codebase, the full acceptance suite and the `new`-is-faster measurement move to the Phase 1 exit; `Version` `0.5` -> `0.6`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

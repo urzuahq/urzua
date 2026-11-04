@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -50,6 +50,14 @@ the expected tier and reports a disagreement as a structured entry:
 ```json
 { "record": "...", "field": "Embodiment", "currentValue": "...", "computedValue": "...", "tier": 1, "evidence": [...] }
 ```
+
+A record whose `Realized-by` locator changed since the `Realized-by` line was last touched (ADR-32)
+computes to `Drift detected` regardless of the locators' tier, exactly as `check`'s
+`embodiment.consistency` does: `fix` reads the same drifted-record set `check` computes, so the two
+never disagree. The repair is written like any other Tier 1 repair, and a stated `Drift detected`
+that is no longer drifted (the `Realized-by` line was touched again) is repaired back to the
+tier-computed value. `fix` computes drift whenever it runs, whatever `check`'s
+`embodiment.consistency` level is.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
@@ -122,3 +130,4 @@ asserted by test, not assumed by convention.
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Corrected the identity-resolution order, stale since ADR-31's amendment (`gh api user` now wins even over `--by`, which wins over `git config user.name` -- not "`--by` wins outright" as this spec still said). Noted the new `notices` field (ADR-46) for a `--by`/`gh` divergence. **Why:** found live, touching this exact paragraph for the `notices` addition -- leaving the identity-order claim wrong while editing the sentence next to it would have been the same "found it, patched around it" mistake this project's own `AGENTS.md` already warns against. | **substantive** |
 > | 2026-11-02 | Bumped to `0.5`. Apply mode now fails an `--ids` entry that matches no repair, and keeps CRLF endings, the absent trailing newline and a plain-table log's row prefix. **Why:** round 29 found each as a silent no-op or a whole-file rewrite (`BUG-164`, `BUG-165`, `BUG-166`). | **substantive** |
+> | 2026-11-03 | Bumped to `0.6`. `fix` now computes `Drift detected` (ADR-32) from the same drifted-record set `check` uses, so it is detected and, on `--apply`, written like any other Tier 1 repair. **Why:** MILE-15 -- ADR-32 named this as separate follow-up work. | **substantive** |

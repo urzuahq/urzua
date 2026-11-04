@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6DFQKHEX940BY1Y6ZHGZJHX
-Status: Draft
+Status: Accepted
 Date: 2026-11-02
 Author: beauwilliams
 ---
@@ -221,3 +221,4 @@ workflow is then configuration on top of it, adopted or not per repository.
 > | 2026-11-02 | `Blocked-on` kept as a separate narrative field beside `Depends-on`. **Why:** Author: a dependency and a free-text note on what is in the way are different fields. | **substantive** |
 > | 2026-11-02 | Added the `condition` record type, success and failure terminal states, review dates and the condition migration. **Why:** Author accepted the recommendations from the condition-type discussion. | **substantive** |
 > | 2026-11-02 | Readiness and `blocked` count only success terminals; Superseded classed as failure; condition example and migration no longer pre-set `Met`; `SPEC-6` amendment for `Blocked` named; primitive count fixed; roadmap JSON shape proposed. **Why:** Review findings. | **substantive** |
+> | 2026-11-04 | `Draft` -> `Accepted`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |

@@ -10,14 +10,13 @@ Blocked-on: MILE-98
 
 ## What
 
-`SPEC-1`'s first success criterion, in full:
+`SPEC-1`'s Phase 1 exit criterion for this, in full:
 
 > It runs green in **at least two** real target codebases, with different primary languages, via
 > pre-push hook and CI, with zero host-repo runtime added to either.
 
 One exists: this repository, Rust, CI only. The second has no milestone, no candidate named, and no
-work item -- which is why Phase 0 read as eleven milestones from done while two of its three exit
-criteria had nothing tracking them.
+work item. It is a Phase 1 exit criterion, not part of the single Phase 0 exit (`SPEC-1`, Exit bar).
 
 ## Not the same as `MILE-51` or `MILE-96`
 
@@ -48,3 +47,4 @@ can read a shape this project did not invent -- `MILE-98`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s first success criterion requires two target codebases and only one exists, with nothing on the plan tracking the second. Distinguished from `MILE-51`/`MILE-96` deliberately: those read a foreign corpus, this one adopts a foreign codebase, and only the second is what the criterion claims. | **substantive** |
+> | 2026-11-04 | Reworded for the restated exit bar: the second codebase is a Phase 1 exit criterion, not part of the single Phase 0 exit. `Phase` is unchanged. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
