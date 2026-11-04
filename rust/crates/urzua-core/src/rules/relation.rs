@@ -342,6 +342,7 @@ pub fn relation_pair_reciprocity(
             let id = record_id(record).unwrap_or_default();
             let normalized_id = crate::values::RecordId::new(&id);
             let mut excluded = 0;
+            let mut scoped_out = 0;
             for reference in &references {
                 let Some(target) = index.get(&crate::values::RecordId::new(reference)) else {
                     findings.push(Finding {
@@ -367,11 +368,14 @@ pub fn relation_pair_reciprocity(
                     continue;
                 }
                 // A target of a type outside a scoped pair cannot hold the
-                // inverse field, so the claim cannot be echoed: judged by the
-                // scoping, disclosed as out of scope, not an unechoed claim
-                // (`MILE-155`).
+                // inverse field, so the claim cannot be echoed: not an unechoed
+                // claim (`MILE-155`). Eligible and unexamined, not out of scope:
+                // the claim is legitimate and no edit to the configuration's
+                // reach is wrong, so `config.scope-matches-nothing` must not
+                // warn that the configuration cannot reach it.
                 if !pair_carried_by(slot.pair, &target.record_type) {
                     excluded += 1;
+                    scoped_out += 1;
                     continue;
                 }
                 let names_back = extract_references(target.header.get(echo).unwrap_or(""))
@@ -406,7 +410,11 @@ pub fn relation_pair_reciprocity(
                 }
             }
             if !references.is_empty() && excluded == references.len() {
-                Outcome::OutOfScope
+                if scoped_out == excluded {
+                    Outcome::Absent
+                } else {
+                    Outcome::OutOfScope
+                }
             } else {
                 Outcome::Examined
             }
@@ -1119,14 +1127,22 @@ Resolves: BUG-7
     }
 
     #[test]
-    fn a_claim_to_a_type_outside_a_scoped_pair_is_out_of_scope_not_an_error_observed_failing() {
+    fn a_claim_to_a_type_outside_a_scoped_pair_is_eligible_and_unexamined_not_an_error_observed_failing(
+    ) {
         let rfc = record("docs/rfc/RFC-1-a.md", "rfc", "---\nAmends: ADR-2\n---\n");
         let adr = record("docs/adr/ADR-2-b.md", "adr", "---\nTitle: x\n---\n");
         let records = [rfc, adr];
         let (exec, findings) = run_pairs(&scoped_config(Some(vec!["rfc"])), &records);
         assert!(findings.is_empty(), "{findings:?}");
         let pop = exec.population.unwrap();
-        assert_eq!(pop.out_of_scope(), 1, "{pop:?}");
+        assert_eq!(pop.out_of_scope(), 0, "{pop:?}");
+        assert_eq!((pop.eligible(), pop.examined()), (2, 0), "{pop:?}");
+        // The rule that judges the run must not blame the configuration.
+        let (_, scope) = crate::rules::config_scope_matches_nothing(
+            &[exec],
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(scope.is_empty(), "{scope:?}");
     }
 
     #[test]

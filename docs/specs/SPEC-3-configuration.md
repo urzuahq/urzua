@@ -1,5 +1,5 @@
 ---
-Version: '0.30'
+Version: '0.32'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -263,8 +263,9 @@ rules:
 - The prefix must be one a record type declares. An entry under no declared prefix, a malformed
   entry, or a range whose start is after its end is a load-time error: it could never match, and a
   declaration that cannot fire is a silent no-op.
-- A matching citation is counted in the rule's population as out of scope, not examined, so it is
-  visible in the report and never hidden. An id the list does not name is still resolved against the
+- A matching citation is counted in the rule's population as eligible and unexamined, not as out of
+  scope, so it is visible in the report and never hidden, and `config.scope-matches-nothing` does not
+  read a declared external id as a configuration that fails to reach its candidates (`BUG-186`). An id the list does not name is still resolved against the
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
 
@@ -279,10 +280,17 @@ rules:
   citation.path-exists:
     level: warn
     reference_sections: ["References"]
+    skip_tables: ["**Change history**"]   # optional
 ```
 
 - `reference_sections` lists `##` heading texts, matched exactly after trimming. Only backtick-quoted
   code spans inside those sections are read; a record with no such section is out of scope.
+- `skip_tables` is optional and empty by default, so behaviour is unchanged unless declared. Each
+  entry is a marker: a line containing it, and the pipe table that follows (blockquoted or not), are
+  not read, and the paths in them are not in the population. It exists for append-only history such
+  as a revision log, whose rows name a path as it was when the row was written; the rest of the
+  section is still read. A declared list must be non-empty with no blank entries, and it belongs to
+  this rule alone (`MILE-143`).
 - A span is read as a path only when it is plainly one: no whitespace, a `/` present, ending in a
   file name with an extension or in `/`, not a URL or host-led path, not absolute, and no glob or
   placeholder character. A bare file name without a directory (`Makefile`) is not read. A trailing
@@ -426,8 +434,8 @@ revisits it:
   that declares a name in `required_fields` or `known_fields` carries that side, and a claim to a
   type that does not declare the echoing field is an unechoed claim. A pair that declares
   `types: [rfc]` is carried by those record types only: a record of another type is not that pair's
-  business (its fields are not slots), and a claim whose target is another type is excluded as out
-  of scope, counted in the population, not reported as unechoed, because that type cannot hold the
+  business (its fields are not slots), and a claim whose target is another type is not judged: it is
+  counted in the population as eligible and unexamined (not out of scope), not reported as unechoed, because that type cannot hold the
   inverse field. Each listed type must be a configured record type declaring at least one of the
   pair's fields; an empty or duplicated list is refused at load. `relation_fields` is unchanged and
   still binds only the fixed roles.
@@ -637,10 +645,11 @@ rules:
 rules:
   date.field-order:
     level: error
-    date_order: ["Date <= Accepted-on"]   # the first may not be later than the second
+    date_order:
+      - {earlier: Date, later: Accepted-on}   # `earlier` may not be later than `later`
 ```
 
-- `date_order` (required, non-empty): each entry is `Earlier <= Later`, two distinct field names.
+- `date_order` (required, non-empty): each entry is a mapping with exactly the keys `earlier` and `later`, two distinct field names (an unknown key or a string entry is refused).
   Both must be declared (`required_fields` or `known_fields`) by one record type, which is the only
   kind of record the entry applies to; anything else is a load-time error, as is the option on any
   other rule.
@@ -718,4 +727,6 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.27`. `y-statement` strips a leading `>` blockquote marker from each line before phrase matching, so a phrase wrapped across quoted lines is found. **Why:** `BUG-181`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.28`. Documented the `indexes` entry shape of `index.freshness`: multi-line `format`, `{file}` in place of `{id}`, `{title}` without the id, and regeneration with `urzua index`. **Why:** `MILE-152` -- a YAML or link-list index could not be declared, and nothing regenerated one. | **substantive** |
 > | 2026-11-04 | Bumped to `0.29`. An `exclude_files` entry that matches no file directly in the type's `dir` is reported as a `type.dir-matches-nothing` warning. **Why:** `MILE-150` -- an exclusion that silently does nothing hides a renamed or removed file and violates the no-silent-no-op principle. | **substantive** |
-> | 2026-11-04 | Bumped to `0.30`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |
+> | 2026-11-04 | Bumped to `0.30`. `date_order` entries are mappings `{earlier, later}` instead of an `Earlier <= Later` string; a relation pair's `types` scoping counts a claim to an uncarried type as eligible and unexamined, not out of scope. **Why:** `ADR-64` (structured in, structured out) for `MILE-157`, and `MILE-155` -- a legitimate cross-type claim is not a configuration the tool cannot reach. | **substantive** |
+> | 2026-11-04 | Bumped to `0.31`. Documented the optional `skip_tables` option of `citation.path-exists` (markers naming tables whose rows are history and are not read; empty by default), and that a declared `external_ids` citation is counted eligible and unexamined, not out of scope. **Why:** `MILE-143` -- a revision log under `## References` names paths as they were; `BUG-186` -- a declared external id was reported by `config.scope-matches-nothing` as a misconfiguration. | **substantive** |
+> | 2026-11-04 | Bumped to `0.32`. Removed the `blockquote` and `bold-list` header shapes: `header_shape` defaults to and accepts only `yaml-frontmatter` and `none`, `fields.from: blockquote` and `bold-list` fail the load naming the form, and the `header_layout` option is gone. **Why:** `MILE-85` (maintainer decision of 2026-11-04: full cleanup at switchover; resolves `BUG-184`). | **substantive** |

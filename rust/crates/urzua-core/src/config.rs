@@ -151,11 +151,11 @@ pub struct RuleSetting {
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_fields: Option<Vec<String>>,
-    /// Date orderings `"Earlier <= Later"` (`MILE-157`): the first field's date
-    /// may not be later than the second's. Only meaningful to
+    /// Date orderings `{earlier, later}` (`MILE-157`): the `earlier` field's
+    /// date may not be later than the `later` field's. Only meaningful to
     /// `date.field-order`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub date_order: Option<Vec<String>>,
+    pub date_order: Option<Vec<DateOrder>>,
     /// Severity per field, within one rule (`MILE-140`): a field named here
     /// reports at its own level (`warn` or `error`), every other field at the
     /// rule's `level`. Only meaningful to the rules that report per field.
@@ -180,6 +180,21 @@ pub struct RuleSetting {
     /// that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_sections: Option<Vec<String>>,
+    /// Markers naming tables `citation.path-exists` does not read: a line
+    /// containing a marker (`**Revision log**`) and the pipe table that follows
+    /// it. For append-only history that names a path as it was. Only
+    /// meaningful to that rule; optional, and empty by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_tables: Option<Vec<String>>,
+}
+
+/// One `date_order` entry (`MILE-157`, `ADR-64`): two header field names, the
+/// `earlier` date of which may not be later than the `later` one's.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DateOrder {
+    pub earlier: String,
+    pub later: String,
 }
 
 /// One generated index artifact a repository commits: a file listing the
@@ -290,7 +305,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
             #[serde(default)]
             date_fields: Option<Vec<String>>,
             #[serde(default)]
-            date_order: Option<Vec<String>>,
+            date_order: Option<Vec<DateOrder>>,
             #[serde(default)]
             field_levels: Option<BTreeMap<String, RuleLevel>>,
             accepted_statuses: Option<Vec<String>>,
@@ -298,6 +313,8 @@ impl<'de> Deserialize<'de> for RuleSetting {
             external_ids: Option<Vec<String>>,
             #[serde(default)]
             reference_sections: Option<Vec<String>>,
+            #[serde(default)]
+            skip_tables: Option<Vec<String>>,
         }
 
         // Dispatched on the parsed value rather than through `#[serde(untagged)]`.
@@ -343,6 +360,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 accepted_statuses: table.accepted_statuses,
                 external_ids: table.external_ids,
                 reference_sections: table.reference_sections,
+                skip_tables: table.skip_tables,
             })
         } else {
             let level = RuleLevel::deserialize(value).map_err(serde::de::Error::custom)?;
@@ -370,6 +388,7 @@ impl<'de> Deserialize<'de> for RuleSetting {
                 accepted_statuses: None,
                 external_ids: None,
                 reference_sections: None,
+                skip_tables: None,
             })
         }
     }
@@ -898,6 +917,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: false,
     },
     RuleOption {
+        name: "skip_tables",
+        owners: &[crate::rules::RULE_CITATION_PATH_EXISTS],
+        consequence_if_missing: "reads every table in a reference section, including append-only history",
+        optional: true,
+    },
+    RuleOption {
         name: "external_ids",
         owners: &[crate::rules::RULE_CITATION_RESOLUTION],
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
@@ -923,25 +948,83 @@ const FIELD_LEVEL_RULES: &[&str] = &[
 /// `RULE_OPTIONS`'s field, by name -- the one place that knows which
 /// `RuleSetting` field an option name maps to, so every check below reads it
 /// once instead of re-matching the name itself.
-fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<String>> {
+fn option_field<'a>(
+    name: &str,
+    setting: &'a RuleSetting,
+) -> Option<std::borrow::Cow<'a, [String]>> {
     match name {
-        "not_in" => setting.not_in.as_ref(),
-        "claim_paths" => setting.claim_paths.as_ref(),
-        "closed_statuses" => setting.closed_statuses.as_ref(),
-        "terminal_statuses" => setting.terminal_statuses.as_ref(),
-        "fields" => setting.fields.as_ref(),
-        "date_fields" => setting.date_fields.as_ref(),
-        "date_order" => setting.date_order.as_ref(),
-        "accepted_statuses" => setting.accepted_statuses.as_ref(),
-        "published_paths" => setting.published_paths.as_ref(),
-        "source_paths" => setting.source_paths.as_ref(),
-        "application_paths" => setting.application_paths.as_ref(),
-        "exclude_paths" => setting.exclude_paths.as_ref(),
-        "back_pointer_paths" => setting.back_pointer_paths.as_ref(),
-        "external_ids" => setting.external_ids.as_ref(),
-        "reference_sections" => setting.reference_sections.as_ref(),
-        "test_paths" => setting.test_paths.as_ref(),
-        "sticky_states" => setting.sticky_states.as_ref(),
+        "not_in" => setting.not_in.as_deref().map(std::borrow::Cow::Borrowed),
+        "claim_paths" => setting
+            .claim_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "closed_statuses" => setting
+            .closed_statuses
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "terminal_statuses" => setting
+            .terminal_statuses
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "fields" => setting.fields.as_deref().map(std::borrow::Cow::Borrowed),
+        "date_fields" => setting
+            .date_fields
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        // Structured entries (`ADR-64`): presented as their two names each, so
+        // the shared "non-empty, no blank value" check reads them too.
+        "date_order" => setting.date_order.as_ref().map(|orders| {
+            std::borrow::Cow::Owned(
+                orders
+                    .iter()
+                    .flat_map(|o| [o.earlier.clone(), o.later.clone()])
+                    .collect(),
+            )
+        }),
+        "accepted_statuses" => setting
+            .accepted_statuses
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "published_paths" => setting
+            .published_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "source_paths" => setting
+            .source_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "application_paths" => setting
+            .application_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "exclude_paths" => setting
+            .exclude_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "back_pointer_paths" => setting
+            .back_pointer_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "external_ids" => setting
+            .external_ids
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "reference_sections" => setting
+            .reference_sections
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "skip_tables" => setting
+            .skip_tables
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "test_paths" => setting
+            .test_paths
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
+        "sticky_states" => setting
+            .sticky_states
+            .as_deref()
+            .map(std::borrow::Cow::Borrowed),
         _ => None,
     }
 }
@@ -951,14 +1034,6 @@ fn option_field<'a>(name: &str, setting: &'a RuleSetting) -> Option<&'a Vec<Stri
 pub fn rule_requires_options(rule: &str) -> bool {
     rule == crate::rules::RULE_INDEX_FRESHNESS
         || RULE_OPTIONS.iter().any(|o| o.owners.contains(&rule))
-}
-
-/// A `date_order` entry as `(earlier, later)` field names, or `None` when it
-/// is not `Earlier <= Later` with two non-blank names (`MILE-157`).
-pub fn parse_date_order(entry: &str) -> Option<(&str, &str)> {
-    let (earlier, later) = entry.split_once("<=")?;
-    let (earlier, later) = (earlier.trim(), later.trim());
-    (!earlier.is_empty() && !later.is_empty() && !later.contains("<=")).then_some((earlier, later))
 }
 
 /// Why an `indexes` entry cannot be compared, or `None` when it can. Every
@@ -1139,7 +1214,8 @@ pub fn parse_with_document_models(
         }
     }
     // A list of blanks is an empty list wearing a value.
-    let declared = |v: &Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
+    let declared =
+        |v: std::borrow::Cow<'_, [String]>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
 
     for (name, setting) in &config.rules {
         for opt in RULE_OPTIONS {
@@ -1164,12 +1240,13 @@ pub fn parse_with_document_models(
             for entry in orders {
                 let bad = |reason: String| ConfigError::InvalidDateOrder {
                     rule: name.clone(),
-                    entry: entry.clone(),
+                    entry: format!("{{earlier: {}, later: {}}}", entry.earlier, entry.later),
                     reason,
                 };
-                let Some((earlier, later)) = parse_date_order(entry) else {
-                    return Err(bad("is not `Earlier <= Later` with two field names".into()));
-                };
+                let (earlier, later) = (entry.earlier.trim(), entry.later.trim());
+                if earlier.is_empty() || later.is_empty() {
+                    return Err(bad("names a blank field".into()));
+                }
                 if earlier == later {
                     return Err(bad("orders a field against itself".into()));
                 }
@@ -1955,6 +2032,29 @@ rules:
         .unwrap_err()
         .to_string()
         .contains("does not take the option 'reference_sections'"));
+    }
+
+    #[test]
+    fn skip_tables_belongs_to_citation_path_exists_and_is_optional() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_tables: [\"**Revision log**\"]\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["citation.path-exists"].skip_tables,
+            Some(vec!["**Revision log**".to_string()])
+        );
+        assert!(parse(&format!(
+            "{base}  citation.path-exists:\n    level: warn\n    reference_sections: [\"References\"]\n    skip_tables: []\n"
+        ))
+        .is_err());
+        assert!(parse(&format!(
+            "{base}  field.quality:\n    level: error\n    skip_tables: [\"x\"]\n"
+        ))
+        .unwrap_err()
+        .to_string()
+        .contains("does not take the option 'skip_tables'"));
     }
 
     #[test]
