@@ -7,7 +7,7 @@ Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: ADR-53
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/property.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs@sha256:17e08ea792a9e943ebce30619e42d99a83effc01d0160e2efd943ee056164097, code:rust/crates/urzua-core/src/header.rs@sha256:7eeae176eeebad15cda048c33cf017daa9f77e00301ab284474359981109fd11, test:rust/crates/urzua-core/src/property.rs@sha256:78acfe16ded958824398a9129d7c5de6b5dd308ef6f808693a3773ea00501539
 ---
 # 57 — field names are compared exactly
 
@@ -122,3 +122,4 @@ a reversal cannot be silent.
 > | 2026-09-21 | Widened from one rule to every field-*name* comparison, and the boundary against field *values* stated. **Why:** the decision was implemented in `field_is_declared` alone while `Header::get` still matched case-insensitively, so two rules disagreed about one field on the same record -- a decision the engine half-implemented, which is what `BUG-98` records about `ADR-50`. | **substantive** |
 > | 2026-09-21 | Initial decision, `Status: Accepted`. **Why:** `BUG-97` was filed expecting a one-line swap to a better case-insensitive comparison. The property suite found that no such comparison is correct in both directions, and measuring the corpus showed this one had never matched anything exact comparison would not have. Deleting it rather than improving it closes the bug and removes the surface it lived on. | **substantive** |
 > | 2026-11-04 | `Realized-by` re-pointed at where the evidence now lives, each locator checked against the code it names. **Why:** the locators named files that have since been split or reorganised (`rules.rs` into `rules/<family>.rs`, `main.rs` into `commands/<command>.rs`), so the recorded `Embodiment` could no longer be re-verified; the Decision is unchanged. | **substantive** |
+> | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
