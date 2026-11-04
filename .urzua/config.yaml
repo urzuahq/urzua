@@ -58,6 +58,9 @@ record_types:
     # to record the write in; `required: false` would apply without a row
     # (MILE-159).
     revision_log: {marker: "**Revision log**", required: true}
+    # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
+    companion_fields:
+      - [embodiment_state, embodiment_locator]
     pointer_fields:
       - "Derives-from"
     narrative_fields: []
@@ -122,6 +125,9 @@ record_types:
       success: ["Accepted"]
       implementable: ["Accepted"]
     spec: "SPEC-18"
+    # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
+    companion_fields:
+      - [embodiment_state, embodiment_locator]
     pointer_fields:
       - "Derives-from"
       - "Implements"
@@ -269,6 +275,7 @@ rules:
   identity.collision: error
   type.record-outside-declared-dir: warn
   config.pointer-declaration-missing: error
+  config.companion-declaration-missing: error
   config.pointer-field-not-known: error
   config.relation-field-not-known: error
   config.known-fields-declaration-missing: error
