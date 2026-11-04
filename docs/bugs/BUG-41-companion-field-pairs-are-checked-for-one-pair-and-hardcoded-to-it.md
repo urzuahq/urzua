@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M2RTYR78PWE69G8116MWWPSH
-Status: Open
+Status: Fixed
 Found-in: 'BUG-26 -- the `spec` type declared `Embodiment` without `Realized-by`, and nothing said so'
-Regression-test: 'not yet written -- a type declaring one half of a companion pair and not the other must be a finding, for every pair, not only `pointer_fields`/`narrative_fields`'
-Blocked-on: —
+Regression-test: 'rust/crates/urzua-core/src/rules/companion.rs::a_type_declaring_one_half_of_a_declared_pair_is_reported_observed_failing, rust/crates/urzua-core/src/rules/companion.rs::the_pair_is_whatever_the_roles_name_not_embodiment_observed_failing, rust/crates/urzua-core/src/config.rs::a_companion_pair_naming_no_relation_role_is_refused_observed_failing'
 ---
 # 41 — Companion-field pairs are checked for one pair and hardcoded to it
 
@@ -53,3 +52,4 @@ implementation side.
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
 > | 2026-11-04 | Relation pairs (`MILE-122`) are declared in config and checked by `relation.pair-reciprocity`; a pair field no type declares fails the load. The `Embodiment` / `Realized-by` companion check this record describes is not part of that and is still open, so `Status` stands. **Why:** `MILE-122` generalises the reciprocity half of this gap only. | **substantive** |
 > | 2026-11-04 | `Blocked-on` cleared (`MILE-98` is Done); `Status` stays Open. Re-checked on main: `config.pointer-declaration-missing` still covers one pair, and a type declaring `Embodiment` without `Realized-by` (the roles `embodiment.consistency` reads together) is still unreported. **Why:** the declared document model does not change this fix, which the record already says is a generalisation over the pairs a rule reads together; it was held only so as not to write a second hardcoded pair, and `MILE-122` has since generalised the reciprocity half. It is buildable as its own change and is left for one, not folded into the document-model work. | **substantive** |
+> | 2026-11-04 | Fixed. `companion_fields` declares pairs of relation roles per type (`SPEC-3`) and `config.companion-declaration-missing` reports a type declaring one field of a pair without the other, or neither; `adr` and `spec` declare the `Embodiment` / `Realized-by` pair in this repository's config. `config.pointer-declaration-missing` is unchanged: it checks declaration keys rather than header fields, and generalising it would need a built-in default pair. **Why:** `MILE-98` landed, so the pair is a declaration and no longer another hardcoded comparison. | **substantive** |

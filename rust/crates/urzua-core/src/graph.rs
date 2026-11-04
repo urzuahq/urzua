@@ -191,6 +191,7 @@ mod tests {
                     narrative_fields: None,
                     spec: None,
                     relation_fields: Some(relation_fields),
+                    companion_fields: None,
                     revision_log: None,
                 },
             )]
