@@ -30,6 +30,8 @@ pub enum DiscoveryError {
     },
     #[error("{base:?} is not a valid base ref: a ref may not begin with `-`")]
     InvalidRef { base: String },
+    #[error("there is no merge base between {base:?} and HEAD: the histories are unrelated")]
+    NoMergeBase { base: String },
     #[error("`git {args}` output was not valid UTF-8")]
     InvalidUtf8 { args: String },
 }
@@ -125,6 +127,18 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
     })
 }
 
+/// What differs between the merge base of a ref and the working tree
+/// (`MILE-123`).
+#[derive(Debug, Clone)]
+pub struct GitChanges {
+    /// The merge base commit, so a caller can read a deleted file as it was.
+    pub merge_base: String,
+    /// Every path that differs, deletions included, repository-relative.
+    pub changed: std::collections::HashSet<PathBuf>,
+    /// The subset of `changed` that no longer exists in the working tree.
+    pub deleted: std::collections::HashSet<PathBuf>,
+}
+
 /// Every path that differs between the merge base of `base` and `HEAD` and
 /// the working tree, repository-relative (`MILE-123`). Merge base, not the
 /// ref's tip: a pull request must not be charged for what its base branch
@@ -133,20 +147,31 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
 /// are not reported, matching the tracked-only discovery (`ADR-6`).
 ///
 /// Renames are reported as a deletion plus an addition (`--no-renames`), so
-/// the new name is always listed on its own. A deleted path is listed too;
-/// the caller intersects with what discovery returns.
-pub fn changed_paths_since(
-    repo_root: &Path,
-    base: &str,
-) -> Result<std::collections::HashSet<PathBuf>, DiscoveryError> {
+/// the new name is always listed on its own. A deleted path is listed too,
+/// and also in `deleted`: a record that was deleted is no longer in the
+/// tree, but whatever referred to it is affected by the change.
+pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, DiscoveryError> {
     // A ref beginning with `-` would be read by git as an option.
     if base.starts_with('-') {
         return Err(DiscoveryError::InvalidRef {
             base: base.to_string(),
         });
     }
-    let merge_base = run_git(repo_root, &["merge-base", base, "HEAD"])?;
-    let merge_base = merge_base.trim();
+    // `merge-base` exits 1 with nothing on stderr when the two commits share
+    // no history; every other failure (an unknown ref, 128) keeps git's own
+    // message, which names the ref.
+    let merge_base = match run_git(repo_root, &["merge-base", base, "HEAD"]) {
+        Ok(out) => out,
+        Err(DiscoveryError::NonZeroExit { status, stderr, .. })
+            if status.code() == Some(1) && stderr.trim().is_empty() =>
+        {
+            return Err(DiscoveryError::NoMergeBase {
+                base: base.to_string(),
+            })
+        }
+        Err(e) => return Err(e),
+    };
+    let merge_base = merge_base.trim().to_string();
     let diff = run_git(
         repo_root,
         &[
@@ -154,16 +179,36 @@ pub fn changed_paths_since(
             "--name-status",
             "--no-renames",
             "-z",
-            merge_base,
+            &merge_base,
             "--",
         ],
     )?;
     let mut changed = std::collections::HashSet::new();
+    let mut deleted = std::collections::HashSet::new();
     let mut fields = diff.split('\0').filter(|f| !f.is_empty());
-    while let (Some(_status), Some(path)) = (fields.next(), fields.next()) {
-        changed.insert(PathBuf::from(path));
+    while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
+        let path = PathBuf::from(path);
+        if status.starts_with('D') {
+            deleted.insert(path.clone());
+        }
+        changed.insert(path);
     }
-    Ok(changed)
+    Ok(GitChanges {
+        merge_base,
+        changed,
+        deleted,
+    })
+}
+
+/// A file as it was at `commit`: how a deleted record is read once it is
+/// gone from the tree.
+pub fn read_at_commit(
+    repo_root: &Path,
+    commit: &str,
+    path: &Path,
+) -> Result<String, DiscoveryError> {
+    let spec = format!("{commit}:{}", path.display());
+    run_git(repo_root, &["show", &spec])
 }
 
 /// Read a file's content as UTF-8. The only I/O `urzua-core`'s parser needs;

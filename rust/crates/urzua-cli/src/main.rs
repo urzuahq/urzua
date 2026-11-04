@@ -19,6 +19,7 @@ use clap::{Parser, Subcommand};
 use urzua_core::report::{CouldNotRun, Report};
 
 mod commands;
+mod diff_scope;
 mod discovery;
 mod gate;
 

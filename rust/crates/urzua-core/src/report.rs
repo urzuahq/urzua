@@ -356,6 +356,26 @@ pub struct ScopeInfo {
     /// (SPEC-2).
     pub base: Option<String>,
     pub record_types: Vec<String>,
+    /// What a `git-diff` run examined and why; absent on every other source.
+    #[serde(flatten)]
+    pub diff: Option<DiffScope>,
+}
+
+/// The shape of a `git-diff` run's examined set (`MILE-123`, SPEC-2): the
+/// changed records plus every record that depends on a change. Reported so a
+/// run that examined nothing, a run that examined a few records and a run
+/// that examined the whole corpus can be told apart.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiffScope {
+    /// Every path git reports as differing from the merge base, deletions
+    /// included; empty exactly when nothing changed.
+    pub changed_paths: Vec<String>,
+    /// Records pulled in only because they refer to a changed or deleted
+    /// record, or cite changed or deleted evidence.
+    pub dependents: Vec<String>,
+    /// Why every record was examined, when one was (a configuration change);
+    /// `null` otherwise.
+    pub whole_corpus_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -764,6 +784,7 @@ mod tests {
                 source: ScopeSource::TrackedSweep,
                 base: None,
                 record_types: vec![],
+                diff: None,
             },
             blocking: false,
             findings: vec![],

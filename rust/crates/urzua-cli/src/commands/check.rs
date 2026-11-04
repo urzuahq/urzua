@@ -255,9 +255,6 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     };
 
     let mut scoped = scope_to_requested_paths(&discovered.paths, &requested_scopes);
-    if let Some(changed) = &changed {
-        scoped.retain(|p| changed.contains(p));
-    }
 
     // A path argument narrows what is *reported on*. It must not narrow the
     // corpus a pointer resolves against: a target outside the requested path
@@ -272,6 +269,31 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
         Ok(r) => r,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+
+    // A diff run examines the changed records and every record a change
+    // reaches, not the changed files alone (`MILE-123`): the corpus above is
+    // whole, so a dependent can be found and judged.
+    let mut diff_scope = None;
+    if let Some(changes) = &changed {
+        let examination = match crate::diff_scope::examine(
+            &repo_root,
+            &config,
+            &config_path,
+            &records,
+            changes,
+        ) {
+            Ok(e) => e,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
+        scoped.retain(|p| examination.examined.contains(p));
+        let mut scope = examination.scope;
+        let kept: std::collections::HashSet<&std::path::Path> =
+            scoped.iter().map(|p| p.as_path()).collect();
+        scope
+            .dependents
+            .retain(|d| kept.contains(std::path::Path::new(d)));
+        diff_scope = Some(scope);
+    }
     let in_scope: std::collections::HashSet<&std::path::Path> =
         scoped.iter().map(|p| p.as_path()).collect();
 
@@ -589,11 +611,11 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     // scope apply: a finding about the config, or from a rule that reports
     // outside the corpus, is about the run rather than a record, and dropping
     // it would be `BUG-86`'s failure again.
-    if let Some(changed) = &changed {
+    if diff_scope.is_some() {
         findings.retain(|f| {
             f.file == config_path.as_path()
                 || rules::RULES_REPORTING_OUTSIDE_THE_CORPUS.contains(&f.rule.as_str())
-                || changed.contains(f.file.as_path())
+                || in_scope.contains(f.file.as_path())
         });
     }
 
@@ -617,8 +639,32 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
     // -- a run that established nothing and found a blocking error at once. A
     // blocking finding is something established, so it settles the question
     // before the record count is consulted.
+    // A diff in which no governed record changed, and nothing reaches one, is
+    // a run that was asked about nothing and found nothing: `ok`, not
+    // `not-run` (a run that could not look). The notice and the empty
+    // `changed_paths` keep it distinguishable from a whole-corpus pass.
+    let empty_diff = diff_scope
+        .as_ref()
+        .is_some_and(|d| examined.is_empty() && d.whole_corpus_reason.is_none());
+    if empty_diff {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: "scope".to_string(),
+            message: format!(
+                "no governed record changed since {} ({} changed path(s), none a record or the configuration); nothing was examined",
+                base.as_deref().unwrap_or_default(),
+                diff_scope.as_ref().map_or(0, |d| d.changed_paths.len()),
+            ),
+        });
+    }
     let status = if blocking {
         ReportStatus::FindingsPresent
+    } else if empty_diff {
+        if active_findings().count() == 0 {
+            ReportStatus::Ok
+        } else {
+            ReportStatus::FindingsPresent
+        }
     } else if examined.is_empty() || !crate::gate::any_rule_looked(&rules_executed) {
         ReportStatus::NotRun
     } else if active_findings().count() == 0 {
@@ -644,6 +690,7 @@ pub fn run(config_path: Option<PathBuf>, paths: Vec<PathBuf>, base: Option<Strin
             source: crate::discovery::scope_source(discovered.source),
             base: base.clone(),
             record_types: config.record_types.keys().cloned().collect(),
+            diff: diff_scope,
         },
         blocking,
         findings,
