@@ -366,7 +366,14 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
             let url = format!("file://{}", t.display());
             git(
                 &std::env::temp_dir(),
-                &["clone", "-q", "--depth", "1", &url, &clone.to_string_lossy()],
+                &[
+                    "clone",
+                    "-q",
+                    "--depth",
+                    "1",
+                    &url,
+                    &clone.to_string_lossy(),
+                ],
             )?;
             drop(guard);
             (clone, Some(guard_clone))
