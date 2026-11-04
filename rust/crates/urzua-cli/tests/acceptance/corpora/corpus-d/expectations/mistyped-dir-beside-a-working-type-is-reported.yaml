@@ -1,0 +1,11 @@
+id: mistyped-dir-beside-a-working-type-is-reported
+corpus: corpus-d
+invocation: [--config, .urzua/decoy-dir.yaml, check]
+expect_exit: 1
+# The decoy type's dir matches nothing while the adr type works: without the
+# rule the run exits on the adr findings alone and says nothing of the type
+# that examined no file.
+expect_findings:
+  - rule: type.dir-matches-nothing
+    severity: error
+    message_contains: "record"

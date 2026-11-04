@@ -5,6 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-71
 Blocked-on: —
+Realized-by: code:.git-hooks/pre-commit, code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 179 — Git hooks run the records gate for every contributor and doctor verifies they are wired
 

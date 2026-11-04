@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNPGW97WYMKFRJ94935W6
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/test_tier_integration.rs
 ---
 # 149 — Embodiment.consistency judges a record with no Realized-by field when back-pointers cite it
 
@@ -26,3 +27,4 @@ A record with cited code and no `Realized-by` field is judged; a record with nei
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Records with no `Realized-by` judged when cited (`SPEC-2` `0.30`): exercised here by `ADR-2`, `ADR-3`, `ADR-5` and `ADR-6`, whose crates cite them and whose stated `Not started` was corrected to the computed value; a fixture covers cited, uncited and the finding text. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #198: `embodiment.consistency` judges a record with no `Realized-by` when a back-pointer cites it. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

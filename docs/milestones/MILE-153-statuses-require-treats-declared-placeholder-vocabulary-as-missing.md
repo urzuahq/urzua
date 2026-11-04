@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNS1NA8ECXQDEF25RA50M
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/status.rs, test:rust/crates/urzua-cli/tests/placeholder_vocabulary_integration.rs
 ---
 # 153 — Statuses.require treats declared placeholder vocabulary as missing
 
@@ -26,3 +27,4 @@ A value matching the declared placeholder vocabulary in a required field of a re
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Implemented: `status.required-field-missing` counts a whole value of the type's declared `statuses.pending` as missing; this repository's `adr` type declares `pending: [pending, unknown, none recorded]` and `placeholder_vocabulary_integration.rs` runs the shipped config. `Status` stays `Planned`. **Why:** the Done-when contract; status is a human decision. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #191: `status.required-field-missing` counts the declared `statuses.pending` vocabulary as missing. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

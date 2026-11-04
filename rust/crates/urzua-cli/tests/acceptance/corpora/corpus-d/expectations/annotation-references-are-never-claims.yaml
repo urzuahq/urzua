@@ -1,0 +1,14 @@
+id: annotation-references-are-never-claims
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+# ADR-0007 cites ADR-0042 only inside the parenthetical annotation of its
+# Implements entry. The claim is the entry's first reference (ADR-0099); the
+# annotation's reference is never read, so it can neither dangle nor resolve.
+expect_findings:
+  - rule: pointer.resolution
+    file: records/ADR-0007-dangling.md
+    message_contains: "ADR-0099"
+expect_no_findings:
+  - rule: pointer.resolution
+    message_contains: "ADR-0042"

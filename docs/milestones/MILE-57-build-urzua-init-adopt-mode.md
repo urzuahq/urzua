@@ -5,6 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: SPEC-5
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/acceptance.rs
 ---
 # 57 — Build urzua init adopt mode
 
@@ -21,3 +22,4 @@ The tool has to be adoptable without a rewrite for "one engine instead of a fork
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-05 | Backfilled: shipped before milestone tracking existed. | **structural** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

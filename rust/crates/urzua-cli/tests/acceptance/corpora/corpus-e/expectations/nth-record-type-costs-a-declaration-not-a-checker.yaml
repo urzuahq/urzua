@@ -1,0 +1,20 @@
+id: nth-record-type-costs-a-declaration-not-a-checker
+corpus: corpus-e
+# `gizmo` is named nowhere in the source. The only difference between this
+# config and .urzua/adr-only.yaml is the type's declaration, and the planted
+# violations in records/gizmo/ must be met by the same rules as the identical
+# ones in records/adr/.
+invocation: [--config, .urzua/with-gizmo.yaml, check]
+expect_exit: 1
+expect_json:
+  - {at: /files_examined, equals: 16}
+expect_mirrored:
+  - {left: records/adr/, right: records/gizmo/}
+expect_findings:
+  - {rule: field.quality, file: records/gizmo/GIZ-0002-blank-owner.md, severity: error}
+  - {rule: status.undeclared-value, file: records/gizmo/GIZ-0003-bad-status.md, severity: error}
+  - {rule: date.field-valid, file: records/gizmo/GIZ-0004-bad-date.md, severity: error}
+  - {rule: pointer.resolution, file: records/gizmo/GIZ-0005-dangling.md, severity: error}
+  - {rule: section.required, file: records/gizmo/GIZ-0006-no-context.md, severity: error}
+  - {rule: header.field-set-consistency, file: records/gizmo/GIZ-0008-undeclared.md, severity: error}
+  - {rule: filename.identity-pattern, file: records/gizmo/notes.md, severity: error}

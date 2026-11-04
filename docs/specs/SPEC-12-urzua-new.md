@@ -1,5 +1,5 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -20,8 +20,8 @@ template's own placeholder text for a human to pick.
 The header is always synthesized as YAML frontmatter from the type's `required_fields`, the only
 header shape `new` writes (the `blockquote` and `bold-list` shapes were removed, `MILE-85`): every
 configured field is emitted as a blank frontmatter key, so the config alone drives what an author
-has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, `Date` and
-`Author` (resolved the same way `fix --apply` resolves an identity: `gh api user` wins even over an
+has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, the date and
+author fields (`relation_fields.date`/`author`, default `Date`/`Author`; the author resolved the same way `fix --apply` resolves an identity: `gh api user` wins even over an
 explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tiering, reused rather
 than redesigned), and the type's status field, which starts at the first value of the type's
 declared `statuses.values` (`MILE-151`). That is the vocabulary's entry state rather than a
@@ -132,3 +132,4 @@ take content and parameters, returning a string.
 > | 2026-11-04 | Bumped to `0.8`. `Stable-Id` is always written and the report's `stable_id` always populated; a closed `known_fields` that omits it yields a warning notice naming the inconsistency instead of an omitted identity. **Why:** `MILE-151` omitted it, contradicting ADR-21 (every record type gets a Stable-Id) and leaving a record with no identity. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. `new` always synthesizes a YAML frontmatter header and appends a template's body scaffolding when one exists; the "fill the template in" path for a `blockquote` or `bold-list` template is gone. **Why:** `MILE-85` removed those shapes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. The H1 id is padded to the file name's width; the header fields a template names that the type declares are kept, blank. **Why:** `BUG-188` -- an unpadded H1 beside a padded file name, and optional template fields dropped. | **substantive** |
+> | 2026-11-04 | Bumped to `0.11`. The fields filled with the date and the author are the type's `relation_fields.date` and `relation_fields.author` (default `Date`, `Author`), not literals. **Why:** `MILE-176`. | **substantive** |

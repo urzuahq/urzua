@@ -5,3 +5,4 @@ expect_exit: 0
 expect_stdout_contains:
   - "header_shape: yaml-frontmatter"
   - "2 in the removed bold-list form"
+mutation_exempt: init proposes a config and runs no rule.

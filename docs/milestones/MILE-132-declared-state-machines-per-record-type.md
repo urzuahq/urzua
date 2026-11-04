@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6DEN8ZYA5Z4DVW6E7SA10F3
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs, code:rust/crates/urzua-core/src/rules/status.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 132 — Declared state machines per record type
 
@@ -56,3 +57,4 @@ lists are read from the declaration instead (`BUG-178`).
 > | 2026-11-04 | Split: status vocabulary and status-dependent required and forbidden fields (including Deciders on accepted) stay here at Phase 0; transitions, unreachable states, the derived `blocked` value and computed lifecycles moved to `MILE-144` at Phase 1, which this record now points at. Added Done-means. `Status` unchanged. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter needs a status enum and per-status required and forbidden fields, and does not need transitions or derived values. | **substantive** |
 > | 2026-11-04 | Phase 0 half built: a type declares `statuses` in config (values, success and failure terminals, fields required or forbidden at a status, its own pending vocabulary); `status.undeclared-value`, `status.required-field-missing` and `status.forbidden-field-present` report against it; `narrative-field.stale` and `claim.status-agreement` read the declared terminals. This repository declares the vocabulary for all five of its types. `Status` unchanged. **Why:** the Phase 0 exit needs the status enum and per-status required and forbidden fields (`SPEC-3`). | **substantive** |
 > | 2026-11-04 | The status vocabulary gains an optional `implementable` list beside `success` and `failure` (`SPEC-3` 0.10). `Status` unchanged. **Why:** a gate needs a per-type declaration of the statuses at which implementation is permitted (`MILE-133`). | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #173: a type declares `statuses`; `status.undeclared-value`, `status.required-field-missing` and `status.forbidden-field-present` read it. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

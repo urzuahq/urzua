@@ -1,0 +1,9 @@
+id: thin-options-table-fails-its-shape
+corpus: corpus-f
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: section.shape
+    file: records/docs/DOC-0004-thin-table.md
+    severity: error
+    message_contains: "at least 2 are required"

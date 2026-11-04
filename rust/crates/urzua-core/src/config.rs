@@ -218,6 +218,12 @@ pub struct IssueRefs {
     /// The citation forms read: `number` is `#123`, `url` is a full link to an
     /// issue or pull request of `repository`. A form not listed is not read.
     pub forms: Vec<RefForm>,
+    /// Header fields whose values are also read for citations, named as the
+    /// type declares them (`Found-in`), so a number in a field is judged as one
+    /// in a reference section is. Absent by default: only `reference_sections`
+    /// are read. A name no record type declares is refused at load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
@@ -576,13 +582,20 @@ pub struct RecordTypeConfig {
 /// exactly one of `marker` (a whole line, blockquote marks aside, such as
 /// `**Revision log**`) or `heading` (the text of a markdown heading of any
 /// level, such as `Revision log`).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+///
+/// `required` (`MILE-159`) says whether `urzua fix --apply` needs the section:
+/// `true` (the default) refuses a write that has no log to record itself in,
+/// `false` writes the field without a log row. It may stand alone, leaving the
+/// identity at its default.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RevisionLogDecl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heading: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
 }
 
 /// The default marker line: what every repository used before the identity
@@ -605,6 +618,14 @@ impl Default for RevisionLogId {
 }
 
 impl RevisionLogId {
+    /// The identity in words, for a message that names what was looked for.
+    pub fn describe(&self) -> String {
+        match self {
+            RevisionLogId::Marker(m) => format!("the line `{}`", m.trim()),
+            RevisionLogId::Heading(h) => format!("a heading `{}`", h.trim()),
+        }
+    }
+
     /// Whether `line` opens the section: a marker line equals the marker, a
     /// heading line is `#`..`######`, a space, then the heading text. Leading
     /// blockquote marks and surrounding whitespace are ignored.
@@ -639,6 +660,15 @@ impl RecordTypeConfig {
             _ => RevisionLogId::default(),
         }
     }
+
+    /// Whether `urzua fix --apply` needs this type's revision-log section
+    /// (`MILE-159`): `true` unless declared `required: false`.
+    pub fn revision_log_required(&self) -> bool {
+        self.revision_log
+            .as_ref()
+            .and_then(|d| d.required)
+            .unwrap_or(true)
+    }
 }
 
 impl Config {
@@ -649,6 +679,14 @@ impl Config {
             .get(record_type)
             .map(RecordTypeConfig::revision_log_id)
             .unwrap_or_default()
+    }
+
+    /// Whether `fix --apply` needs a revision-log section for a record of
+    /// `record_type` (`MILE-159`); required for a type the config omits.
+    pub fn revision_log_required(&self, record_type: &str) -> bool {
+        self.record_types
+            .get(record_type)
+            .is_none_or(RecordTypeConfig::revision_log_required)
     }
 }
 
@@ -712,6 +750,11 @@ pub struct RelationFields {
     pub embodiment_state: Option<String>,
     pub embodiment_locator: Option<String>,
     pub supersession: Option<String>,
+    /// The field `urzua new` fills with today's date (`MILE-176`). Not a
+    /// relation role: it only names a field, so it is not in `RelationRole`.
+    pub date: Option<String>,
+    /// The field `urzua new` fills with the author (`MILE-176`).
+    pub author: Option<String>,
 }
 
 impl RelationFields {
@@ -758,6 +801,24 @@ impl RecordTypeConfig {
             .chain(self.known_fields.iter().flatten())
             .map(|s| crate::values::FieldName::new(s.as_str()))
             .collect()
+    }
+
+    /// The field `urzua new` fills with today's date, declared under
+    /// `relation_fields.date` or defaulting to `Date` (`MILE-176`).
+    pub fn date_field(&self) -> &str {
+        self.relation_fields
+            .as_ref()
+            .and_then(|r| r.date.as_deref())
+            .unwrap_or("Date")
+    }
+
+    /// The field `urzua new` fills with the author, declared under
+    /// `relation_fields.author` or defaulting to `Author` (`MILE-176`).
+    pub fn author_field(&self) -> &str {
+        self.relation_fields
+            .as_ref()
+            .and_then(|r| r.author.as_deref())
+            .unwrap_or("Author")
     }
 
     /// The field name this type uses for `role`, declared or defaulted
@@ -1204,6 +1265,17 @@ fn issue_refs_problem(refs: &IssueRefs) -> Option<String> {
     if refs.forms.is_empty() {
         return Some("declares no forms; give 'number', 'url' or both".to_string());
     }
+    if let Some(fields) = &refs.fields {
+        if fields.is_empty() || fields.iter().any(|f| f.trim().is_empty()) {
+            return Some("declares an empty or blank 'fields' entry".to_string());
+        }
+        let mut names: Vec<&String> = fields.iter().collect();
+        names.sort();
+        names.dedup();
+        if names.len() != fields.len() {
+            return Some("names a field twice in 'fields'".to_string());
+        }
+    }
     let mut seen = refs.forms.clone();
     seen.sort();
     seen.dedup();
@@ -1339,6 +1411,7 @@ pub fn parse_with_document_models(
         }
         if let Some(decl) = &rt.revision_log {
             let reason = match (&decl.marker, &decl.heading) {
+                (None, None) if decl.required.is_some() => None,
                 (None, None) => Some("neither `marker` nor `heading` -- name one"),
                 (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
                 (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
@@ -1448,6 +1521,19 @@ pub fn parse_with_document_models(
                 rule: name.clone(),
                 reason,
             });
+        }
+        // A field no type declares reads nothing: refuse it rather than pass.
+        for field in refs.fields.iter().flatten() {
+            let known = config.record_types.values().any(|t| {
+                t.declared_fields()
+                    .contains(&crate::values::FieldName::from(field.as_str()))
+            });
+            if !known {
+                return Err(ConfigError::InvalidIssueRefs {
+                    rule: name.clone(),
+                    reason: format!("'fields' names '{field}', which no record type declares"),
+                });
+            }
         }
     }
     // A list of blanks is an empty list wearing a value.
@@ -2321,6 +2407,34 @@ rules:
     }
 
     #[test]
+    fn revision_log_required_defaults_true_and_may_stand_alone() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n";
+        let c = parse(base).unwrap();
+        assert!(c.revision_log_required("adr"));
+        assert!(c.revision_log_required("unknown"));
+        let c = parse(&format!(
+            "{base}    revision_log: {{marker: \"**Log**\"}}\n"
+        ))
+        .unwrap();
+        assert!(c.revision_log_required("adr"));
+        let c = parse(&format!(
+            "{base}    revision_log: {{heading: History, required: false}}\n"
+        ))
+        .unwrap();
+        assert!(!c.revision_log_required("adr"));
+        assert_eq!(
+            c.revision_log_id("adr"),
+            RevisionLogId::Heading("History".into())
+        );
+        // `required` alone leaves the identity at its default.
+        let c = parse(&format!("{base}    revision_log: {{required: false}}\n")).unwrap();
+        assert!(!c.revision_log_required("adr"));
+        assert_eq!(c.revision_log_id("adr"), RevisionLogId::default());
+        // An empty declaration still names nothing.
+        assert!(parse(&format!("{base}    revision_log: {{}}\n")).is_err());
+    }
+
+    #[test]
     fn drift_audit_field_needs_a_window_a_declared_field_and_the_consistency_rule() {
         let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [Audited]\nrules:\n";
         let ok = parse(&format!(
@@ -3173,6 +3287,28 @@ record_types:
             .contains("does not take the option 'issue_refs'"));
         let off = issue_config("").replace("level: warn", "level: off");
         assert!(parse(&off).is_ok());
+    }
+
+    #[test]
+    fn issue_refs_fields_must_be_declared_header_fields_and_never_blank() {
+        let base = |fields: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  bug:\n    dir: \"docs/bugs\"\n    required_fields: [Status, Found-in]\n    known_fields: [Fixed-in]\nrules:\n  citation.issue-exists:\n    level: warn\n    reference_sections: [References]\n    issue_refs: {{snapshot: s.json, repository: o/r, forms: [number]{fields}}}\n"
+            )
+        };
+        assert!(parse(&base(", fields: [Found-in, Fixed-in]")).is_ok());
+        assert!(parse(&base("")).is_ok());
+        for bad in [
+            ", fields: []",
+            ", fields: ['']",
+            ", fields: [Found-in, Found-in]",
+        ] {
+            let err = parse(&base(bad)).unwrap_err().to_string();
+            assert!(err.contains("issue_refs"), "{bad}: {err}");
+        }
+        // A name no record type declares would match nothing.
+        let err = parse(&base(", fields: [Nope]")).unwrap_err().to_string();
+        assert!(err.contains("Nope") && err.contains("issue_refs"), "{err}");
     }
 
     #[test]

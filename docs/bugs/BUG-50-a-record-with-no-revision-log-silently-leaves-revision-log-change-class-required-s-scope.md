@@ -3,7 +3,7 @@ Stable-Id: 01M2W0Q9N0GT6WTZPX9YDJKS5W
 Status: Open
 Found-in: 'A code review of PR #74 -- narrowing SPEC-1 deleted its revision log along with a section, and no rule reported it'
 Regression-test: 'not yet written -- a record of a type that carries revision logs, with the block absent, must be a finding; and a record of a type that does not carry them must not be'
-Blocked-on: MILE-4
+Blocked-on: —
 ---
 # 50 — A record with no revision log silently leaves `revision-log.change-class-required`'s scope
 
@@ -66,3 +66,4 @@ is how a spec changes, and a spec can drop one without the tool objecting.
 > | 2026-09-19 | Deferred behind `MILE-98`. **Why:** fixable today as another hardcoded comparison in `rules.rs`, and that is the mistake this family *is* -- `PLACEHOLDER_TOKENS` transcribed by hand, `config.pointer-declaration-missing` hardcoded to one pair, `revision-log.change-class-required` keyed to a literal string. Each is a comparison written as a constant. Under the declared document model they are declarations, so building them now means building them twice and teaching the second version nothing. The gap stays open for the duration, deliberately. | **substantive** |
 > | 2026-09-19 | `Blocked-on: MILE-4` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
 > | 2026-09-19 | Counts reconciled and stated as a subtraction. **Why:** the record quoted 68 of 259 against `records_examined: 189` from different moments, which reads as an inconsistency. Re-measured together: 264 records, 68 without a block, 196 examined -- the arithmetic holds exactly, and the defect is that nothing in the report performs it. | **substantive** |
+> | 2026-11-04 | `Blocked-on` cleared; `Status` stays `Open`. **Why:** `MILE-4` is `Done` (`section.required` reads a type's declared required sections), so the fix this bug waited on can be written; `narrative-field.stale` flagged the stale reference. | **substantive** |

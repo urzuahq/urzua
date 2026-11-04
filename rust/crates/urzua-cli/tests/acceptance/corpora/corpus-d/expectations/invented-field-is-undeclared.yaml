@@ -1,0 +1,9 @@
+id: invented-field-is-undeclared
+corpus: corpus-d
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: header.field-set-consistency
+    file: records/ADR-0014-undeclared-field.md
+    severity: error
+    message_contains: "'Mood'"

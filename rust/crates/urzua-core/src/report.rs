@@ -651,6 +651,10 @@ pub struct FixReport {
     pub status: FixStatus,
     pub population: Population,
     pub repairs: Vec<crate::fix::Repair>,
+    /// Stale evidence pins, listed (or, after `--apply`, re-pinned) by
+    /// `urzua fix --rebaseline` (`MILE-181`); absent otherwise.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rebaselines: Vec<crate::fix::Rebaseline>,
     pub failed: Vec<FixFailure>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
