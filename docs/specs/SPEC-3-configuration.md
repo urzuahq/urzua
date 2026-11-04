@@ -1,5 +1,5 @@
 ---
-Version: '0.54'
+Version: '0.55'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -175,7 +175,7 @@ Two details carry weight:
   `pattern` or a key present with no value is a load-time error naming the record type and key.
 
   **`identity` and `fields` drive record loading; `sections` is read by `section.required` and
-  `section.shape` only.** A type that declares none of the three loads, and is checked, exactly as it
+  `section.shape` only, down to the declared `depth`.** A type that declares none of the three loads, and is checked, exactly as it
   did before the declaration existed.
 
   - **`identity`.** The pattern, not the `TYPE-N-slug.md` convention, decides a record's identifier:
@@ -213,8 +213,8 @@ Two details carry weight:
     `section.required` reports a missing section; `section.shape` checks the shape of a present one.
     Both are opt-in and a type that declares no `required` has nothing eligible. Their population
     unit is `section`: one `(record, required section)` slot, so a record missing a section is
-    counted. A heading inside a fenced code block is not a section, and sections are the `##` level
-    only (`parse_sections` is not yet driven by `depth`).
+    counted. A heading inside a fenced code block is not a section. A requirement is at the `##`
+    level unless it declares otherwise (see `level` and `under`).
     - `y-statement` reads one block and requires `In the context of`, `facing`, `we decided`,
       `to achieve` and `accepting` in it, matched case-insensitively on word boundaries (the phrase
       set is fixed, not declarable). With a `marker`, the block starts at the first line of the
@@ -235,6 +235,19 @@ Two details carry weight:
       are absent and the marker is in the preamble; a preamble without the marker leaves the
       section missing. It needs shape `y-statement` with a `marker` (without one, the block would be
       the H1's first paragraph) and is a load-time error otherwise.
+    - `level` and `under` (optional, any shape; `MILE-98`) make a deeper heading visible to the section
+      rules. `level` is the heading level the requirement sits at, from 2 (`##`, the default) to 6;
+      `under` names the heading one level up it must sit beneath: `{name: Pros and cons, level: 3,
+      under: Options}` asks for a `### Pros and cons` inside the `## Options` section, and a
+      `### Pros and cons` under another `##` does not satisfy it. A `###` is a section of its own
+      range, ending at the next heading of the same or a shallower level, and is also part of the
+      `##` body around it. A requirement without `under` is satisfied under any parent at its level,
+      and an `##` heading never satisfies a `###` requirement or the reverse. A `level` the type's
+      `sections.depth` does not reach (`depth` must be at least `level - 1`), a `level` outside 2 to 6,
+      a blank `under`, or an `under` on a `##` requirement is a load-time error rather than a
+      requirement that can never match. The same name at a different level or under a different
+      parent is not a duplicate. A type that declares no `level` is read exactly as before whatever its
+      `depth`.
     - `table-min-rows` requires a table with at least `min_rows` (an integer of 1 or more) data rows;
       a data row with every cell empty does not count, the largest table in the section decides, and
       a table inside a fenced code block is not read.
@@ -248,8 +261,9 @@ Two details carry weight:
     - Presence and shape are all either rule knows: neither judges whether a section's content is
       true or sufficient.
 
-  `section::parse_sections` (`section.rs`) splits a record body into its `##` sections with line
-  numbers; it is not yet driven by `sections.depth`.
+  `section::parse_sections_to_depth` (`section.rs`) splits a record body into its sections down to
+  `sections.depth`, each with its level, its parent and its line range (`parse_sections` is the
+  depth-1 reading, `##` only).
 
 - **A record type may declare its status vocabulary: `statuses`** (`MILE-132`, `BUG-59`, `BUG-65`,
   `BUG-178`). An optional mapping under a record type. The field it describes is the type's `Status`
@@ -960,3 +974,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.52`. No change to the option reference. The `RuleSetting` option set is one definition (`accepted_statuses` now carries the `serde(default)` its siblings did), and a rule reads its options as a typed value. An option that is declared in the option tables but not accepted by the struct, or the reverse, fails a test. **Why:** `MILE-174` -- the set was defined four times, so a new option could be silently ignored. | **structural** |
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.55`. `sections.depth` now drives the section reading: a type declaring `depth: 2` has its `###` headings parsed as sections nested under their `##`, and a required section may declare `level` and `under` to be asked for one. A type declaring no `level` is read as before. **Why:** `MILE-98` -- this repository's own `###` headings were invisible to the section rules, and the `adr-tools`/MADR corpora need `###` to be checked at all. | **substantive** |

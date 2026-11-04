@@ -147,3 +147,45 @@ fn an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type() {
     assert!(!out.status.success());
     assert!(all.contains("adr") && all.contains("(?P<prefix>"), "{all}");
 }
+
+/// The `MILE-51` shape end to end: bare-numbered file names, a `# N. Title`
+/// H1, a bare `Date:` line and `## Status`/`## Context`/`## Decision`/
+/// `## Consequences`, with a hand-written config and no code specific to it.
+#[test]
+fn a_bare_numbered_nygard_corpus_passes_a_hand_written_config() {
+    let config = "schema_version: 2\nfail_on: warning\nrules: {header.required-fields: error, section.required: error, field.quality: error, header.field-set-consistency: error}\nrecord_types:\n  adr:\n    dir: \"doc/adr\"\n    required_fields: [\"Date\"]\n    known_fields: [\"Date\"]\n    fields: {from: prefix-lines}\n    sections:\n      from: headings\n      required: [{name: Status}, {name: Context}, {name: Decision}, {name: Consequences}]\n";
+    let record = |n: u32| {
+        format!("# {n}. Decision {n}\n\nDate: 2016-02-{:02}\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\ne\n", 10 + n)
+    };
+    let (a, b) = (record(1), record(2));
+    let dir = fixture_repo(
+        "bare-nygard",
+        config,
+        &[
+            ("doc/adr/0001-first.md", &a),
+            ("doc/adr/0002-second.md", &b),
+        ],
+    );
+    let out = run(&dir, &["check"]);
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON on stdout");
+    assert!(out.status.success(), "{report}");
+    assert_eq!(report["findings"].as_array().unwrap().len(), 0, "{report}");
+    let ran_empty: Vec<&str> = report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["status"] == "ran" && r["population"]["examined"] == 0)
+        .filter_map(|r| r["rule"].as_str())
+        .collect();
+    assert!(
+        ran_empty.is_empty(),
+        "rules that ran on nothing: {ran_empty:?}"
+    );
+    // The record's sections were read: breaking one is a finding.
+    let broken = a.replace("## Consequences", "## Outcome");
+    std::fs::write(dir.join("doc/adr/0001-first.md"), broken).unwrap();
+    let out = run(&dir, &["check"]);
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(!out.status.success(), "{report}");
+    assert!(report["findings"].to_string().contains("Consequences"));
+}

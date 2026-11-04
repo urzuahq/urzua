@@ -4,7 +4,7 @@ Stable-Id: 01M1Y5JE63FXMT7PV7QJQN7BXV
 Phase: '0'
 Track: section-checks
 Implements: RFC-17
-Blocked-on: MILE-98
+Blocked-on: —
 Realized-by: code:rust/crates/urzua-core/src/rules/section.rs, test:rust/crates/urzua-cli/tests/section_rules_integration.rs
 ---
 # 4 — Require sections per type, as a rule over the declared document model
@@ -109,3 +109,4 @@ A type declares required sections under `sections.required` and the opt-in rule 
 > | 2026-11-04 | Built as the opt-in rule `section.required`, reading `required` under a type's declared `sections` (`SPEC-3`). `Status` stays `Planned`. **Why:** `MILE-98` merged the declared `sections` model and `section::parse_sections` and nothing read them. Matching is by exact `##` heading text, the population is one slot per `(record, required section)` so a missing section is counted rather than dropped, and a type that declares no `required` has nothing eligible. Run read-only against this repository's `adr` records with three sections required, 31 required sections were missing across 65 records. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #90: opt-in rule `section.required` reads the declared `sections.required`; the population counts one slot per record and required section. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
