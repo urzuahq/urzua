@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZVVVP6PK91GPCXN3SWSK
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
+Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 ---
 # 120 — A rule reporting a file in a type's directory whose name does not match the type's declared identity pattern
 
@@ -38,3 +39,4 @@ Since `RFC-46` was rejected, renaming is the only supported route for a corpus i
 > | 2026-11-02 | Scope widened to whole-corpus mismatch guidance in `init` and `audit`. **Why:** `RFC-46` was rejected, so the engine must explain the one convention rather than tolerate others. | **substantive** |
 > | 2026-11-02 | Expected name follows the declared pattern. **Why:** A type may declare a pattern other than `TYPE-NNNN-slug.md`; files matching it are not off-pattern. | **substantive** |
 > | 2026-11-04 | Built as the opt-in rule `filename.identity-pattern` (`SPEC-2`), run by `check` and `audit`; a whole off-pattern type is one finding on its directory listing each file's expected name, and the acceptance suite's bare-filename known gap is now an assertion of that guidance. `init` does not report it itself; it proposes the rule at `warn`, so the first `audit` does. **Why:** the milestone's rule and rename guidance are shipped; closing it is a human decision. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #166: opt-in rule `filename.identity-pattern` reports a file in a type directory whose name does not match the declared pattern. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |

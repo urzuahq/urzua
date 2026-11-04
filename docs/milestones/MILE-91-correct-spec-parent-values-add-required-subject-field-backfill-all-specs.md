@@ -5,6 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: BUG-10
 Blocked-on: —
+Realized-by: spec:docs/specs/SPEC-18-the-spec-record-type.md, code:.urzua/config.yaml
 ---
 # 91 — Correct spec Parent values, add required Subject field, backfill all specs
 
@@ -46,3 +47,4 @@ type, no new mechanism or rule.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-09 | Initial milestone, `Status: Done`. **Why:** `BUG-10`'s audit plus a live decision to add `Subject` as a required field -- both executed together since they touch the same 18 files' headers. | **substantive** |
+> | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |

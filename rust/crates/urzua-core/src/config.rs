@@ -582,13 +582,20 @@ pub struct RecordTypeConfig {
 /// exactly one of `marker` (a whole line, blockquote marks aside, such as
 /// `**Revision log**`) or `heading` (the text of a markdown heading of any
 /// level, such as `Revision log`).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+///
+/// `required` (`MILE-159`) says whether `urzua fix --apply` needs the section:
+/// `true` (the default) refuses a write that has no log to record itself in,
+/// `false` writes the field without a log row. It may stand alone, leaving the
+/// identity at its default.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RevisionLogDecl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heading: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
 }
 
 /// The default marker line: what every repository used before the identity
@@ -611,6 +618,14 @@ impl Default for RevisionLogId {
 }
 
 impl RevisionLogId {
+    /// The identity in words, for a message that names what was looked for.
+    pub fn describe(&self) -> String {
+        match self {
+            RevisionLogId::Marker(m) => format!("the line `{}`", m.trim()),
+            RevisionLogId::Heading(h) => format!("a heading `{}`", h.trim()),
+        }
+    }
+
     /// Whether `line` opens the section: a marker line equals the marker, a
     /// heading line is `#`..`######`, a space, then the heading text. Leading
     /// blockquote marks and surrounding whitespace are ignored.
@@ -645,6 +660,15 @@ impl RecordTypeConfig {
             _ => RevisionLogId::default(),
         }
     }
+
+    /// Whether `urzua fix --apply` needs this type's revision-log section
+    /// (`MILE-159`): `true` unless declared `required: false`.
+    pub fn revision_log_required(&self) -> bool {
+        self.revision_log
+            .as_ref()
+            .and_then(|d| d.required)
+            .unwrap_or(true)
+    }
 }
 
 impl Config {
@@ -655,6 +679,14 @@ impl Config {
             .get(record_type)
             .map(RecordTypeConfig::revision_log_id)
             .unwrap_or_default()
+    }
+
+    /// Whether `fix --apply` needs a revision-log section for a record of
+    /// `record_type` (`MILE-159`); required for a type the config omits.
+    pub fn revision_log_required(&self, record_type: &str) -> bool {
+        self.record_types
+            .get(record_type)
+            .is_none_or(RecordTypeConfig::revision_log_required)
     }
 }
 
@@ -1356,6 +1388,7 @@ pub fn parse_with_document_models(
         }
         if let Some(decl) = &rt.revision_log {
             let reason = match (&decl.marker, &decl.heading) {
+                (None, None) if decl.required.is_some() => None,
                 (None, None) => Some("neither `marker` nor `heading` -- name one"),
                 (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
                 (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
@@ -2348,6 +2381,34 @@ rules:
             "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [\" \"]\n"
         ));
         assert!(blank.is_err(), "a blank entry is not a declaration");
+    }
+
+    #[test]
+    fn revision_log_required_defaults_true_and_may_stand_alone() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n";
+        let c = parse(base).unwrap();
+        assert!(c.revision_log_required("adr"));
+        assert!(c.revision_log_required("unknown"));
+        let c = parse(&format!(
+            "{base}    revision_log: {{marker: \"**Log**\"}}\n"
+        ))
+        .unwrap();
+        assert!(c.revision_log_required("adr"));
+        let c = parse(&format!(
+            "{base}    revision_log: {{heading: History, required: false}}\n"
+        ))
+        .unwrap();
+        assert!(!c.revision_log_required("adr"));
+        assert_eq!(
+            c.revision_log_id("adr"),
+            RevisionLogId::Heading("History".into())
+        );
+        // `required` alone leaves the identity at its default.
+        let c = parse(&format!("{base}    revision_log: {{required: false}}\n")).unwrap();
+        assert!(!c.revision_log_required("adr"));
+        assert_eq!(c.revision_log_id("adr"), RevisionLogId::default());
+        // An empty declaration still names nothing.
+        assert!(parse(&format!("{base}    revision_log: {{}}\n")).is_err());
     }
 
     #[test]

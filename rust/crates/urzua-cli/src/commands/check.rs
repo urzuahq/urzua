@@ -815,6 +815,9 @@ pub fn run(
         crate::gate::gated(&config, rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT, || {
             rules::status_forbidden_field_present(&records, &config)
         }),
+        crate::gate::gated(&config, rules::RULE_STATUS_DELIVERY_AGREEMENT, || {
+            rules::status_delivery_agreement(&records, &config, &back_pointed)
+        }),
         crate::gate::gated(&config, rules::RULE_DATE_FIELD_VALID, || {
             rules::date_field_valid(&records, &config)
         }),

@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-69
-Blocked-on: MILE-159 (a path-scoped run that judges prospective content), MILE-12 (decide RFC-7)
+Blocked-on: MILE-12 (decide RFC-7)
 ---
 # 178 — A record-edit hook for coding-agent harnesses checks an edit against urzua before it is written
 
@@ -27,3 +27,4 @@ This milestone builds the parts of `RFC-7` section 2 and section 3 (first bullet
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's pre-write hook has no counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
+> | 2026-11-04 | `Blocked-on` now reads `MILE-12` only. **Why:** `MILE-159` is `Done` (its path-scoped run and prospective-content judgment are delivered), and `narrative-field.stale` flagged the reference; set by the delivery backfill of `MILE-183`. `Status` unchanged. | **substantive** |

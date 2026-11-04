@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6JKNQTB0RBVXEWN2RBZTH86
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
 ---
 # 151 — Urzua new follows the declared identity pattern and field set
 
@@ -27,3 +28,4 @@ The adopter's authoring commands cannot adopt `urzua new` until it produces a re
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Implemented in the `new` PR (not flipped to Done): `urzua new` numbers, names and titles by a declared `identity`, starts the status at the first declared value and honours a closed field set; `SPEC-12` 0.7 and `SPEC-3` 0.23; exercised by the `waiver` type's padded `identity` in `.urzua/config.yaml` (the one existing waiver renamed to `WAIVER-0001-...` with a `WAIVER-1` H1 to fit it). **Why:** the Done-when asks for a non-default pattern covered by a test and exercised in this repository. | **substantive** |
 > | 2026-11-04 | Follow-up: `Stable-Id` is always written (report `stable_id` populated); a closed `known_fields` that omits it yields a warning notice instead of an omitted identity (`SPEC-12` 0.8). **Why:** the omission contradicted ADR-21, which gives every record type a Stable-Id. | **substantive** |
+> | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #197: `urzua new` follows the declared identity pattern, status vocabulary and field set. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
