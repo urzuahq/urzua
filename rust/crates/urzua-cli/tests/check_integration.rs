@@ -650,6 +650,85 @@ fn graph_could_not_run_emits_json() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `BUG-13`: a reference to a record drafted beside the citing one but not yet
+/// `git add`ed read exactly like a typo. The on-disk fact is the CLI's to
+/// supply; the finding for an untracked file is its own variant.
+#[test]
+fn a_reference_to_an_untracked_file_is_told_apart_from_a_missing_one_observed_failing() {
+    let dir = fixture_repo("untracked-ref");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {pointer.resolution: error, embodiment.locator-exists: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    pointer_fields: [\"Derives-from\"]\n    known_fields: [\"Status\", \"Derives-from\", \"Embodiment\", \"Realized-by\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-3-a.md"),
+        "---\nStatus: Accepted\nDerives-from: ADR-9, ADR-8\nRealized-by: code:src/drafted.rs, code:src/gone.rs\n---\n# ADR-3\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    std::fs::write(
+        dir.join("docs/adr/ADR-9-untracked.md"),
+        "---\nStatus: Draft\n---\n# ADR-9\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/drafted.rs"), "fn main() {}\n").unwrap();
+
+    let findings = |dir: &Path| {
+        let output = run_urzua(dir, &["check"]);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let parsed = assert_valid_json_object(&stdout);
+        parsed["findings"].as_array().unwrap().clone()
+    };
+    let message_of = |findings: &[serde_json::Value], needle: &str| -> String {
+        findings
+            .iter()
+            .find(|f| f["message"].as_str().unwrap().contains(needle))
+            .unwrap_or_else(|| panic!("no finding names {needle}: {findings:?}"))["message"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    let before = findings(&dir);
+    let untracked_ref = message_of(&before, "ADR-9");
+    assert!(
+        untracked_ref.contains("docs/adr/ADR-9-untracked.md")
+            && untracked_ref.contains("not tracked by git"),
+        "{untracked_ref}"
+    );
+    assert_eq!(
+        message_of(&before, "ADR-8"),
+        "Derives-from: ADR-8 does not resolve to any discovered record"
+    );
+    assert!(
+        message_of(&before, "drafted").contains("exists on disk but is not tracked by git"),
+        "{before:?}"
+    );
+    assert!(message_of(&before, "gone").contains("not in the working tree"));
+
+    // Tracking the files clears exactly the untracked findings.
+    git(
+        &dir,
+        &["add", "docs/adr/ADR-9-untracked.md", "src/drafted.rs"],
+    );
+    let after = findings(&dir);
+    assert!(
+        !after.iter().any(|f| {
+            let m = f["message"].as_str().unwrap();
+            m.contains("ADR-9") || m.contains("drafted")
+        }),
+        "{after:?}"
+    );
+    assert!(after
+        .iter()
+        .any(|f| f["message"].as_str().unwrap().contains("ADR-8")));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// A found-in-review gap: `graph` used to build its index with the lossy
 /// `build_normalized_index` and never disclosed a collision at all, unlike
 /// `check`/`audit`. An edge naming a colliding identifier could silently

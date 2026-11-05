@@ -1,5 +1,5 @@
 ---
-Version: '0.73'
+Version: '0.74'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -128,6 +128,17 @@ untracked scratch file under the records directory failed *every* run from that 
 runs touching zero records. The tracked set is also what a reviewer sees, which makes the check's
 input equal to the review's input.
 
+A reference to a record that exists on disk but is not tracked is not a typo, and the report says so
+(`BUG-13`). The CLI reads the files directly in each record type's directories that git does not track and
+hands their ids to the rules, so `urzua-core` stays free of the filesystem. `pointer.resolution`,
+`relation.supersession-reciprocity`, `relation.pair-reciprocity` and `sequence.unresolved-blocker` then
+emit `pointer-untracked`, `supersession-untracked`, `pair-untracked` and `blocker-untracked` instead of
+their `-unresolved` variant, with a message that names the file; `embodiment.locator-exists` emits
+`locator-untracked` for a locator whose file is on disk and untracked, instead of `locator-missing`. A
+missing target keeps `edit-field` `set`; an untracked one declares an exemption (see the action table),
+because the repair is `git add` and `run-command` is closed to `urzua` commands. Tracking the file clears
+the finding.
+
 Explicit paths on argv override discovery and are used as given -- for a directly-named file. A
 directory argument still scopes the tracked-only sweep rather than walking the filesystem raw
 (`BUG-24`): the "never a raw directory walk" guarantee above governs a directory argument the same as
@@ -235,7 +246,7 @@ which stays only for what genuinely isn't built yet.
 | Rule id | What it checks |
 |---|---|
 | `header.required-fields` | Each type's `required_fields` (SPEC-3) are present; a missing header region or a duplicate key is also reported here. |
-| `pointer.resolution` | A type's config-declared `pointer_fields` ∪ `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted. |
+| `pointer.resolution` | A type's config-declared `pointer_fields` ∪ `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted. A reference to a record whose file exists on disk but is not tracked by git is told apart from one that exists nowhere (`BUG-13`): a different finding variant, naming the file, because discovery reads only tracked and staged files; the same holds for `relation.supersession-reciprocity`, `relation.pair-reciprocity` and `sequence.unresolved-blocker`. |
 | `pointer.target-status` | A reference resolves, but its target's `Status` is one the repository declared unacceptable (`not_in`). The optional `fields` option restricts it to the named declared pointer/narrative fields, so a dependency field (`Implements`) can be judged apart from a lineage field (`Derives-from`); an excluded field is not part of the rule's population, and a `fields` entry naming no declared field is a config error. Split from `pointer.resolution` in `MILE-80`. |
 | `field.quality` | Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. The optional `template_placeholders` option (`BUG-22`), off unless declared `true`, reads a field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, and stops applying the compiled-in placeholder tokens; a type with no template is judged by its declared `pending` vocabulary alone, and declaring the option when no type has a template is disclosed as a warning notice. |
 | `field.pending` | A required field is marked `Pending` — work declared unfinished, as distinct from forgotten. Split from `field.quality` in `BUG-38`. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. The optional `pending_until_required` option (`MILE-169`), off unless declared `true`, treats a pending value as legitimate until the record reaches a status the type's `statuses.require` ties the field to: a deferred slot stays eligible and is counted unexamined, and a field no `require` entry names is judged as before. |
@@ -253,7 +264,7 @@ which stays only for what genuinely isn't built yet.
 | `embodiment.requires-accepted-status` | A record whose `Status` is not an accepted status states an `Embodiment` the `embodiment` declaration marks `claims_built` (`MILE-138`): a decision not yet made cannot have been built. The accepted statuses are the type's declared `statuses.success`; a type declaring none uses the rule's `accepted_statuses` option, and with neither the type is not examined. Any other state, including the drift state and a sticky one, is not flagged, and a record missing either field is left to the header rules. Opt-in; the population counts the records the rule could judge. |
 | `embodiment.back-pointer-resolution` | A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids, each optionally followed by a note, as in `Implements: ADR-1 (why), ADR-2`) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. The marker is read at the start of a comment line or in a trailing comment after code (`//`, `#`, `--`, `/*`, `<!--` after whitespace); the marker is case-sensitive; reading continues past a note to the next comma-separated id and stops at a segment that does not open with one; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean. The optional `test_paths` option (path prefixes, each inside a `back_pointer_paths` entry, else a load error, or globs such as `**/*.test.*` matched among the scanned files; a glob that cannot compile is a load error and one matching no scanned file is a finding) declares the test class: a `Verifies: ADR-12` comment in a file under it is test-tier evidence for the record it cites, and is checked for resolution like an `Implements:` one; a `Verifies:` comment elsewhere is not read (`MILE-146`). |
 | `embodiment.back-pointer-decision-accepted` | A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not one at which implementation is permitted is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Permitted means the cited type's declared `statuses.implementable` (a terminal `success` status is not assumed to permit it); a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision. |
-| `embodiment.locator-exists` | A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file. |
+| `embodiment.locator-exists` | A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. |
 | `embodiment.locator-promotion-candidate` | The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18). |
 | `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `field.untrimmed-value` | A field value carrying leading/trailing whitespace, reachable only through `yaml-frontmatter` — disclosed rather than silently trimmed. |
@@ -446,18 +457,22 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `header.required-fields` | `duplicate-key` | `edit-field` `remove` |
 | `header.required-fields` | `field-missing` | `edit-field` `set` |
 | `pointer.resolution` | `pointer-unresolved` | `edit-field` `set` |
+| `pointer.resolution` | `pointer-untracked` | exempt: the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration |
 | `pointer.target-status` | `pointer-target-status` | `edit-field` `set` |
 | `field.quality` | `field-quality` | `edit-field` `set` |
 | `field.pending` | `field-pending` | `edit-field` `set` |
 | `claim.status-agreement` | `claim-status-disagrees` | exempt: the rule catches a claim that may be false, so the right fix is often the claim file, a non-record file with no action kind yet, and editing the record Status would be the mechanical answer and possibly the wrong one |
 | `filename.title-consistency` | `title-mismatch` | exempt: the fix is a rename or an H1 edit, and no action kind addresses either yet |
 | `relation.supersession-reciprocity` | `supersession-unresolved` | `edit-field` `set` |
+| `relation.supersession-reciprocity` | `supersession-untracked` | exempt: the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration |
 | `relation.supersession-reciprocity` | `supersession-unreciprocated` | `edit-field` `append` |
 | `relation.pair-reciprocity` | `pair-unresolved` | `edit-field` `set` |
+| `relation.pair-reciprocity` | `pair-untracked` | exempt: the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration |
 | `relation.pair-reciprocity` | `pair-unreciprocated` | `edit-field` `append` |
 | `relation.cross-type-disallowed` | `cross-type-claim` | `edit-field` `remove` |
 | `sequence.cycle` | `sequence-cycle` | exempt: breaking a cycle means choosing which dependency to drop, a decision the tool cannot compute |
 | `sequence.unresolved-blocker` | `blocker-unresolved` | `edit-field` `set` |
+| `sequence.unresolved-blocker` | `blocker-untracked` | exempt: the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration |
 | `sequence.unresolved-blocker` | `blocker-not-a-reference` | `edit-field` `set` |
 | `relation.target-status-undeclared` | `target-status-undeclared` | `edit-config` `set` |
 | `revision-log.change-class-required` | `change-class-missing` | `edit-section` `set` |
@@ -475,6 +490,7 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `embodiment.back-pointer-decision-accepted` | `decision-uncovered-path` | `edit-config` `set` |
 | `embodiment.locator-exists` | `locator-empty` | `edit-field` `set` |
 | `embodiment.locator-exists` | `locator-missing` | `edit-field` `set` |
+| `embodiment.locator-exists` | `locator-untracked` | exempt: the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration |
 | `embodiment.locator-promotion-candidate` | `locator-promotion-candidate` | exempt: an advisory nudge that is never auto-promoted |
 | `header.field-set-consistency` | `undeclared-field` | `edit-field` `remove` |
 | `field.untrimmed-value` | `untrimmed-value` | `edit-field` `set` |
@@ -690,3 +706,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.71`. `field.quality` gains the optional `template_placeholders` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-22`; `SPEC-3` states the option. | **substantive** |
 > | 2026-11-04 | Bumped to `0.72`. `sequence.cycle` and `sequence.unresolved-blocker` added to the generated rule table; both read only `relation_pairs` entries that set `acyclic: true` (`SPEC-3`), and enabling either with no such pair is a config load error. **Why:** `MILE-27` -- the sequencing relation `RFC-48` section 1 proposes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.73`. Added `revision-log.version-bump-required` to the rule table (regenerated from `RULE_METADATA`): a diff rule that compares a changed record's revision log and version field against the merge base's copy, read by the CLI and handed to the rules as data. **Why:** `BUG-51`; `SPEC-3` states the declaration. | **substantive** |
+> | 2026-11-05 | Bumped to `0.74`. A reference to a record, or a `Realized-by` locator, whose file exists on disk but is not tracked by git is its own finding variant (`pointer-untracked`, `supersession-untracked`, `pair-untracked`, `blocker-untracked`, `locator-untracked`), distinct from the `-unresolved` and `locator-missing` variants for a target that exists nowhere. Each declares an `ADR-73` action: the missing variants keep `edit-field` `set`; the untracked ones are exempt, since the repair is `git add` and no action kind addresses git. The action table is regenerated. **Why:** `BUG-13`, maintainer decision 2026-11-05; the on-disk fact is supplied by the CLI so the rule layer stays pure. | **substantive** |
