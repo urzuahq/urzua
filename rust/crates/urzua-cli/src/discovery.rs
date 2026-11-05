@@ -774,13 +774,37 @@ pub(crate) fn read_files_under(
     prefixes: &[String],
     rule: &str,
 ) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        prefixes
+            .iter()
+            .any(|entry| rules::path_is_published(path, entry))
+    })
+}
+
+/// [`read_files_under`] for entries that are a prefix or a glob (`MILE-158`):
+/// the boundary rule's paths.
+pub(crate) fn read_files_matching(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    entries: &[String],
+    rule: &str,
+) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        entries
+            .iter()
+            .any(|entry| rules::path_matches_entry(path, entry))
+    })
+}
+
+fn read_files_where(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    rule: &str,
+    wanted: impl Fn(&std::path::Path) -> bool,
+) -> Result<Vec<rules::PublishedFile>, String> {
     let mut out = Vec::new();
     for path in &discovered.paths {
-        if discovered.staged_deletions.contains(path)
-            || !prefixes
-                .iter()
-                .any(|entry| rules::path_is_published(path, entry))
-        {
+        if discovered.staged_deletions.contains(path) || !wanted(path) {
             continue;
         }
         let full = repo_root.join(path);

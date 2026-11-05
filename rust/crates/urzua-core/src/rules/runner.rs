@@ -58,7 +58,8 @@ pub struct RuleCtx<'a> {
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
-    pub published_paths: &'a [String],
+    pub boundaries: &'a [ResolvedBoundary],
+    pub ignore_marker: Option<&'a str>,
     pub index_artifacts: &'a [IndexArtifact],
     /// The declared override log, read by the caller; `None` when `override_log`
     /// is not declared (`MILE-188`).

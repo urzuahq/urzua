@@ -201,10 +201,21 @@ pub fn back_pointer_evidence(
 ) -> BackPointerEvidence {
     let prefixes = declared_prefixes(config);
     let mut evidence = BackPointerEvidence::default();
+    // A path under a `published` boundary is never evidence (`RFC-11` section 3,
+    // `ADR-80`): the boundary's `paths` alone decide, so a path its `exclude`
+    // excuses from the violation check does not become evidence by being
+    // excused. Read only while the boundary rule is enabled.
+    let published: Vec<ResolvedBoundary> = config
+        .enabled_rule_opts::<PublishedPathOpts>(RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+        .map_or_else(Vec::new, |o| o.boundaries)
+        .into_iter()
+        .filter(|b| b.kind == crate::config::BoundaryKind::Published)
+        .collect();
     for file in files {
         if !source_paths
             .iter()
             .any(|e| path_is_published(&file.path, e))
+            || published.iter().any(|b| b.covers(&file.path))
         {
             continue;
         }
@@ -956,5 +967,84 @@ mod tests {
         let cfg = config_with_vocab("values: [Proposed, Accepted]\nsuccess: [Accepted]\n");
         let (_, findings) = gate(&records, &files, &["Accepted"], None, &cfg);
         assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    // ---- Violation and evidence are separate matchers (`RFC-11` section 3, `ADR-80`) ----
+
+    fn config_with_published(paths: &[&str], exclude: &[&str], level: &str) -> Config {
+        let mut c = config();
+        let yaml = format!(
+            "level: {level}\nboundaries:\n  - paths: {paths:?}\n    kind: published\n    reason: ships to users\n    severity: error\n    exclude: {exclude:?}\n"
+        );
+        let yaml = if exclude.is_empty() {
+            yaml.replace("    exclude: []\n", "")
+        } else {
+            yaml
+        };
+        c.rules.insert(
+            RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE.to_string(),
+            yaml_serde::from_str(&yaml).unwrap(),
+        );
+        c
+    }
+
+    fn cited_by(config: &Config, files: &[SourceFile]) -> BackPointerEvidence {
+        let records = vec![adr("docs/adr/ADR-12-x.md")];
+        let (index, _) = build_index_reporting_collisions(&records);
+        back_pointer_evidence(files, &["src".to_string()], &[], config, &index)
+    }
+
+    #[test]
+    fn a_marker_inside_a_published_boundary_is_not_evidence() {
+        let files = [
+            file("src/pub/a.rs", "// Implements: ADR-12\n"),
+            file("src/internal/b.rs", "// Implements: ADR-12\n"),
+        ];
+        let cfg = config_with_published(&["src/pub"], &[], "error");
+        let got = cited_by(&cfg, &files);
+        assert_eq!(got.code.len(), 1, "the internal file is still evidence");
+        // Only the published file: nothing counts.
+        let only_published = [files[0].clone()];
+        assert!(cited_by(&cfg, &only_published).code.is_empty());
+        // Without the boundary the same text is evidence.
+        assert_eq!(cited_by(&config(), &only_published).code.len(), 1);
+    }
+
+    #[test]
+    fn a_path_an_exclude_excuses_does_not_become_evidence_by_being_excused() {
+        let files = [file("src/pub/fixtures/a.rs", "// Implements: ADR-12\n")];
+        let cfg = config_with_published(&["src/pub"], &["src/pub/fixtures"], "error");
+        assert!(cited_by(&cfg, &files).code.is_empty());
+    }
+
+    #[test]
+    fn prose_citing_a_record_is_not_evidence_and_a_marker_is_not_the_only_violation() {
+        let files = [file("src/a.rs", "// see ADR-12 for why\n")];
+        assert!(
+            cited_by(&config(), &files).code.is_empty(),
+            "prose is not evidence"
+        );
+        let prefixes = declared_prefixes(&config());
+        assert!(
+            cited_identifiers("// see ADR-12 for why", &prefixes).len() == 1,
+            "the boundary matcher reads prose"
+        );
+        assert!(scan_back_pointers(
+            std::path::Path::new("a.rs"),
+            "// see ADR-12 for why",
+            &prefixes
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn a_disabled_boundary_rule_skips_nothing() {
+        let files = [file("src/pub/a.rs", "// Implements: ADR-12\n")];
+        let mut cfg = config_with_published(&["src/pub"], &[], "off");
+        cfg.rules
+            .get_mut(RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+            .unwrap()
+            .level = crate::config::RuleLevel::Off;
+        assert_eq!(cited_by(&cfg, &files).code.len(), 1);
     }
 }

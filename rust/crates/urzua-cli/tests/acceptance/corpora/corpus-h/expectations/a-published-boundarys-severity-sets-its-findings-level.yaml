@@ -1,0 +1,11 @@
+id: a-published-boundarys-severity-sets-its-findings-level
+corpus: corpus-h
+# The rule is at `error`; the boundary declares `warn`: its finding is a warning
+# (ADR-80). The marked line is excused and the excluded fixture is not read.
+invocation: [--config, .urzua/boundaries.yaml, check]
+expect_exit: 1
+expect_findings:
+  - {rule: boundary.published-path-reference, file: mirror/lib.rs, severity: warning, message_contains: "ADR-0001"}
+expect_no_findings:
+  - {rule: boundary.published-path-reference, file: mirror/clean.rs}
+  - {rule: boundary.published-path-reference, file: mirror/fixtures/f.rs}
