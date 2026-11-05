@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6D5VMCJKG8X6YSHC5QZE8D4
-Status: Open
+Status: Fixed
 Found-in: "A /code-review pass, round 30"
-Regression-test: "planned: a test that load_waivers does not load or apply a waiver lacking Reason, once the intended behavior is decided (not Waiver::is_active, which checks only Expires)"
+Regression-test: 'rust/crates/urzua-core/src/waiver.rs::a_suppression_lacking_a_required_field_does_not_suppress_observed_failing, rust/crates/urzua-cli/tests/suppression_type_integration.rs::a_suppression_missing_a_required_field_does_not_suppress_and_is_reported_observed_failing'
 ---
 # 177 — a waiver with no Reason still waives because load_waivers requires only Rule and Scope
 
@@ -34,3 +34,4 @@ Matching semantics, and a typo'd `Rule` is listed there under "not built".
 > |---|---|---|
 > | 2026-11-02 | Filed, left `Status: Open`. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. A waiver record with `Rule` and `Scope` and no `Reason` still waives: `urzua check` marks the targeted `embodiment.locator-exists` finding `waived` by it. **Why:** refuse a reasonless waiver, or keep enforcement in `header.required-fields` and say so in `SPEC-10`, is the decision the record names. | **substantive** |
+> | 2026-11-05 | Fixed, opt-in per the maintainer decision of 2026-11-05: the suppression type declares `effective_requires: [Reason]` (`SPEC-3`, `SPEC-10`); a waiver lacking a listed field, or holding a blank, placeholder or pending value, suppresses nothing, its target finding is reported again, and `waiver.matches-nothing` reports it as `waiver-ineffective` (`SPEC-2`, with its `edit-field` `set` action). The default keeps today's behaviour; this repository requires `Reason`. **Why:** the decision this record named, refuse a reasonless waiver or leave enforcement to `header.required-fields`, was taken as an opt-in declaration. | **substantive** |
