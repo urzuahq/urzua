@@ -213,6 +213,7 @@ mod tests {
                 fail_on: Default::default(),
                 embodiment: Default::default(),
                 locator_resolvers: Default::default(),
+                upgraded_from: None,
                 override_log: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
@@ -341,6 +342,7 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
             override_log: None,
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
@@ -591,6 +593,7 @@ mod tests {
                 fail_on: Default::default(),
                 embodiment: Default::default(),
                 locator_resolvers: Default::default(),
+                upgraded_from: None,
                 override_log: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(

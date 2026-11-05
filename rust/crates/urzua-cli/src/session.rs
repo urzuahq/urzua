@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
-use urzua_core::report::CouldNotRun;
+use urzua_core::report::{CouldNotRun, Failure};
 use urzua_io::DiscoveredFiles;
 
 use crate::discovery::{default_config_path, find_repo_root, load_config, load_records};
@@ -26,7 +26,7 @@ pub(crate) struct Workspace {
 impl Workspace {
     /// `root_hint` locates the repository (the first path wins; none means the
     /// current directory). `config_path` defaults to the repository's own.
-    pub fn open(root_hint: &[PathBuf], config_path: Option<PathBuf>) -> Result<Self, String> {
+    pub fn open(root_hint: &[PathBuf], config_path: Option<PathBuf>) -> Result<Self, Failure> {
         let repo_root = find_repo_root(root_hint)?;
         let config_path = config_path.unwrap_or_else(|| default_config_path(&repo_root));
         let config = load_config(&config_path)?;
@@ -49,7 +49,7 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    pub fn open(config_path: Option<PathBuf>) -> Result<Self, String> {
+    pub fn open(config_path: Option<PathBuf>) -> Result<Self, Failure> {
         Self::open_with(&[], config_path, |_, _, _| Ok(()))
     }
 
@@ -60,7 +60,7 @@ impl Session {
         root_hint: &[PathBuf],
         config_path: Option<PathBuf>,
         adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Failure> {
         Self::load(Workspace::open(root_hint, config_path)?, adjust)
     }
 
@@ -69,7 +69,7 @@ impl Session {
     pub fn load(
         workspace: Workspace,
         adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Failure> {
         let Workspace {
             repo_root,
             config_path,
@@ -96,7 +96,7 @@ impl Session {
 }
 
 /// Emits a command's result, or the could-not-run report for its error.
-pub(crate) fn emit_or_not_run(result: Result<ExitCode, String>) -> ExitCode {
+pub(crate) fn emit_or_not_run(result: Result<ExitCode, Failure>) -> ExitCode {
     match result {
         Ok(code) => code,
         Err(e) => emit(&CouldNotRun::from(e)),

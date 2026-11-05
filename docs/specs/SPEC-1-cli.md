@@ -1,5 +1,5 @@
 ---
-Version: '0.18'
+Version: '0.19'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -43,7 +43,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-11** | `urzua audit` — a deprecated alias of `check` (`ADR-79`) | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
-> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` | Accepted |
+> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
 >
 > Its number and identity are unchanged deliberately. Roughly thirty-five records, comments and
@@ -160,9 +160,10 @@ commit, never a flaky run.
   declared `issue_refs` is exit `2` with `status: not-run` and the reason in `error`, and the
   existing snapshot is left as it was.
 
-### `urzua migrate ids` / `urzua migrate schema`
-**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, and previews
-what a newly-required field would break before it's added to config.
+### `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config`
+**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, previews
+what a newly-required field would break before it's added to config, and rewrites a config from the
+previous schema version to the current one.
 
 ### `urzua export --format json`
 Every record of every configured type as plain JSON data, so tooling reads records through the one
@@ -182,7 +183,7 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
   `ExplainReport`, `ExportReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
-  `DoctorReport`, `CouldNotRun`)
+  `DoctorReport`, `MigrateConfigReport`, `CouldNotRun`)
   stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
   no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
   and was killed by a confirmed duplicate-JSON-key bug before it shipped.
@@ -193,6 +194,10 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 - **Exit code is a channel independent of stdout/stderr content.** `Report::exit_code()` drives it —
   0 clean, 1 blocking findings, 2 could not run — the same contract a CI script gates on (`urzua
   check docs/ || exit 1`) whether output is JSON, plain text, or nothing at all.
+- **A could-not-run caused by the config's `schema_version` carries the cause as data.** When the
+  version is outside the window the release reads, `CouldNotRun` adds a `schema_version_error` object
+  (`found`, `supported`, `current`, `migration`; `SPEC-3`, `ADR-77`) beside the usual `error` sentence,
+  and is omitted otherwise.
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
@@ -324,3 +329,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-05 | Bumped to `0.15`. `urzua audit` is a deprecated alias of `check`, and `check` takes `--rules`. **Why:** `MILE-190`, `ADR-79`. | **substantive** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-249) 4d5cc9cf4b35 -> 2e660f5d188b. Reason: The Command enum span changed to add check's --rules flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-248) 4d5cc9cf4b35 -> 6329cd27ceb0. Reason: audit.rs now runs check's engine over the configured rules with a deprecation notice, and Command::Audit's help describes the deprecated alias (ADR-79 as amended, MILE-190); the supersession-reciprocity behaviour ADR-30 cites is unchanged, now reported through check, and the pinned test body changed only to match **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.19`. Named `urzua migrate config` beside the other two `migrate` operations and added `schema_version_error` to the could-not-run contract. **Why:** `ADR-77` / `MILE-34`. | **substantive** |
