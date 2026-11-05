@@ -296,3 +296,241 @@ fn a_dot_slash_entry_covers_its_files_and_names_the_normalised_path() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// A repository declaring `rule_body` (the boundary rule's options, indented
+/// four spaces) at rule `level`.
+fn repo_with_rule(name: &str, level: &str, rule_body: &str) -> std::path::PathBuf {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!(
+            "schema_version: 2\nrules:\n  boundary.published-path-reference:\n    level: {level}\n{rule_body}\n\
+             record_types:\n  adr:\n    dir: \"docs/adr\"\n    prefix: \"ADR\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    dir
+}
+
+fn boundary_yaml(kind: &str, severity: &str, paths: &str, extra: &str) -> String {
+    format!(
+        "    boundaries:\n      - paths: {paths}\n        kind: {kind}\n        reason: \"a test boundary\"\n        severity: {severity}\n{extra}"
+    )
+}
+
+#[test]
+fn a_boundarys_severity_sets_its_findings_level_and_the_rules_level_only_enables_it() {
+    // The rule is at `warn`; the boundary says `error`: the finding is an error.
+    let dir = repo_with_rule(
+        "sev-error",
+        "warn",
+        &boundary_yaml("published", "error", "[\"pkg\"]", ""),
+    );
+    std::fs::create_dir_all(dir.join("pkg")).unwrap();
+    std::fs::write(dir.join("pkg/a.rs"), "// see ADR-1\n").unwrap();
+    commit_all(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    let parsed = report(&out);
+    assert_eq!(
+        boundary_findings(&parsed)[0]["severity"],
+        "error",
+        "{parsed}"
+    );
+    assert_eq!(parsed["blocking"], true, "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+
+    // The rule is at `error`; the boundary says `warn`: the finding is a warning.
+    let dir = repo_with_rule(
+        "sev-warn",
+        "error",
+        &boundary_yaml("published", "warn", "[\"pkg\"]", ""),
+    );
+    std::fs::create_dir_all(dir.join("pkg")).unwrap();
+    std::fs::write(dir.join("pkg/a.rs"), "// see ADR-1\n").unwrap();
+    commit_all(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    let parsed = report(&out);
+    assert_eq!(
+        boundary_findings(&parsed)[0]["severity"],
+        "warning",
+        "{parsed}"
+    );
+    assert_eq!(parsed["blocking"], false, "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_generated_boundary_reports_a_back_pointer_and_not_a_plain_record_id() {
+    let dir = repo_with_rule(
+        "generated",
+        "error",
+        &boundary_yaml("generated", "error", "[\"gen\"]", ""),
+    );
+    std::fs::create_dir_all(dir.join("gen")).unwrap();
+    std::fs::write(
+        dir.join("gen/table.md"),
+        "ADR-1 is cited in prose here\n// Implements: ADR-1\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let parsed = report(&run_urzua(&dir, &["check"]));
+    let findings = boundary_findings(&parsed);
+    assert_eq!(findings.len(), 1, "{parsed}");
+    assert_eq!(findings[0]["line"], 2);
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("generated"),
+        "{parsed}"
+    );
+    assert!(findings[0].get("suggested_action").is_none(), "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_vendored_boundary_is_declared_and_prohibits_nothing() {
+    let dir = repo_with_rule(
+        "vendored",
+        "error",
+        &boundary_yaml("vendored", "error", "[\"vendor\"]", ""),
+    );
+    std::fs::create_dir_all(dir.join("vendor")).unwrap();
+    std::fs::write(dir.join("vendor/a.rs"), "// Implements: ADR-1, see ADR-1\n").unwrap();
+    commit_all(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    let parsed = report(&out);
+    assert!(boundary_findings(&parsed).is_empty(), "{parsed}");
+    assert_eq!(out.status.code(), Some(0), "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_exclude_excuses_a_fixture_directory_and_an_unused_one_is_reported() {
+    let dir = repo_with_rule(
+        "exclude",
+        "error",
+        &boundary_yaml(
+            "published",
+            "error",
+            "[\"pkg\"]",
+            "        exclude: [\"pkg/fixtures\", \"pkg/gone\"]\n",
+        ),
+    );
+    std::fs::create_dir_all(dir.join("pkg/fixtures")).unwrap();
+    std::fs::write(dir.join("pkg/a.rs"), "clean\n").unwrap();
+    std::fs::write(dir.join("pkg/fixtures/f.rs"), "// ADR-1 on purpose\n").unwrap();
+    commit_all(&dir);
+    let parsed = report(&run_urzua(&dir, &["check"]));
+    let findings = boundary_findings(&parsed);
+    assert_eq!(findings.len(), 1, "{parsed}");
+    assert_eq!(findings[0]["file"], "pkg/gone");
+    assert_eq!(
+        findings[0]["suggested_action"]["kind"], "edit-config",
+        "{parsed}"
+    );
+    assert_eq!(findings[0]["suggested_action"]["op"], "remove", "{parsed}");
+    assert_eq!(
+        findings[0]["suggested_action"]["target"]["key_path"],
+        serde_json::json!([
+            "rules",
+            "boundary.published-path-reference",
+            "boundaries",
+            "0",
+            "exclude"
+        ]),
+        "{parsed}"
+    );
+    assert_eq!(
+        findings[0]["suggested_action"]["target"]["file"], ".urzua/config.yaml",
+        "{parsed}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_declared_marker_excuses_its_line_and_a_stale_marker_is_reported() {
+    let dir = repo_with_rule(
+        "marker",
+        "error",
+        &format!(
+            "{}    ignore_marker: \"record-id-ok\"\n",
+            boundary_yaml("published", "error", "[\"pkg\"]", "")
+        ),
+    );
+    std::fs::create_dir_all(dir.join("pkg")).unwrap();
+    std::fs::write(
+        dir.join("pkg/a.rs"),
+        "// ADR-1 record-id-ok\n// ADR-1 here is not excused\nlet a = 1; // record-id-ok\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let parsed = report(&run_urzua(&dir, &["check"]));
+    let mut lines: Vec<i64> = boundary_findings(&parsed)
+        .iter()
+        .map(|f| f["line"].as_i64().unwrap())
+        .collect();
+    lines.sort();
+    assert_eq!(lines, [2, 3], "{parsed}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_glob_boundary_and_the_compatible_key_apply_together() {
+    let dir = repo_with_rule(
+        "both",
+        "error",
+        &format!(
+            "{}    published_paths: [\"old\"]\n",
+            boundary_yaml("published", "warn", "[\"packages/*/src\"]", "")
+        ),
+    );
+    for d in ["packages/a/src", "packages/a/tests", "old"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::write(dir.join("packages/a/src/x.rs"), "// ADR-1\n").unwrap();
+    std::fs::write(dir.join("packages/a/tests/y.rs"), "// ADR-1\n").unwrap();
+    std::fs::write(dir.join("old/z.rs"), "// ADR-1\n").unwrap();
+    commit_all(&dir);
+    let parsed = report(&run_urzua(&dir, &["check"]));
+    let mut seen: Vec<(String, String)> = boundary_findings(&parsed)
+        .iter()
+        .map(|f| {
+            (
+                f["file"].as_str().unwrap().to_string(),
+                f["severity"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    seen.sort();
+    assert_eq!(
+        seen,
+        [
+            ("old/z.rs".to_string(), "error".to_string()),
+            ("packages/a/src/x.rs".to_string(), "warning".to_string())
+        ],
+        "{parsed}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_boundary_without_a_reason_does_not_load() {
+    let dir = repo_with_rule(
+        "no-reason",
+        "error",
+        "    boundaries:\n      - paths: [\"pkg\"]\n        kind: published\n        severity: error\n",
+    );
+    commit_all(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_ne!(out.status.code(), Some(0), "{stdout}");
+    assert!(stdout.contains("reason"), "{stdout}");
+    std::fs::remove_dir_all(&dir).ok();
+}

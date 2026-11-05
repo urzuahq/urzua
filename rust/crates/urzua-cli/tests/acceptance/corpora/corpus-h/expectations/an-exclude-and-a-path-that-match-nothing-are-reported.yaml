@@ -1,0 +1,9 @@
+id: an-exclude-and-a-path-that-match-nothing-are-reported
+corpus: corpus-h
+invocation: [--config, .urzua/boundaries-stale.yaml, check]
+expect_exit: 1
+expect_findings:
+  - {rule: boundary.published-path-reference, file: mirror/no-such-directory, message_contains: "excuses nothing", suggested_action: {kind: edit-config, op: remove, target: {file: .urzua/boundaries-stale.yaml}}}
+  - {rule: boundary.published-path-reference, file: renamed-away, message_contains: "covers no tracked file", suggested_action: {kind: edit-config, op: remove}}
+expect_no_findings:
+  - {rule: boundary.published-path-reference, file: mirror/fixtures/f.rs}

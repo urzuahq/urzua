@@ -1,0 +1,11 @@
+id: a-vendored-boundary-prohibits-nothing
+corpus: corpus-h
+# Written by the case for the reason a-back-pointer-inside-a-generated-boundary-is-reported gives.
+commits:
+  - write:
+      vendor/v.rs: "// Implements: ADR-0001, and see ADR-0001\n"
+invocation: [--config, .urzua/boundaries.yaml, check]
+expect_exit: 1
+expect_rules_ran: [boundary.published-path-reference]
+expect_no_findings:
+  - {rule: boundary.published-path-reference, file: vendor/v.rs}

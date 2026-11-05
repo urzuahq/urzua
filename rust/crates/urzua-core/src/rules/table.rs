@@ -1190,7 +1190,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
-        description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
+        description: "Declared boundaries (`boundaries`: path globs with a `kind` of `published`, `vendored` or `generated`, a required `reason` and a `severity`; `published_paths` is read as one published boundary with no reason required, and is not deprecated) and what follows from each kind (`RFC-11`/`ADR-9`/`ADR-80`, `MILE-125`). A record identifier (any identifier carrying a configured type prefix, resolvable or not, in prose as well as in a marker) inside a `published` boundary is a violation, because it publishes a pointer no external reader can resolve; a back-pointer (`Implements:` or `Verifies:`) inside a `generated` boundary is reported, and a plain record identifier there is not; a `vendored` boundary is declared and prohibits nothing. A boundary's `severity` is the level of its findings and the rule's `level` only enables the rule. A boundary's `exclude` globs remove paths from its violation check only, and the declared `ignore_marker` excuses the one line it is on. An `exclude` entry, a boundary path or an `ignore_marker` use that matches or suppresses nothing is itself a finding, never a clean pass. The violation matcher is wide and the evidence collector's stays narrow: a back-pointer inside a `published` boundary is not realization evidence. An identifier split across lines is not detected.",
         scope: Scope::Files,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1198,13 +1198,25 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         reads_declaration: None,
         header_none: HeaderNone::Exempt("population is published files, not records"),
-        options: &["published_paths"],
+        options: &["published_paths", "boundaries", "ignore_marker"],
         actions: &[
             VariantAction::new("published-path-reference", ActionDecl::Exempt("the edit is to a published non-record file, and no action kind addresses a non-record file yet")),
-            VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_SET),
+            VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("generated-back-pointer", ActionDecl::Exempt("the edit is to a generated non-record file, which is overwritten, and no action kind addresses a non-record file yet")),
+            VariantAction::new("boundary-uncovered", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("boundary-exclude-unused", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("boundary-marker-unused", ActionDecl::Exempt("the edit removes a marker from a non-record file, and no action kind addresses a non-record file yet")),
         ],
         phase: Phase::Main,
-        run: |c| published_path_reference(c.published_files, c.published_paths, c.config),
+        run: |c| {
+            published_path_reference(
+                c.published_files,
+                c.boundaries,
+                c.ignore_marker,
+                c.config,
+                c.config_path,
+            )
+        },
     },
     RuleDef {
         id: RULE_SECTION_REQUIRED,
