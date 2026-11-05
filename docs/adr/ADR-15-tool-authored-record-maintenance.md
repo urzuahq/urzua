@@ -79,3 +79,9 @@ missing rather than the claim being wrong (RFC-12 §5 carries this argument).
 - RFC-2 — the detect/apply split and identity resolution this ADR reuses rather than redesigns.
 - ADR-14 — the revision log this ADR's reversibility clause depends on.
 - RFC-12 §5 — the argument for why Embodiment is excluded despite satisfying the eligibility test.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

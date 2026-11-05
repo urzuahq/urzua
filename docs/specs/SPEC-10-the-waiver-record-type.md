@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.10'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -25,6 +25,7 @@ invisible, only non-blocking.
 record_types:
   waiver:
     dir: "docs/waiver"
+    role: suppression
     required_fields: ["Rule", "Scope", "Reason"]
     header_shape: "yaml-frontmatter"
     known_fields: ["Stable-Id", "Expires"]
@@ -32,6 +33,10 @@ record_types:
     pointer_fields: []
     narrative_fields: []
 ```
+
+`role: suppression` (`SPEC-3`) is what makes this type the suppression type; the type's name is
+free. When no type declares the role, the type named `waiver` is read as the suppression type, so
+a config written before the declaration keeps working.
 
 | Field | Values | Notes |
 |---|---|---|
@@ -58,11 +63,19 @@ with a passed `Expires` is treated as though it doesn't exist (`is_active`) — 
 ISO-8601 string comparison against wall-clock "today," which RFC-15 §1 notes as the first place this
 schema reads real time rather than only corpus content.
 
-`check` calls `load_waivers` (filters discovered records to `record_type == "waiver"`, skipping any
+`check` calls `load_suppressions` (filters discovered records to the type declaring `role: suppression`, else the type named `waiver`, skipping any
 missing `Rule` or `Scope` rather than crashing the run — an unparseable waiver waives nothing, which
 fails toward more findings, not fewer) then `apply_waivers`, which annotates matching findings with
 `waived: <waiver's own path>` and never removes them from the report. `status`/`blocking` are
 computed from non-waived findings only.
+
+`Reason` is required by the table above but, by default, only `header.required-fields` enforces it,
+and a waiver without one still suppresses. The type may instead declare `effective_requires: [Reason]`
+(`SPEC-3`, `BUG-177`): a waiver then takes effect only once each listed field holds a real value,
+that is present and neither blank, a placeholder nor pending. Otherwise it suppresses nothing, so its
+target finding appears again (failing toward more findings, as for a missing `Rule`), and with
+`waiver.matches-nothing` enabled a finding on the waiver names the missing field. The default is
+unchanged.
 
 ## What's deliberately not built
 
@@ -95,3 +108,5 @@ computed from non-waived findings only.
 > | 2026-11-05 | Bumped to `0.7`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.8`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |

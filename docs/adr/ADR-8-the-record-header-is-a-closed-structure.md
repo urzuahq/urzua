@@ -61,3 +61,9 @@ adopter's config to test that transition against.
 - RFC-10 — the proposal this decides.
 - `rust/crates/urzua-core/src/header.rs` — the implementation, including the planted-violation
   tests proving the three-shape handling and duplicate-key detection actually work.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

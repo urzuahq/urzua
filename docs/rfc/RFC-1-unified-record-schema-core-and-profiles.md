@@ -291,3 +291,9 @@ living-spec problem respectively.
 
 - RFC-4, RFC-5, RFC-6 — the layering, Embodiment/claim-graph, and living-spec content
   split out of this document's earlier draft.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
