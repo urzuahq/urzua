@@ -402,6 +402,16 @@ fn load_context<'a>(
         ));
     }
 
+    // A declared non-reference id that now matches a real record is disclosed
+    // (`ADR-75`), only when `citation.resolution` is on.
+    if enabled_setting(config, rules::RULE_CITATION_RESOLUTION).is_some() {
+        notices.extend(rules::non_reference_notices(
+            &session.records,
+            config,
+            &record_index,
+        ));
+    }
+
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
