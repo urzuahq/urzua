@@ -534,3 +534,39 @@ fn a_boundary_without_a_reason_does_not_load() {
     assert!(stdout.contains("reason"), "{stdout}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn an_uncovered_path_offers_a_valueless_set_never_a_remove() {
+    // Removing the only entry would leave a config that cannot load, and
+    // would shrink coverage; a person picks the corrected path instead.
+    for (name, body, variant) in [
+        (
+            "uncovered-declared",
+            boundary_yaml("published", "error", "[\"gone\"]", ""),
+            "boundary-uncovered",
+        ),
+        (
+            "uncovered-published-paths",
+            "    published_paths: [\"gone\"]\n".to_string(),
+            "published-path-uncovered",
+        ),
+    ] {
+        let dir = repo_with_rule(name, "error", &body);
+        commit_all(&dir);
+        let parsed = report(&run_urzua(&dir, &["check"]));
+        let findings = boundary_findings(&parsed);
+        let f = findings
+            .iter()
+            .find(|f| f["file"] == "gone")
+            .unwrap_or_else(|| panic!("{variant} expected: {parsed}"));
+        assert_eq!(f["suggested_action"]["kind"], "edit-config", "{parsed}");
+        assert_eq!(f["suggested_action"]["op"], "set", "{parsed}");
+        assert!(
+            f["suggested_action"]
+                .get("value")
+                .is_none_or(|v| v.is_null()),
+            "{parsed}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

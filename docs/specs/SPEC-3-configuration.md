@@ -736,7 +736,7 @@ rules:
 - **Nothing declared may match nothing silently.** Each of these is a finding at the boundary's
   severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
   matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
-  it suppresses nothing. The first two carry an `edit-config` `remove` action naming the entry.
+  it suppresses nothing. The uncovered `paths` entry carries an `edit-config` `set` action with no value, naming the entry, so a person picks the corrected path and coverage is never shrunk; the unused `exclude` entry carries an `edit-config` `remove` action naming it.
 
 ## Relation pairs
 

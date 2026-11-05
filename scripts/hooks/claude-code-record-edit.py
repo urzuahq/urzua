@@ -3,7 +3,7 @@
 
 Thin: it turns a Write / Edit / MultiEdit payload into the proposed full content
 of the file, hands that to scripts/hooks/record-edit-hook.sh (the harness-neutral
-core, which relays urzua's verdict), and turns the core's verdict into Claude
+core, which relays `urzua check --stdin-path`), and turns the core's verdict into Claude
 Code's hook output. It holds no derivation and no record knowledge.
 
 Run with `python3 -I`. A payload it cannot turn into proposed content (an Edit
@@ -71,7 +71,7 @@ def main():
     verdict, msg = v.get("verdict"), v.get("message", "")
     if verdict == "block":
         out({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": msg}})
-    elif verdict in ("allow-unjudged", "allow-override"):
+    elif verdict in ("allow-unjudged", "allow-override", "allow-with-warnings"):
         out({"systemMessage": msg, "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}})
     return 0
 

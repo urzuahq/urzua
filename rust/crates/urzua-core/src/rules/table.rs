@@ -1211,9 +1211,9 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["published_paths", "boundaries", "ignore_marker"],
         actions: &[
             VariantAction::new("published-path-reference", ActionDecl::Exempt("the edit is to a published non-record file, and no action kind addresses a non-record file yet")),
-            VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_SET),
             VariantAction::new("generated-back-pointer", ActionDecl::Exempt("the edit is to a generated non-record file, which is overwritten, and no action kind addresses a non-record file yet")),
-            VariantAction::new("boundary-uncovered", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("boundary-uncovered", ActionDecl::CONFIG_SET),
             VariantAction::new("boundary-exclude-unused", ActionDecl::CONFIG_REMOVE),
             VariantAction::new("boundary-marker-unused", ActionDecl::Exempt("the edit removes a marker from a non-record file, and no action kind addresses a non-record file yet")),
         ],

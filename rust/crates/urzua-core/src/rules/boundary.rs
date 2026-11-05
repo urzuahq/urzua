@@ -242,13 +242,26 @@ pub fn published_path_reference(
         };
         for (idx, line) in content.lines().enumerate() {
             let line_no = idx + 1;
-            let mut here = Vec::new();
+            // Overlapping boundaries can each report the same citation on this
+            // line; one finding per citation is kept, at the highest severity.
+            let mut here: Vec<(String, Finding)> = Vec::new();
+            let mut keep = |key: String, f: Finding| match here.iter_mut().find(|(k, _)| *k == key)
+            {
+                Some((_, kept)) => {
+                    if f.severity == FindingSeverity::Error
+                        && kept.severity == FindingSeverity::Warning
+                    {
+                        *kept = f;
+                    }
+                }
+                None => here.push((key, f)),
+            };
             for b in &covering {
                 match b.kind {
                     BoundaryKind::Published => {
                         let entry = b.entry_for(&file.path);
                         for identifier in cited_identifiers(line, &prefixes) {
-                            here.push(finding(
+                            keep(format!("cite {identifier}"), finding(
                                 b,
                                 &file.path,
                                 Some(line_no),
@@ -265,7 +278,7 @@ pub fn published_path_reference(
                         let entry = b.entry_for(&file.path);
                         for marker in [MARKER_IMPLEMENTS, MARKER_VERIFIES] {
                             for pointer in scan_marker_line(line, &prefixes, marker) {
-                                here.push(finding(
+                                keep(format!("pointer {marker} {pointer}"), finding(
                                     b,
                                     &file.path,
                                     Some(line_no),
@@ -295,7 +308,7 @@ pub fn published_path_reference(
                         ));
                     }
                 }
-                _ => findings.extend(here),
+                _ => findings.extend(here.into_iter().map(|(_, f)| f)),
             }
         }
         // A vendored boundary declares the path and prohibits nothing, so a
@@ -324,14 +337,14 @@ pub fn published_path_reference(
                     "published-path-uncovered",
                     format!(
                         "published path '{entry}' covers no tracked file, so nothing under it was \
-                         checked; remove the entry or correct the path"
+                         checked; correct the path"
                     ),
                 ),
                 BoundaryOrigin::Declared(_) => (
                     "boundary-uncovered",
                     format!(
                         "{} boundary path '{entry}' covers no tracked file that is not excluded, so nothing under it was \
-                         checked; remove the entry or correct the path{}",
+                         checked; correct the path{}",
                         b.kind.as_str(),
                         reason_note(b)
                     ),
@@ -344,8 +357,7 @@ pub fn published_path_reference(
                 message,
                 ActionSource::new(variant)
                     .file(config_path)
-                    .key_path(b.config_key("paths"))
-                    .text(entry.as_str()),
+                    .key_path(b.config_key("paths")),
             ));
         }
         // An exclusion matching no file inside its own boundary excuses nothing.
@@ -938,6 +950,23 @@ mod tests {
             variants,
             ["generated-back-pointer", "published-path-reference"]
         );
+    }
+
+    #[test]
+    fn overlapping_published_boundaries_report_a_citation_once_at_the_highest_severity() {
+        let b = [
+            declared(0, BoundaryKind::Published, Warn_, &["lib"], &[]),
+            declared(1, BoundaryKind::Published, Err_, &["lib/inner"], &[]),
+        ];
+        let (_, findings) = run_with(&[file("lib/inner/a.rs", "// ADR-1\n")], &b, None);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, Err_);
+        assert_eq!(findings[0].declared_severity, Some(Err_));
+        // Listed in the other order, the result is the same.
+        let b = [b[1].clone(), b[0].clone()];
+        let (_, findings) = run_with(&[file("lib/inner/a.rs", "// ADR-1\n")], &b, None);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].severity, Err_);
     }
 
     #[test]

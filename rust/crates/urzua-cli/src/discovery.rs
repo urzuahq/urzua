@@ -244,6 +244,36 @@ pub(crate) fn parse_prospective_record(
     ))
 }
 
+/// `p` (absolute, or relative to the working directory) as a repo-relative
+/// path, without requiring that it exist.
+pub(crate) fn relative_to_root(
+    repo_root: &std::path::Path,
+    p: &std::path::Path,
+) -> Result<PathBuf, String> {
+    let cwd = std::env::current_dir()
+        .and_then(|c| c.canonicalize())
+        .unwrap_or_default();
+    let joined = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    };
+    let mut normal = PathBuf::new();
+    for c in joined.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                normal.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normal.push(other),
+        }
+    }
+    normal
+        .strip_prefix(repo_root)
+        .map(PathBuf::from)
+        .map_err(|_| format!("{} is outside the repository", p.display()))
+}
+
 /// Restrict discovered files to those under any of the requested paths,
 /// relative to `repo_root`. Empty `requested` means no restriction -- the
 /// existing "check everything" behavior when no path argument is given.
