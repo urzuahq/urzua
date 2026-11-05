@@ -379,6 +379,11 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
+# The committed log of editor-hook overrides (ADR-78, MILE-188): the hook appends a row
+# whenever a named override lets a blocked edit through, and override.unreviewed
+# reports a row no person has reviewed, so it surfaces in the pull request.
+override_log: .urzua/override-log.md
+
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
 # (ADR-82). A containment pair declared acyclic would not order work, so only
 # the sequencing pair is named. The engine names no grouping field.
@@ -390,6 +395,7 @@ roadmap:
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
 rules:
+  override.unreviewed: warn
   embodiment.requires-accepted-status:
     level: warn
   # A milestone's Status agrees with its delivery evidence (MILE-183): the PR
@@ -502,6 +508,27 @@ rules:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with
+  # why, and what each kind forbids. A boundary's severity is the level of its
+  # findings; the rule's level only turns the rule on.
+  boundary.published-path-reference:
+    level: error
+    boundaries:
+      # The composite action adopters reference by `uses:`. A record id in it
+      # points at a document no adopter's checkout holds. The fixtures are test
+      # inputs shaped like real findings, so they are excused here, in the
+      # declaration, and nowhere else.
+      - paths: [".github/actions/urzua-gate"]
+        kind: published
+        reason: "The gate action ships to adopting repositories, whose readers cannot resolve this repository's record ids."
+        severity: error
+        exclude: [".github/actions/urzua-gate/fixtures"]
+      # Written by `urzua index --apply` from the records (MILE-152); a
+      # human-authored back-pointer there is overwritten on the next run.
+      - paths: ["docs/adr/README.md", "docs/specs/README.md"]
+        kind: generated
+        reason: "The two directory indexes are generated from the records and rewritten wholesale."
+        severity: error
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.

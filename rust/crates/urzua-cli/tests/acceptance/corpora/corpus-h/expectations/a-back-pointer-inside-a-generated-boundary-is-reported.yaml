@@ -1,0 +1,14 @@
+id: a-back-pointer-inside-a-generated-boundary-is-reported
+corpus: corpus-h
+# The marker is written by the case, not kept in the corpus tree: this
+# repository reads its own tests as evidence, and a back-pointer committed
+# here would count.
+commits:
+  - write:
+      gen/table.md: "# generated\n// Implements: ADR-0001\n"
+invocation: [--config, .urzua/boundaries.yaml, check]
+expect_exit: 1
+expect_findings:
+  - {rule: boundary.published-path-reference, file: gen/table.md, severity: error, message_contains: "back-pointer", no_suggested_action: true}
+expect_no_findings:
+  - {rule: boundary.published-path-reference, file: gen/plain.md}

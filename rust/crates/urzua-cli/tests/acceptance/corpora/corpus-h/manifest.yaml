@@ -16,3 +16,10 @@ fixtures:
   - {path: src/tests/t.rs, irregularity: "source excluded from the mixed-change rule; not a record."}
   - {path: pub/lib.rs, irregularity: "a published file citing ADR-0001 in a comment; not a record."}
   - {path: pub/clean.rs, irregularity: "a published file citing nothing; not a record."}
+  - {path: .urzua/boundaries.yaml, irregularity: "a config declaring a published (warn, with an exclude and an ignore marker), a generated and a vendored boundary; not a record."}
+  - {path: .urzua/boundaries-stale.yaml, irregularity: "a config whose boundary has a path and an exclude that match nothing; not a record."}
+  - {path: mirror/lib.rs, irregularity: "a published file citing ADR-0001 twice, once on a line carrying the declared ignore marker; not a record."}
+  - {path: mirror/stale.rs, irregularity: "a line carrying the ignore marker with nothing to excuse: a stale exception; not a record."}
+  - {path: mirror/clean.rs, irregularity: "a published file citing nothing; not a record."}
+  - {path: mirror/fixtures/f.rs, irregularity: "a fixture citing ADR-0001 on purpose, excused by the boundary's exclude; not a record."}
+  - {path: gen/plain.md, irregularity: "a generated file citing a record id in plain prose, which is not a back-pointer; not a record."}

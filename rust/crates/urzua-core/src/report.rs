@@ -327,6 +327,8 @@ pub enum PopulationUnit {
     File,
     /// One path in the changed set of a `--base` run.
     ChangedPath,
+    /// One entry of a committed log a rule reads (`override.unreviewed`).
+    Entry,
 }
 
 /// What a rule decided about one candidate it was handed.

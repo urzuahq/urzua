@@ -71,8 +71,10 @@ struct Context<'a> {
     session: &'a Session,
     claims: Vec<(String, String)>,
     published_files: Vec<rules::PublishedFile>,
-    published_paths: Vec<String>,
+    boundaries: Vec<rules::ResolvedBoundary>,
+    ignore_marker: Option<String>,
     index_artifacts: Vec<rules::IndexArtifact>,
+    override_log: Option<rules::OverrideLog>,
     back_pointer_sources: Option<rules::BackPointerSources>,
     decision_gate_sources: Option<rules::BackPointerSources>,
     back_pointed: rules::BackPointerEvidence,
@@ -228,8 +230,10 @@ impl<'a> Context<'a> {
             untracked_records: &self.untracked_records,
             claims: &self.claims,
             published_files: &self.published_files,
-            published_paths: &self.published_paths,
+            boundaries: &self.boundaries,
+            ignore_marker: self.ignore_marker.as_deref(),
             index_artifacts: &self.index_artifacts,
+            override_log: self.override_log.as_ref(),
             back_pointer_sources: self.back_pointer_sources.as_ref(),
             decision_gate_sources: self.decision_gate_sources.as_ref(),
             back_pointed: &self.back_pointed,
@@ -565,22 +569,27 @@ fn load_context<'a>(
         &claim_opts.map_or_else(Vec::new, |o| o.claim_paths),
     )?;
 
-    let published_paths: Vec<String> = config
-        .enabled_rule_opts::<rules::PublishedPathOpts>(
-            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
-        )
-        .map_or_else(Vec::new, |o| o.published_paths);
-    let published_files = crate::discovery::read_files_under(
+    let boundary_opts: rules::PublishedPathOpts = config
+        .enabled_rule_opts(rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+        .unwrap_or_default();
+    let boundary_paths: Vec<String> = boundary_opts
+        .boundaries
+        .iter()
+        .flat_map(|b| b.paths.iter().cloned())
+        .collect();
+    let published_files = crate::discovery::read_files_matching(
         repo_root,
         discovered,
-        &published_paths,
+        &boundary_paths,
         rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     )?;
+    let (boundaries, ignore_marker) = (boundary_opts.boundaries, boundary_opts.ignore_marker);
 
     let index_specs: Vec<urzua_core::config::IndexSpec> = config
         .enabled_rule_opts::<rules::IndexOpts>(rules::RULE_INDEX_FRESHNESS)
         .map_or_else(Vec::new, |o| o.indexes);
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
+    let override_log = crate::discovery::read_override_log(repo_root, config)?;
 
     let back_pointer_sources =
         crate::discovery::read_back_pointer_sources(repo_root, discovered, config)?;
@@ -637,8 +646,10 @@ fn load_context<'a>(
             session,
             claims,
             published_files,
-            published_paths,
+            boundaries,
+            ignore_marker,
             index_artifacts,
+            override_log,
             back_pointer_sources,
             decision_gate_sources,
             back_pointed,

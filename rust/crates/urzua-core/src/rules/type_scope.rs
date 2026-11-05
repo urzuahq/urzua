@@ -352,6 +352,7 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types,
         };
@@ -374,6 +375,7 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types,
         };
