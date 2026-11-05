@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6M8A27T8HXBKK1WRB3ZF7YM
-Status: Draft
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-04
 Author: beauwilliams
 Supersedes / Superseded-by: null
@@ -118,3 +119,4 @@ above is unchanged.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Amendment added: the proposal is decided as written and recorded in `ADR-77` (Proposed). `Status` stays `Draft`; it should become `Accepted` alongside `ADR-77`. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Status changed from Draft to Accepted. **Why:** Maintainer decision, 2026-11-05; ADR-77 records the decision. | **substantive** |

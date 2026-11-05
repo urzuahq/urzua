@@ -40,6 +40,10 @@ pub struct Config {
         skip_serializing_if = "crate::embodiment_model::EmbodimentDecl::is_default"
     )]
     pub embodiment: crate::embodiment_model::EmbodimentDecl,
+    /// Declared symbol resolvers for scoped evidence pins (`ADR-74`,
+    /// `SPEC-3`); absent means none, so only line ranges are available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -948,6 +952,8 @@ pub enum ConfigError {
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
+    #[error("locator_resolvers: {reason}")]
+    InvalidLocatorResolvers { reason: String },
     #[error("record type '{record_type}' companion_fields: {reason}")]
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
@@ -1362,6 +1368,8 @@ pub fn parse_with_document_models(
         .embodiment
         .validate()
         .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
+    crate::locator::validate_resolvers(&config.locator_resolvers)
+        .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
     validate_companion_fields(&config)?;
