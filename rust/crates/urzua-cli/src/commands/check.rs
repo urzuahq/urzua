@@ -40,7 +40,7 @@ struct Opened {
     prospective: Option<Prospective>,
 }
 
-/// One record's proposed content (`--stdin-path`, `MILE-187`). It replaces the
+/// One record's proposed content (`--stdin-path`, `MILE-191`). It replaces the
 /// record's on-disk copy (or adds a record) in the session before any rule
 /// runs, so `urzua-core` only ever sees records and text, never a path to read.
 struct Prospective {
@@ -81,6 +81,7 @@ struct Context<'a> {
     refs_snapshot: Result<RefsSnapshot, String>,
     record_index: rules::RecordIndex<'a>,
     collisions: Vec<rules::IdentifierCollision<'a>>,
+    untracked_records: rules::UntrackedRecords,
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
@@ -224,6 +225,7 @@ impl<'a> Context<'a> {
             templates: &self.templates,
             index: &self.record_index,
             collisions: &self.collisions,
+            untracked_records: &self.untracked_records,
             claims: &self.claims,
             published_files: &self.published_files,
             published_paths: &self.published_paths,
@@ -510,7 +512,7 @@ fn claim_path_notices(repo_root: &Path, opts: &rules::ClaimOpts) -> Result<Vec<N
 /// them (`BUG-115`).
 ///
 /// A proposed record (`--stdin-path`) is the only one reported on, so only it
-/// is computed, from its proposed content (`MILE-187`, as `fix --stdin-path`).
+/// is computed, from its proposed content (`MILE-191`, as `fix --stdin-path`).
 fn load_drift(
     session: &Session,
     prospective: Option<&Prospective>,
@@ -620,7 +622,7 @@ fn load_context<'a>(
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
     // The diff rules judge a changed record against a committed copy. A
     // proposed record is the one changed record, and its committed copy is
-    // HEAD's (`MILE-187`): status transitions and version bumps are then
+    // HEAD's (`MILE-191`): status transitions and version bumps are then
     // judged on a single-record edit instead of reported not-applicable.
     let head_changes = scope
         .prospective
@@ -645,6 +647,11 @@ fn load_context<'a>(
             refs_snapshot,
             record_index,
             collisions,
+            untracked_records: crate::discovery::untracked_records(
+                repo_root,
+                config,
+                &discovered.paths,
+            ),
             live_paths: discovered
                 .paths
                 .iter()
@@ -755,7 +762,7 @@ fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
 }
 
 /// One phase of rules. A proposed record (`--stdin-path`) runs only the rules
-/// that can report on a record (`MILE-187`).
+/// that can report on a record (`MILE-191`).
 fn run_phase(
     context: &Context,
     phase: rules::Phase,

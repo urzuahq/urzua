@@ -1,4 +1,4 @@
-//! MILE-187: `urzua check --stdin-path` judges one record's proposed content
+//! MILE-191: `urzua check --stdin-path` judges one record's proposed content
 //! against every enabled rule without writing. Real git-repo fixtures, real
 //! binary; all output is JSON.
 

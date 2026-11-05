@@ -110,7 +110,7 @@ uses it is described under "The record-edit hook" below.
 
 ### The record-edit hook
 
-`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`, `MILE-187`, `ADR-78`) is the
+`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`, `MILE-191`, `ADR-78`) is the
 harness-neutral core that relays `urzua check --stdin-path` (`SPEC-2`) to a coding-agent harness before
 a record edit is written, so the editor judges every enabled rule on the edited record and not only the
 computed fields `fix` repairs. Its contract: stdin is the proposed full content, argv the record path
@@ -139,7 +139,7 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
 The Claude Code adapter `scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
 `Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
 Code's hook output; a second harness is a second adapter over the same core. Measured on this corpus
-(`MILE-187`, release build, 522 records, best of 20 runs on a loaded 4-core machine): about 0.43s per
+(`MILE-191`, release build, 522 records, best of 20 runs on a loaded 4-core machine): about 0.43s per
 record through the core when the edit has no errors, which is one `check --stdin-path` run, and about
 0.77s when it has errors, which pays for the second, baseline run; the Claude Code adapter adds about
 0.04s. Compiling each pending pattern once per process, instead of on every field, took a single run
@@ -303,4 +303,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.18`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.19`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
-> | 2026-11-05 | Bumped to `0.20`. The record-edit hook relays `check --stdin-path` and judges every enabled rule that can judge one record, and its `allow` message counts the rules that ran and names the ones it could not judge instead of claiming every rule, with a new `allow-with-warnings` verdict and `findings` replacing `repairs` in its output; `fix --stdin-path` is unchanged and no longer the hook's call. **Why:** `MILE-187`, `ADR-78` item 2. | **substantive** |
+> | 2026-11-05 | Bumped to `0.20`. The record-edit hook relays `check --stdin-path` and judges every enabled rule that can judge one record, and its `allow` message counts the rules that ran and names the ones it could not judge instead of claiming every rule, with a new `allow-with-warnings` verdict and `findings` replacing `repairs` in its output; `fix --stdin-path` is unchanged and no longer the hook's call. **Why:** `MILE-191`, `ADR-78` item 2. | **substantive** |

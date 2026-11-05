@@ -7,7 +7,7 @@ Implements: ADR-78
 Blocked-on: —
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules/runner.rs, code:scripts/hooks/record-edit-hook.sh, code:scripts/hooks/claude-code-record-edit.py, test:rust/crates/urzua-cli/tests/check_stdin_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
 ---
-# 187 — urzua check --stdin-path judges one record's proposed content against every enabled rule, and the editor hook relays all its findings
+# 191 — urzua check --stdin-path judges one record's proposed content against every enabled rule, and the editor hook relays all its findings
 
 ## What
 
@@ -33,3 +33,4 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
 > | 2026-11-05 | Built in #308: `urzua check --stdin-path` (`SPEC-2`), `Realized-by` added, and the hook relays it (`SPEC-8`); measured about 0.6s per record through the core and about 1.1s when the edit has errors. `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's configuration and corpus. | **substantive** |
 > | 2026-11-05 | Fixed after review of #308: the hook's `allow` message counts the rules that ran and names the enabled rules a single record cannot be judged by, instead of claiming every enabled rule; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the edited record; pending patterns are compiled once per process, which brought a blocked edit from about 1.1s to about 0.77s (best of 20 runs, loaded 4-core machine; clean edit about 0.43s). **Why:** the reviewer found the message untrue (20 enabled rules were not run) and the blocked path over a second. | **substantive** |
+> | 2026-11-05 | Renumbered from `MILE-187` to `MILE-191`: another milestone took `MILE-187` on `main` first, and every reference here, in the specs and in the code now says `MILE-191`. **Why:** two records claimed one identifier (`identity.collision`). | **editorial** |

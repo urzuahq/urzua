@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harness-neutral core of the record-edit hook (ADR-69, ADR-78, MILE-178, MILE-187).
+# Harness-neutral core of the record-edit hook (ADR-69, ADR-78, MILE-178, MILE-191).
 #
 #   record-edit-hook.sh [--override NAME] <record-path> < proposed-content
 #

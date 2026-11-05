@@ -556,7 +556,7 @@ pub enum ScopeSource {
     /// reported in [`ScopeInfo::base`].
     GitDiff,
     /// One record's proposed content read from stdin (`check --stdin-path`,
-    /// `MILE-187`); the record need not exist on disk.
+    /// `MILE-191`); the record need not exist on disk.
     Stdin,
 }
 

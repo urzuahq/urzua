@@ -52,6 +52,9 @@ pub struct RuleCtx<'a> {
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
+    /// Record files on disk that git does not track, by id (`BUG-13`); read by
+    /// the rules that report an unresolved reference.
+    pub untracked_records: &'a UntrackedRecords,
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
@@ -141,7 +144,7 @@ pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Fin
 }
 
 /// [`run_phase`] for a run that reports on one record's proposed content
-/// (`check --stdin-path`, `MILE-187`). A rule whose findings are anchored
+/// (`check --stdin-path`, `MILE-191`). A rule whose findings are anchored
 /// outside the records (the configuration, a source file, an index, a diff)
 /// cannot report on that record, so an enabled one is not run and says so:
 /// `not-applicable`, never `ran` with nothing found.

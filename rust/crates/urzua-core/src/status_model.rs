@@ -142,7 +142,7 @@ impl PendingEntry {
 
 /// A pending pattern, compiled once per process. A pending value is asked of
 /// every field of every record by several rules, so compiling per call was a
-/// third of a single-record `check --stdin-path` run (`MILE-187`).
+/// third of a single-record `check --stdin-path` run (`MILE-191`).
 fn compiled(pattern: &str) -> Option<std::sync::Arc<regex::Regex>> {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex, OnceLock};
