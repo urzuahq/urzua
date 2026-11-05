@@ -357,6 +357,7 @@ fn build_fix_report(
         population,
         repairs,
         Vec::new(),
+        Vec::new(),
         failed,
         warning,
         ran_apply,
@@ -364,10 +365,12 @@ fn build_fix_report(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_report(
     population: urzua_core::report::Population,
     repairs: Vec<urzua_core::fix::Repair>,
     rebaselines: Vec<urzua_core::fix::Rebaseline>,
+    failed_pins: Vec<urzua_core::fix::FailedPin>,
     failed: Vec<(PathBuf, String)>,
     warning: Option<String>,
     ran_apply: bool,
@@ -375,7 +378,7 @@ fn build_report(
 ) -> FixReport {
     let status = if population.examined() == 0 && !ran_apply && failed.is_empty() {
         FixStatus::NotRun
-    } else if !failed.is_empty() {
+    } else if !failed.is_empty() || !failed_pins.is_empty() {
         FixStatus::PartialFailure
     } else if repairs.is_empty() && rebaselines.is_empty() {
         FixStatus::Ok
@@ -390,6 +393,7 @@ fn build_report(
         population,
         repairs,
         rebaselines,
+        failed_pins,
         failed: failed
             .into_iter()
             .map(|(record, error)| FixFailure { record, error })
@@ -425,13 +429,18 @@ fn run_rebaseline(
     by: Option<String>,
     reason: &str,
 ) -> ExitCode {
-    let hash = |locator: &str| urzua_io::sha256_hex_of_file(&repo_root.join(locator));
-    let (population, found) = urzua_core::fix::detect_rebaselines(scoped, config, &hash);
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let read = |locator: &urzua_core::locator::Locator| {
+        crate::pins::read_pin(repo_root, config, &texts, locator)
+    };
+    let (population, found, failed_pins) =
+        urzua_core::fix::detect_rebaselines(scoped, config, &read);
     if !apply {
         return emit(&build_report(
             population,
             Vec::new(),
             found,
+            failed_pins,
             unmatched,
             None,
             false,
@@ -497,6 +506,7 @@ fn run_rebaseline(
         population,
         Vec::new(),
         applied,
+        failed_pins,
         failed,
         identity.warning,
         true,

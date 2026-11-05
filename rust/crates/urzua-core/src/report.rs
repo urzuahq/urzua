@@ -715,8 +715,28 @@ pub struct ExplainReport {
     pub status: ReportStatus,
     pub path: String,
     pub governing_records: Vec<crate::graph::GoverningRecord>,
+    /// The resolved span of `path#scope` and its pin, when the argument names
+    /// a scope (`ADR-74` point 7): the authoring route for a scoped pin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ScopeExplanation>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// What `urzua explain <path>#<scope>` resolved.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScopeExplanation {
+    pub scope: String,
+    /// The resolver that found the symbol; absent for a line range.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolver: Option<String>,
+    pub start: usize,
+    pub end: usize,
+    /// The pinned bytes: the span's lines, normalised as hashed.
+    pub text: String,
+    pub sha256: String,
+    /// The locator to paste into `Realized-by`.
+    pub pin: String,
 }
 
 impl Report for ExplainReport {
@@ -863,6 +883,10 @@ pub struct FixReport {
     /// `urzua fix --rebaseline` (`MILE-181`); absent otherwise.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rebaselines: Vec<crate::fix::Rebaseline>,
+    /// Scoped pins that do not resolve and so cannot be re-pinned, each with
+    /// its reason (`ADR-74`); absent when every pin resolves.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub failed_pins: Vec<crate::fix::FailedPin>,
     pub failed: Vec<FixFailure>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,

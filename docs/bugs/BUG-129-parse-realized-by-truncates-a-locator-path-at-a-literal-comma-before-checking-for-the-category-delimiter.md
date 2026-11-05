@@ -50,8 +50,8 @@ the path. No escaping or quoting is added and the format stays flat. The options
 - Change the field's delimiter entirely (a breaking format change, the same class of decision
   `ADR-54` already made once for this file format's schema version).
 
-Fixed in `rules/embodiment.rs`: one splitter, `realized_by_entries`, now serves `parse_realized_by` and
-`realized_by_pinned_locators`. One shape stays ambiguous by construction: a path that itself contains
+Fixed in `locator.rs`: one splitter, `realized_by_entries`, now serves `parse_realized_by` and
+`realized_by_locators`, the two readers of the field. One shape stays ambiguous by construction: a path that itself contains
 `,<category>:` (for example `src/a,test:b.rs`) reads as two entries. A comma followed by text that is not a
 category prefix now stays in the path, so a mistyped category (`code:a.rs, docs:b.md`) yields a locator
 naming nothing, which `embodiment.locator-exists` reports instead of the entry vanishing.

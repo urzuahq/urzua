@@ -1,7 +1,9 @@
 ---
-Version: '0.9'
+Version: '0.11'
 Date: 2026-09-08
-Status: Accepted
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -90,3 +92,6 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `Shipped` to the `Status` values after `Accepted`, with `Embodiment` and `Realized-by` required of a `Shipped` spec. **Why:** `MILE-7`, maintainer decision of 2026-11-04: a spec whose status says the work shipped has to carry its evidence, and `required_fields` could only demand it of every spec or none. Declared in `.urzua/config.yaml` (`statuses` and `statuses.require`); no engine change. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. Stated that the `Version` bump with every substantive or structural entry is now checked on a `--base` run, by `revision-log.version-bump-required` with `revision_log.version_bump` declared on this type. **Why:** `BUG-51`, maintainer decision of 2026-11-04: only the entry half of the rule was enforced. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.11`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

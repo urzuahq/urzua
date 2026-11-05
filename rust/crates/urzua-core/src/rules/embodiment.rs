@@ -43,78 +43,15 @@ pub fn normalize_locator(raw: &str) -> String {
     parts.join("/")
 }
 
-const PIN_MARKER: &str = "@sha256:";
-
-/// Splits an optional content-hash pin off a locator (`MILE-129`):
-/// `src/a.rs@sha256:<64 lowercase hex>` is the path `src/a.rs` pinned to that
-/// digest. Anything else after the marker -- wrong length, uppercase, non-hex
-/// -- is not a pin and stays part of the path, so a malformed pin surfaces as
-/// a locator naming nothing (`embodiment.locator-exists`), never as a silently
-/// unpinned one.
-fn split_pin(locator: &str) -> (&str, Option<&str>) {
-    let locator = locator.trim();
-    match locator.rsplit_once(PIN_MARKER) {
-        Some((path, hash))
-            if hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>
-        {
-            (path, Some(hash))
-        }
-        _ => (locator, None),
-    }
-}
-
-/// Every locator with its optional pinned digest (`MILE-129`), in the order
-/// written. The path is normalised exactly as [`parse_realized_by`] does.
-pub fn realized_by_pinned_locators(value: &str) -> Vec<(String, Option<String>)> {
-    realized_by_entries(value)
-        .into_iter()
-        .map(|(_, locator)| {
-            let (path, pin) = split_pin(locator);
-            (normalize_locator(path), pin.map(str::to_string))
-        })
-        .collect()
-}
-
-/// The categories a `Realized-by` entry can carry: the declared evidence
-/// categories (`Evidence`).
-const CATEGORIES: [&str; 3] = ["spec", "code", "test"];
-
-/// True when `rest` begins an entry: a category, then `:`.
-fn starts_entry(rest: &str) -> bool {
-    rest.trim_start()
-        .split_once(':')
-        .is_some_and(|(prefix, _)| CATEGORIES.contains(&prefix.trim()))
-}
-
-/// Splits a `Realized-by` value into `(category, locator)` entries. A comma
-/// separates entries only when a `category:` prefix follows it; any other
-/// comma belongs to the path (`BUG-129`). Text before the first category
-/// prefix belongs to no entry. A path that itself contains `,<category>:` is
-/// the one ambiguous shape; it reads as two entries.
-fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
-    let mut starts = Vec::new();
-    if starts_entry(value) {
-        starts.push(0);
-    }
-    for (i, _) in value.match_indices(',') {
-        if starts_entry(&value[i + 1..]) {
-            starts.push(i + 1);
-        }
-    }
-    let mut out = Vec::new();
-    for (n, &start) in starts.iter().enumerate() {
-        let end = starts.get(n + 1).map_or(value.len(), |next| next - 1);
-        if let Some((prefix, locator)) = value[start..end].split_once(':') {
-            out.push((prefix.trim(), locator));
-        }
-    }
-    out
-}
-
+/// A locator that parses is its normalised path; one that does not stays as
+/// written, normalised, so every reader still has a path to name.
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
-    for (prefix, locator) in realized_by_entries(value) {
-        let locator = normalize_locator(split_pin(locator).0);
+    for (prefix, locator) in crate::locator::realized_by_entries(value) {
+        let locator = match crate::locator::parse_locator(locator) {
+            Ok(l) => l.path,
+            Err(_) => normalize_locator(locator),
+        };
         match prefix {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
@@ -178,19 +115,24 @@ pub fn relation_field_name<'a>(
         .unwrap_or_else(|| role.default_field_name())
 }
 
-/// A `Realized-by` locator naming a path that is not in the working tree.
+// Implements: ADR-74 (every scope failure is reported here, never passed)
+/// A `Realized-by` locator that does not point at anything: a path that is
+/// not in the working tree, an empty one, one that does not parse, or a scope
+/// that does not resolve in the file (`ADR-74` point 6).
 ///
 /// `Embodiment` is computed from these paths, so a locator naming nothing lets
 /// a record claim verified work against a file that is not there -- and the
 /// claim reads as stronger than `Not started`, not weaker.
 ///
-/// `present` is supplied by the caller: this crate does not touch the
-/// filesystem.
+/// `present` and `read` are supplied by the caller: this crate does not touch
+/// the filesystem. `read` returns a file's text for a scope to resolve in.
 pub fn embodiment_locator_exists(
     records: &[Record],
     config: &Config,
     present: &dyn Fn(&str) -> bool,
+    read: &dyn Fn(&str) -> crate::locator::SharedText,
 ) -> (RuleExecution, Vec<Finding>) {
+    use crate::locator::{self, Anchor, FileText, ScopeError};
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
 
@@ -217,32 +159,7 @@ pub fn embodiment_locator_exists(
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
-            let realized = parse_realized_by(value);
-            for locator in realized
-                .spec
-                .iter()
-                .chain(&realized.code)
-                .chain(&realized.test)
-            {
-                // An empty locator joins to the repository root, which exists --
-                // so it would pass while still computing to `Implemented`.
-                if locator.trim().is_empty() {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("locator-empty").field(field),
-                        message: format!("{field} has an empty locator"),
-                    });
-                    continue;
-                }
-                if present(locator) {
-                    continue;
-                }
+            let mut report = |variant: &'static str, message: String| {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -251,9 +168,85 @@ pub fn embodiment_locator_exists(
                     waived: None,
                     declared_severity: None,
                     suggested_action: None,
-                    action_source: ActionSource::new("locator-missing").field(field),
-                    message: format!("{field} names '{locator}', which is not in the working tree"),
+                    action_source: ActionSource::new(variant).field(field),
+                    message,
                 });
+            };
+            for entry in locator::realized_by_locators(value) {
+                let l = match &entry.parsed {
+                    Ok(l) => l,
+                    Err(e) => {
+                        report(
+                            "locator-malformed",
+                            format!(
+                                "{field} names '{}', which does not parse: {e} (grammar: {})",
+                                entry.raw,
+                                locator::GRAMMAR
+                            ),
+                        );
+                        continue;
+                    }
+                };
+                // An empty locator joins to the repository root, which exists --
+                // so it would pass while still computing to `Implemented`.
+                if l.path.trim().is_empty() {
+                    report("locator-empty", format!("{field} has an empty locator"));
+                    continue;
+                }
+                if !present(&l.path) {
+                    // A `#` that did not parse as a scope stayed in the path: it
+                    // is a malformed scope, not a file missing from the tree.
+                    if l.path.contains('#') {
+                        report("locator-malformed", format!(
+                            "{field} names '{}', whose text after `#` is not a scope and which is not a file in the working tree (grammar: {})",
+                            l.path,
+                            locator::GRAMMAR
+                        ));
+                    } else {
+                        report(
+                            "locator-missing",
+                            format!(
+                                "{field} names '{}', which is not in the working tree",
+                                l.path
+                            ),
+                        );
+                    }
+                    continue;
+                }
+                if matches!(l.anchor, Some(Anchor::Commit(_))) {
+                    report(
+                        "locator-commit-anchor",
+                        format!(
+                            "{field} names '{}': {}",
+                            l.display(),
+                            ScopeError::CommitAnchor
+                        ),
+                    );
+                    continue;
+                }
+                let Some(scope) = &l.scope else { continue };
+                let resolved = match &*read(&l.path) {
+                    FileText::Text(text) => {
+                        locator::select_resolver(&config.locator_resolvers, &l.path)
+                            .and_then(|resolver| locator::resolve_scope(text, resolver, scope))
+                    }
+                    FileText::NotUtf8 => Err(ScopeError::NotUtf8),
+                    FileText::Missing => Err(ScopeError::NotFound(
+                        "the file could not be read".to_string(),
+                    )),
+                };
+                match resolved {
+                    Err(e) => report("locator-scope-unresolved", format!(
+                        "{field} names '{}', whose scope does not resolve: {e}",
+                        l.display()
+                    )),
+                    Ok(_) if l.anchor.is_none() => report("locator-scope-unpinned", format!(
+                        "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
+                        l.display(),
+                        l.display()
+                    )),
+                    Ok(_) => {}
+                }
             }
             Outcome::Examined
         },
@@ -677,20 +670,128 @@ mod tests {
     use crate::rules::tests::*;
 
     #[test]
-    fn a_sha256_pin_is_split_off_the_locator_and_malformed_pins_are_not() {
+    fn other_readers_see_the_bare_path_whatever_the_pin_or_scope() {
         let h = "a".repeat(64);
-        let value = format!("code:./src/a.rs@sha256:{h}, test:t.rs, spec:s.md@sha256:ABC");
-        assert_eq!(
-            realized_by_pinned_locators(&value),
-            vec![
-                ("src/a.rs".to_string(), Some(h.clone())),
-                ("t.rs".to_string(), None),
-                ("s.md@sha256:ABC".to_string(), None),
-            ]
-        );
-        // Every other reader sees the bare path.
+        let value = format!("code:./src/a.rs#Foo@sha256:{h}, test:t.rs, spec:s.md@sha256:ABC");
         assert_eq!(parse_realized_by(&value).code, vec!["src/a.rs".to_string()]);
         assert!(realized_by_locator_paths(&value).contains(&"src/a.rs".to_string()));
+        // A malformed pin is neither a pin nor a path; the existence rule
+        // reports it, and every other reader still has a path to name.
+        assert_eq!(
+            parse_realized_by(&value).spec,
+            vec!["s.md@sha256:ABC".to_string()]
+        );
+    }
+
+    // ---- scoped locators (ADR-74) ------------------------------------------------
+
+    fn scoped_config() -> Config {
+        let mut config = embodiment_config();
+        config.locator_resolvers = vec![yaml_serde::from_str(
+            r#"
+name: rust
+glob: "**/*.rs"
+start: '^\s*(pub\s+)?(fn|struct)\s+{symbol}\b'
+end: brace_balanced
+"#,
+        )
+        .unwrap()];
+        config
+    }
+
+    /// The findings of one `Realized-by` value over files `a.rs` (valid) and
+    /// `bin.rs` (not UTF-8).
+    fn exists_messages(value: &str) -> Vec<String> {
+        use crate::locator::FileText;
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            &format!("---\nRealized-by: '{value}'\n---\n"),
+        );
+        let present = |p: &str| matches!(p, "a.rs" | "bin.rs" | "weird#1.md" | "docs/c.md");
+        let read = |p: &str| {
+            std::rc::Rc::new(match p {
+                "a.rs" => FileText::Text("fn one() {\n}\nfn two() {\n}\nfn two() {\n}\n".into()),
+                "bin.rs" => FileText::NotUtf8,
+                "docs/c.md" => FileText::Text("Foo\n".into()),
+                _ => FileText::Missing,
+            })
+        };
+        let (_, findings) = embodiment_locator_exists(&[r], &scoped_config(), &present, &read);
+        findings.into_iter().map(|f| f.message).collect()
+    }
+
+    #[test]
+    fn a_pinned_scope_that_resolves_is_silent() {
+        let h = "a".repeat(64);
+        assert!(exists_messages(&format!(
+            "code:a.rs#one@sha256:{h}, code:a.rs#L1-L2@sha256:{h}"
+        ))
+        .is_empty());
+    }
+
+    #[test]
+    fn a_scope_without_a_pin_is_reported_and_names_the_authoring_route() {
+        let m = exists_messages("code:a.rs#one");
+        assert_eq!(m.len(), 1, "{m:?}");
+        assert!(
+            m[0].contains("without a pin") && m[0].contains("urzua explain"),
+            "{m:?}"
+        );
+    }
+
+    #[test]
+    fn every_scope_failure_is_one_finding_with_its_reason() {
+        let h = "b".repeat(64);
+        let cases = [
+            (format!("code:a.rs#missing@sha256:{h}"), "matches nothing"),
+            (format!("code:a.rs#two@sha256:{h}"), "ambiguous"),
+            (format!("code:a.rs#L1-L99@sha256:{h}"), "beyond the end"),
+            (format!("code:bin.rs#L1@sha256:{h}"), "not valid UTF-8"),
+            (
+                format!("code:docs/c.md#Foo@sha256:{h}"),
+                "no locator resolver",
+            ),
+            (
+                "code:a.rs#one@abcdef1".to_string(),
+                "commit anchor not yet supported",
+            ),
+            (format!("code:a.rs#one::<T>::f@sha256:{h}"), "unsupported"),
+        ];
+        for (value, reason) in cases {
+            let m = exists_messages(&value);
+            assert_eq!(m.len(), 1, "{value}: {m:?}");
+            assert!(m[0].contains(reason), "{value}: {m:?}");
+        }
+    }
+
+    #[test]
+    fn a_locator_that_does_not_parse_is_a_malformed_finding_not_a_missing_path() {
+        let h = "c".repeat(64);
+        for value in [
+            "code:a.rs#L0".to_string(),
+            "code:a.rs#L40-L10".to_string(),
+            format!("code:a.rs@abcdef1@sha256:{h}"),
+            "spec:s.md@sha256:ABC".to_string(),
+            "code:src/**#Foo".to_string(),
+        ] {
+            let m = exists_messages(&value);
+            assert_eq!(m.len(), 1, "{value}: {m:?}");
+            assert!(
+                m[0].contains("does not parse") && m[0].contains("grammar"),
+                "{value}: {m:?}"
+            );
+            assert!(!m[0].contains("not in the working tree"), "{value}: {m:?}");
+        }
+        // A `#` that is not a scope, on a file that is not there: a malformed
+        // scope naming the grammar, not a plain missing path.
+        let m = exists_messages("code:gone#1.md");
+        assert!(
+            m[0].contains("grammar") && !m[0].contains("not in the working tree"),
+            "{m:?}"
+        );
+        // The same text naming a file that is there passes.
+        assert!(exists_messages("code:weird#1.md").is_empty());
     }
 
     #[test]
@@ -698,13 +799,12 @@ mod tests {
         let r = parse_realized_by("code:src/weird,name.rs, test:tests/a, b.rs");
         assert_eq!(r.code, vec!["src/weird,name.rs".to_string()]);
         assert_eq!(r.test, vec!["tests/a, b.rs".to_string()]);
-        assert_eq!(
-            realized_by_pinned_locators("spec:docs/x,y.md,code:src/a.rs"),
-            vec![
-                ("docs/x,y.md".to_string(), None),
-                ("src/a.rs".to_string(), None)
-            ]
-        );
+        let entries = crate::locator::realized_by_locators("spec:docs/x,y.md,code:src/a.rs");
+        let paths: Vec<_> = entries
+            .iter()
+            .map(|e| e.parsed.as_ref().unwrap().path.clone())
+            .collect();
+        assert_eq!(paths, vec!["docs/x,y.md", "src/a.rs"]);
     }
 
     #[test]
@@ -850,8 +950,12 @@ mod tests {
         );
         let present = |p: &str| p == "src/real.rs";
 
-        let (exec, findings) =
-            embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
+        let (exec, findings) = embodiment_locator_exists(
+            std::slice::from_ref(&r),
+            &embodiment_config(),
+            &present,
+            &crate::locator::no_file_text,
+        );
         // One candidate per declared slot, whatever its locator count: the
         // population is the rule's input, not its work count.
         assert_eq!(examined(&exec), 1);
@@ -861,8 +965,12 @@ mod tests {
 
         // Every locator present means silence, not a rule that cannot fire.
         let all_there = |_: &str| true;
-        let (_, none) =
-            embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &all_there);
+        let (_, none) = embodiment_locator_exists(
+            std::slice::from_ref(&r),
+            &embodiment_config(),
+            &all_there,
+            &crate::locator::no_file_text,
+        );
         assert!(none.is_empty(), "{none:?}");
 
         // An empty locator names nothing, and the repo root exists -- so it
@@ -872,7 +980,12 @@ mod tests {
             "adr",
             "---\nRealized-by: 'code:'\n---\n",
         );
-        let (_, findings) = embodiment_locator_exists(&[empty], &embodiment_config(), &all_there);
+        let (_, findings) = embodiment_locator_exists(
+            &[empty],
+            &embodiment_config(),
+            &all_there,
+            &crate::locator::no_file_text,
+        );
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(
             findings[0].message.contains("empty locator"),
@@ -891,8 +1004,12 @@ mod tests {
                 "adr",
                 &format!("---\nRealized-by: code:{spelled}\n---\n"),
             );
-            let (_, findings) =
-                embodiment_locator_exists(std::slice::from_ref(&r), &embodiment_config(), &present);
+            let (_, findings) = embodiment_locator_exists(
+                std::slice::from_ref(&r),
+                &embodiment_config(),
+                &present,
+                &crate::locator::no_file_text,
+            );
             assert!(findings.is_empty(), "{spelled}: {findings:?}");
         }
         assert_eq!(normalize_locator("../x"), "../x");
@@ -921,8 +1038,12 @@ mod tests {
         );
         let present = |_: &str| false;
 
-        let (exec, findings) =
-            embodiment_locator_exists(std::slice::from_ref(&r), &config, &present);
+        let (exec, findings) = embodiment_locator_exists(
+            std::slice::from_ref(&r),
+            &config,
+            &present,
+            &crate::locator::no_file_text,
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("src/gone.rs"), "{findings:?}");
