@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN69PC0WBYK6ZWEBV9Z4D0
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review"
-Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_run_in_which_no_rule_examined_anything_is_not_ok@sha256:fbf927164325ade3c0fb2b5aeb29ca155b5e6767ca9293092c5e042456a85298, test:rust/crates/urzua-cli/tests/check_integration.rs#audit_with_neither_of_its_rules_declared_is_not_ok@sha256:231530bffcae3c70eb6e6ed27cfb9ef57bc0771d12d883264f4b472a19cd2f24
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_run_in_which_no_rule_examined_anything_is_not_ok@sha256:fbf927164325ade3c0fb2b5aeb29ca155b5e6767ca9293092c5e042456a85298, test:rust/crates/urzua-cli/tests/check_integration.rs#audit_with_no_rule_declared_is_not_ok@sha256:de68e88d0c241731ffa447cb02f6a5d5d3dfbfc398c87c639806533102b58f4c
 ---
 # 77 — check and audit report ok when no rule examined anything
 
@@ -48,3 +48,4 @@ trust. It was not yet applied to the place the verdict is computed.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-05 | Realized-by locator `audit_with_neither_of_its_rules_declared_is_not_ok` re-pointed to `audit_with_no_rule_declared_is_not_ok`. **Why:** `MILE-190` renamed the test when `audit` stopped owning a rule set; it asserts the same behavior for a run in which no rule is declared. | **structural** |

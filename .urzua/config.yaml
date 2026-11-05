@@ -308,14 +308,13 @@ record_types:
       # Realized-by, as for every other type. A `test:` locator computes to
       # Verified, a `code:` locator to Implemented; either under Open is a
       # disagreement `urzua fix --apply` repairs, and a deliberately open bug
-      # with evidence is waived with a reason and an expiry. A Fixed bug with
-      # no evidence is legitimate (a documentation, performance or workflow
-      # change has no test), so this type declares no unevidenced tier and
-      # reports only the first direction. A source back-pointer is not
+      # with evidence is waived with a reason. A Fixed bug with no evidence is
+      # reported (a done record with no evidence is reported, ADR-84); one
+      # that legitimately has none is waived. A source back-pointer is not
       # evidence here: only the declared field counts.
       delivery:
         delivered_tiers: ["Verified", "Implemented"]
-        unevidenced_tiers: []
+        unevidenced_tiers: ["Not started"]
         not_done: ["Open"]
         set_status: "Fixed"
         back_pointer_evidence: false
@@ -418,6 +417,8 @@ rules:
   config.known-fields-declaration-missing: error
   config.header-none-has-no-required-fields: error
   config.scope-matches-nothing: warn
+  # Reports this file when it is read through a schema upgrade (ADR-77, MILE-34).
+  config.schema-version-outdated: warn
   section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error

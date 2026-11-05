@@ -2,6 +2,7 @@
 Stable-Id: 01M373DYSJ4RC12J0XKH8EJRYG
 Status: Fixed
 Found-in: "MILE-112's duplication sweep"
+Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#a_non_resolving_pointer_is_an_error@sha256:b574f4ec3caea8639cd99fd8fcc722e86f999a23872cc99b9d2ece710adc6a9a, test:rust/crates/urzua-core/src/rules/pointer.rs#target_status_judges_only_the_statuses_a_repository_declared@sha256:3dec110571d2cb7ad4e48e74a906d9474641f8118fbeb3e030e833258a2a2046, test:rust/crates/urzua-core/src/rules/narrative.rs#blocked_on_free_text_with_no_reference_is_skipped@sha256:b0a65ebce1923dd13cbac83ed5d0e5dca3d384e37d3caca14cf1c1d347158cc8, test:rust/crates/urzua-core/src/rules/relation.rs#relation_target_status_undeclared_flags_a_resolving_reference_to_an_undeclaring_type_observed_failing@sha256:ca11ae7cf1c144e89c5a032cd910d68b79f39f8ff384b65143ce0f8d23a253c7
 ---
 # 140 — four reference-resolving rules duplicate the same declared-field guard chain
 
@@ -46,13 +47,9 @@ findings.
 - `BUG-133`/`BUG-134`/`BUG-135`/`BUG-138` -- the same duplication-drift shape found earlier in the same
   sweep, at other places in this file.
 
-## Regression test
-
-none -- pure extraction, no behavior change; each of the 4 rules' own existing tests cover the unreadable/absent/empty-references cases unchanged
-
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by MILE-112's duplication sweep. **Why:** four rules independently re-derived the identical declared-field resolution guard chain. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
-> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); the 4 existing tests that cover the change are now cited as `test:` locators in `Realized-by`, and the prose text is removed. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

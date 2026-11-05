@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6MF5W5K7R6PVMV1B71HRG3C
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/citation.rs, code:rust/crates/urzua-core/src/rules/runner.rs, test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs
 ---
 # 186 — Report declared non-reference entries in their own field-entry population
 
@@ -28,3 +29,4 @@ Blocked-on: —
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** the field-entry population `ADR-75` clause 3 asks for was deferred by the `BUG-190` build. | **substantive** |
+> | 2026-11-05 | Delivered and set `Done`: `PopulationUnit::FieldEntry` (`field-entry`) is documented in `SPEC-2` with the output-contract change; `citation.resolution` with `non_reference_field` set reports a second `rules_executed` entry counting each declared entry (zero eligible over no declarations); the uncited and malformed findings are counted there and `config.scope-matches-nothing` does not read it as a misconfiguration; it is exercised on `ADR-18` and `RFC-5` in this repository's own corpus (two eligible entries, both examined). **Why:** each Done-means item is met and tested end to end; the maintainer reviewing the pull request is the human decision. | **substantive** |

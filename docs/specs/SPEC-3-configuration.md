@@ -1,5 +1,5 @@
 ---
-Version: '0.76'
+Version: '0.78'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -655,7 +655,7 @@ see and correct; a default applied silently at read time is a fact nobody review
 ## Exit threshold: `fail_on`
 
 A top-level `fail_on` sets the lowest unwaived finding severity that makes `urzua check` and
-`urzua audit` exit 1 (`MILE-145`):
+`urzua audit` (an alias of `check`, `ADR-79`) exit 1 (`MILE-145`):
 
 ```yaml
 fail_on: warning   # error (default) | warning
@@ -929,13 +929,101 @@ config is structured.
 Criterion 4 is the point of the spec. The claim is only worth something if we would notice it being
 false.
 
+## Supported schema versions
+
+`schema_version` is the first key of every config and is required (`ADR-12`, `ADR-52`). A release
+reads the current version `N` and the one before it, `N-1` (`ADR-77`, decided in `RFC-49`); a version
+older than `N-1` or newer than `N` is outside the window. Each release is one row; its upgrade step is
+the one from the row's older version to its newer.
+
+| Release | Reads | Writes |
+|---|---|---|
+| `0.4.0` | 1, 2 | 2 |
+
+`urzua check` and every other command that loads the config behave in one of three ways:
+
+- **At `N`.** Read as written.
+- **At `N-1`.** Upgraded in memory to `N` before any rule runs, so a rule only ever sees the current
+  shape. `config.schema-version-outdated` (`SPEC-2`) reports one warning on the config file, naming the
+  version found, the current version, the keys the upgrade dropped and the command that rewrites the
+  file. Under `fail_on: warning` that fails a strict repository until the file is migrated. The rule is
+  opt-in like every rule, and the upgrade enables it (the upgraded config and the file `migrate config`
+  writes both name it at `warn`), so a config upgraded once is reported by the next release that moves
+  the version again.
+- **Outside the window.** The run does not start: exit 2, `status: not-run`, the usual `error`
+  sentence, and a `schema_version_error` object:
+
+  ```json
+  {
+    "found": 7,
+    "supported": [1, 2],
+    "current": 2,
+    "migration": { "release": null, "command": null, "note": "this config is newer than this build; ..." }
+  }
+  ```
+
+  `migration.release` is the oldest release that still reads `found` and `migration.command` the
+  command to run with it (`urzua migrate config`); both are `null` when no release reads `found` (a
+  version newer than `current`, or one no release ever read), and `note` says what to do either way.
+  Nothing else in the file is read first, so a bad key in a config of the wrong version is not reported
+  in place of the version.
+
+`urzua migrate config` (`SPEC-14`) rewrites an `N-1` config to `N` in place, keeping its comments, and
+lists every key it added, changed, renamed, moved or dropped. A second run reports `nothing-to-do`.
+It never reads a version outside the window, so there is no chain of steps: an adopter who skips a
+release installs the older release that reads their version, migrates, and moves on.
+
+### Version 1
+
+Version 1 is the shape `.urzua/config.yaml` had from its introduction (`ADR-52`) until `MILE-80` made
+every rule opt-in. It was current on `main` for a day and no release read it as YAML: the `0.3.0`
+release read `.urzua/config.toml` at `schema_version: 1`, a format nothing reads any more (`ADR-54`). The
+upgrade to version 2 does exactly what that break did:
+
+- **No `rules` table.** A version-1 build ran every rule, each at a severity the rule chose, and a
+  version-1 config with a `rules` key is refused as not a version-1 config. The upgrade names every
+  rule the version-1 build ran, at the severity it ran, so the config keeps running what it ran:
+  `header.required-fields`, `config.pointer-declaration-missing`, `config.pointer-field-not-known`,
+  `config.pointer-narrative-overlap`, `pointer.resolution`, `filename.title-consistency`,
+  `revision-log.change-class-required` and `relation.supersession-reciprocity` at `error`;
+  `header.field-set-consistency`, `type.no-declared-spec`, `header.pointer-field-clean`,
+  `embodiment.consistency` and `embodiment.locator-promotion-candidate` at `warn`; and `field.quality`
+  at `error` with `field.pending` at `warn`, the two halves of one version-1 rule.
+- **Dropped, and reported as dropped.** The per-type `header_layout` key and the rule that read it
+  (`header.layout-consistency`); `header.deprecated-shape`, whose header shapes no release reads;
+  `narrative-field.stale`, which version 2 refuses without a `terminal_statuses` list a version-1
+  config had no place to declare; and `pointer.target-status`, which version 1 ran by announcing the
+  status of every resolved reference and which version 2 runs only for statuses a repository declares.
+- **Not converted.** A version-1 config that names a removed `header_shape` (`blockquote`,
+  `bold-list`) is not made valid by the upgrade: those shapes are no longer read (`MILE-85`), so the
+  upgraded config fails to load with that error and `migrate config` leaves the file as it was.
+- **Refused.** A version-1 record type that omits `header_shape` meant `blockquote`, and the default
+  is now `yaml-frontmatter`. The upgrade does not carry that across silently, and it cannot write
+  `blockquote`, which no release reads (`ADR-54`: a break is a break). It refuses, in memory and in
+  `migrate config`, with an error naming each such type (`record_types.<name>`), the removed shape and
+  the repair: rewrite the type's records as YAML frontmatter and declare `header_shape:
+  yaml-frontmatter` (or `none`) on the type. The file is left as it was.
+
+### When a version bump is required
+
+`schema_version` changes only for a break: a removed or renamed key, a changed meaning for an existing
+key, or a default that changes behaviour for an unchanged config. An additive optional key whose
+default preserves behaviour is not a break and needs no bump. A reviewer applies this to a config
+change; a change that is a break and does not bump the version is a defect in the change.
+
+A bump to `N+1` is one change that: raises `CURRENT_SCHEMA_VERSION`; replaces the upgrade step in
+`urzua-core::schema_version` with the one from `N` to `N+1` (the previous step is deleted, not kept);
+adds a row to the table above and to `RELEASES`; enables `config.schema-version-outdated` in the new
+step; and adds a fixture config at each supported version to the acceptance corpora, with a case
+proving each loads to the same effective config.
+
 ## Open questions
 
 - **Can scoped overrides express per-package variation without becoming a second config format?**
   The moment overrides gain their own resolution order, this is per-package configs with extra
   steps.
-- **Does the config need a version field?** It has no consumers yet, so a version costs nothing now
-  and is unaddable later without a migration.
+- **Does the config need a version field?** Answered: it has one, `schema_version`, and a window of
+  versions a release reads (see "Supported schema versions").
 - **Where do back-pointer patterns live** — config, or fixed by the record format (ADR-2)? Making
   them configurable is what lets a corpus keep its existing `Implements:` convention; fixing them is
   what makes cross-repo resolution possible (roadmap Phase 4).
@@ -1440,4 +1528,6 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
 > | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
-> | 2026-11-05 | Bumped to `0.76`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
+> | 2026-11-05 | Bumped to `0.77`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
+> | 2026-11-05 | Bumped to `0.78`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |

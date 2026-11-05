@@ -16,3 +16,4 @@ expect_rules_ran:
   - config.relation-field-not-known
   - config.known-fields-declaration-missing
   - config.scope-matches-nothing
+  - config.schema-version-outdated

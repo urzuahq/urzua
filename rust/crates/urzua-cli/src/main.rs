@@ -125,6 +125,12 @@ enum Command {
         /// editor hook. Cannot be combined with PATHS or --base.
         #[arg(long, value_name = "PATH")]
         stdin_path: Option<PathBuf>,
+        /// Run only these declared rules (comma-separated ids). Narrows what
+        /// runs and never enables a rule; an id the configuration does not
+        /// declare is an error (exit 2). The report names the filter in
+        /// `rules_selected` and omits the other rules from `rules_executed`.
+        #[arg(long, value_delimiter = ',', value_name = "ID")]
+        rules: Vec<String>,
         paths: Vec<PathBuf>,
     },
 
@@ -136,13 +142,12 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
-    /// Cross-record reconciliation: supersession reciprocity, dangling
-    /// references. Embodiment consistency lives in `check` and `fix`
-    /// instead -- it turned out to be per-record, not cross-record
-    /// (ADR-0018/0019).
+    /// Deprecated alias of `check`: runs every rule the configuration
+    /// declares and prints `check`'s report, plus a deprecation notice that
+    /// never changes the exit code. Use `check` instead, or `check --rules
+    /// <id>[,<id>...]` for a narrower run. Removed in the next release.
     ///
-    /// Reports only. Never writes -- bulk cross-reference rewriting is a
-    /// real data-loss risk without one.
+    /// Reports only. Never writes.
     Audit,
 
     /// Migrate the corpus itself: identifiers, or field-schema rollout.
@@ -265,6 +270,12 @@ enum MigrateTarget {
         apply: bool,
     },
 
+    /// Rewrite the config from the previous schema version to the current one,
+    /// in place, keeping its comments. Reports every key it added, changed,
+    /// renamed, moved or dropped, and reports nothing to do when the config is
+    /// already current. A version outside what this build reads is refused.
+    Config,
+
     /// Field-rollout assistant for a newly-required field. Only --report
     /// exists so far: a read-only preview of which existing records would
     /// newly fail, before the field is ever added to config.
@@ -325,8 +336,19 @@ fn main() -> ExitCode {
             base,
             fail_on,
             stdin_path,
+            rules,
             paths,
-        } => commands::check::run(cli.config, paths, base, fail_on.map(Into::into), stdin_path),
+        } => commands::check::run(
+            cli.config,
+            commands::check::CheckArgs {
+                paths,
+                base,
+                fail_on: fail_on.map(Into::into),
+                stdin_path,
+                rules,
+                ..Default::default()
+            },
+        ),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
         Command::New {
@@ -338,6 +360,9 @@ fn main() -> ExitCode {
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
         } => commands::migrate::run_ids(cli.config, apply),
+        Command::Migrate {
+            target: MigrateTarget::Config,
+        } => commands::migrate::run_config(cli.config),
         Command::Migrate {
             target:
                 MigrateTarget::Schema {

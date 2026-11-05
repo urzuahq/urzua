@@ -32,6 +32,7 @@ pub const RULE_RELATION_CROSS_TYPE_DISALLOWED: &str = "relation.cross-type-disal
 pub const RULE_SEQUENCE_CYCLE: &str = "sequence.cycle";
 pub const RULE_SEQUENCE_UNRESOLVED_BLOCKER: &str = "sequence.unresolved-blocker";
 pub const RULE_RELATION_TARGET_STATUS_UNDECLARED: &str = "relation.target-status-undeclared";
+pub const RULE_CONFIG_SCHEMA_VERSION_OUTDATED: &str = "config.schema-version-outdated";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";

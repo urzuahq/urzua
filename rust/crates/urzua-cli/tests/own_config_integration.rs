@@ -121,8 +121,9 @@ fn finding_rules(dir: &Path) -> Vec<String> {
 
 /// `ADR-84`: a bug's `Status` follows its `Realized-by`. An `Open` bug whose
 /// evidence names a test is a finding `urzua fix` repairs; a `Fixed` one with a
-/// test, and one with no evidence at all (a change with no test), are not, and
-/// neither is an `Open` one with none. A bug carrying the retired
+/// test is not, and neither is an `Open` one with none. A `Fixed` bug with no
+/// evidence at all is reported too: a done record with no evidence is a finding
+/// (a bug that legitimately has none is waived). A bug carrying the retired
 /// `Regression-test` field is reported as an unknown field.
 #[test]
 fn a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not() {
@@ -141,11 +142,16 @@ fn a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not() {
         finding_rules(&open),
         vec!["status.delivery-agreement".to_string()]
     );
-    for (status, extra) in [("Fixed", by_scope), ("Fixed", ""), ("Open", "")] {
+    for (status, extra) in [("Fixed", by_scope), ("Open", "")] {
         let dir = files(status, extra);
         let rules = finding_rules(&dir);
         assert!(rules.is_empty(), "{status} {extra:?}: {rules:?}");
     }
+    let unevidenced = files("Fixed", "");
+    assert_eq!(
+        finding_rules(&unevidenced),
+        vec!["status.delivery-agreement".to_string()]
+    );
     let retired = files("Fixed", "Regression-test: rust/t.rs::a_real_test\n");
     assert!(
         !finding_rules(&retired).is_empty(),
@@ -161,14 +167,14 @@ fn the_declared_pending_vocabulary_reads_whole_values_only() {
         "mentions-pending",
         &[(
             "docs/bugs/BUG-1-a-bug.md",
-            &bug("Fixed", "'a pending review of the release'", ""),
+            &bug("Open", "'a pending review of the release'", ""),
         )],
     );
     let rules = finding_rules(&dir);
     assert!(rules.is_empty(), "{rules:?}");
     let whole = repo(
         "whole-pending",
-        &[("docs/bugs/BUG-1-a-bug.md", &bug("Fixed", "pending", ""))],
+        &[("docs/bugs/BUG-1-a-bug.md", &bug("Open", "pending", ""))],
     );
     assert!(
         finding_rules(&whole).contains(&"field.pending".to_string()),

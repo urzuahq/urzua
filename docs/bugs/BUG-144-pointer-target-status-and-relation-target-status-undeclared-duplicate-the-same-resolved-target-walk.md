@@ -2,6 +2,7 @@
 Stable-Id: 01M376A49FF9QM8YWCKQARWKW2
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 26"
+Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#target_status_judges_only_the_statuses_a_repository_declared@sha256:3dec110571d2cb7ad4e48e74a906d9474641f8118fbeb3e030e833258a2a2046, test:rust/crates/urzua-core/src/rules/relation.rs#relation_target_status_undeclared_flags_a_resolving_reference_to_an_undeclaring_type_observed_failing@sha256:ca11ae7cf1c144e89c5a032cd910d68b79f39f8ff384b65143ce0f8d23a253c7
 ---
 # 144 — pointer.target-status and relation.target-status-undeclared duplicate the same resolved-target walk
 
@@ -29,13 +30,9 @@ full test suite and real-corpus finding count unchanged.
 - `BUG-140`/`BUG-141` -- the same duplication-drift shape found in the same review, at other places in
   this file.
 
-## Regression test
-
-none -- pure extraction, no behavior change; each rule's own existing tests are unchanged and pass
-
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by a full-release code review. **Why:** two rules shared the identical resolved-target walk, differing only in their final predicate. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
-> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); the 2 existing tests that cover the change are now cited as `test:` locators in `Realized-by`, and the prose text is removed. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

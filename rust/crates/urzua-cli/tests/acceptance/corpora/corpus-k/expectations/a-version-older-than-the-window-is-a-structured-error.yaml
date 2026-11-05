@@ -1,0 +1,13 @@
+id: a-version-older-than-the-window-is-a-structured-error
+corpus: corpus-k
+invocation: [--config, .urzua/config-v0.yaml, check]
+# Outside the window the run does not start: exit 2 and {found, supported,
+# current, migration} as data (ADR-77).
+expect_exit: 2
+expect_json:
+  - {at: /status, equals: not-run}
+  - {at: /schema_version_error/found, equals: 0}
+  - {at: /schema_version_error/supported, equals: [1, 2]}
+  - {at: /schema_version_error/current, equals: 2}
+  - {at: /schema_version_error/migration/release, equals: null}
+mutation_exempt: a config that fails to load; no rule runs, so there is no rule to switch off.

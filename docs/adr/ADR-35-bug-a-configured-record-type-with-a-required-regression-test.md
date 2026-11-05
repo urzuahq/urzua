@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml#record_types::bug@sha256:7f267824073e3ec5db3a172110b9ea7414f945a278be3d81160fd6fb63f3c507, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_bug_needs_found_in_and_a_what_was_wrong_section@sha256:83080eb2059b6c6eb69353b0a8730fa705e8a160c25134f84c7c16c18ee206bf, test:rust/crates/urzua-cli/tests/own_config_integration.rs#a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not@sha256:d256a87ded76bd29035c00ae359f771f551c8f73de1e3ae225ec999d2076adb6
+Realized-by: code:.urzua/config.yaml#record_types::bug@sha256:908086d76c3339a33b77a50a67d64ef3b73ae6e0adc5f83135c811aac0123a12, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_bug_needs_found_in_and_a_what_was_wrong_section@sha256:83080eb2059b6c6eb69353b0a8730fa705e8a160c25134f84c7c16c18ee206bf, test:rust/crates/urzua-cli/tests/own_config_integration.rs#a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not@sha256:d256a87ded76bd29035c00ae359f771f551c8f73de1e3ae225ec999d2076adb6
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -70,6 +70,31 @@ declares five: `Open`, `Fixed`, `WontFix`, `Not a bug` and `Rejected`. The requi
 (`Status`, `Found-in`, `Regression-test`) and the rest of the Decision are unchanged. The declared
 list in the config is the authority; this text does not enumerate it again.
 
+## Amendment (2026-11-05): the named test is carried by `Realized-by`, and `Regression-test` is retired
+
+*Status of this amendment: accepted 2026-11-05 by the maintainer (drafted 2026-11-05 at the maintainer's request). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The Decision requires a bug to name the test that proves its fix, and says why: a bug with no
+regression test is a claim nobody verified. That requirement still holds. What changes is where it is
+written. `ADR-84` makes `Realized-by` the one evidence field of every record type and holds a record's
+`Status` to it, so a bug now names its test as a `test:` locator in `Realized-by`, and the
+`Regression-test` field is retired: it is no longer in the `bug` type's `required_fields`, the
+template or `SPEC-9`.
+
+What a reader of the Decision should take from this:
+
+- A `Fixed` bug with a `test:` locator computes to `Verified`; a `Fixed` bug with no evidence at all is
+  a `status.delivery-agreement` finding, because the `bug` type declares `Not started` as an
+  unevidenced tier. The check that a named test exists is no longer `field.quality` on a blank
+  `Regression-test`; it is `embodiment.locator-exists` and the evidence pin on the locator.
+- A bug that has no test because none fits (a records, documentation, workflow or performance change)
+  is not made to cite one; it is recorded as a waiver (`ADR-11`), so the exception stays visible.
+- The `Realized-by` line in the Decision, which points "at the actual fix commit/function", is
+  unchanged and now also carries the test locators.
+
+The `Context`, the `Reversibility` section and the first Consequence describe the field as it stood
+and are left as written.
+
 ## References
 
 - ADR-34 — the `milestone` type this is a sibling of, and the reasoning this ADR follows.
@@ -89,5 +114,6 @@ list in the config is the authority; this text does not enumerate it again.
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Narrowed to the item the decision concerns; re-pin approved by the maintainer's 2026-11-04 drift decision (`ADR-74`, `MILE-185`): `config.yaml` to `record_types::bug` (lines 247-295). The test locator `check_integration.rs`, which has no test of the `Regression-test` requirement, is replaced, not narrowed, by `own_config_integration.rs#a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not` (lines 122-167). **Why:** an unrelated edit to a volatile file must not stale this pin again; the spans were chosen by the author of this change and not reviewed line by line by the maintainer. | **structural** |
 > | 2026-11-05 | Re-baselined (BUG-50, attested by this PR's review): re-pinned `.urzua/config.yaml#record_types::bug` 0f500a61157f -> ae2814c161f8. Reason: BUG-50 added one `revision_log: {marker, required: true}` declaration to the bug type; its Found-in, Regression-test and section requirements this record cites are unchanged **Why:** the pinned evidence changed and the PR review is the human re-verification that the claim still holds. | **structural** |
-> | 2026-11-05 | `Realized-by` test locator re-pointed: `own_config_integration.rs#a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not` no longer exists, replaced by `record_types_own_config_integration.rs#a_bug_needs_found_in_and_a_what_was_wrong_section` (the type's required fields) and `own_config_integration.rs#a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not` (the type's evidence). The Decision text is unchanged; its `Regression-test` field is retired and its named test is carried by `Realized-by` locators (`ADR-84`), which no longer makes a `Fixed` bug with no test a finding. **Why:** `ADR-84`'s repository migration retired the field and rewrote the test that exercised it; whether `ADR-35` is amended or superseded by it is for the maintainer. | **structural** |
-> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `.urzua/config.yaml#record_types::bug` (lines 274-333) ae2814c161f8 -> 7f267824073e. Reason: ADR-84 migration changed the bug type's declaration: Regression-test is removed from required_fields and from statuses.require (its values moved into Realized-by as test: locators), and statuses.delivery with back_pointer_evidence: false is added. The type still requires Status and Found-in and keeps its pending vocabulary; it no longer requires a named test to be Fixed. That last part of ADR-35's decision is carried by Realized-by evidence instead, and whether ADR-35 is amended or superseded is for the maintainer. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | `Realized-by` test locator re-pointed: `own_config_integration.rs#a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not` no longer exists, replaced by `record_types_own_config_integration.rs#a_bug_needs_found_in_and_a_what_was_wrong_section` (the type's required fields) and `own_config_integration.rs#a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not` (the type's evidence). The Decision text is unchanged; its `Regression-test` field is retired and its named test is carried by `Realized-by` locators (`ADR-84`, and the amendment of this date). **Why:** `ADR-84`'s repository migration retired the field and rewrote the test that exercised it. | **structural** |
+> | 2026-11-05 | Amendment accepted: the requirement for a named test still holds, now carried by `Realized-by` under `ADR-84`, and `Regression-test` is retired. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `.urzua/config.yaml#record_types::bug` (lines 274-332) ae2814c161f8 -> 908086d76c33. Reason: The bug type's declaration changed: Regression-test is removed from required_fields and from statuses.require, and statuses.delivery is added (delivered_tiers Verified and Implemented, unevidenced_tiers Not started, not_done Open, set_status Fixed, back_pointer_evidence false). The type still requires Status and Found-in. It no longer requires a Regression-test field; the requirement for a named test is now carried by Realized-by under ADR-84, as the amendment of 2026-11-05 records **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

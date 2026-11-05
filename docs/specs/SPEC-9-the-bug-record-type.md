@@ -42,7 +42,7 @@ record_types:
       failure: ["WontFix", "Not a bug", "Rejected"]
       delivery:
         delivered_tiers: ["Verified", "Implemented"]
-        unevidenced_tiers: []
+        unevidenced_tiers: ["Not started"]
         not_done: ["Open"]
         set_status: "Fixed"
         back_pointer_evidence: false
@@ -66,15 +66,16 @@ bug that is `Open` while its `Realized-by` computes to `Verified` or `Implemente
 `status.delivery-agreement` finding, and `urzua fix --apply --ids <bug>` sets `Fixed` with a
 structural revision row. A bug that is deliberately open with evidence (a partial fix) is not given a
 new status: it is waived with the existing `waiver` record, scoped to the bug's path, with the rule
-set to `status.delivery-agreement`, a `Reason` and an `Expires`. This type declares no unevidenced
-tier, so a `Fixed` bug with no evidence (a documentation, performance or workflow change has no
-test) is not reported, and `back_pointer_evidence: false` makes a source back-pointer that cites the
-bug not count.
+set to `status.delivery-agreement` and a `Reason`. This type declares `Not started` as an unevidenced
+tier, so a `Fixed` bug with no evidence is a `status.delivery-agreement` finding (`ADR-84`: a done
+record with no evidence is reported). A bug that legitimately has no test (a documentation, records,
+workflow or performance change) is waived with the same `waiver` record, not given invented evidence.
+`back_pointer_evidence: false` makes a source back-pointer that cites the bug not count.
 
 The retired `Regression-test` field is no longer known to the type; its values were migrated into
 `Realized-by` as locators. A value that named no test (prose, `none`, a test that no longer exists)
 is not evidence: the original text of such a record is kept under a `## Regression test` heading in
-its body.
+its body, and its `Realized-by` stays empty.
 
 No `Phase`/`Track` — a bug isn't planned or grouped the way a milestone is; it either exists because
 something broke, or it doesn't exist yet.
@@ -105,4 +106,4 @@ something broke, or it doesn't exist yet.
 > | 2026-11-05 | Bumped to `0.6`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `a_bug_needs_found_in_and_regression_test_and_a_what_was_wrong_section`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.7`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
-> | 2026-11-05 | Bumped to `0.8`. The `Regression-test` field is retired: its values moved into `Realized-by` as `test:` locators, `required_fields` is `Status` and `Found-in`, and the type declares `statuses.delivery` (`ADR-84`), so a bug's `Status` follows its `Realized-by`. A deliberately open bug with evidence is a scoped, expiring waiver. **Why:** `ADR-84` makes `Realized-by` the one evidence field for every type, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. The `Regression-test` field is retired: its values moved into `Realized-by` as `test:` locators, `required_fields` is `Status` and `Found-in`, and the type declares `statuses.delivery` (`ADR-84`), so a bug's `Status` follows its `Realized-by`. A deliberately open bug with evidence, and a `Fixed` bug with no evidence, are each a waiver. **Why:** `ADR-84` makes `Realized-by` the one evidence field for every type, accepted by the maintainer on 2026-11-05. | **substantive** |

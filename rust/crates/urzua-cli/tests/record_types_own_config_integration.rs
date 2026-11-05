@@ -156,12 +156,16 @@ fn a_bug_status_outside_the_declared_vocabulary_is_a_finding_and_fixed_may_be_fi
         )],
     );
     assert!(check_rules(&closed, "BUG-1-").contains(&"status.undeclared-value".to_string()));
+    let evidenced = "Found-in: a review\nRealized-by: test:rust/t.rs\n";
     let fixed = repo(
         "bug-fixed",
-        &[(
-            "docs/bugs/BUG-1-a-bug.md",
-            &bug("Fixed", ok, "What was wrong"),
-        )],
+        &[
+            (
+                "docs/bugs/BUG-1-a-bug.md",
+                &bug("Fixed", evidenced, "What was wrong"),
+            ),
+            ("rust/t.rs", "#[test]\nfn a_real_test() {}\n"),
+        ],
     );
     assert!(check_rules(&fixed, "BUG-1-").is_empty());
 }
@@ -325,12 +329,19 @@ fn audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one() 
             ("docs/adr/ADR-2-a-decision.md", &n2(new_both)),
         ],
     );
+    // `audit` is `check` over every declared rule now (ADR-79), so a fixture
+    // repo that lacks this repository's source directories reports other
+    // rules; what this test pins is that a reciprocated supersession is not
+    // reported.
     let out = urzua(&good, &["audit"]);
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&out.stdout)
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !json(&out)["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"] == "relation.supersession-reciprocity"),
+        "{stdout}"
     );
 }
 
