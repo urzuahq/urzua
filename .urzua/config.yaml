@@ -32,12 +32,20 @@ record_types:
       - "Accepted-on"
       - "Derives-from"
       - "Supersedes / Superseded-by"
+      - "Non-reference-ids"
     statuses:
       values: ["Proposed", "Accepted", "Rejected", "Superseded", "Retired"]
       success: ["Accepted"]
       failure: ["Rejected", "Superseded", "Retired"]
       implementable: ["Accepted"]
       claim_retained: ["Superseded", "Retired"]
+      # The lifecycle (MILE-144, ADR-72): a decision is Proposed, then Accepted or
+      # Rejected; an Accepted one is later Superseded or Retired. A decision enters
+      # Proposed and is accepted in a later change, never filed already Accepted.
+      initial: ["Proposed"]
+      transitions:
+        Proposed: ["Accepted", "Rejected"]
+        Accepted: ["Superseded", "Retired"]
       # The type's placeholder vocabulary (MILE-153): whole values, and patterns. It
       # feeds field.pending and makes status.require count them as missing, so
       # an Accepted ADR whose Deciders reads "Unknown" is not decided.
@@ -87,11 +95,19 @@ record_types:
       - "Amended-by"
       - "Amended-by-pending"
       - "Implements"
+      - "Non-reference-ids"
     statuses:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
       success: ["Accepted"]
       failure: ["Rejected", "Superseded"]
       implementable: ["Accepted"]
+      initial: ["Draft"]
+      transitions:
+        Draft: ["Discussion", "Accepted", "Rejected"]
+        Discussion: ["Draft", "Accepted", "Rejected"]
+        Accepted: ["Superseded"]
+        # A rejected proposal can be reopened as a draft (RFC-30).
+        Rejected: ["Draft"]
     spec: "SPEC-17"
     pointer_fields:
       - "Implements"
@@ -130,6 +146,10 @@ record_types:
       values: ["Draft", "Accepted", "Shipped"]
       success: ["Accepted", "Shipped"]
       implementable: ["Accepted", "Shipped"]
+      initial: ["Draft"]
+      transitions:
+        Draft: ["Accepted"]
+        Accepted: ["Shipped"]
       require:
         - {when: ["Shipped"], fields: ["Embodiment", "Realized-by"]}
     spec: "SPEC-18"
@@ -162,6 +182,15 @@ record_types:
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.
       implementable: ["Planned", "InProgress", "Done"]
+      # A milestone starts Planned, or Blocked when filed already waiting, or Done
+      # when the PR that files it delivers it. Done can be reopened; WontDo is
+      # terminal (SPEC-6).
+      initial: ["Planned", "Blocked", "Done"]
+      transitions:
+        Planned: ["InProgress", "Blocked", "Done", "WontDo"]
+        InProgress: ["Planned", "Blocked", "Done", "WontDo"]
+        Blocked: ["Planned", "InProgress", "Done", "WontDo"]
+        Done: ["Planned", "InProgress"]
       # Status is held to the evidence (MILE-183): the PR that delivers a
       # milestone sets Realized-by and Done together. Implemented or Verified
       # evidence under a not-done status is a disagreement `urzua fix --apply`
@@ -204,6 +233,15 @@ record_types:
       success: ["Fixed"]
       failure: ["WontFix", "Not a bug", "Rejected"]
       implementable: ["Open"]
+      # A bug fixed in the PR that files it starts Fixed (the fixed-in-PR
+      # convention); a fixed or closed bug can be reopened.
+      initial: ["Open", "Fixed"]
+      transitions:
+        Open: ["Fixed", "WontFix", "Not a bug", "Rejected"]
+        Fixed: ["Open"]
+        WontFix: ["Open"]
+        "Not a bug": ["Open"]
+        Rejected: ["Open"]
       # Whole values only (BUG-65): a Regression-test that merely mentions
       # the word, or names a test called a_pending_..., is a real value.
       pending:
@@ -297,6 +335,10 @@ rules:
     level: warn
     pending_until_required: true
   status.undeclared-value: error
+  # Each type's lifecycle graph is enforced on a `--base` run, and a declared
+  # status the graph cannot reach is reported (MILE-144, ADR-72).
+  status.transition-allowed: error
+  status.unreachable-state: warn
   status.required-field-missing: error
   date.field-valid:
     level: error
@@ -380,6 +422,10 @@ rules:
   citation.resolution:
     level: warn
     external_ids: ["RFC-822", "RFC-4122"]
+    # A record lists here the ids it names without citing as a reference, so
+    # a record later created with that number does not capture the citation
+    # (BUG-190, ADR-75).
+    non_reference_field: "Non-reference-ids"
     # Revision-log rows are append-only history (RFC-6): an id they cite
     # as it was when the row was written is not read (MILE-156).
     skip_revision_log: true

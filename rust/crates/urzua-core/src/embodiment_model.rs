@@ -133,20 +133,16 @@ impl EmbodimentDecl {
         self.drift == state
     }
 
-    /// Names of the built-claiming states, for a message.
-    pub fn claim_states(&self) -> Vec<&str> {
-        self.tiers
-            .iter()
-            .filter(|t| t.claims_built)
-            .map(|t| t.state.as_str())
-            .collect()
-    }
-
     /// A half-reading would be a vocabulary that silently never matches
     /// (ADR-7), so a bad declaration fails the load.
     pub fn validate(&self) -> Result<(), String> {
         if self.tiers.is_empty() {
             return Err("`tiers` must list at least one tier".into());
+        }
+        // With none marked, `embodiment.requires-accepted-status` and the
+        // no-evidence claim check could never fire: a silent no-op (ADR-7).
+        if !self.tiers.iter().any(|t| t.claims_built) {
+            return Err("no tier sets `claims_built: true`, so a record could never be held to claiming built work; mark the tiers that say the work was built".into());
         }
         let mut seen: Vec<&str> = Vec::new();
         for state in self.computed_states() {
@@ -201,7 +197,8 @@ mod tests {
     fn default_is_valid_and_claims_the_two_built_tiers() {
         let d = EmbodimentDecl::default();
         d.validate().unwrap();
-        assert_eq!(d.claim_states(), ["Verified", "Implemented"]);
+        assert!(d.claims_built("Verified") && d.claims_built("Implemented"));
+        assert!(!d.claims_built("Specified") && !d.claims_built("Drift detected"));
         assert!(d.is_default());
     }
 
@@ -218,5 +215,20 @@ mod tests {
         let mut d = EmbodimentDecl::default();
         d.tiers.clear();
         assert!(d.validate().unwrap_err().contains("tiers"));
+        let mut d = EmbodimentDecl::default();
+        for t in &mut d.tiers {
+            t.claims_built = false;
+        }
+        assert!(d.validate().unwrap_err().contains("claims_built"));
+        let d = EmbodimentDecl {
+            drift: " Stale".into(),
+            ..Default::default()
+        };
+        assert!(d.validate().unwrap_err().contains("whitespace"));
+        let d = EmbodimentDecl {
+            none: " ".into(),
+            ..Default::default()
+        };
+        assert!(d.validate().unwrap_err().contains("blank"));
     }
 }

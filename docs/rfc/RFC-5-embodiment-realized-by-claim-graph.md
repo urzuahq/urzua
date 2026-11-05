@@ -4,6 +4,7 @@ Date: 2026-07-30
 Accepted-on: 2026-09-05
 Author: beauwilliams
 Supersedes / Superseded-by: —
+Non-reference-ids: ADR-72
 ---
 # 5 — Embodiment as a schema-level concept; `realized_by` as a claim graph
 
@@ -248,3 +249,9 @@ trigger mechanism beyond what RFC-2 already designed for one concrete case.
   embedded-in-code, model (see RFC-1 §1a).
 - SLSA/in-toto's graduated provenance levels, ArchUnit-style fitness functions, and the
   SOC 2/CODEOWNERS attestation model — prior art for the confidence ladder in §2.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-04 | Added the `Non-reference-ids` header field declaring `ADR-72`. **Why:** the text writes "ADR-72/73/74" as a worked example from another corpus, and a real `ADR-72` here would otherwise capture that citation (`BUG-190`, `ADR-75`). The field carries no decision; the proposal is unchanged. | **structural** |
