@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N6PC6Y79X69H1AKA01RA9K
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -162,3 +163,4 @@ Moderate. The rule is additive and opt-in; a repository that declares it on no t
 > | 2026-11-05 | Amended while Proposed: retitled and rephrased over declared types and fields, since a record type like `bug` is only what this repository declares; the evidence is a declared test-locator field (no `Realized-by` is added); a back-pointer alone counting is a config option, default off; a deliberately open record with evidence is a scoped, expiring waiver, not a status. **Why:** maintainer answers of 2026-11-05 to the open questions. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after review: the measured recall is restated as post-migration figures (at HEAD 1 of 178 `Regression-test` values is a `path#Symbol` locator); the evidence reuses the existing `relation_fields.embodiment_locator` role remap instead of a new field kind (which is kept as a considered option), with its limits stated; the tier is stated (`compute_embodiment`, a `test:` entry computes to the test tier, several locators split before each `category:`); the claim that no `Realized-by` is added is corrected (the defect type already declares it and 17 records use it); the back-pointer option defaults to today's behaviour; the fix and waiver wording follow `ADR-73` and `SPEC-10`; open questions resolved. **Why:** review blockers on the Proposed text. | **substantive** |
 > | 2026-11-05 | Amended while Proposed: the evidence field is `Realized-by` for every type; a separate test field migrates into it as `test:path#name` entries (several comma-separated) and is retired in the implementing change; the `embodiment_locator` remap moves to the considered options (G) as not chosen; migration sizing restated (178 values: 1 `path#Symbol`, 90 `::`, 113 comma; 17 existing `Realized-by` stay). **Why:** maintainer decision of 2026-11-05 on the question left to the implementing change. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
