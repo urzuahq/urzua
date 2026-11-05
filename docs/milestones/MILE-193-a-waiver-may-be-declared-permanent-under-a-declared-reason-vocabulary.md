@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: schema-governance
 Implements: ADR-86
-Blocked-on: ADR-86 being Accepted
+Blocked-on: —
 ---
 # 193 — A waiver may be declared permanent under a declared reason vocabulary
 
@@ -31,3 +31,4 @@ The suppression type can declare `permanent` (`ADR-86`): per rule, a waiver with
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** maintainer request of 2026-11-05; decided in `ADR-86` (Proposed). Depends on `ADR-86` being Accepted. | **substantive** |
 > | 2026-11-05 | Done means updated to match the amended `ADR-86`: 16 records (not 19), the five-category vocabulary, the reworded `waiver-ineffective` message and the `SPEC-10` amendment. **Why:** independent review of `#338`. | **substantive** |
+> | 2026-11-05 | Cleared `Blocked-on`: ADR-86 is Accepted. **Why:** the wait it named is over. | **structural** |

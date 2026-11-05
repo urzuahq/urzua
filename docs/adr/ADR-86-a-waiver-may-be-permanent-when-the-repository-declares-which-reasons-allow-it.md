@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NE3QA7SY782EX298E5J9Q0
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -188,3 +189,4 @@ report as ineffective.
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer request of 2026-11-05: waivers do not let a repository state a permanent exception on a declared reason, which `ADR-84`'s exemption route needs for 19 `Fixed` defects with no test to cite. | **substantive** |
 > | 2026-11-05 | Amended after independent review; `Status` stays `Proposed`. Corrected the line citations (`effective_requires` at `config.rs:752`, validated near `:1779`; the waiver config at `.urzua/config.yaml:349-351`); stated that the `waiver-ineffective` message is reworded to name the unmet requirement; restated the remaining set as 16 (not 24 or 19); added `unreachable-failure` and a repository-only `behaviour-preserving-refactor` so the vocabulary covers all 16, with each record mapped; noted that `SPEC-10`'s "no relationship fields" is amended once `Justified-by` is added; wrote the reviewer's five recommended answers into the text as decided points and removed the open questions. **Why:** independent review of `#338` found the vocabulary covered 14 of the 16, the counts were stale and three citations were wrong. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
