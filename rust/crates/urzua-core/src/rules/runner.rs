@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Waiver;
+use crate::waiver::Suppression;
 use std::path::Path;
 
 /// Source files a back-pointer rule scans, with the `back_pointer_paths` that
@@ -17,7 +17,7 @@ pub struct RunState<'a> {
     pub executions: &'a [RuleExecution],
     /// The findings left after scoping, before waivers apply.
     pub findings: &'a [Finding],
-    pub waivers: &'a [Waiver],
+    pub waivers: &'a [Suppression],
     /// The run covers the whole corpus: no path scope, no `--base`.
     pub whole_corpus: bool,
     /// Whether a path is inside what the run reports on.
@@ -52,10 +52,14 @@ pub struct RuleCtx<'a> {
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
+    /// Record files on disk that git does not track, by id (`BUG-13`); read by
+    /// the rules that report an unresolved reference.
+    pub untracked_records: &'a UntrackedRecords,
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
-    pub published_paths: &'a [String],
+    pub boundaries: &'a [ResolvedBoundary],
+    pub ignore_marker: Option<&'a str>,
     pub index_artifacts: &'a [IndexArtifact],
     /// The declared override log, read by the caller; `None` when `override_log`
     /// is not declared (`MILE-188`).
