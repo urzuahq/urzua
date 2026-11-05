@@ -255,7 +255,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_FILENAME_TITLE_CONSISTENCY,
-        description: "The filename's display number and the H1's display number agree (ADR-3).",
+        description: "The filename's display number and the H1's display number agree (ADR-3). The H1's id is read the way a filename's is (`BUG-32`): with a declared `identity` pattern, the leading token must be the pattern's `prefix` and a number (`SPEC-3`); with none, a leading `PREFIX-N` or a bare `N`. A title that does not match, such as `# 2026-09-16 Notes` or `# v1.2 Release`, is reported as carrying no record id and never read as a number, and a number too large to compare is reported as such.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
