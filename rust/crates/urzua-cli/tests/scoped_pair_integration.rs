@@ -2,6 +2,8 @@
 //! scoped case runs this repository's own `.urzua/config.yaml`; the global
 //! case runs the same pair without `types` for contrast.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -11,8 +13,7 @@ fn own_config() -> String {
 }
 
 fn run(name: &str, config: &str) -> serde_json::Value {
-    let dir = std::env::temp_dir().join(format!("urzua-scoped-pair-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new(&format!("urzua-scoped-pair-{name}"));
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();

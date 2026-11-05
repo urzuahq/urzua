@@ -2,7 +2,9 @@
 //! binary; all output is JSON. A scope that stops resolving is reported by
 //! `embodiment.locator-exists`, never passed.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -63,9 +65,8 @@ fn record(realized_by: &str) -> String {
 
 const SOURCE: &str = "/// Alpha.\nfn alpha() {\n    1;\n}\n\nstruct Beta {\n    b: u8,\n}\n\nimpl Beta {\n    fn go(&self) {}\n}\n";
 
-fn repo(name: &str, resolvers: &str, realized_by: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-scoped-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, resolvers: &str, realized_by: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-scoped-{name}"));
     for d in ["docs/adr", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -227,7 +228,7 @@ fn drift_messages(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn pinned_repo(name: &str, consistency: &str, scope: &str) -> PathBuf {
+fn pinned_repo(name: &str, consistency: &str, scope: &str) -> common::TempDir {
     let dir = repo(name, "", "code:src/a.rs");
     std::fs::write(dir.join(".urzua/config.yaml"), config_with(consistency)).unwrap();
     let pin = explained_pin(&dir, &format!("src/a.rs{scope}"));

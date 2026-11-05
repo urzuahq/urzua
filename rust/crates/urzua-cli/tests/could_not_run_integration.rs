@@ -2,7 +2,9 @@
 //! no repository, no config, and an unreadable tracked record each produce the
 //! same `not-run` JSON on stdout and exit code 2, whichever command was asked.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::{Command, Output};
 
 const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n";
@@ -28,14 +30,11 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-cnr-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir.canonicalize().unwrap()
+fn scratch(name: &str) -> common::TempDir {
+    common::TempDir::new(&format!("urzua-cnr-{name}"))
 }
 
-fn repo(name: &str) -> PathBuf {
+fn repo(name: &str) -> common::TempDir {
     let dir = scratch(name);
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);

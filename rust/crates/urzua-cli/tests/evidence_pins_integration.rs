@@ -3,7 +3,9 @@
 //! option is off by default, so each test that turns one on has a sibling
 //! asserting the default behaviour is unchanged.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str], date: Option<&str>) {
@@ -56,14 +58,9 @@ fn record_stating(state: &str, realized_by: &str) -> String {
 }
 
 fn sha256(content: &str) -> String {
-    let path = std::env::temp_dir().join(format!(
-        "urzua-pin-{}-{}",
-        std::process::id(),
-        content.len()
-    ));
+    let path = common::TempFile::new("urzua-pin");
     std::fs::write(&path, content).unwrap();
     let out = Command::new("sha256sum").arg(&path).output().unwrap();
-    std::fs::remove_file(&path).ok();
     String::from_utf8(out.stdout)
         .unwrap()
         .split_whitespace()
@@ -72,9 +69,8 @@ fn sha256(content: &str) -> String {
         .to_string()
 }
 
-fn repo(name: &str, consistency: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-pins-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, consistency: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-pins-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -171,7 +167,7 @@ fn a_pin_that_no_longer_matches_is_drift_even_when_the_record_is_newer_observed_
     );
 }
 
-fn drifted_repo(name: &str, consistency: &str, locator_date: Option<&str>) -> PathBuf {
+fn drifted_repo(name: &str, consistency: &str, locator_date: Option<&str>) -> common::TempDir {
     let dir = repo(name, consistency);
     std::fs::write(dir.join("src/a.rs"), V1).unwrap();
     std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
@@ -220,7 +216,7 @@ fn with_no_grace_window_a_fresh_change_reports_as_before() {
     );
 }
 
-fn aged_repo(name: &str, consistency: &str) -> PathBuf {
+fn aged_repo(name: &str, consistency: &str) -> common::TempDir {
     let dir = repo(name, consistency);
     std::fs::write(dir.join("src/a.rs"), V1).unwrap();
     std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
@@ -293,7 +289,7 @@ fn the_new_options_belong_to_embodiment_consistency_only() {
 
 /// The record is committed first and the locator changes after, so the drift
 /// is fresh. The record already says `Drift detected`.
-fn stated_drift_repo(name: &str, locator_date: Option<&str>) -> PathBuf {
+fn stated_drift_repo(name: &str, locator_date: Option<&str>) -> common::TempDir {
     let dir = repo(name, "{level: error, drift_grace_days: 7}");
     std::fs::write(dir.join("src/a.rs"), V1).unwrap();
     std::fs::write(
@@ -355,7 +351,7 @@ fn fix_does_not_flip_a_stated_drift_detected_while_the_drift_is_inside_the_grace
 
 /// `MILE-166`: a declared last-audit field replaces the locator's last change
 /// as where the grace window counts from.
-fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> PathBuf {
+fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> common::TempDir {
     let dir = repo(
         name,
         "{level: error, drift_grace_days: 7, drift_audit_field: Audited}",

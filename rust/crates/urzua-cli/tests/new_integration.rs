@@ -1,6 +1,8 @@
 //! CLI-golden integration tests for `urzua new`: build a real, isolated
 //! git-repo fixture and run the actual compiled binary against it.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -13,10 +15,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-cli-new-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-new-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -85,8 +85,6 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
     // template's sections.
     assert!(content.contains("## Context"));
     assert!(content.contains("## Decision"));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const BUG_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  bug:\n    dir: \"docs/bug\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n";
@@ -120,8 +118,6 @@ fn new_skips_a_number_claimed_on_another_branch_and_names_it() {
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["display_number"], 3, "stderr: {stderr}");
     assert!(stderr.contains("other-pr"), "stderr: {stderr}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// When git cannot read refs (here: a `.git` directory that is not a real
@@ -129,8 +125,7 @@ fn new_skips_a_number_claimed_on_another_branch_and_names_it() {
 /// the working tree and says so rather than silently skipping the check.
 #[test]
 fn new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs() {
-    let dir = std::env::temp_dir().join(format!("urzua-cli-new-nogit-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new("urzua-cli-new-nogit");
     std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join(".git")).unwrap();
@@ -147,7 +142,6 @@ fn new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs() {
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["display_number"], 2);
     assert!(stderr.contains("working tree only"), "stderr: {stderr}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A title that slugifies to nothing (empty, whitespace, or only non-ASCII)
@@ -177,15 +171,13 @@ fn new_refuses_a_title_with_no_slug_and_writes_nothing() {
     let output = run_urzua(&dir, &["new", "adr", "Real title", "--by", "me"]);
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert!(dir.join("docs/adr/ADR-1-real-title.md").exists());
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const PADDED_RULES: &str = "{header.required-fields: error, field.quality: error, filename.identity-pattern: error, filename.title-consistency: error, header.field-set-consistency: error}";
 
 /// A type with a four-digit padded identity pattern, a declared status
 /// vocabulary and a closed field set (`known_fields`).
-fn padded_repo(name: &str, known_fields: &str, pattern: &str) -> std::path::PathBuf {
+fn padded_repo(name: &str, known_fields: &str, pattern: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::write(
         dir.join(".urzua/config.yaml"),
@@ -241,7 +233,6 @@ fn new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing
         "the H1 id is padded exactly as the file name is: {content}"
     );
     check_is_clean(&dir);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `ADR-21`: every record type gets a `Stable-Id`. A closed field set that does
@@ -264,7 +255,6 @@ fn new_always_writes_a_stable_id_and_warns_when_the_closed_field_set_omits_it_ob
             && n["message"].as_str().unwrap().contains("known_fields")),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A pattern `new` cannot produce a conforming name for is refused before
@@ -284,7 +274,6 @@ fn new_refuses_when_the_declared_pattern_cannot_name_the_file() {
         .map(|e| e.unwrap().file_name())
         .collect();
     assert_eq!(names.len(), 1, "{names:?}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Numbering reads the declared pattern too, so a corpus the default grammar
@@ -300,7 +289,6 @@ fn new_numbers_from_the_declared_pattern() {
     commit_all(&dir);
     let report = new_report(&dir, "Next");
     assert_eq!(report["path"], "docs/adr/ADR-0013-next.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-188`: a type's template names header fields the type declares but does
@@ -325,7 +313,6 @@ fn new_keeps_the_templates_declared_non_required_header_fields_observed_failing(
     assert!(!content.contains("Mood"), "{content}");
     assert!(content.contains("## Context"), "{content}");
     check_is_clean(&dir);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// MILE-176: the fields `new` fills with the date and the author are the ones

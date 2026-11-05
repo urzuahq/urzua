@@ -2,6 +2,8 @@
 //! isolated git fixture. The rule is opt-in, so one test proves it does not
 //! run unless declared, and the others prove what it examined and reported.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -14,9 +16,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture(name: &str, rules: &str, records: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-citation-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-citation-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -185,7 +186,7 @@ fn an_external_id_under_no_declared_prefix_fails_the_config_load() {
     assert!(all.contains("external_ids"), "{all}");
 }
 
-fn path_fixture(name: &str, body: &str, extra: &[(&str, &str)]) -> std::path::PathBuf {
+fn path_fixture(name: &str, body: &str, extra: &[(&str, &str)]) -> common::TempDir {
     let dir = fixture(
         name,
         "{ citation.path-exists: { level: warn, reference_sections: [\"References\"] } }",
@@ -258,7 +259,7 @@ fn a_declared_revision_log_heading_is_the_log_and_prose_mentions_are_not_observe
     assert!(found[0]["message"].as_str().unwrap().contains("2026-01-01"));
 }
 
-fn nonref_fixture(name: &str, records: &[(&str, &str)]) -> std::path::PathBuf {
+fn nonref_fixture(name: &str, records: &[(&str, &str)]) -> common::TempDir {
     let dir = fixture(
         name,
         "{ citation.resolution: { level: error, non_reference_field: Non-reference-ids } }",

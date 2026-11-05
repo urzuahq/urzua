@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci release-guard release-invariants gate-action-test hooks-install hooks-auto \
+.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci test-no-leak release-guard release-invariants gate-action-test hooks-install hooks-auto \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint deny rust-clean
 
 help: ## Show available commands
@@ -29,7 +29,7 @@ fmt-check: rust-fmt-check ## Verify formatting without writing
 lint: rust-lint ## Lint everything
 clean: rust-clean ## Remove build artifacts
 
-ci: fmt-check lint deny rust-build test records rule-table-check release-guard release-invariants gate-action-test ## Run exactly what CI runs, locally
+ci: fmt-check lint deny rust-build test-no-leak records rule-table-check release-guard release-invariants gate-action-test ## Run exactly what CI runs, locally
 	@echo "make ci: all checks passed"
 
 gate-action-test: ## Test the reusable CI gate action's scripts (recorded fixtures, no network)
@@ -93,6 +93,10 @@ rule-table: rust-build ## Regenerate SPEC-2's rule table from the shipped rule s
 
 rule-table-check: rust-build ## Fail if SPEC-2's committed rule table is stale
 	@python3 scripts/generate-rule-table.py --check
+
+test-no-leak: ## Run the tests under a fresh TMPDIR and fail if they leave any urzua-* entry behind (BUG-193)
+	@.github/scripts/test-no-leak.test.sh
+	@.github/scripts/test-no-leak.sh
 
 release-guard: ## Exercise the release guard's planted-violation cases
 	@.github/scripts/release-guard.test.sh

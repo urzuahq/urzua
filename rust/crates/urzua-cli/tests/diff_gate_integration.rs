@@ -3,7 +3,9 @@
 //! they run only on a `--base` run and say `not-applicable` on any other,
 //! never a quiet pass (SPEC-2, Rules).
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -32,9 +34,8 @@ const MIXED: &str = "  diff.source-and-records-mixed:\n    level: warn\n    appl
 
 /// A repository whose base commit (tagged `base`) holds one record and two
 /// source files; nothing has changed since.
-fn fixture(name: &str, rules: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-diff-gate-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-diff-gate-{name}"));
     for sub in ["docs/adr/archive", ".urzua", "src/tests"] {
         std::fs::create_dir_all(dir.join(sub)).unwrap();
     }
@@ -282,8 +283,7 @@ fn a_prefix_only_configuration_still_treats_a_test_file_as_source() {
 #[test]
 fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_source() {
     let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
-    let dir = std::env::temp_dir().join(format!("urzua-diff-gate-own-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new("urzua-diff-gate-own");
     for sub in [".urzua", "rust/crates/x/src", "rust/crates/x/tests"] {
         std::fs::create_dir_all(dir.join(sub)).unwrap();
     }
