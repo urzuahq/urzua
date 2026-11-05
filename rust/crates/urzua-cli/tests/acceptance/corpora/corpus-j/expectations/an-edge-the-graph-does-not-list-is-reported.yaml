@@ -1,0 +1,12 @@
+id: an-edge-the-graph-does-not-list-is-reported
+corpus: corpus-j
+commits:
+  - write:
+      records/ADR-0002-accepted.md: "---\nStatus: Proposed\n---\n# ADR-0002 \u2014 Moves backward\n\nEdited.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: status.transition-allowed
+    severity: error
+    file: records/ADR-0002-accepted.md
+    message_contains: "from 'Accepted' to 'Proposed'"

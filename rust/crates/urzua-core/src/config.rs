@@ -237,6 +237,12 @@ pub struct RuleSetting {
     /// record prefix. Only meaningful to `citation.resolution`; optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_ids: Option<Vec<String>>,
+    /// The header field in which a record lists, as comma-separated exact ids,
+    /// the ids it names without citing as a reference (`BUG-190`, `ADR-75`).
+    /// Must be a known field that is not a pointer, narrative or relation-role
+    /// field. Only meaningful to `citation.resolution`; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_reference_field: Option<String>,
     /// The `##` headings whose backtick-quoted paths `citation.path-exists`
     /// reads (`MILE-143`), matched exactly after trimming. Only meaningful to
     /// that rule.
@@ -539,6 +545,13 @@ pub struct RecordTypeConfig {
     /// `config.pointer-field-not-known`.
     #[serde(default)]
     pub relation_fields: Option<RelationFields>,
+    /// Pairs of relation roles (`RelationRole::config_key`) whose fields a
+    /// record must carry together (`BUG-41`): `config.companion-declaration-missing`
+    /// reports a type declaring one field of a pair without the other. Each
+    /// entry is exactly two distinct role keys; a role whose field the type does not declare is
+    /// reported by `config.companion-declaration-missing`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub companion_fields: Option<Vec<[String; 2]>>,
     /// How this type's revision-log section is found (`MILE-167`): the
     /// `marker` line (default `**Revision log**`) or a `heading`. Omitted means
     /// the default marker, so an existing config needs no change.
@@ -697,6 +710,13 @@ impl RelationRole {
             RelationRole::EmbodimentLocator => "Realized-by",
             RelationRole::Supersession => "Supersedes / Superseded-by",
         }
+    }
+
+    /// The role declared under `key` in `relation_fields` or `companion_fields`.
+    pub fn from_config_key(key: &str) -> Option<RelationRole> {
+        RelationRole::ALL
+            .into_iter()
+            .find(|role| role.config_key() == key)
     }
 
     /// The config key this role is declared under in `relation_fields`
@@ -877,6 +897,8 @@ pub enum ConfigError {
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
+    #[error("record type '{record_type}' companion_fields: {reason}")]
+    InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -929,6 +951,8 @@ pub enum ConfigError {
         entry: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'non_reference_field' {reason}")]
+    InvalidNonReferenceField { rule: String, reason: String },
     #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
     InvalidExternalId {
         rule: String,
@@ -1289,6 +1313,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
+    validate_companion_fields(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
@@ -1469,6 +1494,14 @@ pub fn parse_with_document_models(
                     option: opt.name.to_string(),
                 });
             }
+        }
+        if setting.non_reference_field.is_some()
+            && !crate::rules::rule_accepts_option(name, "non_reference_field")
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "non_reference_field".to_string(),
+            });
         }
         if setting.skip_revision_log.is_some()
             && !crate::rules::rule_accepts_option(name, "skip_revision_log")
@@ -1741,6 +1774,53 @@ pub fn parse_with_document_models(
             }
         }
     }
+    // `non_reference_field` must name a field some type declares (the header is
+    // a closed structure) that no rule resolves or stale-checks: a pointer,
+    // narrative or relation-role field would read the ids as references, the
+    // opposite of the declaration (`ADR-75`).
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let Some(field) = setting.non_reference_field.as_deref() else {
+            continue;
+        };
+        let bad = |reason: String| ConfigError::InvalidNonReferenceField {
+            rule: name.clone(),
+            reason,
+        };
+        if field.trim().is_empty() || field.trim() != field {
+            return Err(bad("is empty or has surrounding whitespace".to_string()));
+        }
+        let known = config.record_types.values().any(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::from(field))
+        });
+        if !known {
+            return Err(bad(format!(
+                "names '{field}', which no record type lists in `known_fields` (or `required_fields`)"
+            )));
+        }
+        for (type_name, t) in &config.record_types {
+            let role = if t.pointer_fields.iter().flatten().any(|f| f == field) {
+                Some("pointer_fields")
+            } else if t.narrative_fields.iter().flatten().any(|f| f == field) {
+                Some("narrative_fields")
+            } else if RelationRole::ALL
+                .into_iter()
+                .any(|r| t.relation_field(r) == field)
+            {
+                Some("a relation-role field")
+            } else {
+                None
+            };
+            if let Some(role) = role {
+                return Err(bad(format!(
+                    "names '{field}', which record type '{type_name}' declares in {role}; those rules would resolve the ids as references"
+                )));
+            }
+        }
+    }
     // A test path outside every back-pointer path is never scanned, so a
     // `Verifies:` there would be a silent no-op.
     for (name, setting) in &config.rules {
@@ -1865,6 +1945,35 @@ pub enum ProvisionalLevel {
 
 fn default_provisional_level() -> ProvisionalLevel {
     ProvisionalLevel::Warn
+}
+
+/// Load-time checks for `companion_fields` (`BUG-41`): a pair that cannot run
+/// reads as a clean corpus, so every misdeclaration is refused.
+fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
+    for (name, rt) in &config.record_types {
+        let Some(pairs) = &rt.companion_fields else {
+            continue;
+        };
+        let bad = |reason: String| {
+            Err(ConfigError::InvalidCompanionFields {
+                record_type: name.clone(),
+                reason,
+            })
+        };
+        for [a, b] in pairs {
+            if a == b {
+                return bad(format!("pair [{a}, {b}] names one role twice"));
+            }
+            for key in [a, b] {
+                if RelationRole::from_config_key(key).is_none() {
+                    return bad(format!(
+                        "'{key}' is not a relation role (one of status, embodiment_state, embodiment_locator, supersession)"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
@@ -2189,6 +2298,7 @@ mod tests {
             narrative_fields: None,
             spec: None,
             relation_fields: None,
+            companion_fields: None,
             revision_log: None,
         };
         let declared = t.declared_fields();
@@ -2566,6 +2676,71 @@ rules:
             .unwrap_err()
             .to_string()
             .contains("does not take the option 'external_ids'"));
+    }
+
+    #[test]
+    fn non_reference_field_must_be_a_known_plain_field_of_citation_resolution() {
+        let base = |extra: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [\"Status\", \"Non-reference-ids\", \"Derives-from\", \"Note\"]\n{extra}rules:\n"
+            )
+        };
+        let rule = |field: &str| {
+            format!("  citation.resolution:\n    level: error\n    non_reference_field: {field}\n")
+        };
+        let ok = parse(&format!("{}{}", base(""), rule("Non-reference-ids"))).unwrap();
+        assert_eq!(
+            ok.rules["citation.resolution"]
+                .non_reference_field
+                .as_deref(),
+            Some("Non-reference-ids")
+        );
+        // Still optional.
+        assert!(parse(&format!("{}  citation.resolution: error\n", base(""))).is_ok());
+        // Unknown to every type: the header is a closed structure.
+        let err = parse(&format!("{}{}", base(""), rule("Nope")))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("non_reference_field") && err.contains("Nope"),
+            "{err}"
+        );
+        // A pointer, a narrative or a relation-role field would resolve or
+        // stale-check the ids, the opposite of the intent.
+        for (extra, field) in [
+            (
+                "    pointer_fields: [\"Derives-from\"]\n    narrative_fields: []\n",
+                "Derives-from",
+            ),
+            (
+                "    pointer_fields: []\n    narrative_fields: [\"Note\"]\n",
+                "Note",
+            ),
+            ("    relation_fields: {supersession: \"Note\"}\n", "Note"),
+            (
+                "    relation_fields: {status: \"Non-reference-ids\"}\n",
+                "Non-reference-ids",
+            ),
+        ] {
+            let err = parse(&format!("{}{}", base(extra), rule(field)))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("non_reference_field"), "{field}: {err}");
+        }
+        // The default relation roles count too.
+        let err = parse(&format!("{}{}", base(""), rule("Status")))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("non_reference_field"), "{err}");
+        // Another rule does not take it.
+        let elsewhere = format!(
+            "{}  field.quality:\n    level: error\n    non_reference_field: Note\n",
+            base("")
+        );
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'non_reference_field'"));
     }
 
     #[test]
@@ -3113,6 +3288,21 @@ record_types:
     }
 
     #[test]
+    fn a_companion_pair_naming_no_relation_role_is_refused_observed_failing() {
+        let cfg = |pair: &str| {
+            format!("schema_version: 2\nrecord_types:\n  spec:\n    dir: \"docs/specs\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - {pair}\n")
+        };
+        assert!(parse(&cfg("[embodiment_state, embodiment_locator]")).is_ok());
+        for bad in [
+            "[embodiment_state, Realized-by]",
+            "[status, status]",
+            "[status]",
+        ] {
+            assert!(parse(&cfg(bad)).is_err(), "{bad} must be refused");
+        }
+    }
+
+    #[test]
     fn enabling_a_pair_rule_with_no_pairs_declared_is_refused() {
         for rule in [
             "relation.pair-reciprocity",
@@ -3379,6 +3569,7 @@ mod option_table_tests {
         "pending_until_required",
         "template_placeholders",
         "skip_revision_log",
+        "non_reference_field",
         "field_levels",
         "drift_grace_days",
         "drift_audit_field",

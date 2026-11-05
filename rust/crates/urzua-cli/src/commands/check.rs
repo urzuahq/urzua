@@ -73,6 +73,7 @@ struct Context<'a> {
     collisions: Vec<rules::IdentifierCollision<'a>>,
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
+    committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     repo_root: PathBuf,
     templates: urzua_core::new_record::TemplateValues,
 }
@@ -153,6 +154,7 @@ impl<'a> Context<'a> {
             fresh: &self.drift.fresh,
             claim_ages: &self.claim_ages,
             changed_paths: self.changed_paths.as_deref(),
+            committed_statuses: self.committed_statuses.as_ref(),
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
             live_paths: &self.live_paths,
@@ -449,6 +451,16 @@ fn load_context<'a>(
         ));
     }
 
+    // A declared non-reference id that now matches a real record is disclosed
+    // (`ADR-75`), only when `citation.resolution` is on.
+    if enabled_setting(config, rules::RULE_CITATION_RESOLUTION).is_some() {
+        notices.extend(rules::non_reference_notices(
+            &session.records,
+            config,
+            &record_index,
+        ));
+    }
+
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
@@ -480,6 +492,14 @@ fn load_context<'a>(
                 .changed
                 .as_ref()
                 .map(|c| c.changed.iter().cloned().collect()),
+            committed_statuses: scope.changed.as_ref().map(|c| {
+                crate::diff_scope::committed_statuses(
+                    repo_root,
+                    &session.config,
+                    &session.records,
+                    c,
+                )
+            }),
             repo_root: repo_root.clone(),
             templates,
         },

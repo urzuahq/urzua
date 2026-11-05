@@ -1,5 +1,5 @@
 ---
-Version: '0.56'
+Version: '0.59'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -265,6 +265,23 @@ Two details carry weight:
   `sections.depth`, each with its level, its parent and its line range (`parse_sections` is the
   depth-1 reading, `##` only).
 
+- **A record type may declare companion field pairs: `companion_fields`** (`BUG-41`). An optional
+  list under a record type, each entry exactly two distinct relation role keys (`status`,
+  `embodiment_state`, `embodiment_locator`, `supersession`); anything else is refused at load. The
+  fields are the ones the type's `relation_fields` names for those roles (default literals
+  otherwise). `config.companion-declaration-missing` reports a type that declares one field of a
+  declared pair in `required_fields`/`known_fields` without the other, or neither. No pair is known
+  to the engine; this repository declares `[embodiment_state, embodiment_locator]` for `adr` and
+  `spec`.
+
+  ```yaml
+  record_types:
+    spec:
+      known_fields: [Embodiment, Realized-by]
+      companion_fields:
+        - [embodiment_state, embodiment_locator]
+  ```
+
 - **A record type may declare its status vocabulary: `statuses`** (`MILE-132`, `BUG-59`, `BUG-65`,
   `BUG-178`). An optional mapping under a record type. The field it describes is the type's `Status`
   role field (`relation_fields.status`, default `Status`):
@@ -278,6 +295,10 @@ Two details carry weight:
         failure: [WontFix]                # terminal, it ended without being done
         implementable: [Open]             # statuses at which code may implement the record
         claim_retained: []                # statuses that may keep an Implemented/Verified claim
+        initial: [Open]                   # where a new record may start (with transitions)
+        transitions:                      # which statuses may follow each status
+          Open: [Fixed, WontFix]
+          Fixed: [Open]
         pending: [pending, "not yet written", {pattern: "^\\(pending"}]
         require: [{when: [Fixed], fields: [Regression-test]}]
         forbid:  [{when: [Open], fields: [Fixed-in]}]
@@ -291,8 +312,21 @@ Two details carry weight:
   [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
   `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
   required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
-  with no value is a load-time error naming the record type and `statuses`. Transitions between
-  statuses are not declared here (`MILE-144`).
+  with no value is a load-time error naming the record type and `statuses`.
+
+  `transitions` and `initial` (`MILE-144`, `ADR-72`) declare the type's lifecycle. `transitions`
+  maps a declared status to the declared statuses that may follow it; a status with no entry is
+  terminal, nothing may follow it. `initial` is the list of statuses a new record may start at, and
+  is also where the engine starts when it asks which declared statuses can be reached. The two come
+  together: either without the other is a load error, as is a status that is not in `values`, a list
+  that repeats an entry, or a status listed as following itself. A type that declares neither has no
+  lifecycle and no transition is judged. Two opt-in rules read it: `status.transition-allowed`
+  compares a changed record's `Status` at the merge base with its `Status` in the change under check
+  and reports an edge the graph does not list, or a new record outside `initial`; it needs `--base`
+  and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
+  path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
+  committed status is no longer declared is counted unreadable by the first rule, not judged. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
+  derived `blocked` value is not part of this declaration (`MILE-27`).
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -395,6 +429,42 @@ rules:
   read a declared external id as a configuration that fails to reach its candidates (`BUG-186`). An id the list does not name is still resolved against the
   records and reported when it resolves to none. A declared external id wins over a record of the
   same id, so declare only ids no record answers to.
+
+## Named, not cited: `citation.resolution`'s `non_reference_field`
+
+A record can name an id without citing it as a reference: an example, a number minted and
+retracted, a hypothetical corpus. `citation.resolution` takes an optional `non_reference_field`
+naming a header field in which a record lists those ids (`BUG-190`, `ADR-75`):
+
+```yaml
+rules:
+  citation.resolution:
+    level: error
+    non_reference_field: "Non-reference-ids"
+```
+
+```yaml
+---
+Status: Accepted
+Non-reference-ids: ADR-72
+---
+```
+
+- The field holds a comma-separated list of exact ids (`PREFIX-N`); there are no ranges. Ids compare
+  by value (`ADR-072` is `ADR-72`) and the prefix is case-sensitive. Id parsing is the exact-id
+  parsing of `external_ids`, so the two cannot disagree on what an id is.
+- In a record that declares an id, a prose citation of it is counted as eligible and unexamined,
+  neither resolved nor reported. In any other record the same id resolves as before. `external_ids`
+  takes precedence. "Cited" means the prose the rule reads: an id appearing only in the header, a
+  fenced block, or a revision-log row while `skip_revision_log` is on counts as uncited.
+- A declared id the record never cites, and an entry that is not an exact id of a declared prefix,
+  are findings on the record, naming the field, the entry and the line of the field.
+- The option must name a field some record type lists in `known_fields` (or `required_fields`), and
+  not a `pointer_fields`, `narrative_fields` or relation-role field, since those rules would resolve
+  the ids as references; either failure is a load-time error. Other rules do not take the option.
+- When a declared id resolves to a real record, `check` prints one aggregated `Info` notice naming
+  the records and ids. A notice never changes the exit code.
+- Adding the field to an Accepted record is a `structural` revision-log row, not an amendment.
 
 ## Cited issues and pull requests: `citation.issue-exists`
 
@@ -984,4 +1054,7 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.53`. Documented the per-type `extra_dirs` declaration: further directories of one type, one identity namespace with `dir`; duplicate and shared directories are load errors. **Why:** `MILE-130` -- a prefix may not be shared (`BUG-173`), which left monorepo, archive and mid-migration layouts with no correct configuration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.54`. Documented the top-level `embodiment` declaration: the drift state, the tiers in order with the evidence category and `claims_built` flag of each, and the no-evidence state; it replaces the state names compiled into `compute`, `fix` and the consistency rules, and `sticky_states` and `statuses.delivery` are validated against it. Omitted, the built-in vocabulary applies. **Why:** `MILE-144` -- the Embodiment vocabulary was hardcoded in three places, against `ADR-64`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.55`. `sections.depth` now drives the section reading: a type declaring `depth: 2` has its `###` headings parsed as sections nested under their `##`, and a required section may declare `level` and `under` to be asked for one. A type declaring no `level` is read as before. **Why:** `MILE-98` -- this repository's own `###` headings were invisible to the section rules and a corpus that checks a considered option's subsection needs `###` to be checked at all. | **substantive** |
-> | 2026-11-04 | Bumped to `0.56`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |
+> | 2026-11-04 | Bumped to `0.56`. Documented the per-type `companion_fields` declaration: a list of pairs of relation role keys (`status`, `embodiment_state`, `embodiment_locator`, `supersession`) whose fields the type declares together, resolved through `relation_fields`; an entry that is not two distinct role keys is refused at load, and `config.companion-declaration-missing` reports a pair the type declares one half of or neither. **Why:** `BUG-41` -- the one companion pair checked was hardcoded. | **substantive** |
+> | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.58`. Documented the optional `non_reference_field` option of `citation.resolution`: a header field listing the exact ids a record names without citing as a reference, set aside in that record only, with a finding for a declared id never cited and for a malformed entry, a load error for a field that is unknown or a pointer, narrative or relation-role field, and an aggregated Info notice for ids that now match a real record. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.59`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |

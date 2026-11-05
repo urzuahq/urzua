@@ -583,6 +583,7 @@ mod tests {
                     pointer_fields: None,
                     narrative_fields: None,
                     spec: None,
+                    companion_fields: None,
                     relation_fields: Some(crate::config::RelationFields {
                         embodiment_state: Some("Phase".to_string()),
                         embodiment_locator: Some("Evidence".to_string()),

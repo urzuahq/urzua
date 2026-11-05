@@ -66,6 +66,9 @@ pub struct RuleCtx<'a> {
     pub claim_ages: &'a HashMap<PathBuf, u64>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
+    /// Each changed record's `Status` at the merge base, for the types that
+    /// declare `transitions`; `None` on a run with no `--base` (`ADR-72`).
+    pub committed_statuses: Option<&'a HashMap<PathBuf, CommittedStatus>>,
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
