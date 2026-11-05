@@ -1414,6 +1414,36 @@ pub const RULE_TABLE: &[RuleDef] = &[
         run: |c| override_unreviewed(c.override_log, c.config),
     },
     RuleDef {
+        id: RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH,
+        description: "A `Realized-by` locator names a file under `back_pointer_paths`, where an `Implements:` or `Verifies:` comment would say the same thing and is read automatically (`ADR-78` item 4, `MILE-189`, `RFC-7` section 5: prefer the lighter mechanism). A warning nudging the evidence into that comment, never an error, because the two mechanisms are not interchangeable: only a `code:` locator on a file under `back_pointer_paths`, or a `test:` locator on a file under the optional `test_paths` (the only files whose `Verifies:` comment counts), has a comment of the same tier. A `spec:` locator, a `test:` locator outside `test_paths` and any locator with a `#scope` or an `@sha256` pin stay `Realized-by` and are not flagged. The suggested action edits `Realized-by` to the remaining locators, or removes the field when the flagged one is the only one. Opt-in, and needs `back_pointer_paths`; `test_paths` is optional and, as for the back-pointer rules, each entry must lie inside a `back_pointer_paths` entry. The population counts the declared `Realized-by` slots.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        reads_declaration: None,
+        header_none: HeaderNone::OutOfScope,
+        options: &["back_pointer_paths", "test_paths"],
+        actions: &[
+            VariantAction::new("locator-on-back-pointer-path", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-on-back-pointer-path-sole", ActionDecl::FIELD_REMOVE),
+        ],
+        phase: Phase::Main,
+        run: |c| {
+            let opts = c
+                .config
+                .enabled_rule_opts::<LocatorMechanismOpts>(RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH)
+                .unwrap_or_default();
+            embodiment_locator_on_back_pointer_path(
+                c.records,
+                c.config,
+                &opts.back_pointer_paths,
+                &opts.test_paths,
+            )
+        },
+    },
+    RuleDef {
         id: RULE_CONFIG_SCOPE_MATCHES_NOTHING,
         description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`).",
         scope: Scope::Run,
