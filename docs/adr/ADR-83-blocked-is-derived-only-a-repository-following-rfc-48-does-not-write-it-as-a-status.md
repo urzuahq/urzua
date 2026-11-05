@@ -58,18 +58,17 @@ no longer sees "Blocked" and must run `urzua check` or `urzua roadmap`.
   A dependency in a `failure` status, one with no `Status`, and one whose type declares no `success`
   therefore blocks. (A dependency in `failure` also draws `sequence.failed-dependency`, when built, for
   re-planning; this rule only says the dependent is not unblocked.)
-- Every declared `acyclic` pair is a dependency relation, read in either field, so a written `Blocks`
-  counts. The derived value presumes sequencing pairs: a pair declared `acyclic` to get cycle detection
-  over a containment relation (parent and children) would mark every child blocked by an open parent.
-  The rule therefore reports an `acyclic` pair that looks like containment, a pair declaring
-  `reciprocity: required` (both sides written, which `RFC-48` gives containment and gives sequencing
-  as `none`), as a warning naming the pair, so the author either sets the reciprocity the pair
-  means or leaves the pair out of the derived value. This is a signal, not a proof, and a warning for that
-  reason.
+- The dependency set is the sequencing pairs the repository declares in `roadmap.pairs` (the roadmap
+  command's declaration, `MILE-182`), each an `acyclic` `relation_pairs` entry, read in either field, so
+  a written `Blocks` counts. Check and the roadmap read the same declared set, so blocked in one can
+  never disagree with blocked in the other. An `acyclic` pair that is not named there is not a
+  dependency: a containment pair (parent and children) declared `acyclic` for cycle detection does not
+  mark a child blocked by an open parent. Every pair named there is a dependency, whatever its
+  reciprocity.
 - A record that states a status claiming progress while it is blocked is reported. The statuses that
   claim progress are declared (below). `Planned`, and any status that does not claim progress, is
-  correct for a blocked record; moving a `Blocked` record to `Planned` is the migration `RFC-48`
-  prescribes.
+  correct for a blocked record and is not reported: a `Planned` record with an open dependency is
+  simply derived-blocked. Moving a `Blocked` record to `Planned` is the migration `RFC-48` prescribes.
 - A blocked value that cannot be computed is not guessed. A record with a claim on a record whose header
   cannot be read, or whose own header cannot be read while another record claims it through the inverse
   field, is counted unreadable, not reported as unblocked. A record with a `Depends-on` value that
@@ -90,7 +89,9 @@ that mean waiting, to opt in to the two-way check: a declared blocked status whi
 record is reported, and a blocked record that states a `progress` status is reported. It must be a subset
 of `values` and disjoint from `success`, `failure` and `progress`; a `progress` and `blocked` overlap is a
 load error. A type that declares neither key is not examined. Enabling the rule while no type declares
-either key, or no pair is `acyclic`, is a config load error. urzua's own repository follows `RFC-48`: it
+either key, or `roadmap.pairs` declares no pair, is a config load error. A written status that a type
+does not declare is not this rule's: it is unsupported under the status vocabulary, and urzua's own
+config declares no `Blocked`. urzua's own repository follows `RFC-48`: it
 declares `progress` and no `blocked`, so a written `Blocked` is not a declared status at all.
 
 **The `SPEC-6` amendment.** `Blocked` is removed from the milestone `Status` value set. The set becomes
@@ -116,8 +117,8 @@ once adopters of the milestone shape have migrated, and the `progress` key's nam
 - A wait on a fact is invisible to `urzua roadmap` until the `condition` type is built, so such a
   milestone may appear ready while waiting. That cost is not new; it was hidden behind the written
   `Blocked`. A tracked milestone for the `condition` type and the migration is wanted.
-- The containment warning is a heuristic. A sequencing pair declaring `reciprocity: required` for a
-  legitimate reason is warned about and the warning is the author's to dismiss by waiver.
+- The rule is inert until `roadmap.pairs` is declared, which ties it to the roadmap command's decision
+  and sequencing: it should be accepted after, or together with, that record.
 
 ## References
 
@@ -133,3 +134,4 @@ once adopters of the milestone shape have migrated, and the `progress` key's nam
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 that `Blocked` is derived only, per `RFC-48`; #313's review found no decision record for the derived readings and a departure from the RFC. The maintainer approves before it is Accepted. | **substantive** |
+> | 2026-11-05 | Amended while Proposed: the dependency set is the pairs `roadmap.pairs` declares, not every `acyclic` pair, so a containment pair never blocks and check agrees with the roadmap; the containment warning is dropped; `Planned` while blocked is not reported. **Why:** coordinator alignment with the roadmap decision. | **substantive** |
