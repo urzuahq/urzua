@@ -1,5 +1,5 @@
 ---
-Version: '0.61'
+Version: '0.62'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -156,7 +156,7 @@ Two details carry weight:
   population, so `ADR-7` in `docs/adr-archive` resolves from a pointer in `docs/adr` and collides with an
   `ADR-7` in `docs/adr`. `urzua new` writes to `dir` and numbers past the highest id in any of the
   directories, and past a number claimed in any of them on another local or remote-tracking ref. An
-  entry is validated like `dir` (it names a directory below the repository root); a directory listed
+  entry is validated like `dir` (it names a directory below the repository root, written in canonical form: no `./` or empty component and no trailing `/`, so `./docs/adr`, `docs/adr/` and `docs//adr` are load errors that name `docs/adr`); a directory listed
   twice, and a directory owned by two types, are load errors; an `extra_dirs` entry that does not
   exist is reported by `type.dir-matches-nothing`, and `urzua new` numbers without it and says so on
   stderr. `exclude_files` names files in any of the directories. Two types sharing a prefix remain
@@ -1117,3 +1117,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.59`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |
 > | 2026-11-04 | Bumped to `0.60`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the readings `ADR-76` decides for each question `RFC-48` leaves open, including that a written `Blocks` is an edge and that `sequence.unresolved-blocker` yields to enabled pointer rules. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |
 > | 2026-11-04 | Bumped to `0.61`. Documented the `revision_log.version_bump` declaration: a field name and a list of change classes whose added revision-log rows require that field to change, read by `revision-log.version-bump-required`. **Why:** `BUG-51`, maintainer decision of 2026-11-04; `SPEC-18` requires a `Version` bump with every substantive or structural entry and nothing checked it. Off for every type unless declared. | **substantive** |
+> | 2026-11-05 | Bumped to `0.62`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |

@@ -946,6 +946,12 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares dir '{dir}', which names no directory below the repository root -- the type would examine nothing")]
     InvalidDir { record_type: String, dir: String },
+    #[error("record type '{record_type}' declares dir '{dir}', which is not in canonical form -- write '{canonical}'")]
+    NonCanonicalDir {
+        record_type: String,
+        dir: String,
+        canonical: String,
+    },
     #[error("record type '{record_type}' declares directory '{dir}' more than once -- list each directory once")]
     DuplicateDir { record_type: String, dir: String },
     #[error("record types '{first}' and '{second}' both own directory '{dir}' -- a directory holds one type's records")]
@@ -1318,6 +1324,16 @@ fn published_path_problem(entry: &str) -> Option<&'static str> {
     None
 }
 
+/// The one spelling of a repository-relative directory: surrounding
+/// whitespace, `.` and empty components, and a trailing `/` removed.
+fn canonical_dir(dir: &str) -> String {
+    dir.trim()
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != ".")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
     parse_with_document_models(content).map(|(config, _)| config)
 }
@@ -1358,8 +1374,18 @@ pub fn parse_with_document_models(
                     dir: dir.to_string(),
                 });
             }
-            // Compared as paths so `docs/adr/` and `docs/adr` are one directory.
-            let path: std::path::PathBuf = std::path::Path::new(dir.trim()).components().collect();
+            // Discovery compares paths component by component, so a spelling
+            // with a `.` component, an empty one or a trailing slash names the
+            // directory without ever matching it (`BUG-168`).
+            let canonical = canonical_dir(dir);
+            if canonical != *dir {
+                return Err(ConfigError::NonCanonicalDir {
+                    record_type: name.clone(),
+                    dir: dir.to_string(),
+                    canonical,
+                });
+            }
+            let path: std::path::PathBuf = std::path::Path::new(&canonical).components().collect();
             if !own_dirs.insert(path.clone()) {
                 return Err(ConfigError::DuplicateDir {
                     record_type: name.clone(),
@@ -3150,6 +3176,40 @@ record_types:
         assert!(parse(&rt_config("  adr:\n    dir: \"docs/adr\"\n")).is_ok());
     }
 
+    /// `BUG-168`: a `dir` written `./docs/adr`, `docs/adr/` or `docs//adr`
+    /// names a real directory but compares unequal to the one discovery
+    /// builds, so the type examined nothing. It is a load error that names the
+    /// canonical form, for `dir` and for each `extra_dirs` entry.
+    #[test]
+    fn a_non_canonical_dir_is_a_load_error_naming_the_canonical_form_observed_failing() {
+        for bad in [
+            "./docs/adr",
+            "docs/adr/",
+            "docs//adr",
+            "docs/./adr",
+            " docs/adr",
+        ] {
+            let yaml = rt_config(&format!("  adr:\n    dir: \"{bad}\"\n"));
+            match parse(&yaml) {
+                Err(e @ ConfigError::NonCanonicalDir { .. }) => {
+                    let message = e.to_string();
+                    assert!(message.contains("'docs/adr'"), "{bad:?}: {message}");
+                    assert!(message.contains(&format!("'{bad}'")), "{bad:?}: {message}");
+                }
+                other => panic!("dir {bad:?} must be a NonCanonicalDir error, got {other:?}"),
+            }
+            let extra = bad.replace("adr", "arch");
+            let yaml = rt_config(&format!(
+                "  adr:\n    dir: docs/adr\n    extra_dirs: [\"{extra}\"]\n"
+            ));
+            assert!(
+                matches!(parse(&yaml), Err(ConfigError::NonCanonicalDir { .. })),
+                "extra dir {extra:?} must be refused"
+            );
+        }
+        assert!(parse(&rt_config("  adr:\n    dir: \"docs/adr\"\n")).is_ok());
+    }
+
     /// `MILE-130`: a type may own several directories; each is validated like
     /// `dir`, listed once, and owned by one type only.
     #[test]
@@ -3174,7 +3234,7 @@ record_types:
                 "extra dir {bad:?} must be refused"
             );
         }
-        for dup in ["[docs/adr]", "[a, a]", "[\"docs/adr/\"]"] {
+        for dup in ["[docs/adr]", "[a, a]"] {
             let yaml = rt_config(&format!(
                 "  adr:\n    dir: docs/adr\n    extra_dirs: {dup}\n"
             ));
