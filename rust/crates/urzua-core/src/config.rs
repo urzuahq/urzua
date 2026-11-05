@@ -7,8 +7,10 @@ use crate::header::HeaderShape;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The only schema version defined so far (ADR-0012). A config declaring any
-/// other value is a parse-time error, not a silent best-effort read.
+/// The schema version this build writes (ADR-0012). It reads this version and
+/// the one before it (`ADR-77`, `crate::schema_version`); a config declaring
+/// any other value is a structured parse-time error, not a silent best-effort
+/// read.
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -44,6 +46,12 @@ pub struct Config {
     /// `SPEC-3`); absent means none, so only line ranges are available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
+    /// Set when the file was at the previous schema version and was upgraded
+    /// in memory (`ADR-77`). Not part of the declared configuration: it is
+    /// never read from or written to a file, so an upgraded config and the
+    /// same config written at the current version are equal.
+    #[serde(skip)]
+    pub upgraded_from: Option<crate::schema_version::UpgradeInfo>,
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -910,8 +918,10 @@ impl Serialize for HeaderShape {
 pub enum ConfigError {
     #[error("could not parse config: {0}")]
     Parse(#[from] yaml_serde::Error),
-    #[error("unrecognized schema_version {found} -- this build of urzua understands version {CURRENT_SCHEMA_VERSION}")]
-    UnrecognizedSchemaVersion { found: u32 },
+    #[error("{0}")]
+    SchemaVersionOutOfWindow(crate::schema_version::SchemaVersionError),
+    #[error("could not upgrade the schema_version {from} config: {reason}")]
+    UpgradeFailed { from: u32, reason: String },
     #[error("unknown rule '{found}' under `rules:` -- this build ships: {}", known.join(", "))]
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
@@ -1326,6 +1336,45 @@ fn published_path_problem(entry: &str) -> Option<&'static str> {
     None
 }
 
+/// The `schema_version` a config declares, read on its own: the probe skips
+/// every other key without building a value for it, so a config that reads
+/// today (an unquoted integer beyond `u64` read as a string, say) is read
+/// exactly as it was, and only a config that needs the upgrade is parsed whole.
+fn declared_version(content: &str) -> Result<Option<u64>, ConfigError> {
+    #[derive(Deserialize)]
+    struct VersionProbe {
+        #[serde(default)]
+        schema_version: Option<yaml_serde::Value>,
+    }
+    let probe: VersionProbe = yaml_serde::from_str(content)?;
+    Ok(probe.schema_version.and_then(|v| v.as_u64()))
+}
+
+/// Reads the typed config, upgrading it first when it is at the previous
+/// schema version and rejecting it when it is outside the window (`ADR-77`).
+/// A config that declares no integer `schema_version` falls through to the
+/// typed parse, whose error names the field.
+fn read_in_window(content: &str) -> Result<Config, ConfigError> {
+    let Some(found) = declared_version(content)? else {
+        return Ok(yaml_serde::from_str(content)?);
+    };
+    if found == u64::from(CURRENT_SCHEMA_VERSION) {
+        return Ok(yaml_serde::from_str(content)?);
+    }
+    if found != u64::from(crate::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION) {
+        return Err(ConfigError::SchemaVersionOutOfWindow(
+            crate::schema_version::SchemaVersionError::new(found),
+        ));
+    }
+    let from = crate::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION;
+    let doc: yaml_serde::Value = yaml_serde::from_str(content)?;
+    let (upgraded, changes) = crate::schema_version::upgrade(doc)
+        .map_err(|reason| ConfigError::UpgradeFailed { from, reason })?;
+    let mut config: Config = yaml_serde::from_value(upgraded)?;
+    config.upgraded_from = Some(crate::schema_version::UpgradeInfo { from, changes });
+    Ok(config)
+}
+
 pub fn parse(content: &str) -> Result<Config, ConfigError> {
     parse_with_document_models(content).map(|(config, _)| config)
 }
@@ -1339,12 +1388,7 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
 pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
-    let mut config: Config = yaml_serde::from_str(content)?;
-    if config.schema_version != CURRENT_SCHEMA_VERSION {
-        return Err(ConfigError::UnrecognizedSchemaVersion {
-            found: config.schema_version,
-        });
-    }
+    let mut config = read_in_window(content)?;
     let models = crate::document_model::validate_declarations(&config.record_types)?;
     config
         .embodiment
@@ -2345,7 +2389,7 @@ mod tests {
         let yaml = "schema_version: 99\nrecord_types:\n  adr:\n    dir: docs/adr\n    sections: {from: headings, depth: 9}\n";
         let e = parse(yaml).unwrap_err();
         assert!(
-            matches!(e, ConfigError::UnrecognizedSchemaVersion { found: 99 }),
+            matches!(&e, ConfigError::SchemaVersionOutOfWindow(v) if v.found == 99),
             "{e}"
         );
     }
@@ -3095,8 +3139,8 @@ record_types:
 "#;
         let err = parse(yaml).unwrap_err();
         assert!(matches!(
-            err,
-            ConfigError::UnrecognizedSchemaVersion { found: 99 }
+            &err,
+            ConfigError::SchemaVersionOutOfWindow(v) if v.found == 99
         ));
     }
 

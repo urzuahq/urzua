@@ -1,5 +1,5 @@
 ---
-Version: '0.64'
+Version: '0.65'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -794,13 +794,96 @@ config is structured.
 Criterion 4 is the point of the spec. The claim is only worth something if we would notice it being
 false.
 
+## Supported schema versions
+
+`schema_version` is the first key of every config and is required (`ADR-12`, `ADR-52`). A release
+reads the current version `N` and the one before it, `N-1` (`ADR-77`, decided in `RFC-49`); a version
+older than `N-1` or newer than `N` is outside the window. Each release is one row; its upgrade step is
+the one from the row's older version to its newer.
+
+| Release | Reads | Writes |
+|---|---|---|
+| `0.4.0` | 1, 2 | 2 |
+
+`urzua check` and every other command that loads the config behave in one of three ways:
+
+- **At `N`.** Read as written.
+- **At `N-1`.** Upgraded in memory to `N` before any rule runs, so a rule only ever sees the current
+  shape. `config.schema-version-outdated` (`SPEC-2`) reports one warning on the config file, naming the
+  version found, the current version, the keys the upgrade dropped and the command that rewrites the
+  file. Under `fail_on: warning` that fails a strict repository until the file is migrated. The rule is
+  opt-in like every rule, and the upgrade enables it (the upgraded config and the file `migrate config`
+  writes both name it at `warn`), so a config upgraded once is reported by the next release that moves
+  the version again.
+- **Outside the window.** The run does not start: exit 2, `status: not-run`, the usual `error`
+  sentence, and a `schema_version_error` object:
+
+  ```json
+  {
+    "found": 7,
+    "supported": [1, 2],
+    "current": 2,
+    "migration": { "release": null, "command": null, "note": "this config is newer than this build; ..." }
+  }
+  ```
+
+  `migration.release` is the oldest release that still reads `found` and `migration.command` the
+  command to run with it (`urzua migrate config`); both are `null` when no release reads `found` (a
+  version newer than `current`, or one no release ever read), and `note` says what to do either way.
+  Nothing else in the file is read first, so a bad key in a config of the wrong version is not reported
+  in place of the version.
+
+`urzua migrate config` (`SPEC-14`) rewrites an `N-1` config to `N` in place, keeping its comments, and
+lists every key it added, changed, renamed, moved or dropped. A second run reports `nothing-to-do`.
+It never reads a version outside the window, so there is no chain of steps: an adopter who skips a
+release installs the older release that reads their version, migrates, and moves on.
+
+### Version 1
+
+Version 1 is the shape `.urzua/config.yaml` had from its introduction (`ADR-52`) until `MILE-80` made
+every rule opt-in. It was current on `main` for a day and no release read it as YAML: the `0.3.0`
+release read `.urzua/config.toml` at `schema_version: 1`, a format nothing reads any more (`ADR-54`). The
+upgrade to version 2 does exactly what that break did:
+
+- **No `rules` table.** A version-1 build ran every rule, each at a severity the rule chose, and a
+  version-1 config with a `rules` key is refused as not a version-1 config. The upgrade names every
+  rule the version-1 build ran, at the severity it ran, so the config keeps running what it ran:
+  `header.required-fields`, `config.pointer-declaration-missing`, `config.pointer-field-not-known`,
+  `config.pointer-narrative-overlap`, `pointer.resolution`, `filename.title-consistency`,
+  `revision-log.change-class-required` and `relation.supersession-reciprocity` at `error`;
+  `header.field-set-consistency`, `type.no-declared-spec`, `header.pointer-field-clean`,
+  `embodiment.consistency` and `embodiment.locator-promotion-candidate` at `warn`; and `field.quality`
+  at `error` with `field.pending` at `warn`, the two halves of one version-1 rule.
+- **Dropped, and reported as dropped.** The per-type `header_layout` key and the rule that read it
+  (`header.layout-consistency`); `header.deprecated-shape`, whose header shapes no release reads;
+  `narrative-field.stale`, which version 2 refuses without a `terminal_statuses` list a version-1
+  config had no place to declare; and `pointer.target-status`, which version 1 ran by announcing the
+  status of every resolved reference and which version 2 runs only for statuses a repository declares.
+- **Not converted.** A version-1 config that names a removed `header_shape` (`blockquote`,
+  `bold-list`), or omits it and so meant `blockquote`, is not made valid by the upgrade: those shapes
+  are no longer read (`MILE-85`), so the upgraded config fails to load with that error and
+  `migrate config` leaves the file as it was.
+
+### When a version bump is required
+
+`schema_version` changes only for a break: a removed or renamed key, a changed meaning for an existing
+key, or a default that changes behaviour for an unchanged config. An additive optional key whose
+default preserves behaviour is not a break and needs no bump. A reviewer applies this to a config
+change; a change that is a break and does not bump the version is a defect in the change.
+
+A bump to `N+1` is one change that: raises `CURRENT_SCHEMA_VERSION`; replaces the upgrade step in
+`urzua-core::schema_version` with the one from `N` to `N+1` (the previous step is deleted, not kept);
+adds a row to the table above and to `RELEASES`; enables `config.schema-version-outdated` in the new
+step; and adds a fixture config at each supported version to the acceptance corpora, with a case
+proving each loads to the same effective config.
+
 ## Open questions
 
 - **Can scoped overrides express per-package variation without becoming a second config format?**
   The moment overrides gain their own resolution order, this is per-package configs with extra
   steps.
-- **Does the config need a version field?** It has no consumers yet, so a version costs nothing now
-  and is unaddable later without a migration.
+- **Does the config need a version field?** Answered: it has one, `schema_version`, and a window of
+  versions a release reads (see "Supported schema versions").
 - **Where do back-pointer patterns live** — config, or fixed by the record format (ADR-2)? Making
   them configurable is what lets a corpus keep its existing `Implements:` convention; fixing them is
   what makes cross-repo resolution possible (roadmap Phase 4).
@@ -1267,3 +1350,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.62`. Documented scoped evidence pins: the locator grammar and parse order, the hashed bytes, the top-level `locator_resolvers` declaration (`start`, `end`, `leading`, `container`, `member`, `trait_container`), the five end kinds, resolution and its failure reasons, with normative test vectors. **Why:** `MILE-185` / `ADR-74` -- a pin on a volatile file went stale on edits unrelated to its decision; resolvers are repository configuration, not engine knowledge. | **substantive** |
 > | 2026-11-05 | Bumped to `0.63`. Documented the drift rule for a scoped pin: no file-based grace window, an audit date still applies, and a scope without a pin is judged on the whole file. **Why:** `MILE-185` / `ADR-74` point 8. | **substantive** |
 > | 2026-11-05 | Bumped to `0.64`. Clarified that an unpinned scope that does not resolve is reported by `embodiment.locator-exists` while drift is still judged on the whole file, and that a commit anchor is not judged for drift. **Why:** review of `MILE-185` part 2, reconciling `ADR-74` points 6 and 8. | **substantive** |
+> | 2026-11-05 | Bumped to `0.65`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does, and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |

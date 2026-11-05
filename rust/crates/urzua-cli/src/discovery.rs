@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
-use urzua_core::report::ScopeSource;
+use urzua_core::report::{Failure, ScopeSource};
 use urzua_core::rules;
 
 /// The contract value for how a run selected its records. The adapter lives
@@ -51,10 +51,18 @@ pub(crate) fn default_config_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".urzua/config.yaml")
 }
 
-pub(crate) fn load_config(path: &PathBuf) -> Result<Config, String> {
+pub(crate) fn load_config(path: &PathBuf) -> Result<Config, Failure> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
-    urzua_core::config::parse(&content).map_err(|e| e.to_string())
+    urzua_core::config::parse(&content).map_err(|e| match e {
+        // The structured form rides along so a could-not-run report can carry
+        // `{found, supported, current, migration}` (`ADR-77`).
+        urzua_core::config::ConfigError::SchemaVersionOutOfWindow(v) => Failure {
+            message: v.to_string(),
+            schema_version: Some(Box::new(v)),
+        },
+        other => Failure::from(other.to_string()),
+    })
 }
 
 pub(crate) fn load_records(

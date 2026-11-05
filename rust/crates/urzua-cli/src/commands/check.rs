@@ -18,6 +18,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::Failure;
 use urzua_core::report::{
     CheckReport, CouldNotRun, DiffScope, Finding, FindingSeverity, Notice, NoticeSeverity,
     RuleExecution, ScopeInfo,
@@ -243,7 +244,7 @@ fn execute(
     paths: Vec<PathBuf>,
     base: Option<String>,
     fail_on: Option<urzua_core::config::FailOn>,
-) -> Result<CheckReport, String> {
+) -> Result<CheckReport, Failure> {
     let opened = open_session(&paths, config_path, base.as_deref())?;
     let session = &opened.session;
     let scope = narrow(session, opened.requested_scopes, opened.changed)?;
@@ -303,7 +304,7 @@ fn open_session(
     paths: &[PathBuf],
     config_path: Option<PathBuf>,
     base: Option<&str>,
-) -> Result<Opened, String> {
+) -> Result<Opened, Failure> {
     let mut requested_scopes = Vec::new();
     let mut changed = None;
     let session = Session::open_with(paths, config_path, |repo_root, _config, discovered| {

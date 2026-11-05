@@ -12,12 +12,13 @@ use urzua_core::rules;
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
+use urzua_core::report::Failure;
 
 pub fn run(config_path: Option<PathBuf>) -> ExitCode {
     emit_or_not_run(run_inner(config_path))
 }
 
-fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, String> {
+fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
     let Session {
         config,
         discovered,

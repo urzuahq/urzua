@@ -259,6 +259,12 @@ enum MigrateTarget {
         apply: bool,
     },
 
+    /// Rewrite the config from the previous schema version to the current one,
+    /// in place, keeping its comments. Reports every key it added, changed,
+    /// renamed, moved or dropped, and reports nothing to do when the config is
+    /// already current. A version outside what this build reads is refused.
+    Config,
+
     /// Field-rollout assistant for a newly-required field. Only --report
     /// exists so far: a read-only preview of which existing records would
     /// newly fail, before the field is ever added to config.
@@ -331,6 +337,9 @@ fn main() -> ExitCode {
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
         } => commands::migrate::run_ids(cli.config, apply),
+        Command::Migrate {
+            target: MigrateTarget::Config,
+        } => commands::migrate::run_config(cli.config),
         Command::Migrate {
             target:
                 MigrateTarget::Schema {

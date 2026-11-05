@@ -1,0 +1,5 @@
+# A version older than the one before the current: outside the window.
+schema_version: 0
+record_types:
+  adr:
+    dir: records

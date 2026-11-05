@@ -388,6 +388,8 @@ rules:
   config.known-fields-declaration-missing: error
   config.header-none-has-no-required-fields: error
   config.scope-matches-nothing: warn
+  # Reports this file when it is read through a schema upgrade (ADR-77, MILE-34).
+  config.schema-version-outdated: warn
   section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error

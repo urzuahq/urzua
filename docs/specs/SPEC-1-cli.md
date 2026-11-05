@@ -1,5 +1,5 @@
 ---
-Version: '0.13'
+Version: '0.14'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -43,7 +43,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-11** | `urzua audit` | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
-> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` | Accepted |
+> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
 >
 > Its number and identity are unchanged deliberately. Roughly thirty-five records, comments and
@@ -156,9 +156,10 @@ commit, never a flaky run.
   declared `issue_refs` is exit `2` with `status: not-run` and the reason in `error`, and the
   existing snapshot is left as it was.
 
-### `urzua migrate ids` / `urzua migrate schema`
-**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, and previews
-what a newly-required field would break before it's added to config.
+### `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config`
+**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, previews
+what a newly-required field would break before it's added to config, and rewrites a config from the
+previous schema version to the current one.
 
 ### `urzua export --format json`
 Every record of every configured type as plain JSON data, so tooling reads records through the one
@@ -178,7 +179,7 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
   `ExplainReport`, `ExportReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
-  `DoctorReport`, `CouldNotRun`)
+  `DoctorReport`, `MigrateConfigReport`, `CouldNotRun`)
   stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
   no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
   and was killed by a confirmed duplicate-JSON-key bug before it shipped.
@@ -189,6 +190,10 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 - **Exit code is a channel independent of stdout/stderr content.** `Report::exit_code()` drives it —
   0 clean, 1 blocking findings, 2 could not run — the same contract a CI script gates on (`urzua
   check docs/ || exit 1`) whether output is JSON, plain text, or nothing at all.
+- **A could-not-run caused by the config's `schema_version` carries the cause as data.** When the
+  version is outside the window the release reads, `CouldNotRun` adds a `schema_version_error` object
+  (`found`, `supported`, `current`, `migration`; `SPEC-3`, `ADR-77`) beside the usual `error` sentence,
+  and is omitted otherwise.
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
@@ -312,3 +317,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-04 | Bumped to `0.12`. The export contract gains `sections` and `preamble` (`MILE-115`). **Why:** the ADR, bug and milestone types now declare `sections`, so the condition the contract named for adding them holds. A type with no declaration gets an explicit `null`, not an absent key: absence reads as "not exported", while `null` states "no declaration" and `[]` states "declared, none present", so no consumer takes a silent default. Aliases resolve to the declared name as in `MILE-165`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.13`. Narrowed to the item the decision concerns; re-pin approved by the maintainer's 2026-11-04 drift decision (`ADR-74`, `MILE-185`): `main.rs` to `Command` (lines 89-237), `emit` (lines 39-56); `check_integration.rs` to `help_exits_0_with_plain_text_not_json` (lines 773-790), `a_bad_flag_emits_json_not_a_panic` (lines 792-808), `check_exits_0_on_a_clean_corpus` (lines 68-93), `check_exits_1_on_a_missing_required_field` (lines 95-117), `check_exits_2_when_no_config_exists` (lines 119-129). **Why:** an unrelated edit to a volatile file must not stale this pin again; the spans were chosen by the author of this change and not reviewed line by line by the maintainer. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/tests/export_integration.rs` e1ad4b495f5b -> ee81adceb0d7. Reason: Drift review of 2026-11-04, recommendation (a). The only change to export_integration.rs since the pin is one added fixture and test (`export_json_emits_declared_sections...`, MILE-115, 76 lines); no existing test changed, so the output-contract coverage this spec cites holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.14`. Named `urzua migrate config` beside the other two `migrate` operations and added `schema_version_error` to the could-not-run contract. **Why:** `ADR-77` / `MILE-34`. | **substantive** |

@@ -1,0 +1,16 @@
+id: migrate-config-reports-every-key-it-touched
+corpus: corpus-k
+invocation: [--config, .urzua/config-v1.yaml, migrate, config]
+# The rewrite names what it dropped, with the reason, and what it enabled so the
+# configuration keeps running what a version-1 build ran (ADR-77).
+expect_exit: 0
+expect_json:
+  - {at: /outcome, equals: migrated}
+  - {at: /from, equals: 1}
+  - {at: /to, equals: 2}
+expect_stdout_contains:
+  - record_types.adr.header_layout
+  - rules.narrative-field.stale
+  - rules.field.pending
+  - rules.config.schema-version-outdated
+mutation_exempt: the migrate command is not a rule; it has no rule to switch off.
