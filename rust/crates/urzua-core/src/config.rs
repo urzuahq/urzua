@@ -1921,6 +1921,12 @@ pub struct RelationPair {
     /// unechoed claim, because that type cannot hold the inverse field.
     #[serde(default)]
     pub types: Option<Vec<String>>,
+    /// The pair is a sequencing relation that must not loop (`RFC-48`,
+    /// `MILE-27`): `sequence.cycle` reports a cycle through its claims and
+    /// `sequence.unresolved-blocker` a claim that names no record. Defaults to
+    /// `false`; it applies to any pair, not only a dependency one.
+    #[serde(default)]
+    pub acyclic: bool,
 }
 
 /// Which claimants make a pair's claim provisional, and how loudly an
@@ -2127,6 +2133,20 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             if !declared.contains(status) {
                 return bad(format!(
                     "pair '{label}' provisional status '{status}' is not in the `statuses.values` of any record type, so it could never apply"
+                ));
+            }
+        }
+    }
+    // A sequencing rule with no acyclic pair to read examines nothing (ADR-7).
+    if !config.relation_pairs.iter().any(|p| p.acyclic) {
+        for rule in crate::rules::rule_ids_where(|d| d.requires_acyclic_pair) {
+            if config
+                .rules
+                .get(rule)
+                .is_some_and(|s| s.level != RuleLevel::Off)
+            {
+                return bad(format!(
+                    "rule '{rule}' is enabled but no relation_pairs entry declares `acyclic: true`, so it would examine nothing"
                 ));
             }
         }
@@ -3323,6 +3343,30 @@ record_types:
                 AMEND_PAIR
             ))
             .is_ok());
+        }
+    }
+
+    #[test]
+    fn acyclic_defaults_to_false_and_parses_when_declared() {
+        let c = parse(&pair_cfg("", AMEND_PAIR)).unwrap();
+        assert!(!c.relation_pairs[0].acyclic);
+        let y = "relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: none, acyclic: true}\n";
+        assert!(parse(&pair_cfg("", y)).unwrap().relation_pairs[0].acyclic);
+    }
+
+    #[test]
+    fn enabling_a_sequence_rule_without_an_acyclic_pair_is_refused() {
+        let acyclic = "relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: none, acyclic: true}\n";
+        for rule in ["sequence.cycle", "sequence.unresolved-blocker"] {
+            // No pair at all, and a pair that is not acyclic: both would examine nothing.
+            for pairs in ["", AMEND_PAIR] {
+                let e =
+                    parse(&pair_cfg(&format!("rules: {{{rule}: error}}\n"), pairs)).unwrap_err();
+                assert!(matches!(e, ConfigError::InvalidRelationPair { .. }), "{e}");
+                assert!(e.to_string().contains("acyclic"), "{e}");
+            }
+            assert!(parse(&pair_cfg(&format!("rules: {{{rule}: off}}\n"), "")).is_ok());
+            assert!(parse(&pair_cfg(&format!("rules: {{{rule}: error}}\n"), acyclic)).is_ok());
         }
     }
 
