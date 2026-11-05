@@ -77,6 +77,11 @@ Removing it is cheap to undo. Keeping it is what compounds.
 - **The version gate still exists.** `schema_version` remains the mechanism that makes a break loud
   (`ADR-12`), and this decision does not touch it. A config from a *supported* schema version that
   cannot be read is still an error that names the version.
+- **Note (2026-11-05): "a population of zero" holds through Phase 0 only.** It expires at the Phase 1 switchover
+  (`MILE-102`), when a real adopter's config exists. From then on a break is the question this record says to ask
+  "with numbers rather than instinct", and `ADR-77` (proposed) amends the default: a config schema break ships a
+  support window and a migration path (`RFC-49`). The Decision above is unchanged for any format with no real
+  adopter behind it (`MILE-118`).
 
 ## References
 
@@ -93,3 +98,4 @@ Removing it is cheap to undo. Keeping it is what compounds.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit fa5476f14. | **structural** |
+> | 2026-11-05 | Dated note added to Consequences: the zero-population premise holds through Phase 0 and expires at the Phase 1 switchover, where `ADR-77` (proposed) amends the default. **Why:** Maintainer decision, 2026-11-05 (`MILE-118`); the Decision text is unchanged. | **substantive** |

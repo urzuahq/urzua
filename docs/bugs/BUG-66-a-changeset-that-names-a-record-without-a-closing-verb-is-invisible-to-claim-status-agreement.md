@@ -51,3 +51,4 @@ claims at all.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. A changeset reading `Names ADR-1 without closing it.` gives `claim.status-agreement` `eligible: 0, examined: 0` and no finding. **Why:** what counts as a claim is `RFC-36`, still Draft. | **substantive** |
+> | 2026-11-05 | Waits on `RFC-36`; `Status` stays `Open`. **Why:** Maintainer decision, 2026-11-05: what counts as a claim is `RFC-36`'s to decide, so this bug is not worked until it is decided. | **substantive** |

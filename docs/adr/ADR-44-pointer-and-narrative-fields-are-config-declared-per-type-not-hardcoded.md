@@ -81,6 +81,10 @@ being reconsidered.
 - Raised, not resolved by this decision: whether other backward-compatibility shims exist elsewhere
   in `urzua-core` for the same reason this one did (imagined future adopters, not real ones) --
   scoped as a separate research task before any bug gets filed for it.
+- **Note (2026-11-05): the "zero real external adopters" cost holds through Phase 0 only.** It expires at the Phase 1
+  switchover (`MILE-102`), when a real adopter's corpus exists and `RFC-49`'s compatibility contract (proposed in
+  `ADR-77`) takes over; a break after that point is decided against a nonzero population. The Decision above is
+  unchanged (`MILE-118`).
 
 ## Amendment (2026-09-09): three validation checks added; `narrative_fields` clarified
 
@@ -150,3 +154,4 @@ declarations now live there. The shape of the declarations and the rest of the D
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/pointer.rs` 4248952dc30f -> f25158f2e1d0, `rust/crates/urzua-core/src/rules/narrative.rs` ab1662309844 -> 9fff38b1c9f6, `rust/crates/urzua-core/src/graph.rs` 1638485fe98c -> 33b1c278a9ff. Reason: Re-verified: pointer_fields and narrative_fields resolution is unchanged; diffs are severity, exclude_files and fixtures. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Amendment added: `.urzua/config.toml` is now `.urzua/config.yaml` (`ADR-52`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Dated note added to Consequences: the zero-adopters premise holds through Phase 0 and expires at the Phase 1 switchover. **Why:** Maintainer decision, 2026-11-05 (`MILE-118`); the Decision text is unchanged. | **substantive** |
