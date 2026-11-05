@@ -32,6 +32,8 @@ pub enum Declaration {
     RequiredFields,
     KnownFields,
     PointerFields,
+    /// `revision_log.version_bump` (`BUG-51`).
+    VersionBump,
 }
 
 impl Declaration {
@@ -41,6 +43,7 @@ impl Declaration {
             Declaration::RequiredFields => "required_fields",
             Declaration::KnownFields => "known_fields",
             Declaration::PointerFields => "pointer_fields",
+            Declaration::VersionBump => "revision_log.version_bump",
         }
     }
 }
@@ -391,6 +394,23 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::Main,
         run: |c| revision_log_change_class(c.records, c.config, c.full_text),
+    },
+    RuleDef {
+        id: RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+        description: "A changed record that adds a revision-log row of a class its type declares must also change its version (`BUG-51`, `SPEC-18`: a substantive or structural change is a `Version` bump plus a revision-log entry). A type declares it as `revision_log: {version_bump: {field: Version, classes: [substantive, structural]}}`: a field name and the classes that require a bump, and no type has it by default. Judged against the merge base's copy of the record, so it reports `not-applicable` on a run with no `--base`, never clean; a record new in the diff, including one renamed in it, has nothing to bump from and stays unexamined. A row counts as added when its cells appear in the current log and not in the merge base's. Enabling the rule when no type declares a bump is a config load error.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        reads_declaration: Some(Declaration::VersionBump),
+        header_none: HeaderNone::Exempt("reads a declared version field and body text, only on a --base run"),
+        options: &[],
+        actions: &[
+            VariantAction::new("version-bump", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        run: |c| revision_log_version_bump(c.records, c.config, c.full_text, c.changed_paths, c.base_text),
     },
     RuleDef {
         id: RULE_EMBODIMENT_CONSISTENCY,
@@ -1449,6 +1469,10 @@ mod tests {
             vec![
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (
+                    RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+                    Declaration::VersionBump
+                ),
                 (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
             ]

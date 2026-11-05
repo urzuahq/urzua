@@ -64,6 +64,9 @@ pub struct RuleCtx<'a> {
     pub drifted: &'a HashSet<PathBuf>,
     pub fresh: &'a HashSet<PathBuf>,
     pub claim_ages: &'a HashMap<PathBuf, u64>,
+    /// The merge base's text of each changed record (`--base`), read by the
+    /// caller; a record new in the diff has no entry. Empty without `--base`.
+    pub base_text: &'a HashMap<PathBuf, String>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
     /// Each changed record's `Status` at the merge base, for the types that

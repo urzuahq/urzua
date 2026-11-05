@@ -156,6 +156,13 @@ record_types:
     # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
       - [embodiment_state, embodiment_locator]
+    # A substantive or structural revision-log row on a changed spec means its
+    # Version moves (BUG-51, SPEC-18): `revision-log.version-bump-required`
+    # compares against the merge base's copy.
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      version_bump: {field: "Version", classes: ["substantive", "structural"]}
     pointer_fields:
       - "Derives-from"
       - "Implements"
@@ -381,6 +388,9 @@ rules:
   sequence.cycle: error
   sequence.unresolved-blocker: error
   revision-log.change-class-required: error
+  # Judged on a `--base` run against the merge base's copy of the record
+  # (BUG-51); `not-applicable` on a whole-repo run.
+  revision-log.version-bump-required: error
   narrative-field.stale:
     level: warn
     terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Retired", "Done", "WontDo"]

@@ -577,6 +577,23 @@ pub struct RevisionLogDecl {
     pub heading: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
+    /// Which revision-log change classes require the record's version field to
+    /// change (`BUG-51`). Absent for every type unless declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_bump: Option<VersionBumpDecl>,
+}
+
+/// A type's version-bump requirement: a revision-log row of one of `classes`
+/// added to a changed record means the record's `field` must differ from the
+/// merge base's. Read by `revision-log.version-bump-required`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VersionBumpDecl {
+    /// The header field that carries the version.
+    pub field: String,
+    /// The change classes (the revision log's Class column, without emphasis)
+    /// that require a bump.
+    pub classes: Vec<String>,
 }
 
 /// The default marker line: what every repository used before the identity
@@ -647,6 +664,13 @@ impl RecordTypeConfig {
             }) => RevisionLogId::Marker(m.clone()),
             _ => RevisionLogId::default(),
         }
+    }
+
+    /// The version-bump requirement this type declares, if any (`BUG-51`).
+    pub fn version_bump(&self) -> Option<&VersionBumpDecl> {
+        self.revision_log
+            .as_ref()
+            .and_then(|d| d.version_bump.as_ref())
     }
 
     /// Whether `urzua fix --apply` needs this type's revision-log section
@@ -1364,7 +1388,7 @@ pub fn parse_with_document_models(
         }
         if let Some(decl) = &rt.revision_log {
             let reason = match (&decl.marker, &decl.heading) {
-                (None, None) if decl.required.is_some() => None,
+                (None, None) if decl.required.is_some() || decl.version_bump.is_some() => None,
                 (None, None) => Some("neither `marker` nor `heading` -- name one"),
                 (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
                 (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
@@ -1375,6 +1399,18 @@ pub fn parse_with_document_models(
                 }
                 _ => None,
             };
+            let reason = reason.or_else(|| {
+                let bump = decl.version_bump.as_ref()?;
+                if bump.field.trim().is_empty() {
+                    Some("a `version_bump` with a blank `field` -- it names no field")
+                } else if bump.classes.is_empty() {
+                    Some("a `version_bump` with no `classes` -- it would require nothing")
+                } else if bump.classes.iter().any(|c| c.trim().is_empty()) {
+                    Some("a `version_bump` with a blank class -- it would match no row")
+                } else {
+                    None
+                }
+            });
             if let Some(reason) = reason {
                 return Err(ConfigError::InvalidRevisionLog {
                     record_type: name.clone(),
@@ -2164,6 +2200,22 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
                 ));
             }
         }
+    }
+    // A version-bump rule with no type declaring a bump is a check that ran on
+    // nothing (`BUG-51`).
+    if config
+        .rules
+        .get(crate::rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+        && !config
+            .record_types
+            .values()
+            .any(|t| t.version_bump().is_some())
+    {
+        return bad(format!(
+            "rule '{}' is enabled but no record type declares revision_log.version_bump, so it would examine nothing",
+            crate::rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
+        ));
     }
     Ok(())
 }

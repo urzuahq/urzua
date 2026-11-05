@@ -21,6 +21,7 @@ pub const RULE_FIELD_PENDING: &str = "field.pending";
 pub const RULE_CLAIM_STATUS_AGREEMENT: &str = "claim.status-agreement";
 pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
 pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";
+pub const RULE_REVISION_LOG_VERSION_BUMP_REQUIRED: &str = "revision-log.version-bump-required";
 pub const RULE_EMBODIMENT_CONSISTENCY: &str = "embodiment.consistency";
 pub const RULE_EMBODIMENT_LOCATOR_EXISTS: &str = "embodiment.locator-exists";
 pub const RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE: &str =

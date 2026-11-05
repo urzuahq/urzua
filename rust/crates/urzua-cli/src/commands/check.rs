@@ -75,7 +75,60 @@ struct Context<'a> {
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     repo_root: PathBuf,
+    base_text: HashMap<PathBuf, String>,
     templates: urzua_core::new_record::TemplateValues,
+}
+
+/// `revision-log.version-bump-required` judges a changed record against the
+/// merge base's copy, so that copy is read here (`BUG-51`) and handed over as
+/// data. Only the changed records of a type declaring a bump are read; a
+/// record new in the diff has no merge-base copy and gets no entry.
+fn load_base_text(
+    session: &Session,
+    scope: &ReportScope,
+    notices: &mut Vec<Notice>,
+) -> Result<HashMap<PathBuf, String>, String> {
+    let mut out = HashMap::new();
+    let (Some(changes), Some(_)) = (
+        &scope.changed,
+        enabled_setting(
+            &session.config,
+            rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+        ),
+    ) else {
+        return Ok(out);
+    };
+    for record in &session.records {
+        let declares = session
+            .config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.version_bump().is_some());
+        if !declares || !changes.changed.contains(&record.path) {
+            continue;
+        }
+        // A path added since the merge base (a rename's new name too) has no
+        // copy there: not an error, and not examined. Any other failure to read
+        // the merge base's copy is disclosed, since the record then goes
+        // unexamined.
+        if changes.added.contains(&record.path) {
+            continue;
+        }
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path) {
+            Ok(text) => {
+                out.insert(record.path.clone(), text);
+            }
+            Err(e) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
+                message: format!(
+                    "{}: could not read the merge base's copy, so the record is not examined: {e}",
+                    record.path.display()
+                ),
+            }),
+        }
+    }
+    Ok(out)
 }
 
 /// `field.quality`'s `template_placeholders` (`BUG-22`): each declared type's
@@ -153,6 +206,7 @@ impl<'a> Context<'a> {
             drifted: &self.drift.drifted,
             fresh: &self.drift.fresh,
             claim_ages: &self.claim_ages,
+            base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
             committed_statuses: self.committed_statuses.as_ref(),
             refs_snapshot: &self.refs_snapshot,
@@ -464,6 +518,7 @@ fn load_context<'a>(
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
+    let base_text = load_base_text(session, scope, &mut notices)?;
     let templates = load_templates(repo_root, config, &mut notices)?;
 
     Ok((
@@ -501,6 +556,7 @@ fn load_context<'a>(
                 )
             }),
             repo_root: repo_root.clone(),
+            base_text,
             templates,
         },
         notices,
