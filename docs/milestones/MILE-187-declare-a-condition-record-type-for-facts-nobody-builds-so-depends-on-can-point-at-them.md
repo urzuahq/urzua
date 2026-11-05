@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N53TQASB8WHQTZ217WHJ5W
-Status: Planned
+Status: Done
+Realized-by: code:.urzua/config.yaml, spec:docs/specs/SPEC-23-the-condition-record-type.md, test:rust/crates/urzua-cli/tests/condition_type_integration.rs
 Phase: '0'
 Track: roadmap-tracking
 Implements: RFC-48
@@ -33,3 +34,4 @@ A `condition` record type, declared entirely in `.urzua/config.yaml`, for a depe
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** Maintainer decision, 2026-11-05: the `condition` record type of `RFC-48` is a Phase 0 milestone, so waits on facts are structured and the computed roadmap sees them. | **substantive** |
 > | 2026-11-05 | `Blocked-on` cleared. **Why:** `MILE-182` is Done, so `urzua roadmap` exists to read the type; the dependency stays declared in `Depends-on`. `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Status` Planned -> Done; `Realized-by` set. **Why:** delivered in full by this change: the `condition` type declared in `.urzua/config.yaml` with `SPEC-23` and the `SPEC-3` row, the fixtures in `condition_type_integration.rs` (same shape under another name; `Depends-on` on `Open`, `Met`, `Dropped` and missing conditions; the roadmap and derived `blocked`), and `MILE-13`, `MILE-21`, `MILE-23` and `MILE-30` migrated to `COND-1` to `COND-4`. `condition.review-due` and `sequence.failed-dependency` stay out of scope, as the record says. | **structural** |

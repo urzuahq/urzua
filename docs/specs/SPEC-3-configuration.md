@@ -1,5 +1,5 @@
 ---
-Version: '0.85'
+Version: '0.86'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1085,6 +1085,24 @@ pair, an unknown `reciprocity`, and enabling either pair rule while no pair is d
 declared as a `pointer_fields` entry is also resolved by `pointer.resolution`, so an unresolved
 reference reports twice; keep pair fields outside `pointer_fields`, as `Supersedes / Superseded-by` is.
 
+### A record type declared from configuration alone: `condition` (`MILE-187`, `RFC-48`)
+
+A record type needs no engine support when its shape is made of primitives this file already
+documents. `condition`, the record for a fact nobody builds, is the first such type; its schema,
+statuses and `Signal` section are specified by `SPEC-23`.
+
+| Type | Spec | Directory and identity | Statuses | Required by status |
+|---|---|---|---|---|
+| `condition` | `SPEC-23` | `docs/conditions`, prefix `COND`, `COND-NNNN-slug.md` | `Open` (initial) moves to `Met` (success) or `Dropped` (failure), both terminal | `Met-by` in `Met` |
+
+The declaration uses `dir`, `prefix`, `identity`, `statuses` (`values`, `success`, `failure`,
+`initial`, `transitions`, `require`), `sections` and `spec`, and nothing else. No rule, option or
+code path reads the name `condition`: the same declaration under another type name, prefix and
+directory reports the same findings and the same roadmap (a fixture proves it). A `Depends-on` from
+any record that declares the field resolves to a condition through the sequencing pair like any other
+record, which needs `cross_type: true` on that pair as here. A type's effective prefix defaults to its
+upper-cased name (`CONDITION`), so a type whose prefix differs from its name declares `prefix`.
+
 ## `urzua doctor`
 
 **Specified in full by SPEC-15.** Reports on the tool's own configuration and invocation health —
@@ -1783,3 +1801,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.83`. Documents the `closes` and `strict` options of `claim.status-agreement`: a changeset fragment lists the records it closes in a one-line frontmatter key, each id must resolve (`claim.id-unresolved`) and be at a terminal status its own type declares, a block list or malformed value is `claim.field-malformed`, `strict` makes a fragment without the key a finding, and a file with no frontmatter is out of scope and disclosed, except that under `strict` an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed`. **Why:** `BUG-66`, decided by `ADR-85`; the fence case because the pinned release tool rejects both. | **substantive** |
 > | 2026-11-05 | Bumped to `0.84`. Documents the top-level `block_on: introduced \| all` key for the editor hook: `introduced` is the default and what an absent key means, `all` blocks on any error in the edited record, any other value is a load error. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.85`. `info` is a rule level and a `field_levels` level and a boundary `severity` (`ADR-87`, `MILE-194`): findings are reported and counted, never `blocking`, never fail `fail_on`, and a rule set to `info` caps every declared severity at `info`. `fail_on: info` and every other unrecognised level are refused at load, the level message listing `off`, `info`, `warn` and `error`. **Why:** `MILE-194` builds `ADR-87`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.86`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |

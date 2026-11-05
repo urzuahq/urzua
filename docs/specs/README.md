@@ -47,4 +47,6 @@ regenerates the list below from the records.
   Repository layout
 - [SPEC-22](SPEC-22-rust-coding-standards.md) — Accepted, 2026-09-23
   Rust coding standards
+- [SPEC-23](SPEC-23-the-condition-record-type.md) — Draft, 2026-11-05
+  The condition record type
 <!-- urzua:index:end -->
