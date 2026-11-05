@@ -2,7 +2,7 @@
 Version: '0.10'
 Date: 2026-09-08
 Status: Accepted
-Embodiment: Not started
+Embodiment: Verified
 Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs
 Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
@@ -77,3 +77,4 @@ ADR's own `Deciders` field records.
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
 > | 2026-11-04 | Bumped to `0.9`. Added the optional `Non-reference-ids` field to `known_fields`: the exact ids a record names without citing as a reference (`BUG-190`, `ADR-75`). **Why:** `RFC-5` writes an example id from another corpus that a real record could otherwise capture. | **substantive** |
 > | 2026-11-05 | Bumped to `0.10`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `an_rfc_follows_its_declared_lifecycle_and_vocabulary`, `an_rfc_amending_another_must_be_echoed_by_the_amended_rfc`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
