@@ -1,9 +1,9 @@
 ---
-Version: '0.76'
+Version: '0.78'
 Date: 2026-08-20
-Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Status: Shipped
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
+Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
 Implements: RFC-1, RFC-3, RFC-10, RFC-11
@@ -719,4 +719,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.73`. Added `revision-log.version-bump-required` to the rule table (regenerated from `RULE_METADATA`): a diff rule that compares a changed record's revision log and version field against the merge base's copy, read by the CLI and handed to the rules as data. **Why:** `BUG-51`; `SPEC-3` states the declaration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.74`. `embodiment.locator-exists` also reports a locator that does not parse, a scope that does not resolve in the file (with the reason), a scope given without a pin and a commit anchor (not yet supported); the rule table is regenerated. **Why:** `MILE-185` / `ADR-74` -- a scope that stops resolving must be reported, never passed; `SPEC-3` lists every reason. | **substantive** |
 > | 2026-11-05 | Bumped to `0.75`. `embodiment.consistency` judges a scoped pin by the hash of its resolved span: an edit elsewhere in the file is not drift, there is no file-based grace window for it, and a scope that does not resolve is reported by `embodiment.locator-exists` and not also as drift. **Why:** `MILE-185` / `ADR-74`. | **substantive** |
-> | 2026-11-05 | Bumped to `0.76`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone. **Why:** `MILE-187`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.76`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.77`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.78`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone. **Why:** `MILE-187`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
