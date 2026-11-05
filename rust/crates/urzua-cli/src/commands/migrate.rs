@@ -17,13 +17,22 @@ use crate::session::{emit_or_not_run, Session};
 /// `urzua migrate ids`'s report (SPEC-14).
 #[derive(serde::Serialize)]
 struct MigrateIdsReport {
-    status: ReportStatus,
+    status: MigrateIdsStatus,
     apply: bool,
     missing: Vec<PathBuf>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     results: Vec<MigrateIdsResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     notices: Vec<Notice>,
+}
+
+/// `partial-failure` when any record could not be written, so the report and
+/// the exit code agree (as `fix --apply` and `index --apply` do).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum MigrateIdsStatus {
+    Ok,
+    PartialFailure,
 }
 
 #[derive(serde::Serialize)]
@@ -88,7 +97,7 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
 
     if missing.is_empty() || !apply {
         return Ok(emit(&MigrateIdsReport {
-            status: ReportStatus::Ok,
+            status: MigrateIdsStatus::Ok,
             apply,
             missing: missing.into_iter().map(|r| r.path.clone()).collect(),
             results: Vec::new(),
@@ -96,6 +105,9 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
         }));
     }
 
+    // The lock `fix --apply` takes: two writers on one record must not
+    // interleave.
+    let _lock = urzua_io::FixLock::acquire(&repo_root)?;
     let missing_paths: Vec<PathBuf> = missing.iter().map(|r| r.path.clone()).collect();
     let mut results = Vec::with_capacity(missing.len());
     for r in &missing {
@@ -143,7 +155,32 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
         let new_content = doc.to_string();
 
         let full_path = repo_root.join(&r.path);
-        match std::fs::write(&full_path, new_content) {
+        // Re-read right before writing (as `fix` does): the id was placed from
+        // the text read at session start, and a record edited since would be
+        // overwritten by it.
+        match urzua_io::read_to_string(&full_path) {
+            Ok(on_disk) if on_disk == *content => {}
+            Ok(_) => {
+                results.push(MigrateIdsResult {
+                    record: r.path.clone(),
+                    outcome: MigrateIdsOutcome::Failed,
+                    error: Some(
+                        "the record changed since it was read; nothing was written -- run `urzua migrate ids --apply` again"
+                            .to_string(),
+                    ),
+                });
+                continue;
+            }
+            Err(e) => {
+                results.push(MigrateIdsResult {
+                    record: r.path.clone(),
+                    outcome: MigrateIdsOutcome::Failed,
+                    error: Some(format!("could not re-read: {e}")),
+                });
+                continue;
+            }
+        }
+        match urzua_io::write_atomic(&full_path, &new_content) {
             Ok(()) => results.push(MigrateIdsResult {
                 record: r.path.clone(),
                 outcome: MigrateIdsOutcome::Applied,
@@ -157,8 +194,16 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
         }
     }
 
+    let status = if results
+        .iter()
+        .any(|r| r.outcome == MigrateIdsOutcome::Failed)
+    {
+        MigrateIdsStatus::PartialFailure
+    } else {
+        MigrateIdsStatus::Ok
+    };
     Ok(emit(&MigrateIdsReport {
-        status: ReportStatus::Ok,
+        status,
         apply,
         missing: missing_paths,
         results,
@@ -296,7 +341,7 @@ fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
             path.display()
         )
     })?;
-    std::fs::write(&path, &migrated.text)
+    urzua_io::write_atomic(&path, &migrated.text)
         .map_err(|e| format!("could not write {}: {e}", path.display()))?;
     Ok(emit(&MigrateConfigReport {
         status: ReportStatus::Ok,

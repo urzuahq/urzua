@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -97,6 +97,9 @@ the rule. Each rule's declaration is the `reads_declaration` of its entry in the
   and exits 2.
 - **Idempotent, via the never-clobber refusal above.** A re-run against an initialized repository
   exits 2 and changes nothing.
+- **The config is written whole or not at all** (a temporary file renamed into place), so a full disk
+  or a killed process leaves no truncated `.urzua/config.yaml`, which a re-run would refuse to
+  overwrite.
 - **`--dry-run` prints the plan and writes nothing**, and is the documented way to see what adopt
   inferred before committing to it.
 
@@ -175,3 +178,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.7`. `init` proposes only `yaml-frontmatter` and reports, in a `header-shape` notice, the existing records written in a removed `blockquote` or `bold-list` form; it no longer infers a shape from the corpus and no longer declares `header.deprecated-shape`. **Why:** `MILE-85` removed those shapes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `## Proposed rules`: `init` does not propose a rule that reads a per-type declaration it leaves empty (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and names each in a `rule-applicability` notice with the declaration to write. **Why:** `BUG-73`; the four rules ran over zero records on every adopted corpus. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. `init` writes the config through a temporary file and a rename. **Why:** review of the CLI found every record and config write truncated the file before writing it. | **substantive** |

@@ -32,6 +32,8 @@ pub enum DiscoveryError {
     InvalidRef { base: String },
     #[error("there is no merge base between {base:?} and HEAD: the histories are unrelated")]
     NoMergeBase { base: String },
+    #[error("there is no merge base between {base:?} and HEAD because this is a shallow clone and the history that joins them is not fetched: fetch full history (e.g. `git fetch --unshallow`, or `fetch-depth: 0` in CI)")]
+    ShallowClone { base: String },
     #[error("`git {args}` output was not valid UTF-8")]
     InvalidUtf8 { args: String },
 }
@@ -169,9 +171,16 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
         Err(DiscoveryError::NonZeroExit { status, stderr, .. })
             if status.code() == Some(1) && stderr.trim().is_empty() =>
         {
+            // A shallow clone hides the commits that join the two histories;
+            // that, not unrelated histories, is the usual cause in CI.
+            if is_shallow_repository(repo_root).unwrap_or(false) {
+                return Err(DiscoveryError::ShallowClone {
+                    base: base.to_string(),
+                });
+            }
             return Err(DiscoveryError::NoMergeBase {
                 base: base.to_string(),
-            })
+            });
         }
         Err(e) => return Err(e),
     };
@@ -220,6 +229,33 @@ pub fn read_at_commit(
     run_git(repo_root, &["show", &spec])
 }
 
+/// A file as it was at `commit`, or `None` when the commit has no such path.
+/// Absence is an answer; every other failure (a missing object, a copy that is
+/// not UTF-8) is an error, so a caller cannot read "could not read" as "was
+/// never there". Presence is asked of the tree (`ls-tree`), not read off git's
+/// error wording, which is localised.
+pub fn read_at_commit_if_present(
+    repo_root: &Path,
+    commit: &str,
+    path: &Path,
+) -> Result<Option<String>, DiscoveryError> {
+    let listed = run_git(
+        repo_root,
+        &[
+            "ls-tree",
+            "--name-only",
+            "-z",
+            commit,
+            "--",
+            &path.display().to_string(),
+        ],
+    )?;
+    if listed.is_empty() {
+        return Ok(None);
+    }
+    read_at_commit(repo_root, commit, path).map(Some)
+}
+
 /// Read a file's content as UTF-8. The only I/O `urzua-core`'s parser needs;
 /// `urzua-core` itself never touches a `Path`.
 pub fn read_to_string(path: &Path) -> std::io::Result<String> {
@@ -241,6 +277,7 @@ const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// `resolve_identity`'s result plus any non-fatal notice about it. Structured
 /// rather than a bare `eprintln!` so a caller can fold `warning` into its own
 /// JSON report instead of it landing as unparseable stderr prose.
+#[derive(Debug)]
 pub struct ResolvedIdentity {
     pub name: String,
     pub warning: Option<String>,
@@ -252,6 +289,34 @@ pub struct ResolvedIdentity {
 /// over `git config user.name`. Errors rather than defaulting when none of
 /// the three resolve.
 pub fn resolve_identity(
+    explicit: Option<&str>,
+    repo_root: &Path,
+) -> Result<ResolvedIdentity, String> {
+    // Checked whichever tier wins: a `--by` that would corrupt the row is
+    // refused even when a gh login supersedes it.
+    if let Some(by) = explicit {
+        row_safe_identity(by, "--by")?;
+    }
+    let resolved = resolve_identity_unchecked(explicit, repo_root)?;
+    row_safe_identity(&resolved.name, "the resolved identity")?;
+    Ok(resolved)
+}
+
+/// The identity is written into a revision-log table row, where a `|` adds a
+/// cell and a line break splits the row. Refused, as `--reason` is, rather
+/// than rewritten: a silently altered name is not the one that attested.
+fn row_safe_identity(name: &str, source: &str) -> Result<(), String> {
+    if name.chars().any(|c| c == '|' || c.is_control()) {
+        return Err(format!(
+            "{source} {name:?} contains '|' or a control character such as a line break; \
+             it is written into a revision-log table row. Pass --by with a plain name \
+             (or fix `git config user.name`)"
+        ));
+    }
+    Ok(())
+}
+
+fn resolve_identity_unchecked(
     explicit: Option<&str>,
     repo_root: &Path,
 ) -> Result<ResolvedIdentity, String> {
@@ -367,6 +432,54 @@ impl Drop for FixLock {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
     }
+}
+
+/// Replace `path` with `text` only once the whole text is on disk: written to a
+/// temporary file in the same directory, then renamed over the target. A write
+/// that fails (disk full) or a process killed part-way leaves the old file
+/// intact instead of an empty or truncated record or configuration. An
+/// existing file's permissions are kept; a symlink is written through, so the
+/// link stays a link. A read-only file is refused, as a plain write would.
+/// The temporary file is removed on failure.
+pub fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let target = match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => std::fs::canonicalize(path)?,
+        _ => path.to_path_buf(),
+    };
+    let dir = match target.parent() {
+        Some(d) if !d.as_os_str().is_empty() => d.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let temp = dir.join(format!(".{name}.urzua-tmp-{}", std::process::id()));
+    let result = (|| {
+        // A file made read-only on purpose stays unwritable: rename would
+        // replace it regardless of its own mode.
+        if let Ok(meta) = std::fs::metadata(&target) {
+            if meta.permissions().readonly() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "the file is read-only",
+                ));
+            }
+        }
+        let mut file = std::fs::File::create(&temp)?;
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        if let Ok(meta) = std::fs::metadata(&target) {
+            std::fs::set_permissions(&temp, meta.permissions())?;
+        }
+        std::fs::rename(&temp, &target)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
 }
 
 /// The commit that last touched a specific 1-indexed line (RFC-0005 tier 1),
@@ -900,6 +1013,81 @@ mod tests {
         let result = result.unwrap();
         assert_eq!(result.name, "explicit-name");
         assert!(result.warning.is_none());
+    }
+
+    #[test]
+    fn write_atomic_replaces_the_file_and_leaves_no_temporary_behind() {
+        let tmp = Scratch::new("urzua-io-atomic");
+        fs::create_dir_all(&tmp).unwrap();
+        let path = tmp.join("record.md");
+        fs::write(&path, "old\n").unwrap();
+        write_atomic(&path, "new\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new\n");
+        let names: Vec<_> = fs::read_dir(&*tmp).unwrap().collect();
+        assert_eq!(names.len(), 1, "only the record remains: {names:?}");
+    }
+
+    #[test]
+    fn write_atomic_failing_part_way_keeps_the_old_file() {
+        let tmp = Scratch::new("urzua-io-atomic-fail");
+        fs::create_dir_all(&tmp).unwrap();
+        let path = tmp.join("record.md");
+        fs::write(&path, "old\n").unwrap();
+        // The temporary name is taken by a directory, so creating it fails
+        // before anything is renamed: the target must be untouched.
+        let temp = tmp.join(format!(".record.md.urzua-tmp-{}", std::process::id()));
+        fs::create_dir(&temp).unwrap();
+        assert!(write_atomic(&path, "new\n").is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "old\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_keeps_the_mode_and_writes_through_a_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = Scratch::new("urzua-io-atomic-link");
+        fs::create_dir_all(&tmp).unwrap();
+        let real = tmp.join("real.yaml");
+        fs::write(&real, "a: 1\n").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o640)).unwrap();
+        let link = tmp.join("link.yaml");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        write_atomic(&link, "a: 2\n").unwrap();
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "a: 2\n");
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+
+    #[test]
+    fn resolve_identity_refuses_a_name_that_would_break_a_table_row() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
+
+        let tmp = Scratch::new("urzua-io-identity-pipe");
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+
+        let pipe = resolve_identity(Some("a | b"), &tmp);
+        let newline = resolve_identity(Some("a\nb"), &tmp);
+        // A git user.name is checked too, not only --by.
+        Command::new("git")
+            .args(["config", "user.name", "x | y"])
+            .current_dir(&tmp)
+            .output()
+            .unwrap();
+        let from_git = resolve_identity(None, &tmp);
+
+        std::env::set_var("PATH", original_path);
+
+        assert!(pipe.unwrap_err().contains("--by"));
+        assert!(newline.is_err());
+        assert!(from_git.unwrap_err().contains("resolved identity"));
     }
 
     #[test]
