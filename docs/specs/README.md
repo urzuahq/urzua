@@ -5,11 +5,11 @@ This directory holds urzua's specs, one `SPEC-N-slug.md` file each. This index i
 regenerates the list below from the records.
 
 <!-- urzua:index:begin -->
-- [SPEC-1](SPEC-1-cli.md) — Accepted, 2026-07-29
+- [SPEC-1](SPEC-1-cli.md) — Shipped, 2026-07-29
   The `urzua` CLI
-- [SPEC-2](SPEC-2-urzua-check.md) — Accepted, 2026-08-20
+- [SPEC-2](SPEC-2-urzua-check.md) — Shipped, 2026-08-20
   `urzua check`
-- [SPEC-3](SPEC-3-configuration.md) — Accepted, 2026-08-20
+- [SPEC-3](SPEC-3-configuration.md) — Shipped, 2026-08-20
   Configuration: `.urzua/config.yaml`
 - [SPEC-4](SPEC-4-the-corpus-acceptance-suite.md) — Draft, 2026-08-20
   The corpus acceptance suite
@@ -17,15 +17,15 @@ regenerates the list below from the records.
   `urzua init`
 - [SPEC-6](SPEC-6-the-milestone-record-type.md) — Accepted, 2026-09-07
   The `milestone` record type
-- [SPEC-8](SPEC-8-urzua-fix.md) — Accepted, 2026-09-07
+- [SPEC-8](SPEC-8-urzua-fix.md) — Shipped, 2026-09-07
   `urzua fix`
 - [SPEC-9](SPEC-9-the-bug-record-type.md) — Accepted, 2026-09-07
   The `bug` record type
-- [SPEC-10](SPEC-10-the-waiver-record-type.md) — Accepted, 2026-09-07
+- [SPEC-10](SPEC-10-the-waiver-record-type.md) — Shipped, 2026-09-07
   The `waiver` record type
 - [SPEC-11](SPEC-11-urzua-audit.md) — Accepted, 2026-09-07
   `urzua audit`
-- [SPEC-12](SPEC-12-urzua-new.md) — Accepted, 2026-09-07
+- [SPEC-12](SPEC-12-urzua-new.md) — Shipped, 2026-09-07
   `urzua new`
 - [SPEC-13](SPEC-13-urzua-explain-and-urzua-graph.md) — Accepted, 2026-09-07
   `urzua explain` and `urzua graph`
@@ -37,11 +37,11 @@ regenerates the list below from the records.
   The `adr` record type
 - [SPEC-17](SPEC-17-the-rfc-record-type.md) — Accepted, 2026-09-08
   The `rfc` record type
-- [SPEC-18](SPEC-18-the-spec-record-type.md) — Accepted, 2026-09-08
+- [SPEC-18](SPEC-18-the-spec-record-type.md) — Shipped, 2026-09-08
   The `spec` record type
 - [SPEC-19](SPEC-19-repository-agent-guardrails.md) — Accepted, 2026-09-08
   Repository agent guardrails
-- [SPEC-20](SPEC-20-ci-cd-pipeline.md) — Accepted, 2026-09-10
+- [SPEC-20](SPEC-20-ci-cd-pipeline.md) — Shipped, 2026-09-10
   CI/CD pipeline
 - [SPEC-21](SPEC-21-repository-layout.md) — Accepted, 2026-09-19
   Repository layout

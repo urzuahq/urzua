@@ -81,5 +81,7 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A pin can be scoped to one symbol or line range, in one locator grammar with the commit anchor](ADR-74-a-pin-can-be-scoped-to-one-symbol-or-line-range-in-one-locator-grammar-with-the-commit-anchor.md)
 - [A record declares the ids it names without citing as a reference, and citation.resolution does not resolve them](ADR-75-a-record-declares-the-ids-it-names-without-citing-as-a-reference-and-citation-resolution-does-not-resolve-them.md)
 - [An acyclic relation pair is a sequencing relation, checked by two sequence rules](ADR-76-an-acyclic-relation-pair-is-a-sequencing-relation-checked-by-two-sequence-rules.md)
+- [Config schema versions have a declared support window and a migration path](ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)
 - [RFC-7's remaining enforcement-harness decisions](ADR-78-rfc-7-s-remaining-enforcement-harness-decisions.md)
+- [audit folds into check and the command surface keeps one read-only validator](ADR-79-audit-folds-into-check-and-the-command-surface-keeps-one-read-only-validator.md)
 <!-- urzua:index:end -->

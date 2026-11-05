@@ -40,6 +40,10 @@ pub struct Config {
         skip_serializing_if = "crate::embodiment_model::EmbodimentDecl::is_default"
     )]
     pub embodiment: crate::embodiment_model::EmbodimentDecl,
+    /// Declared symbol resolvers for scoped evidence pins (`ADR-74`,
+    /// `SPEC-3`); absent means none, so only line ranges are available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -509,8 +513,10 @@ pub struct RecordTypeConfig {
     /// `header_pointer_field_clean`. Declared, not voted, same "undeclared
     /// means skip, no implicit default" principle as `known_fields`: this
     /// tool has no real external adopters yet whose behavior a hardcoded
-    /// fallback would need to preserve. Every field named here must also
-    /// appear in this type's `required_fields`/`known_fields`
+    /// fallback would need to preserve. (Note, 2026-11-05: that holds through
+    /// Phase 0 and expires at the Phase 1 switchover, MILE-102, when RFC-49's
+    /// compatibility contract takes over; MILE-118.) Every field named here
+    /// must also appear in this type's `required_fields`/`known_fields`
     /// (`config.pointer-field-not-known`) and must not also appear in
     /// `narrative_fields` (`config.pointer-narrative-overlap`).
     #[serde(default)]
@@ -928,6 +934,8 @@ pub enum ConfigError {
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
+    #[error("locator_resolvers: {reason}")]
+    InvalidLocatorResolvers { reason: String },
     #[error("record type '{record_type}' companion_fields: {reason}")]
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
@@ -1342,6 +1350,8 @@ pub fn parse_with_document_models(
         .embodiment
         .validate()
         .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
+    crate::locator::validate_resolvers(&config.locator_resolvers)
+        .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
     validate_companion_fields(&config)?;
