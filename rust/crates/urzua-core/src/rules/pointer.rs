@@ -73,6 +73,8 @@ pub fn pointer_target_status(
                             line: None,
                             waived: None,
                             declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("pointer-target-status").field(field_name.as_str()),
                             message: format!(
                                 "{field_name}: {reference} resolves, but its {target_status_field} is {status}"
                             ),
@@ -138,6 +140,9 @@ pub fn pointer_resolution(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("pointer-unresolved")
+                        .field(field_name.as_str()),
                     message: format!(
                         "{field_name}: {reference} does not resolve to any discovered record"
                     ),
@@ -220,6 +225,8 @@ pub fn header_pointer_field_clean(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("pointer-field-not-clean").field(field_name.as_str()),
                         message: format!(
                             "{field_name} entry {entry:?} isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status"
                         ),

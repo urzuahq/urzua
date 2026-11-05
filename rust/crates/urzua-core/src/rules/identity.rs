@@ -50,6 +50,8 @@ pub fn identity_collision(
                 line: None,
                 waived: None,
                 declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("identifier-collision"),
                 message: format!(
                     "identifier {id} is claimed by {} records ({}) -- a reference to it resolves to only one of them",
                     claimants.len(),

@@ -1,5 +1,5 @@
 ---
-Version: '0.14'
+Version: '0.15'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -149,6 +149,17 @@ with no evidence is not downgraded: `fix` reports it as a notice naming the reco
 adding evidence. `fix` computes no drift for this repair, so it runs when only
 `status.delivery-agreement` is enabled.
 
+### How `check` points at these repairs (`ADR-73`, `MILE-44`)
+
+A `check` finding of `embodiment.consistency` or `status.delivery-agreement` whose repair `fix` writes
+carries a `suggested_action` of kind `run-command` with `argv` `["urzua", "fix", "--apply", "--ids",
+"<record path>"]` and no `value`: the repair stays the one place the computed value lives. The
+command is offered only when `fix` would list a repair for that record and field, so a finding `fix`
+does not repair (a stated tier with neither a locator nor a citing back-pointer, a success `Status`
+with no evidence) offers an edit to the field or nothing. A test runs each offered command and checks
+the finding is gone. The command is the whole promise: `--apply` still needs an identity (`--by`) and
+its own gates, and the editor hook (`ADR-69`) still reads `repairs` only, never findings.
+
 ## Apply mode (`--apply`)
 
 Every one of the following is a hard gate — none are optional, none are defaults-on:
@@ -255,4 +266,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.12`. `fix` proposes, and `--apply` writes, the declared success `Status` for a record whose evidence computes to a declared delivered tier while its `Status` is declared not done (`statuses.delivery`); a success `Status` with no evidence is reported as a notice and never downgraded; the revision row now names the computed value; `fix` runs when only `status.delivery-agreement` is enabled. **Why:** `MILE-183`. | **structural** |
 > | 2026-11-04 | Bumped to `0.13`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. `fix --rebaseline` lists stale `@sha256:` pins and, on `--apply --ids`/`--force --by --reason`, re-pins the chosen records with an attributed revision row. **Why:** `MILE-181` -- a pin was a block with no sanctioned way to say "re-verified, still holds"; `RFC-2` proposed exactly this review-before-apply refresh. | **substantive** |
-
+> | 2026-11-04 | Bumped to `0.15`. Documents how `check` findings point at the `Embodiment` and `Status` repairs: a `run-command` `suggested_action` naming `urzua fix --apply --ids <record>`, offered only where `fix` lists that repair. No change to `fix` itself. **Why:** `MILE-44`, `ADR-73`. | **substantive** |

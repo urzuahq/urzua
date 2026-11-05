@@ -684,6 +684,7 @@ dependencies = [
  "cargo_metadata",
  "regex",
  "serde",
+ "serde_json",
  "thiserror",
  "yaml_serde",
 ]

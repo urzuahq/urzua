@@ -7,3 +7,4 @@ expect_findings:
     file: records/ADR-0006-supersedes.md
     severity: error
     message_contains: "ADR-0001"
+    suggested_action: {kind: edit-field, op: append}
