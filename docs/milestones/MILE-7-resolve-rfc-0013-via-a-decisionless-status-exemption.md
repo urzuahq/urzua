@@ -1,10 +1,11 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M1Y5JFS4DE9EE9HFVD4H4QHP
 Phase: '0'
 Track: section-checks
 Implements: RFC-13
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/section.rs, code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/section_rules_integration.rs, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs
 ---
 # 7 — Resolve RFC-13 via a decisionless-status exemption
 
@@ -49,3 +50,4 @@ A type declares statuses under `sections.exempt_statuses` whose records `section
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** the exemption half is built (`sections.exempt_statuses`, `rules/section.rs`, `section_rules_integration.rs`, merged in #172); the require-by-state half (`Embodiment` and `Realized-by` required of a shipped spec) is not built. `Status` stays Planned until it is. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done. `Status` stays Planned. The require-by-state half is now buildable as a declaration with no new code: `statuses.require` (`MILE-132`, `MILE-137`) already ties a field to the statuses that need it, and `bug` uses it for `Regression-test`. Declaring `require: [{when: [Accepted], fields: [Embodiment, Realized-by]}]` on the `spec` type was tried against this repository and reports 28 findings across the 14 Accepted specs that carry neither field; it was not kept. **Why:** two things stand between the try and a Done milestone. The `spec` vocabulary has only `Draft` and `Accepted`, so `Accepted` cannot tell a spec whose work shipped from one that is only agreed, and the declaration needs a status that says *shipped* (a vocabulary decision for the maintainer). And the 14 specs need their `Embodiment` and `Realized-by` backfilled before the rule can be enabled at `error`. | **substantive** |
+> | 2026-11-04 | `Status` `Planned` -> `Done`; `Realized-by` set. **Why:** the require-by-state half is built as configuration alone, with no engine change: this repository's `spec` type declares `Shipped` after `Accepted` and `statuses.require` for `Embodiment` and `Realized-by`, and `spec_shipped_integration.rs` shows a `Shipped` spec without them reported by `status.required-field-missing` while `Draft` and `Accepted` specs are not. Together with the exemption half (`sections.exempt_statuses`, in use on `adr` and `milestone`), that meets Done means. No spec is `Shipped` yet; moving one is the maintainer's call (`SPEC-18`). | **substantive** |
