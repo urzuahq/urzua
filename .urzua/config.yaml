@@ -382,16 +382,18 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
-# The pairs that are dependencies (ADR-83): the derived blocked value reads
-# these and no other acyclic pair, so a containment pair declared acyclic would
-# not block its children.
-roadmap:
-  pairs: ["sequencing"]
-
 # The committed log of editor-hook overrides (ADR-78, MILE-188): the hook appends a row
 # whenever a named override lets a blocked edit through, and override.unreviewed
 # reports a row no person has reviewed, so it surfaces in the pull request.
 override_log: .urzua/override-log.md
+
+# The pairs that are dependencies, and how `urzua roadmap` groups its records
+# (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic
+# pair, and a containment pair declared acyclic would not order work or block
+# its children, so only the sequencing pair is named. The engine names no grouping field.
+roadmap:
+  pairs: ["sequencing"]
+  group_by: ["Phase", "Track"]
 
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather

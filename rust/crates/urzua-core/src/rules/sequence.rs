@@ -284,7 +284,7 @@ pub fn sequence_unresolved_blocker(
 
 /// Tarjan's algorithm, iterative so a long chain cannot exhaust the stack.
 /// Components and their members come out in `RecordId` order.
-fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
+pub(super) fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
     let nodes: Vec<&N> = graph.keys().collect();
     let position: BTreeMap<&N, usize> = nodes.iter().enumerate().map(|(i, n)| (*n, i)).collect();
     let edges: Vec<Vec<usize>> = nodes

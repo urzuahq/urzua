@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6K53B7R9MSAHEPCE46XJ91G
-Status: Planned
+Status: Done
+Realized-by: code:rust/crates/urzua-core/src/rules/roadmap.rs, code:rust/crates/urzua-cli/src/commands/roadmap.rs, test:rust/crates/urzua-cli/tests/roadmap_integration.rs
 Phase: '0'
 Track: roadmap-tracking
 Implements: RFC-48
@@ -41,3 +42,5 @@ In this repository, `urzua roadmap` run against `.urzua/config.yaml` and the com
 > | 2026-11-05 | `Depends-on: MILE-115` added. **Why:** Done means puts the roadmap data in `export --format json`, the feed `MILE-115` built (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: ADR-82` added and `Blocked-on` set to it; `Status` stays `Planned`. **Why:** `RFC-48` leaves the roadmap's waves, ready set, critical path and output shape open and no accepted record decides them; building part of an RFC needs its own ADR. `ADR-82` is drafted as Proposed and the maintainer decides it; nothing of `urzua roadmap` is built until it is Accepted. `blocked` is derived from `Depends-on` and is not written, so no status change is needed. | **substantive** |
 > | 2026-11-05 | `Blocked-on` cleared. **Why:** ADR-82 is Accepted; the dependency stays declared in `Depends-on`. | **structural** |
+> | 2026-11-05 | `Status` Planned -> Done; `Realized-by` added. **Why:** Done means is met. `urzua roadmap` prints waves, a ready set and a critical path that match hand-computed answers (`roadmap_integration.rs`, and the acceptance cases of `corpus-l`) for a record blocked on a failure-terminal record (kept out of every list, with a `needs_replan` reason), a cycle (reported once, never looped on), a declared pair that matches no record and a claim that resolves to nothing (both notes), a loop across two declared pairs (a cycle), and the critical-path tie-break; a repository that declares no `roadmap.pairs` gets a `no-sequencing-pair` note, not an empty roadmap. Grouping comes from `roadmap.group_by`, validated at load, and the engine names no field. The output shape is in `SPEC-2` and `SPEC-3` and appears in `export --format json` when `roadmap.pairs` is declared. This repository declares `roadmap.pairs` and `group_by` in `.urzua/config.yaml`, and `make roadmap` prints its own roadmap, with its ready set and critical path read from `Depends-on` values. No hand-built Phase 0 roadmap page is committed in this repository, so there is none to retire. Built to `ADR-82`. | **substantive** |
+> | 2026-11-05 | `critical_path` is an empty list when no open record has an included dependency (the failure-terminal acceptance case and a flat repository), not a single arbitrary record; `SPEC-2` and the tests say so. `Depends-on: MILE-144` is Done on `main` since the derived `blocked` value landed, so `Status` stays `Done`. **Why:** maintainer decision of 2026-11-05 on the case where there is no chain. | **substantive** |

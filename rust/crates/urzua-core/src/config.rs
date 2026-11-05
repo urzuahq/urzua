@@ -33,7 +33,8 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_pairs: Vec<RelationPair>,
     /// The roadmap's declaration (`ADR-82`, `ADR-83`): the sequencing pairs the
-    /// derived `blocked` value and the roadmap command both read.
+    /// roadmap command and the derived `blocked` value both read, and how the
+    /// roadmap groups its records.
     #[serde(default, skip_serializing_if = "RoadmapDecl::is_empty")]
     pub roadmap: RoadmapDecl,
     /// The lowest finding severity that makes `urzua check` exit 1. Absent
@@ -63,10 +64,12 @@ pub struct Config {
     pub override_log: Option<String>,
 }
 
-/// `roadmap` (`SPEC-3`): which `relation_pairs` are dependencies. A pair can be
-/// `acyclic` without being one: a containment pair (parent and children) is
-/// checked for cycles but a child does not wait on its parent finishing. The
-/// derived `blocked` value reads exactly these pairs, so `check` and the
+/// `roadmap` (`SPEC-3`, `ADR-82`): which `relation_pairs` are dependencies, and
+/// how `urzua roadmap` groups its records. A pair can be `acyclic` without
+/// being a dependency: a containment pair (parent and children) is checked for
+/// cycles but a child does not wait on its parent finishing. Absent means no
+/// roadmap, which the command states instead of printing an empty one.
+/// The derived `blocked` value reads exactly these pairs, so `check` and the
 /// roadmap cannot disagree about what is blocked.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -74,11 +77,15 @@ pub struct RoadmapDecl {
     /// Names of `relation_pairs` entries that declare `acyclic: true`.
     #[serde(default)]
     pub pairs: Vec<String>,
+    /// Header field names the roadmap groups by, outermost first. The engine
+    /// names none; each must be declared by some record type.
+    #[serde(default)]
+    pub group_by: Vec<String>,
 }
 
 impl RoadmapDecl {
     fn is_empty(&self) -> bool {
-        self.pairs.is_empty()
+        self.pairs.is_empty() && self.group_by.is_empty()
     }
 }
 
@@ -1096,6 +1103,8 @@ pub enum ConfigError {
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
+    #[error("roadmap: {reason}")]
+    InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
     InvalidPrefix {
         record_type: String,
@@ -1576,6 +1585,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
+    validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
@@ -2404,6 +2414,53 @@ fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Load-time checks for `roadmap` (`ADR-82`): `pairs` names declared, acyclic
+/// pairs, each once, and `group_by` names fields some record type declares,
+/// each once. A declaration that can never apply reads as a clean roadmap, so
+/// it is refused (`ADR-7`, `ADR-64` clause 5).
+fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
+    let bad = |reason: String| Err(ConfigError::InvalidRoadmap { reason });
+    let mut named = std::collections::BTreeSet::new();
+    for name in &config.roadmap.pairs {
+        if !named.insert(name.as_str()) {
+            return bad(format!("pairs lists '{name}' twice"));
+        }
+        match config.relation_pairs.iter().find(|p| p.name == *name) {
+            None => {
+                return bad(format!(
+                    "pairs names '{name}', which is not a relation_pairs entry"
+                ))
+            }
+            Some(p) if !p.acyclic => {
+                return bad(format!(
+                    "pairs names '{name}', which does not declare `acyclic: true`; a dependency relation must be checked for cycles"
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    let mut grouped = std::collections::BTreeSet::new();
+    for field in &config.roadmap.group_by {
+        if field.trim().is_empty() || *field != field.trim() {
+            return bad(format!(
+                "group_by field '{field}' is blank or has surrounding whitespace"
+            ));
+        }
+        if !grouped.insert(field.as_str()) {
+            return bad(format!("group_by lists '{field}' twice"));
+        }
+        if !config.record_types.values().any(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::new(field))
+        }) {
+            return bad(format!(
+                "group_by names '{field}', which is not in the required_fields or known_fields of any record type, so no record could carry it"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
 /// because a pair that cannot run reads as a clean corpus.
 fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
@@ -2578,26 +2635,6 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
                     "rule '{rule}' is enabled but no relation_pairs are declared, so it would examine nothing"
                 ));
             }
-        }
-    }
-    // `roadmap.pairs` names declared, acyclic pairs, each once.
-    let mut named = std::collections::BTreeSet::new();
-    for name in &config.roadmap.pairs {
-        if !named.insert(name.as_str()) {
-            return bad(format!("roadmap.pairs lists '{name}' twice"));
-        }
-        match config.relation_pairs.iter().find(|p| p.name == *name) {
-            None => {
-                return bad(format!(
-                    "roadmap.pairs names '{name}', which is not a relation_pairs entry"
-                ))
-            }
-            Some(p) if !p.acyclic => {
-                return bad(format!(
-                    "roadmap.pairs names '{name}', which does not declare `acyclic: true`; a dependency relation must be checked for cycles"
-                ))
-            }
-            Some(_) => {}
         }
     }
     // A status-agreement rule with no pair to read, or no type declaring

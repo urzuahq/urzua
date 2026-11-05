@@ -142,6 +142,14 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
+    /// The order of work, computed from the records: waves, the ready set, the
+    /// critical path, what each record blocks and a grouping (ADR-82).
+    ///
+    /// One graph over the sequencing pairs `roadmap.pairs` declares. Read-only;
+    /// nothing is stored. A repository that declares none gets a note saying
+    /// there is no roadmap, not an empty one.
+    Roadmap,
+
     /// Deprecated alias of `check`: runs every rule the configuration
     /// declares and prints `check`'s report, plus a deprecation notice that
     /// never changes the exit code. Use `check` instead, or `check --rules
@@ -351,6 +359,7 @@ fn main() -> ExitCode {
         ),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
+        Command::Roadmap => commands::roadmap::run(cli.config),
         Command::New {
             record_type,
             title,

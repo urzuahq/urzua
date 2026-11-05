@@ -1,5 +1,5 @@
 ---
-Version: '0.78'
+Version: '0.79'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -919,8 +919,33 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
 - **The derived `blocked` value** is read from these edges by `sequence.status-agreement` (see
   `statuses.progress` and `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type and `urzua roadmap` are
-  `RFC-48`'s other parts and belong to other milestones (`MILE-182`).
+  `sequence.terminal-parent-open-child` and the `condition` record type are `RFC-48`'s other parts and
+  belong to other milestones. `urzua roadmap` is built (`MILE-182`, `ADR-82`) and reads the same
+  `roadmap.pairs` as the derived `blocked` value, below.
+
+### `roadmap` (`ADR-82`, `MILE-182`)
+
+```yaml
+roadmap:
+  pairs: ["sequencing"]          # relation_pairs entries that are dependencies
+  group_by: ["Phase", "Track"]   # header fields to group by, outermost first
+```
+
+`urzua roadmap` (output in `SPEC-2`) computes one graph over the pairs `pairs` names. A pair can be
+`acyclic` without being a dependency: a containment pair (`Parent`/`Children`) is checked for cycles,
+but a child does not wait on its parent finishing, so only the pairs named here order work. Both keys
+are optional and default to empty. Absent `pairs` means no roadmap: the command says so in a note and
+`export --format json` carries no `roadmap` key.
+
+- `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
+- `group_by`: each name must be a field some record type declares (`required_fields` or
+  `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
+  A field no open record carries is not an error; the roadmap notes it.
+
+Load-time errors, reported as `roadmap: ...`: a `pairs` name that is not a declared pair, one that does
+not declare `acyclic: true`, a repeated `pairs` or `group_by` entry, a blank or padded `group_by` name,
+and a `group_by` name no type declares. A declaration that can never apply would read as a clean
+roadmap, so it is refused (`ADR-7`).
 
 Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
@@ -1554,3 +1579,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
 > | 2026-11-05 | Bumped to `0.77`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
 > | 2026-11-05 | Bumped to `0.78`. A type's `statuses` declaration gains `progress` (statuses that claim work advanced) and `blocked` (written waiting statuses, opt-in), and a top-level `roadmap.pairs` names the sequencing pairs the derived `blocked` value reads. The opt-in rule `sequence.status-agreement` reports a blocked record that states a `progress` status, and a written blocked status while nothing blocks the record; a progress-status record with an unresolved or unreadable dependency is counted unreadable even when the type writes no blocked status. **Why:** `MILE-144`, decided in `ADR-83` (maintainer decision, 2026-11-05: `Blocked` is derived only, per `RFC-48`). | **substantive** |
+> | 2026-11-05 | Bumped to `0.79`. A top-level `roadmap: {pairs, group_by}` names the `relation_pairs` entries that are dependencies and the header fields `urzua roadmap` groups by, validated at load. **Why:** `MILE-182`, decided in `ADR-82`: one graph over the declared sequencing pairs, with the pairs declared because an `acyclic` containment pair is not a dependency. | **substantive** |

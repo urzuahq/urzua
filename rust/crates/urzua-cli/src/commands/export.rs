@@ -112,6 +112,8 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
         record_count: exported.len(),
         types,
         records: exported,
+        roadmap: (!config.roadmap.pairs.is_empty())
+            .then(|| urzua_core::rules::compute_roadmap(&records, &config)),
         notices: Vec::new(),
     }))
 }
