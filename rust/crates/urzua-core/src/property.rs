@@ -233,6 +233,7 @@ mod tests {
                         relation_fields: None,
                         companion_fields: None,
                         revision_log: None,
+                        role: None,
                     },
                 )]
                 .into_iter()
@@ -372,6 +373,7 @@ mod tests {
                     relation_fields: None,
                     companion_fields: None,
                     revision_log: None,
+                    role: None,
                 },
             )]
             .into_iter()
@@ -575,6 +577,7 @@ mod tests {
                         relation_fields: None,
                         companion_fields: None,
                         revision_log: None,
+                        role: None,
                     },
                 )]
                 .into_iter()

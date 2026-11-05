@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -23,6 +23,7 @@ invisible, only non-blocking.
 record_types:
   waiver:
     dir: "docs/waiver"
+    role: suppression
     required_fields: ["Rule", "Scope", "Reason"]
     header_shape: "yaml-frontmatter"
     known_fields: ["Stable-Id", "Expires"]
@@ -30,6 +31,10 @@ record_types:
     pointer_fields: []
     narrative_fields: []
 ```
+
+`role: suppression` (`SPEC-3`) is what makes this type the suppression type; the type's name is
+free. When no type declares the role, the type named `waiver` is read as the suppression type, so
+a config written before the declaration keeps working.
 
 | Field | Values | Notes |
 |---|---|---|
@@ -56,7 +61,7 @@ with a passed `Expires` is treated as though it doesn't exist (`is_active`) — 
 ISO-8601 string comparison against wall-clock "today," which RFC-15 §1 notes as the first place this
 schema reads real time rather than only corpus content.
 
-`check` calls `load_waivers` (filters discovered records to `record_type == "waiver"`, skipping any
+`check` calls `load_suppressions` (filters discovered records to the type declaring `role: suppression`, else the type named `waiver`, skipping any
 missing `Rule` or `Scope` rather than crashing the run — an unparseable waiver waives nothing, which
 fails toward more findings, not fewer) then `apply_waivers`, which annotates matching findings with
 `waived: <waiver's own path>` and never removes them from the report. `status`/`blocking` are
@@ -90,3 +95,4 @@ computed from non-waived findings only.
 > | 2026-09-09 | Declared `pointer_fields = []`/`narrative_fields = []` in config (MILE-90/ADR-44) — explicit zero, not omitted, since `waiver` is the one type with no relationship fields to declare. **Why:** MILE-90's new `config.pointer-declaration-missing` rule requires every type to make this choice explicit. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. Dropped the reference to the removed `header_layout` option. **Why:** `MILE-85`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.7`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |

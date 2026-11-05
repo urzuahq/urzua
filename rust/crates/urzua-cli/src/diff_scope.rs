@@ -92,14 +92,16 @@ fn touched_waiver_scopes(
     records: &[Record],
     changes: &urzua_io::GitChanges,
 ) -> Result<Vec<String>, String> {
-    let mut waivers = urzua_core::waiver::load_waivers(
+    let type_name = config.suppression_type();
+    let mut waivers = urzua_core::waiver::load_suppressions(
         &records
             .iter()
             .filter(|r| changes.changed.contains(&r.path))
             .cloned()
             .collect::<Vec<_>>(),
+        type_name,
     );
-    if let Some(type_config) = config.record_types.get("waiver") {
+    if let Some(type_config) = config.record_types.get(type_name) {
         for path in &changes.changed {
             let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
@@ -117,15 +119,15 @@ fn touched_waiver_scopes(
             };
             let record = Record::parse_with_shape_and_prefix(
                 path.clone(),
-                "waiver".to_string(),
+                type_name.to_string(),
                 &content,
                 type_config.header_shape,
                 type_config
                     .prefix
                     .clone()
-                    .unwrap_or_else(|| "WAIVER".to_string()),
+                    .unwrap_or_else(|| type_name.to_ascii_uppercase()),
             );
-            waivers.extend(urzua_core::waiver::load_waivers(&[record]));
+            waivers.extend(urzua_core::waiver::load_suppressions(&[record], type_name));
         }
     }
     Ok(waivers.into_iter().map(|w| w.scope).collect())

@@ -248,7 +248,8 @@ fn execute(
     let (context, mut notices) = load_context(session, &scope)?;
     let (mut executions, mut findings) = run_rules(&context);
     scope_findings(session, &scope, &mut findings);
-    let waivers = urzua_core::waiver::load_waivers(&session.records);
+    let waivers =
+        urzua_core::waiver::load_suppressions(&session.records, session.config.suppression_type());
     let today = urzua_io::today();
     run_after_scoping(
         &context,
@@ -257,7 +258,7 @@ fn execute(
         &mut executions,
         &mut findings,
     );
-    urzua_core::waiver::apply_waivers(&mut findings, &waivers, &today);
+    urzua_core::waiver::apply_suppressions(&mut findings, &waivers, &today);
     let (status, files_examined) = status_and_examined(
         session,
         &scope,
@@ -694,7 +695,7 @@ fn scope_findings(session: &Session, scope: &ReportScope, findings: &mut Vec<Fin
 fn run_after_scoping(
     context: &Context,
     scope: &ReportScope,
-    (waivers, today): (&[urzua_core::waiver::Waiver], &str),
+    (waivers, today): (&[urzua_core::waiver::Suppression], &str),
     executions: &mut Vec<RuleExecution>,
     findings: &mut Vec<Finding>,
 ) {
