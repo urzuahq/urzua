@@ -1,5 +1,5 @@
 ---
-Version: '0.19'
+Version: '0.20'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -236,6 +236,11 @@ the same `PATHS` scoping.
   listed under `failed_pins` (`record`, `locator`, `reason`), per pin and not per record, status is
   `partial-failure`, and the record's other stale pins still move. A rename is repaired by editing
   the scope on the `Realized-by` line.
+- **Directory and glob pins** (`BUG-176`, `SPEC-3`). A pin on a directory or glob whose kind the
+  repository declares in `locator_kinds` and `pinnable` is re-pinned from the hash over the sorted
+  (path, file content hash) list of the files it covers now, and each listed pin carries `files`, so
+  the reviewer sees which files the attestation covers; a file added to or removed from the set
+  changes the pin like an edit does.
 - **Authoring route.** A first hash for a new scoped pin comes from `urzua explain <path>#<scope>`
   (`SPEC-13`), which prints the span and the locator ready to paste. A bogus placeholder hash
   re-baselined later would record a re-verification of something never verified, and is not a
@@ -293,3 +298,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.18`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.19`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.20`. `--rebaseline` lists and re-pins a directory or glob pin of a kind the repository declares pinnable, each listed pin carrying the `files` it covers. **Why:** `BUG-176` -- a pin on a tree is attested over the files it covers, which the reviewer must be able to read. | **substantive** |

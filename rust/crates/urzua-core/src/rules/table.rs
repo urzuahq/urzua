@@ -528,7 +528,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. The `locator_kinds` option (`file`, `directory`, `glob`; default `[file]`) declares which kinds a locator may be: a directory or glob is legal when it matches at least one tracked file present on disk, and one of a kind not declared is reported naming the option. The `pinnable` option (default `[file]`, each kind also in `locator_kinds`) declares which kinds may carry a `@sha256:` pin (`BUG-176`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -536,7 +536,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
-        options: &[],
+        options: &["locator_kinds", "pinnable"],
         actions: &[
             VariantAction::new("locator-empty", ActionDecl::FIELD_SET),
             VariantAction::new("locator-missing", ActionDecl::FIELD_SET),
@@ -544,6 +544,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
             VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-kind-undeclared", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-kind-unpinnable", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
         run: |c| {
@@ -564,7 +566,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 // so only a definite absence counts.
                 (c.may_exist)(path)
             };
-            embodiment_locator_exists(c.records, c.config, &present, c.read_text)
+            embodiment_locator_exists(c.records, c.config, c.tracked_paths, &present, c.read_text)
         },
     },
     RuleDef {

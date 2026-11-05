@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use urzua_core::config::Config;
+use urzua_core::config::{Config, LocatorKind};
 use urzua_core::record::Record;
 use urzua_core::report::ScopeSource;
 use urzua_core::rules;
@@ -434,6 +434,8 @@ pub(crate) fn compute_drifted_records_at(
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
     let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let locator_opts: rules::LocatorExistsOpts =
+        config.rule_opts(rules::RULE_EMBODIMENT_LOCATOR_EXISTS);
     // Implements: ADR-67 (the grace window)
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
@@ -524,13 +526,38 @@ pub(crate) fn compute_drifted_records_at(
             }
             let locator = parsed.path.clone();
             let locator_path = PathBuf::from(&locator);
-            if let (Some(urzua_core::locator::Anchor::Pin(pinned)), Some(_)) =
-                (&parsed.anchor, &parsed.scope)
+            // BUG-176: a directory or glob locator the config accepts
+            // The files such a locator covers. A kind the config does not
+            // declare is not judged this way: `embodiment.locator-exists`
+            // reports it and drift is read from the path's history as before.
+            let covered: Option<(LocatorKind, Vec<String>)> = if parsed.scope.is_none() {
+                texts
+                    .locator_files(&parsed.path)
+                    .ok()
+                    .and_then(|m| Some((m.kind?, m.files)))
+                    .filter(|(kind, _)| {
+                        *kind != LocatorKind::File && locator_opts.locator_kinds.contains(kind)
+                    })
+            } else {
+                None
+            };
+            if let Some((kind, files)) = &covered {
+                // Nothing matched, or a pin the config does not allow on this
+                // kind, is `embodiment.locator-exists`' finding.
+                if files.is_empty()
+                    || (parsed.anchor.is_some() && !locator_opts.pinnable.contains(kind))
+                {
+                    continue;
+                }
+            }
+            if let (Some(urzua_core::locator::Anchor::Pin(pinned)), true) =
+                (&parsed.anchor, parsed.scope.is_some() || covered.is_some())
             {
                 // Implements: ADR-74 (a scoped pin drifts on its span's hash)
                 // The file's last commit says nothing about the scope, so there
                 // is no file-based grace window: only a declared audit date can
-                // hold a scoped pin back.
+                // hold a scoped pin back. A directory or glob pin is held back
+                // the same way (`BUG-176`).
                 let urzua_core::fix::PinRead::Current { hash, .. } =
                     crate::pins::read_pin(repo_root, config, &texts, &parsed)
                 else {
@@ -579,7 +606,15 @@ pub(crate) fn compute_drifted_records_at(
             let Some(locator_commit) = last_commit_for_path
                 .entry(locator_path.clone())
                 .or_insert_with(|| {
-                    urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or_else(|e| {
+                    let commit = match &covered {
+                        // The newest commit among the matched files.
+                        Some((_, files)) => {
+                            let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+                            urzua_io::last_commit_for_paths(repo_root, &files)
+                        }
+                        None => urzua_io::last_commit_for_path(repo_root, &locator_path),
+                    };
+                    commit.unwrap_or_else(|e| {
                         note(&mut problems, e);
                         None
                     })

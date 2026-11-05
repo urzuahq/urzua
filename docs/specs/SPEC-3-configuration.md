@@ -1,5 +1,5 @@
 ---
-Version: '0.70'
+Version: '0.71'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1075,6 +1075,52 @@ inclusive) or the failure. Rows 1 to 12 use the `rust` resolver above with the `
 | 19 | the bytes `a\r\nb\r\r\nc\n`, lines 1-3 | | pinned bytes `a\nb\r\nc` |
 | 20 | the bytes `\uFEFFfn a() {\n}\n`, lines 1-2 | | pinned bytes `fn a() {\n}` |
 
+### Locator kinds: files, directories and globs (`BUG-176`)
+
+Which kinds of path a `Realized-by` locator may name, and which of those may carry a `@sha256:`
+pin, are options of `embodiment.locator-exists`. Maintainer decision, 2026-11-05: this is
+repository configuration, not engine policy.
+
+```yaml
+rules:
+  embodiment.locator-exists:
+    level: error
+    locator_kinds: [file, directory, glob]   # default [file]
+    pinnable: [file, directory]              # default [file]; each kind must also be in locator_kinds
+```
+
+- `locator_kinds` (optional, non-empty when given): `file`, `directory` and `glob`. A **file** is a
+  git-tracked path present on disk, as always. A **glob** is a path holding `*`, `?` or `[`, matched
+  with the diff rules' matcher (`Diff rule path options`: `*` within one component, `**` across
+  components, `?` one character, `[abc]` a class); it covers the tracked files it matches, and a
+  glob that names a directory covers the files below it. A **directory** is any other path with a
+  tracked file below it, compared by path component. A path that is itself a tracked file is a file
+  whatever characters its name holds. The default `[file]` is the behaviour before this option.
+- A directory or glob locator is legal when it covers at least one tracked file that is present on
+  disk: an untracked directory, a path with no tracked file below it, and a glob matching nothing
+  are reported as missing, and a staged deletion of every covered file leaves nothing covered.
+- A locator of a kind that `locator_kinds` does not declare is reported (`locator-kind-undeclared`),
+  naming the option. A pin (`@sha256:`) on a directory or glob whose kind `pinnable` does not
+  declare is reported (`locator-kind-unpinnable`), naming that option. A scope (`#...`) applies to
+  one file and is reported unresolved on a directory; on a glob it is a malformed locator.
+- A `pinnable` kind not in `locator_kinds`, an empty list, an unknown kind, and either option on any
+  other rule are load errors: each would be a silent no-op or a locator that is always reported.
+
+**Drift.** An unpinned directory or glob drifts on the newest commit among the files it covers now:
+the record is behind when that commit is strictly after the commit that last touched the
+`Realized-by` line, exactly as for one file, including `drift_grace_days`. A pinned one drifts when
+its pin differs from the current one, with no file-based grace window (as for a scoped pin; only a
+declared audit date holds it back).
+
+**The pin.** The pin of a directory or glob is the lowercase hex SHA-256 of one line per covered
+file, sorted by path, each `<path>` then a tab then the lowercase hex SHA-256 of the file's raw
+bytes then `\n`. It moves when a covered file's content changes, a file is added, removed or moved
+into or out of the set, and not when any other file changes. `urzua explain <directory-or-glob>`
+prints `coverage`: the kind, the covered files, the hash and, when `pinnable` allows the kind, the
+`pin` to paste; `urzua fix --rebaseline` lists the covered files of a stale pin and re-pins it
+(`SPEC-8`, `SPEC-13`). A kind that is not declared in `locator_kinds` is not judged here: `explain`
+says so in a notice, and drift reads the path's git history as it did before the option.
+
 ### Source back-pointers as evidence (`MILE-128`, `MILE-146`, `MILE-149`)
 
 `embodiment.back-pointer-resolution` reads source comments as realization evidence and takes one
@@ -1311,3 +1357,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
 > | 2026-11-05 | Bumped to `0.69`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
+> | 2026-11-05 | Bumped to `0.71`. Documented the `locator_kinds` and `pinnable` options of `embodiment.locator-exists`: a `Realized-by` locator may name a directory or glob when the repository declares that kind, a directory or glob is legal when it covers a tracked file, its drift uses the newest commit among the files it covers, its pin hashes the sorted (path, file content hash) list, `explain` shows the files, and an undeclared kind is a finding naming the option. Both options default to `[file]`. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration. | **substantive** |

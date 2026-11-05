@@ -128,17 +128,25 @@ pub fn relation_field_name<'a>(
 /// a record claim verified work against a file that is not there -- and the
 /// claim reads as stronger than `Not started`, not weaker.
 ///
-/// `present` and `read` are supplied by the caller: this crate does not touch
-/// the filesystem. `read` returns a file's text for a scope to resolve in.
+/// A directory or glob locator is a locator when the repository accepts that
+/// kind (`locator_kinds`) and it matches at least one tracked file that is
+/// present; a pin on one needs `pinnable` to allow it (`BUG-176`).
+///
+/// `tracked`, `present` and `read` are supplied by the caller: this crate does
+/// not touch the filesystem. `read` returns a file's text for a scope to
+/// resolve in.
 pub fn embodiment_locator_exists(
     records: &[Record],
     config: &Config,
+    tracked: &[PathBuf],
     present: &dyn Fn(&str) -> bool,
     read: &dyn Fn(&str) -> crate::locator::SharedText,
 ) -> (RuleExecution, Vec<Finding>) {
+    use crate::config::LocatorKind;
     use crate::locator::{self, Anchor, FileText, ScopeError};
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
+    let opts: LocatorExistsOpts = config.rule_opts(RULE_ID);
 
     // One candidate per declared slot, not per locator: the population is the
     // rule's input, not its work count.
@@ -197,7 +205,21 @@ pub fn embodiment_locator_exists(
                     report("locator-empty", format!("{field} has an empty locator"));
                     continue;
                 }
-                if !present(&l.path) {
+                let matched = match locator::match_locator_files(&l.path, tracked, present) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        report(
+                            "locator-malformed",
+                            format!(
+                                "{field} names '{}', whose glob {e} (grammar: {})",
+                                l.path,
+                                locator::GRAMMAR
+                            ),
+                        );
+                        continue;
+                    }
+                };
+                let Some(kind) = matched.kind else {
                     // A `#` that did not parse as a scope stayed in the path: it
                     // is a malformed scope, not a file missing from the tree.
                     if l.path.contains('#') {
@@ -216,6 +238,27 @@ pub fn embodiment_locator_exists(
                         );
                     }
                     continue;
+                };
+                // BUG-176: which kinds are legal, and which can be pinned, is config
+                if !opts.locator_kinds.contains(&kind) {
+                    report(
+                        "locator-kind-undeclared",
+                        format!(
+                            "{field} names '{}', a {kind} locator, and `{RULE_ID}` does not accept that kind: add `{kind}` to its `locator_kinds` option, or name a file",
+                            l.path
+                        ),
+                    );
+                    continue;
+                }
+                if kind != LocatorKind::File && matched.files.is_empty() {
+                    report(
+                        "locator-missing",
+                        format!(
+                            "{field} names '{}', a glob that matches no tracked file in the working tree",
+                            l.path
+                        ),
+                    );
+                    continue;
                 }
                 if matches!(l.anchor, Some(Anchor::Commit(_))) {
                     report(
@@ -228,7 +271,30 @@ pub fn embodiment_locator_exists(
                     );
                     continue;
                 }
+                if matches!(l.anchor, Some(Anchor::Pin(_))) && !opts.pinnable.contains(&kind) {
+                    report(
+                        "locator-kind-unpinnable",
+                        format!(
+                            "{field} names '{}' with a pin, and `{RULE_ID}` does not allow a {kind} locator to be pinned: add `{kind}` to its `pinnable` option, or remove the pin",
+                            l.display()
+                        ),
+                    );
+                    continue;
+                }
                 let Some(scope) = &l.scope else { continue };
+                if kind != LocatorKind::File {
+                    report(
+                        "locator-scope-unresolved",
+                        format!(
+                            "{field} names '{}', whose scope does not resolve: {}",
+                            l.display(),
+                            ScopeError::Unsupported(format!(
+                                "a scope applies to one file, and this locator names a {kind}"
+                            ))
+                        ),
+                    );
+                    continue;
+                }
                 let resolved = match &*read(&l.path) {
                     FileText::Text(text) => {
                         locator::select_resolver(&config.locator_resolvers, &l.path)
@@ -721,7 +787,7 @@ end: brace_balanced
                 _ => FileText::Missing,
             })
         };
-        let (_, findings) = embodiment_locator_exists(&[r], &scoped_config(), &present, &read);
+        let (_, findings) = embodiment_locator_exists(&[r], &scoped_config(), &[], &present, &read);
         findings.into_iter().map(|f| f.message).collect()
     }
 
@@ -928,6 +994,7 @@ end: brace_balanced
         let (exec, findings) = embodiment_locator_exists(
             std::slice::from_ref(&r),
             &embodiment_config(),
+            &[],
             &present,
             &crate::locator::no_file_text,
         );
@@ -943,6 +1010,7 @@ end: brace_balanced
         let (_, none) = embodiment_locator_exists(
             std::slice::from_ref(&r),
             &embodiment_config(),
+            &[],
             &all_there,
             &crate::locator::no_file_text,
         );
@@ -958,6 +1026,7 @@ end: brace_balanced
         let (_, findings) = embodiment_locator_exists(
             &[empty],
             &embodiment_config(),
+            &[],
             &all_there,
             &crate::locator::no_file_text,
         );
@@ -982,6 +1051,7 @@ end: brace_balanced
             let (_, findings) = embodiment_locator_exists(
                 std::slice::from_ref(&r),
                 &embodiment_config(),
+                &[],
                 &present,
                 &crate::locator::no_file_text,
             );
@@ -1016,6 +1086,7 @@ end: brace_balanced
         let (exec, findings) = embodiment_locator_exists(
             std::slice::from_ref(&r),
             &config,
+            &[],
             &present,
             &crate::locator::no_file_text,
         );

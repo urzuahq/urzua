@@ -6,8 +6,11 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use urzua_core::config::LocatorKind;
 use urzua_core::locator::{self, FileText};
-use urzua_core::report::{ExplainReport, ReportStatus, ScopeExplanation};
+use urzua_core::report::{
+    CoverageExplanation, ExplainReport, Notice, NoticeSeverity, ReportStatus, ScopeExplanation,
+};
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
@@ -30,9 +33,16 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Str
         ));
     }
     let governing_records = urzua_core::graph::explain(&records, &parsed.path, &config);
-    let scope = match &parsed.scope {
-        None => None,
-        Some(scope) => Some(explain_scope(&repo_root, &config, &parsed, scope)?),
+    let mut notices = Vec::new();
+    let (scope, coverage) = match &parsed.scope {
+        None => (
+            None,
+            explain_coverage(&repo_root, &config, &parsed, &mut notices)?,
+        ),
+        Some(scope) => (
+            Some(explain_scope(&repo_root, &config, &parsed, scope)?),
+            None,
+        ),
     };
 
     Ok(emit(&ExplainReport {
@@ -40,7 +50,64 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Str
         path: parsed.path.clone(),
         governing_records,
         scope,
-        notices: Vec::new(),
+        coverage,
+        notices,
+    }))
+}
+
+// BUG-176: explain shows the files a directory or glob pin covers
+/// The files a directory or glob argument covers and the pin over them. A file
+/// argument, or a path that names nothing, has no coverage (the old query). A
+/// kind the config does not accept is said so in a notice rather than shown, so
+/// the output never offers a pin the check would reject.
+fn explain_coverage(
+    repo_root: &std::path::Path,
+    config: &urzua_core::config::Config,
+    parsed: &locator::Locator,
+    notices: &mut Vec<Notice>,
+) -> Result<Option<CoverageExplanation>, String> {
+    use urzua_core::rules::{LocatorExistsOpts, RULE_EMBODIMENT_LOCATOR_EXISTS};
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let located = texts
+        .locator_files(&parsed.path)
+        .map_err(|e| format!("'{}': the glob {e}", parsed.path))?;
+    let Some(kind) = located.kind.filter(|k| *k != LocatorKind::File) else {
+        return Ok(None);
+    };
+    let opts: LocatorExistsOpts = config.rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
+    if !opts.locator_kinds.contains(&kind) {
+        notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: parsed.path.clone(),
+            message: format!(
+                "'{}' is a {kind} locator and `{RULE_EMBODIMENT_LOCATOR_EXISTS}` does not accept that kind; add `{kind}` to its `locator_kinds` option to cite it in `Realized-by`",
+                parsed.path
+            ),
+        });
+        return Ok(None);
+    }
+    if located.files.is_empty() {
+        return Err(format!(
+            "'{}' matches no tracked file in the working tree",
+            parsed.path
+        ));
+    }
+    let mut pairs = Vec::new();
+    for file in &located.files {
+        let hash = urzua_io::sha256_hex_of_file(&repo_root.join(file))
+            .ok_or_else(|| format!("'{file}' could not be read"))?;
+        pairs.push((file.clone(), hash));
+    }
+    let sha256 = urzua_io::sha256_hex_of_str(&locator::files_pin_text(&pairs));
+    let pin = opts
+        .pinnable
+        .contains(&kind)
+        .then(|| format!("{}@sha256:{sha256}", parsed.path));
+    Ok(Some(CoverageExplanation {
+        kind: kind.to_string(),
+        files: located.files,
+        sha256,
+        pin,
     }))
 }
 

@@ -244,6 +244,77 @@ pub fn realized_by_locators(value: &str) -> Vec<LocatorEntry> {
     out
 }
 
+/// What a locator path names among the tracked files (`BUG-176`): its kind and
+/// the files it covers, sorted. `kind` is `None` when the path names nothing
+/// (no tracked file, no tracked file below it, and not a glob).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatorFiles {
+    pub kind: Option<crate::config::LocatorKind>,
+    pub files: Vec<String>,
+}
+
+// BUG-176: a directory or glob locator is the tracked files it matches
+/// Classifies `path` and lists the tracked files it covers. A path that is
+/// itself a file (`exists` holds for it) is a file, whatever characters it holds; otherwise a
+/// path with a glob character is a glob (matched with the `MILE-158` matcher),
+/// and any other is a directory when a tracked file sits below it. Only files
+/// for which `exists` holds count, so a staged deletion matches nothing (`exists`
+/// must itself require the path be tracked). An
+/// `Err` is a glob that cannot compile. Pure.
+pub fn match_locator_files(
+    path: &str,
+    tracked: &[std::path::PathBuf],
+    exists: &dyn Fn(&str) -> bool,
+) -> Result<LocatorFiles, String> {
+    use crate::config::LocatorKind;
+    let live = |p: &std::path::PathBuf| p.to_str().filter(|s| exists(s)).map(str::to_string);
+    if exists(path) {
+        return Ok(LocatorFiles {
+            kind: Some(LocatorKind::File),
+            files: vec![path.to_string()],
+        });
+    }
+    let (kind, mut files): (LocatorKind, Vec<String>) = if crate::rules::is_path_glob(path) {
+        let re = crate::rules::path_glob_regex(path)?;
+        (
+            LocatorKind::Glob,
+            tracked
+                .iter()
+                .filter(|p| re.is_match(&p.to_string_lossy()))
+                .filter_map(live)
+                .collect(),
+        )
+    } else {
+        (
+            LocatorKind::Directory,
+            tracked
+                .iter()
+                .filter(|p| crate::rules::path_is_published(p, path))
+                .filter_map(live)
+                .collect(),
+        )
+    };
+    files.sort();
+    files.dedup();
+    // A directory with nothing below it is not a directory; a glob is a glob
+    // whether or not it matches.
+    let kind = (kind == LocatorKind::Glob || !files.is_empty()).then_some(kind);
+    Ok(LocatorFiles { kind, files })
+}
+
+/// The text a directory or glob pin hashes (`BUG-176`): one line per covered
+/// file, `<path>\t<sha256 of the file>`, sorted by path. `pairs` is the files
+/// with their content hashes. The pin is the hash of this text, so it moves
+/// when a file's content changes, a file is added or removed, or a file moves.
+pub fn files_pin_text(pairs: &[(String, String)]) -> String {
+    let mut sorted: Vec<&(String, String)> = pairs.iter().collect();
+    sorted.sort();
+    sorted
+        .iter()
+        .map(|(path, hash)| format!("{path}\t{hash}\n"))
+        .collect()
+}
+
 /// 1-based inclusive lines of a file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct Span {
