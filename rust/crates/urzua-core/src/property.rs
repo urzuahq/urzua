@@ -396,7 +396,10 @@ mod tests {
                 "header.pointer-field-clean",
                 rules::header_pointer_field_clean(&records, &config),
             ),
-            ("field.quality", rules::field_quality(&records, &config)),
+            (
+                "field.quality",
+                rules::field_quality(&records, &config, &Default::default()),
+            ),
             ("field.pending", rules::field_pending(&records, &config)),
             (
                 "field.untrimmed-value",
