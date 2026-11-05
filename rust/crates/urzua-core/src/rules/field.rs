@@ -221,6 +221,32 @@ pub fn field_leading_reserved_indicator(
     )
 }
 
+/// The state `field.quality` judges `field` of `record` to be in: against the
+/// type's template when `from_templates` (`BUG-22`), by the compiled-in tokens
+/// otherwise. Shared with `urzua migrate schema --report`, so the preview and
+/// the rule cannot disagree.
+pub fn classify_quality_field(
+    record: &Record,
+    field: &str,
+    from_templates: bool,
+    templates: &crate::new_record::TemplateValues,
+    statuses: &HashMap<String, crate::status_model::StatusDecl>,
+) -> FieldState {
+    let value = record.header.get(field);
+    if from_templates {
+        crate::field_state::classify_against_template(
+            value,
+            templates
+                .get(&record.record_type)
+                .and_then(|t| t.get(field))
+                .map(String::as_str),
+            statuses.get(&record.record_type),
+        )
+    } else {
+        classify(value)
+    }
+}
+
 pub fn field_quality(
     records: &[Record],
     config: &Config,
@@ -258,19 +284,13 @@ pub fn field_quality(
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
-            let value = record.header.get(field.as_str());
-            let state = if from_templates {
-                crate::field_state::classify_against_template(
-                    value,
-                    templates
-                        .get(&record.record_type)
-                        .and_then(|t| t.get(field.as_str()))
-                        .map(String::as_str),
-                    statuses.get(&record.record_type),
-                )
-            } else {
-                classify(value)
-            };
+            let state = classify_quality_field(
+                record,
+                field.as_str(),
+                from_templates,
+                templates,
+                &statuses,
+            );
             // `Pending` is `field.pending`'s subject, not this rule's: it means
             // someone declared the work unfinished, where Blank and Placeholder
             // mean someone forgot. One rule carries one declared level, so

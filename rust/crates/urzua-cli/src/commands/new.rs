@@ -93,12 +93,19 @@ pub fn run(
             None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
         }
     };
-    let display_number = assign_display_number(
+    let display_number = match assign_display_number(
         &repo_root,
         &type_config.all_dirs().collect::<Vec<_>>(),
         &filenames,
         &number_of,
-    );
+    ) {
+        Ok(n) => n,
+        Err(e) => {
+            return emit(&CouldNotRun::from(format!(
+                "record type '{record_type}': {e}"
+            )))
+        }
+    };
 
     let title = title.unwrap_or_else(|| "Title".to_string());
     // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
@@ -292,7 +299,7 @@ fn assign_display_number(
     dirs: &[&str],
     filenames: &[String],
     number_of: &dyn Fn(&str) -> Option<u32>,
-) -> u32 {
+) -> Result<u32, String> {
     let claims = match other_ref_claims(repo_root, dirs) {
         Ok(c) => c,
         Err(reason) => {
@@ -304,14 +311,14 @@ fn assign_display_number(
         }
     };
     let got =
-        urzua_core::new_record::next_display_number_with_claims_by(filenames, &claims, number_of);
+        urzua_core::new_record::next_display_number_with_claims_by(filenames, &claims, number_of)?;
     for (number, refs) in &got.skipped {
         eprintln!(
             "urzua: skipped {number}: already used on {} (local git refs only; unfetched remotes are not checked)",
             refs.join(", ")
         );
     }
-    got.number
+    Ok(got.number)
 }
 
 fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, String> {

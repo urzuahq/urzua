@@ -169,7 +169,7 @@ fn head_changes_for(repo_root: &Path, path: &Path) -> urzua_io::GitChanges {
 /// template is simply absent. Declaring the option when no type has one is a
 /// warning notice rather than a rule that quietly does nothing (the same
 /// treatment as an absent `claim_paths` entry).
-fn load_templates(
+pub(crate) fn load_templates(
     repo_root: &Path,
     config: &Config,
     notices: &mut Vec<Notice>,
