@@ -31,3 +31,4 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-78` Accepted 2026-11-05 decides the hook judges every rule on the edited record and notes that no milestone exists for it; it needs the prospective-content form of `check`. | **substantive** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-05 | Built in #308: `urzua check --stdin-path` (`SPEC-2`), `Realized-by` added, and the hook relays it (`SPEC-8`); measured about 0.6s per record through the core and about 1.1s when the edit has errors. `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's configuration and corpus. | **substantive** |
