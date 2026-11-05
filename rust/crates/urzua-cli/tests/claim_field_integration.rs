@@ -1,6 +1,8 @@
 //! `ADR-85`: a changeset fragment declares the records it closes in a
 //! frontmatter field, and `check` reads that data instead of a sentence. Each
 //! case runs the real binary over a scratch repository.
+//!
+//! Verifies: ADR-85
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -248,4 +250,35 @@ fn strict_without_closes_does_not_load_observed_failing() {
     );
     assert!(text.contains("strict") && text.contains("closes"), "{text}");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The release tool refuses an unterminated fence and a blank line before the
+/// opening fence (`could_not_read_changeset`), so under `strict` both are
+/// `claim.field-malformed` rather than a file that is out of scope.
+#[test]
+fn strict_reports_a_fence_the_release_tool_cannot_read_observed_failing() {
+    let unterminated = "---\ndefault: patch\ncloses: [BUG-2]\n\nA change.\n";
+    let blank_first = "\n---\ndefault: patch\ncloses: [BUG-2]\n---\n\nA change.\n";
+    for (name, text) in [("unterminated", unterminated), ("blank-first", blank_first)] {
+        let dir = repo(name, OPTIONS, &[("a.md", text)]);
+        let (code, report) = check(&dir);
+        let found = claim_findings(&report);
+        assert_eq!(found.len(), 1, "{name}: {report}");
+        assert!(
+            found[0]["message"]
+                .as_str()
+                .unwrap()
+                .contains("claim.field-malformed"),
+            "{name}: {report}"
+        );
+        assert_eq!(code, 1, "{name}");
+        std::fs::remove_dir_all(&dir).ok();
+
+        // Not strict: read as no frontmatter, out of scope, no finding.
+        let dir = repo(name, "    closes: closes\n", &[("a.md", text)]);
+        let (code, report) = check(&dir);
+        assert!(claim_findings(&report).is_empty(), "{name}: {report}");
+        assert_eq!(code, 0, "{name}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

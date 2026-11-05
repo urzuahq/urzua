@@ -1,6 +1,6 @@
 ---
 default: minor
-closes: [BUG-110]
+closes: [BUG-110, MILE-109]
 ---
 
 Adds a new optional per-type config key, `relation_fields`, mapping a fixed role set (`status`,

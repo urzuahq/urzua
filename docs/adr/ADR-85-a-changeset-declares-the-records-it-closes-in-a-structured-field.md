@@ -5,7 +5,7 @@ Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Verified
 Supersedes / Superseded-by: null
 Derives-from: —
 ---
@@ -68,7 +68,10 @@ left undeclared is not detected by this ADR alone.
   that is not a list or an id is a new finding, `claim.field-malformed`, naming the file and line; it is never
   guessed at. A file in a claim path with no frontmatter block is not a fragment: it is counted out of scope
   and disclosed, never given a finding, which is how a non-fragment such as a `README.md` in the directory is
-  excluded without the engine knowing its name.
+  excluded without the engine knowing its name. The exception is a file that tries to be a fragment and the release tool cannot read: an unterminated
+  `---` fence, or a blank line before the opening `---`. Under `strict` that is `claim.field-malformed`,
+  because knope 0.23.0 rejects both with `could_not_read_changeset`; without `strict` it is read as no
+  frontmatter, as before.
 - **An id that resolves to nothing is a new, reported finding.** Today a claimed reference that matches no
   record is eligible and skipped silently (`Outcome::Absent` in `rules/claim.rs`). With the field declared,
   a listed id that resolves to no record is an error (`claim.id-unresolved`), gated by the same opt-in
@@ -158,3 +161,5 @@ decision.
 > | 2026-11-05 | Amended while Proposed: whether the field is required on every fragment is a `strict: true|false` config option, default false (checked when present); under `strict` a fragment without the field is a finding, and this repository enables it. The single-line flow-list constraint from the knope test stays. Phrased over declared records and statuses, with no type named. **Why:** maintainer answers of 2026-11-05 to the open questions. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after review: the claim that `--base` diff scoping exists today is dropped (every fragment is read and `check` applies no diff filter), and under `strict` existing fragments are migrated in the implementing change; an id the field lists that resolves to nothing is a new finding gated by the opt-in config and applying only to the structured field; frontmatter parsing is stated as new, with a finding for a block list or malformed value and non-fragments (no frontmatter) counted out of scope; the knope 0.23.0 test is described and kept as a CI test, with multi-package workspaces noted as untested risk; the options are placed on `claim.status-agreement`; the open question about replacing knope is removed. **Why:** review blockers on the Proposed text. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Amended after Accepted: under `strict`, an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed` instead of an out-of-scope file. **Why:** an independent review of the build found that the pinned knope 0.23.0 rejects both shapes with `could_not_read_changeset`, so reading them as "not a fragment" let a fragment through `check` that breaks the release; maintainer decision of 2026-11-05. Status unchanged. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |

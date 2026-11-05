@@ -1,6 +1,6 @@
 ---
 default: minor
-closes: [MILE-145]
+closes: [MILE-145, BUG-180]
 ---
 
 Add a `fail_on` setting (`error` or `warning`, default `error`) to `.urzua/config.yaml`, and a

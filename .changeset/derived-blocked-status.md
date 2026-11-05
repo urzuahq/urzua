@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-144]
 ---
 
 `blocked` is a derived value. A record type's `statuses` can declare `progress`, the statuses that

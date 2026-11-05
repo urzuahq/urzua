@@ -65,6 +65,8 @@ fn claimed_closed(line: &str) -> Vec<String> {
 /// (`ADR-11`) is the intended escape for the former -- deliberately a record,
 /// so an exception is visible rather than a silent pattern tweak.
 ///
+/// Implements: ADR-85 (the listed ids are checked against record status)
+///
 /// The second reading is exact (`ADR-85`). A repository that declares `closes`
 /// has each claim file list, in a frontmatter key, the records it closes, and
 /// the rule checks that data: each id resolves, and is at a status its type
@@ -103,6 +105,15 @@ pub fn claim_status_agreement(
         for (path, content) in claims {
             match read_claim_field(content, key) {
                 ClaimField::NoFrontmatter => non_fragments.push(path),
+                // The release tool cannot read it: a malformed claim file under
+                // `strict`, and as before (no frontmatter) otherwise.
+                ClaimField::BrokenFence { line, reason } => {
+                    if opts.strict {
+                        findings.push(field_finding(path, line, "claim-field-malformed", reason));
+                    } else {
+                        non_fragments.push(path);
+                    }
+                }
                 ClaimField::Missing => {
                     if opts.strict {
                         findings.push(field_finding(
@@ -309,7 +320,11 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
     let mut notices = Vec::new();
     let not_fragments: Vec<&str> = claims
         .iter()
-        .filter(|(_, text)| read_claim_field(text, key) == ClaimField::NoFrontmatter)
+        .filter(|(_, text)| match read_claim_field(text, key) {
+            ClaimField::NoFrontmatter => true,
+            ClaimField::BrokenFence { .. } => !opts.strict,
+            _ => false,
+        })
         .map(|(path, _)| path.as_str())
         .collect();
     if !not_fragments.is_empty() {
@@ -811,6 +826,20 @@ mod tests {
         let (exec, findings) = run(&[(".changeset/a.md", &fragment("[]"))], &declared(true));
         assert!(findings.is_empty(), "{findings:?}");
         assert_eq!(examined(&exec), 0);
+    }
+
+    #[test]
+    fn strict_reports_a_fence_the_release_tool_cannot_read_observed_failing() {
+        let unterminated = "---\ndefault: patch\ncloses: [BUG-2]\n";
+        let blank_first = "\n---\ndefault: patch\ncloses: [BUG-2]\n---\n";
+        for text in [unterminated, blank_first] {
+            let (_, findings) = run(&[(".changeset/a.md", text)], &declared(true));
+            assert_eq!(variants(&findings), ["claim-field-malformed"], "{text:?}");
+            // Not strict: read as no frontmatter, out of scope, no finding.
+            let (exec, findings) = run(&[(".changeset/a.md", text)], &declared(false));
+            assert!(findings.is_empty(), "{findings:?}");
+            assert_eq!(exec.population.unwrap().out_of_scope(), 1);
+        }
     }
 
     #[test]

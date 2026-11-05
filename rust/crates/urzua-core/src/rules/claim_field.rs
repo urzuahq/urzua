@@ -11,12 +11,18 @@
 
 use super::*;
 
+// Implements: ADR-85 (the structured claim field)
 /// What a claim file says about the key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClaimField {
     /// The file does not begin with a closed `---` block, so it is not a
     /// fragment: out of scope, never given a finding.
     NoFrontmatter,
+    /// The file tries to open a `---` block and the release tool cannot read
+    /// it: the fence is never closed, or a blank line comes before it. Under
+    /// `strict` this is `claim.field-malformed`; otherwise the file is read as
+    /// no frontmatter, as before. `line` is the opening fence, one-based.
+    BrokenFence { line: usize, reason: String },
     /// A frontmatter block without the key.
     Missing,
     /// The key and the ids it lists, in order (empty for `[]`). `line` is the
@@ -41,7 +47,7 @@ pub fn frontmatter_lines(text: &str) -> Option<std::ops::Range<usize>> {
 /// Reads `key` from the frontmatter block of `text`.
 pub fn read_claim_field(text: &str, key: &str) -> ClaimField {
     let Some(block) = frontmatter_lines(text) else {
-        return ClaimField::NoFrontmatter;
+        return broken_fence(text).unwrap_or(ClaimField::NoFrontmatter);
     };
     let lines: Vec<&str> = text.lines().collect();
     // The lines between the fences.
@@ -79,6 +85,34 @@ pub fn read_claim_field(text: &str, key: &str) -> ClaimField {
             reason,
         },
     }
+}
+
+/// A file that tries to open a block the release tool (knope) would refuse
+/// with `could_not_read_changeset`: the first non-blank line is `---` and the
+/// file either has a blank line before it or never closes the block.
+fn broken_fence(text: &str) -> Option<ClaimField> {
+    let mut lines = text.lines().map(|l| l.trim_start_matches('\u{feff}'));
+    let mut at = 0;
+    let mut first = lines.next()?;
+    let leading_blank = first.trim().is_empty();
+    while first.trim().is_empty() {
+        first = lines.next()?;
+        at += 1;
+    }
+    if first.trim_end() != "---" {
+        return None;
+    }
+    if leading_blank {
+        return Some(ClaimField::BrokenFence {
+            line: at + 1,
+            reason: "has a blank line before its opening `---`, which the release tool refuses to read as frontmatter; start the file with the fence".to_string(),
+        });
+    }
+    // Reached only when `frontmatter_lines` found no closing fence.
+    Some(ClaimField::BrokenFence {
+        line: at + 1,
+        reason: "opens a `---` frontmatter block that is never closed, which the release tool refuses to read; add the closing `---`".to_string(),
+    })
 }
 
 fn parse_value(key: &str, value: &str, next: Option<&str>) -> Result<Vec<String>, String> {
@@ -234,14 +268,26 @@ mod tests {
             ClaimField::NoFrontmatter
         );
         assert_eq!(read_claim_field("", "closes"), ClaimField::NoFrontmatter);
-        // Opened and never closed: not a block.
+    }
+
+    #[test]
+    fn an_unterminated_fence_or_a_blank_line_before_it_is_a_broken_fence_observed_failing() {
+        for text in [
+            "---\ncloses: [BUG-1]\n",
+            "\n---\ncloses: [BUG-1]\n---\n",
+            "  \n---\ncloses: [BUG-1]\n",
+        ] {
+            assert!(
+                matches!(
+                    read_claim_field(text, "closes"),
+                    ClaimField::BrokenFence { .. }
+                ),
+                "{text:?}"
+            );
+        }
+        // Not an attempt at a block: a horizontal rule mid-file, or none.
         assert_eq!(
-            read_claim_field("---\ncloses: [BUG-1]\n", "closes"),
-            ClaimField::NoFrontmatter
-        );
-        // A fence that is not the first line.
-        assert_eq!(
-            read_claim_field("\n---\ncloses: [BUG-1]\n---\n", "closes"),
+            read_claim_field("# Notes\n\n---\ncloses: [BUG-1]\n", "closes"),
             ClaimField::NoFrontmatter
         );
     }
