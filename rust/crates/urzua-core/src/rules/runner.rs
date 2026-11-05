@@ -81,6 +81,8 @@ pub struct RuleCtx<'a> {
     /// so a blocking finding is never raised on a guess.
     pub may_exist: &'a dyn Fn(&Path) -> bool,
     pub dir_exists: &'a dyn Fn(&str) -> bool,
+    /// A file's text for a scoped locator to resolve in; read once per path.
+    pub read_text: &'a dyn Fn(&str) -> crate::locator::SharedText,
     pub run: RunState<'a>,
 }
 

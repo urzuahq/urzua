@@ -1,7 +1,9 @@
 ---
-Version: '0.8'
+Version: '0.10'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs
 Author: beauwilliams
 Subject: 'The `waiver` record type -- time-boxed, scoped exceptions to a check finding.'
 Implements: ADR-11
@@ -103,5 +105,8 @@ unchanged.
 > | 2026-09-09 | Declared `pointer_fields = []`/`narrative_fields = []` in config (MILE-90/ADR-44) — explicit zero, not omitted, since `waiver` is the one type with no relationship fields to declare. **Why:** MILE-90's new `config.pointer-declaration-missing` rule requires every type to make this choice explicit. | **structural** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. Dropped the reference to the removed `header_layout` option. **Why:** `MILE-85`. | **substantive** |
-> | 2026-11-05 | Bumped to `0.7`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |
-> | 2026-11-05 | Bumped to `0.8`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.7`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.8`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |

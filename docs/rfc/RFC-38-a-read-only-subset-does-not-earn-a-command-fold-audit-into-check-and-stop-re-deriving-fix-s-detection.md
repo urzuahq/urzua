@@ -232,6 +232,12 @@ there being two implementations.
 - **Does not ship in `0.4.0`.** That release already carries a breaking report-contract change
   (`BUG-40`). A CLI-surface break wants its own release and its own migration note.
 
+## Note (2026-11-05): the "no real external adopters" premise
+
+The "cheapest moment" argument in section 3 quotes `config.rs` on there being no real external adopters. As decided for
+`MILE-118`, the premise holds through Phase 0 and expires at the Phase 1 switchover (`MILE-102`), when a real adopter's corpus exists and
+`RFC-49`'s compatibility contract (proposed in `ADR-77`) takes over. The deprecation release proposed above is what protects an adopter once the premise has expired. The proposal is unchanged.
+
 ## References
 
 - `RFC-20` — the command taxonomy whose axes this RFC applies to its own table.
@@ -251,3 +257,4 @@ there being two implementations.
 > | 2026-09-21 | Defined the filtered report's contract; downgraded the `fix` half from a settled design to a named direction. **Why:** review found three things the first draft asserted without working out. An excluded rule had no status that was not already taken, and reusing `not-enabled` would have reported a declared policy as declined. And sharing `embodiment_consistency` with `fix` was claimed to close the drift divergence and change no behaviour; it does neither, because `check` gates the rule and supplies a `drifted` set `fix` has no plumbing to build. The divergence is in the rule's input, not in there being two implementations. | **substantive** |
 > | 2026-09-21 | Filed. **Why:** `BUG-99` was filed against `audit`'s empty-rule-set edge case, and examining it showed the edge case was a symptom: `audit` is a read-only subset of `check` that outlived `ADR-53`, and `fix` carries the duplicate-implementation risk `ADR-30` was written to avoid. Filed as an RFC rather than three bug fixes because the question is which commands the surface should have, not how to patch the ones it has. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 8cda15573. | **structural** |
+> | 2026-11-05 | Dated note added: the no-external-adopters premise holds through Phase 0 and expires at the Phase 1 switchover. **Why:** Maintainer decision, 2026-11-05 (`MILE-118`); the proposal text is unchanged. | **substantive** |

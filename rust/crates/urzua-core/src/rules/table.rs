@@ -527,7 +527,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -539,6 +539,10 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("locator-empty", ActionDecl::FIELD_SET),
             VariantAction::new("locator-missing", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-malformed", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
         run: |c| {
@@ -559,7 +563,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 // so only a definite absence counts.
                 (c.may_exist)(path)
             };
-            embodiment_locator_exists(c.records, c.config, &present)
+            embodiment_locator_exists(c.records, c.config, &present, c.read_text)
         },
     },
     RuleDef {
@@ -1002,7 +1006,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_TRANSITION_ALLOWED,
-        description: "A changed record's `Status` moved along an edge its type's `statuses.transitions` does not list, comparing the status the merge base committed with the one in the change under check, or a record new in the change starts at a status outside `statuses.initial` (`MILE-144`, `ADR-72`). Needs `--base`: a whole-repo run reports it not-applicable, not a pass. A type declaring no `transitions` is not examined, a record the diff did not change is eligible and not examined, and a record whose committed status cannot be read or is no longer declared is counted unreadable. A renamed record reads as new (`BUG-191`), because the diff reports a rename as a deletion plus an addition. A repository whose ADRs and RFCs enter at `Proposed` or `Draft` and are accepted in a later change declares that as `initial`, so a record filed already accepted is reported; this repository does so.",
+        description: "A changed record's `Status` moved along an edge its type's `statuses.transitions` does not list, comparing the status the merge base committed with the one in the change under check, or a record new in the change starts at a status outside `statuses.initial` (`MILE-144`, `ADR-72`). Needs `--base`: a whole-repo run reports it not-applicable, not a pass. A type declaring no `transitions` is not examined, a record the diff did not change is eligible and not examined, and a record whose committed status cannot be read or is no longer declared is counted unreadable. A record added at a path the merge base lacks is matched by `Stable-Id` to a record the diff deleted, so a renamed record is judged against the status it had before and not called new (`BUG-191`); one with no `Stable-Id` or no match reads as new, and one matching several deleted records is counted unreadable. A repository whose ADRs and RFCs enter at `Proposed` or `Draft` and are accepted in a later change declares that as `initial`, so a record filed already accepted is reported; this repository does so.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,

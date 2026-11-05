@@ -97,6 +97,11 @@ Evidence, not preference:
 - Not addressing pull requests, which stay exactly as they are: AGENTS.md's git workflow already
   requires a PR for every change, and nothing here touches that.
 
+## Note (2026-11-05): the "no external adopters" premise
+
+Proposal item 4 relies on the `AGENTS.md` premise that external adopters do not exist yet. As decided for `MILE-118`, the premise holds through Phase 0 and expires at the Phase 1 switchover (`MILE-102`), when a real adopter's corpus exists and
+`RFC-49`'s compatibility contract (proposed in `ADR-77`) takes over. Keeping issues enabled is the provision for an adopter who arrives. The proposal is unchanged.
+
 ## References
 
 - GitHub issue #1 — the one issue ever filed, the evidence this surface is unused, and the content
@@ -115,3 +120,4 @@ Evidence, not preference:
 > |---|---|---|
 > | 2026-09-11 | Initial RFC, `Status: Draft`. Filed while closing GitHub issue #1; the policy was already real in practice and in AGENTS.md, but never written down as a decision anyone could point at. | **structural** |
 > | 2026-09-11 | Corrected before merge, from an adversarial review. (1) The RFC claimed the policy was merely unwritten; `CONTRIBUTING.md:3` and `:29` actively invite issues, so adopting this reverses a stated invitation rather than codifying practice -- now said plainly in the Summary and folded into Proposal point 3. (2) Three of four corpus counts were wrong or stale ("46 ADRs" when there are 45; bug/RFC counts predating this RFC's own commit), in a section headed "Evidence, not preference". (3) The claim that `bug_report.md` duplicates SPEC-9's schema was overstated -- zero fields overlap; narrowed to the real objection, that one of the two is rule-validated and one is not. (4) Proposal point 2 proposed closing issue #1, which the maintainer had already directed and which was already done; reframed as recorded rather than proposed. (5) Added the caveat that migration buys checkability, not connectedness -- BUG-23 carries no `Implements` pointer and adds zero `urzua graph` edges, so the RFC's own stated benefit is not delivered by its own migration. (6) `design_feedback.md` was unnamed despite point 3 proposing to delete the directory holding it. | **substantive** |
+> | 2026-11-05 | Dated note added: the no-external-adopters premise holds through Phase 0 and expires at the Phase 1 switchover. **Why:** Maintainer decision, 2026-11-05 (`MILE-118`); the proposal text is unchanged. | **substantive** |
