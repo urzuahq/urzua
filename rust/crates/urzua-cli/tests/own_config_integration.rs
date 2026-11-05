@@ -103,7 +103,7 @@ fn new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare
 
 fn bug(status: &str, regression_test: &str) -> String {
     format!(
-        "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: a review\nRegression-test: {regression_test}\n---\n# 1 — A bug\n\n## What was wrong\n\nx\n"
+        "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: a review\nRegression-test: {regression_test}\n---\n# 1 — A bug\n\n## What was wrong\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 

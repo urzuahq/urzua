@@ -78,3 +78,9 @@ decision constrains later re-grouping; it only replaces "no rule" with "a named,
 - ADR-40 — the pointer-resolution fix that makes spec-to-spec `Parent` references checked, not just
   possible.
 - MILE-77 — the milestone this ADR resolves.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

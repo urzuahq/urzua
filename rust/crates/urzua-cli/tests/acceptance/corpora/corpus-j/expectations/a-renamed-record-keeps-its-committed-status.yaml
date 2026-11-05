@@ -1,0 +1,14 @@
+id: a-renamed-record-keeps-its-committed-status
+corpus: corpus-j
+# The diff reports a rename as a deletion plus an addition, so the new path has
+# no base copy. The base's record with the same Stable-Id is its committed side:
+# Accepted stays Accepted, and the record is not called new (BUG-191).
+commits:
+  - rename:
+      - {from: records/ADR-0002-accepted.md, to: records/ADR-0002-moved.md}
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - status.transition-allowed
+expect_no_findings:
+  - {rule: status.transition-allowed}

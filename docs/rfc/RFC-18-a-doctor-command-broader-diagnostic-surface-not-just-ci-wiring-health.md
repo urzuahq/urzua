@@ -101,3 +101,9 @@ Widen `doctor`'s checks along two new axes, in addition to what SPEC-15 already 
   `doctor` should check for.
 - RFC-20 — how `doctor` relates to `check`/`fix`/the rest of the command surface, the boundary
   question this RFC's first open question depends on.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

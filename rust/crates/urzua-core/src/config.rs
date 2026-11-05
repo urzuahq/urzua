@@ -90,6 +90,17 @@ impl Config {
         }
     }
 
+    /// The record type whose records suppress findings: the one declaring
+    /// `role: suppression`, else the type named `waiver` (the fallback for a
+    /// config that declares no role). Load refuses two declaring types.
+    pub fn suppression_type(&self) -> &str {
+        self.record_types
+            .iter()
+            .find(|(_, t)| t.role == Some(TypeRole::Suppression))
+            .map(|(name, _)| name.as_str())
+            .unwrap_or(DEFAULT_SUPPRESSION_TYPE)
+    }
+
     /// Every declared record type's name, in `record_types`' own (sorted)
     /// order.
     pub fn sorted_type_names(&self) -> Vec<&String> {
@@ -563,7 +574,35 @@ pub struct RecordTypeConfig {
     /// the default marker, so an existing config needs no change.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision_log: Option<RevisionLogDecl>,
+    /// What this type is for, beyond its fields (`BUG-74`). The one role
+    /// today is `suppression`: its records suppress findings (`SPEC-10`). At
+    /// most one type declares it. Omitted by every type means the type named
+    /// `waiver` is the suppression type (`DEFAULT_SUPPRESSION_TYPE`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<TypeRole>,
+    /// The fields a suppression must carry before it takes effect
+    /// (`BUG-177`), on the type declaring `role: suppression`. A suppression
+    /// whose field is absent, blank, a placeholder or pending (the type's
+    /// own `statuses.pending` vocabulary) suppresses nothing and is reported
+    /// by `waiver.matches-nothing`. Omitted means today's behaviour: only
+    /// `Rule` and `Scope` are needed. Every entry must be a field the type
+    /// declares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_requires: Option<Vec<String>>,
 }
+
+/// A role a record type can declare (`RecordTypeConfig::role`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TypeRole {
+    /// Records of this type suppress the findings they name (`SPEC-10`).
+    Suppression,
+}
+
+/// The type name read as the suppression type when no type declares
+/// `role: suppression`, so a config written before the declaration existed
+/// keeps its suppression.
+pub const DEFAULT_SUPPRESSION_TYPE: &str = "waiver";
 
 /// The declared identity of a type's revision-log section (`MILE-167`):
 /// exactly one of `marker` (a whole line, blockquote marks aside, such as
@@ -679,6 +718,16 @@ impl RecordTypeConfig {
             .and_then(|d| d.version_bump.as_ref())
     }
 
+    /// Whether this type declares `revision_log: {required: true}`
+    /// (`BUG-50`): the opt-in under which a record with no log is a finding.
+    /// A type that does not declare it, or declares `false`, reports none.
+    pub fn revision_log_declared_required(&self) -> bool {
+        self.revision_log
+            .as_ref()
+            .and_then(|d| d.required)
+            .unwrap_or(false)
+    }
+
     /// Whether `urzua fix --apply` needs this type's revision-log section
     /// (`MILE-159`): `true` unless declared `required: false`.
     pub fn revision_log_required(&self) -> bool {
@@ -697,6 +746,14 @@ impl Config {
             .get(record_type)
             .map(RecordTypeConfig::revision_log_id)
             .unwrap_or_default()
+    }
+
+    /// Whether a record of `record_type` with no revision log is a finding
+    /// (`BUG-50`): only a type declaring `revision_log: {required: true}`.
+    pub fn revision_log_declared_required(&self, record_type: &str) -> bool {
+        self.record_types
+            .get(record_type)
+            .is_some_and(RecordTypeConfig::revision_log_declared_required)
     }
 
     /// Whether `fix --apply` needs a revision-log section for a record of
@@ -964,6 +1021,14 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares exclude_files entry '{entry}', which is not a bare file name -- it would exclude nothing")]
     InvalidExcludedFile { record_type: String, entry: String },
+    #[error("record types '{first}' and '{second}' both declare `role: {role}` -- one type suppresses findings")]
+    DuplicateRole {
+        role: &'static str,
+        first: String,
+        second: String,
+    },
+    #[error("record type '{record_type}' declares effective_requires {reason}")]
+    InvalidEffectiveRequires { record_type: String, reason: String },
     #[error("record type '{record_type}' declares revision_log {reason}")]
     InvalidRevisionLog {
         record_type: String,
@@ -1359,6 +1424,7 @@ pub fn parse_with_document_models(
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
     let mut seen_dir: std::collections::BTreeMap<std::path::PathBuf, &String> = Default::default();
+    let mut suppression_type: Option<&String> = None;
     for (name, rt) in &config.record_types {
         let mut own_dirs: std::collections::BTreeSet<std::path::PathBuf> = Default::default();
         for dir in rt.all_dirs() {
@@ -1379,6 +1445,46 @@ pub fn parse_with_document_models(
             if let Some(first) = seen_dir.insert(path, name) {
                 return Err(ConfigError::SharedDir {
                     dir: dir.to_string(),
+                    first: first.clone(),
+                    second: name.clone(),
+                });
+            }
+        }
+        if let Some(requires) = &rt.effective_requires {
+            let reason = if rt.role != Some(TypeRole::Suppression) {
+                Some("but not `role: suppression` -- only the suppression type has suppressions that take effect".to_string())
+            } else if requires.is_empty() {
+                Some("as an empty list -- it would require nothing; omit it".to_string())
+            } else {
+                requires.iter().enumerate().find_map(|(i, f)| {
+                    if f.trim().is_empty() {
+                        Some("with a blank field name".to_string())
+                    } else if requires[..i].contains(f) {
+                        Some(format!("naming '{f}' twice"))
+                    } else if !rt
+                        .declared_fields()
+                        .iter()
+                        .any(|d| d.as_str() == f.as_str())
+                    {
+                        Some(format!(
+                            "naming '{f}', which is in neither `required_fields` nor `known_fields`"
+                        ))
+                    } else {
+                        None
+                    }
+                })
+            };
+            if let Some(reason) = reason {
+                return Err(ConfigError::InvalidEffectiveRequires {
+                    record_type: name.clone(),
+                    reason,
+                });
+            }
+        }
+        if rt.role == Some(TypeRole::Suppression) {
+            if let Some(first) = suppression_type.replace(name) {
+                return Err(ConfigError::DuplicateRole {
+                    role: "suppression",
                     first: first.clone(),
                     second: name.clone(),
                 });
@@ -2389,6 +2495,8 @@ mod tests {
             relation_fields: None,
             companion_fields: None,
             revision_log: None,
+            role: None,
+            effective_requires: None,
         };
         let declared = t.declared_fields();
         assert!(declared.contains("Status"));
@@ -3158,6 +3266,67 @@ record_types:
             );
         }
         assert!(parse(&rt_config("  adr:\n    dir: \"docs/adr\"\n")).is_ok());
+    }
+
+    /// `BUG-74`: the type that suppresses findings is declared by `role`,
+    /// resolved by `suppression_type`; the literal name `waiver` is only the
+    /// fallback when no type declares the role.
+    #[test]
+    fn the_suppression_type_is_declared_by_role_with_the_literal_as_fallback() {
+        let declared = parse(&rt_config(
+            "  exception:\n    dir: docs/exception\n    role: suppression\n  waiver:\n    dir: docs/waiver\n",
+        ))
+        .unwrap();
+        assert_eq!(declared.suppression_type(), "exception");
+        let fallback = parse(&rt_config("  waiver:\n    dir: docs/waiver\n")).unwrap();
+        assert_eq!(fallback.suppression_type(), "waiver");
+        let neither = parse(&rt_config("  adr:\n    dir: docs/adr\n")).unwrap();
+        assert_eq!(neither.suppression_type(), "waiver");
+    }
+
+    #[test]
+    fn a_second_suppression_type_or_an_unknown_role_is_refused_at_load() {
+        let two = rt_config(
+            "  a:\n    dir: docs/a\n    role: suppression\n  b:\n    dir: docs/b\n    role: suppression\n",
+        );
+        assert!(matches!(
+            parse(&two),
+            Err(ConfigError::DuplicateRole { .. })
+        ));
+        let unknown = rt_config("  a:\n    dir: docs/a\n    role: waiver\n");
+        assert!(parse(&unknown).is_err());
+    }
+
+    /// `BUG-177`: `effective_requires` belongs to the suppression type, names
+    /// non-blank fields the type declares, and is otherwise refused at load.
+    #[test]
+    fn effective_requires_is_validated_at_load() {
+        let ok = parse(&rt_config(
+            "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    known_fields: [Reason]\n    effective_requires: [Reason]\n",
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.record_types["w"].effective_requires.as_deref(),
+            Some(&["Reason".to_string()][..])
+        );
+        for bad in [
+            // no role
+            "  w:\n    dir: docs/w\n    required_fields: [Reason]\n    effective_requires: [Reason]\n",
+            // a field the type does not declare
+            "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    effective_requires: [Reason]\n",
+            // blank, empty, repeated
+            "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    effective_requires: [\" \"]\n",
+            "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    effective_requires: []\n",
+            "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    effective_requires: [Rule, Rule]\n",
+        ] {
+            assert!(
+                matches!(
+                    parse(&rt_config(bad)),
+                    Err(ConfigError::InvalidEffectiveRequires { .. })
+                ),
+                "{bad}"
+            );
+        }
     }
 
     /// `MILE-130`: a type may own several directories; each is validated like

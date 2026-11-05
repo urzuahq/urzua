@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Waiver;
+use crate::waiver::Suppression;
 
 /// `waiver.matches-nothing` (`MILE-168`): a waiver that no longer does
 /// anything is reported, so a stale exception does not stay on file hiding that
@@ -8,7 +8,7 @@ use crate::waiver::Waiver;
 /// Three states, each a finding on the waiver record:
 ///
 /// - **Expired**: its `Expires` has passed, or is not a real `YYYY-MM-DD`
-///   date. `apply_waivers` already ignores it, so its finding resurfaces; this
+///   date. `apply_suppressions` already ignores it, so its finding resurfaces; this
 ///   names the record that is left behind. Reported once as expired, never
 ///   also as unmatched.
 /// - **Unknown rule**: it names a rule this build does not ship, so it can
@@ -26,7 +26,7 @@ use crate::waiver::Waiver;
 ///
 /// `findings` is every finding before waivers are applied.
 pub fn waiver_matches_nothing(
-    waivers: &[Waiver],
+    waivers: &[Suppression],
     findings: &[Finding],
     executed: &[RuleExecution],
     whole_corpus: bool,
@@ -71,6 +71,21 @@ pub fn waiver_matches_nothing(
                     "waiver ({claimed}) is expired: Expires '{expires}' has passed or is not a \
                      YYYY-MM-DD date, so it covers nothing; remove it or set a new date"
                 ),
+                );
+            }
+            if !w.is_effective() {
+                if !reached(&path) {
+                    return Outcome::Absent;
+                }
+                let missing = w.unmet.join(", ");
+                return report(
+                    "waiver-ineffective",
+                    &w.unmet[0],
+                    format!(
+                        "waiver ({claimed}) is not in effect: it lacks {missing}, which its type \
+                     requires (`effective_requires`) before it suppresses anything; its finding \
+                     is reported again until the field holds a real value"
+                    ),
                 );
             }
             if !ALL_RULES.contains(&w.rule.as_str()) {
@@ -123,12 +138,13 @@ mod tests {
     use super::*;
     use crate::rules::tests::{examined, exec_with};
 
-    fn waiver(id: &str, rule: &str, scope: &str, expires: Option<&str>) -> Waiver {
-        Waiver {
+    fn waiver(id: &str, rule: &str, scope: &str, expires: Option<&str>) -> Suppression {
+        Suppression {
             id: id.into(),
             rule: rule.into(),
             scope: scope.into(),
             expires: expires.map(str::to_string),
+            unmet: Vec::new(),
         }
     }
 
@@ -147,7 +163,7 @@ mod tests {
     }
 
     fn run(
-        waivers: &[Waiver],
+        waivers: &[Suppression],
         findings: &[Finding],
         executed: &[RuleExecution],
         whole: bool,
@@ -262,5 +278,19 @@ mod tests {
         let (_, f) = run(&[w], &[], &[], true);
         assert_eq!(f.len(), 1);
         assert!(f[0].message.contains("no.such-rule"));
+    }
+
+    /// `BUG-177`: a suppression missing a field its type requires is reported
+    /// on the record, naming the field, instead of being counted as live.
+    #[test]
+    fn an_ineffective_waiver_is_reported_naming_the_missing_field_observed_failing() {
+        let mut w = waiver("docs/waiver/W-1.md", "field.quality", "docs/a.md", None);
+        w.unmet = vec!["Reason".into()];
+        let fs = [finding("field.quality", "docs/a.md")];
+        let (_, f) = run(&[w], &fs, &[exec_with("field.quality", 1, 1, 0)], true);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!(f[0].file, PathBuf::from("docs/waiver/W-1.md"));
+        assert!(f[0].message.contains("Reason"), "{}", f[0].message);
+        assert_eq!(f[0].action_source.variant, "waiver-ineffective");
     }
 }
