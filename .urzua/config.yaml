@@ -136,13 +136,22 @@ record_types:
       - "Implements"
       - "Parent"
       - "Last-audited"
+    # Shipped (MILE-7): the work the spec describes is built. A spec that says
+    # so must carry the evidence for it, which is the require-by-state half of
+    # the status-conditioned capability: Embodiment and Realized-by are known
+    # fields, optional for Draft and Accepted and required once Shipped. Shipped
+    # is a success and implementable state like Accepted: a delivered spec is
+    # still cited by the code that implements it.
     statuses:
-      values: ["Draft", "Accepted"]
-      success: ["Accepted"]
-      implementable: ["Accepted"]
+      values: ["Draft", "Accepted", "Shipped"]
+      success: ["Accepted", "Shipped"]
+      implementable: ["Accepted", "Shipped"]
       initial: ["Draft"]
       transitions:
         Draft: ["Accepted"]
+        Accepted: ["Shipped"]
+      require:
+        - {when: ["Shipped"], fields: ["Embodiment", "Realized-by"]}
     spec: "SPEC-18"
     # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
@@ -328,7 +337,11 @@ rules:
   section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error
-  field.quality: error
+  # A required field whose value is identical to its type's template text is
+  # a placeholder (BUG-22); the template is the vocabulary, not a token list.
+  field.quality:
+    level: error
+    template_placeholders: true
   field.pending:
     level: warn
     pending_until_required: true

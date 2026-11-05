@@ -76,6 +76,7 @@ struct Context<'a> {
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
+    templates: urzua_core::new_record::TemplateValues,
 }
 
 /// `revision-log.version-bump-required` judges a changed record against the
@@ -130,6 +131,55 @@ fn load_base_text(
     Ok(out)
 }
 
+/// `field.quality`'s `template_placeholders` (`BUG-22`): each declared type's
+/// template header, read from `.urzua/templates/<type>.md`. A type with no
+/// template is simply absent. Declaring the option when no type has one is a
+/// warning notice rather than a rule that quietly does nothing (the same
+/// treatment as an absent `claim_paths` entry).
+fn load_templates(
+    repo_root: &Path,
+    config: &Config,
+    notices: &mut Vec<Notice>,
+) -> Result<urzua_core::new_record::TemplateValues, String> {
+    let declared = config
+        .enabled_rule_opts::<rules::FieldQualityOpts>(rules::RULE_FIELD_QUALITY)
+        .is_some_and(|o| o.template_placeholders);
+    let mut templates = urzua_core::new_record::TemplateValues::new();
+    if !declared {
+        return Ok(templates);
+    }
+    for record_type in config.record_types.keys() {
+        let path = repo_root
+            .join(".urzua/templates")
+            .join(format!("{record_type}.md"));
+        match urzua_io::read_to_string(&path) {
+            Ok(text) => {
+                templates.insert(
+                    record_type.clone(),
+                    urzua_core::new_record::template_header_values(&text),
+                );
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(format!(
+                    "field.quality: template '{}' could not be read: {e}",
+                    path.display()
+                ))
+            }
+        }
+    }
+    if templates.is_empty() {
+        notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: rules::RULE_FIELD_QUALITY.to_string(),
+            message: "field.quality: template_placeholders is declared but no \
+                      .urzua/templates/<type>.md exists for any record type -- the option reads nothing"
+                .to_string(),
+        });
+    }
+    Ok(templates)
+}
+
 impl<'a> Context<'a> {
     fn rule_ctx(
         &'a self,
@@ -143,6 +193,7 @@ impl<'a> Context<'a> {
             config_path: &s.config_path,
             records: &s.records,
             full_text: &s.full_text,
+            templates: &self.templates,
             index: &self.record_index,
             collisions: &self.collisions,
             claims: &self.claims,
@@ -468,6 +519,7 @@ fn load_context<'a>(
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
     let base_text = load_base_text(session, scope, &mut notices)?;
+    let templates = load_templates(repo_root, config, &mut notices)?;
 
     Ok((
         Context {
@@ -505,6 +557,7 @@ fn load_context<'a>(
             }),
             repo_root: repo_root.clone(),
             base_text,
+            templates,
         },
         notices,
     ))
