@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-170]
 ---
 
 Outside a git repository, commands that read one now fail with `urzua needs a git repository: no .git

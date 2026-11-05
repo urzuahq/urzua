@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-87, BUG-89, BUG-90]
 ---
 
 Fixes BUG-87: a record whose filename contains a non-ASCII character is part of the corpus. git

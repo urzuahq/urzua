@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-184]
 ---
 
 Remove the `blockquote` (`> Key: value`) and `bold-list` (`- **Key:** value`) header shapes. YAML

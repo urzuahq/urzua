@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-129]
 ---
 
 A comma in a `Realized-by` locator path no longer truncates the path. A comma now separates entries only

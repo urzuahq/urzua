@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-188]
 ---
 
 `urzua new` writes the H1 id padded exactly as the file name is, so a type whose identity pattern requires

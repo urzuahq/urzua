@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-152]
 ---
 
 `urzua check` now reports a record of a `header_shape: none` type as out of scope, rather than as

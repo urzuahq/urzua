@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-135]
 ---
 
 `compute_drifted_records` (the git-history check behind `embodiment.consistency`'s drift detection)

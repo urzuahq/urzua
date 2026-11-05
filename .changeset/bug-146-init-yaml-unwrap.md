@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-146]
 ---
 
 `urzua init` swallowed a hypothetical YAML serialization failure into an empty config body, reporting

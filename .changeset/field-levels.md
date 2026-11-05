@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Set severity per field within one rule. `field.quality`, `field.pending` and

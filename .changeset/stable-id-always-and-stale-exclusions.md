@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `urzua new` always writes a `Stable-Id` and reports it in `stable_id`; when the record type's closed

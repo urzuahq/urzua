@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `urzua new` no longer reuses a number already taken on another branch. Besides the working tree, it

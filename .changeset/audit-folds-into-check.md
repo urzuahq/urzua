@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-99, MILE-190]
 ---
 
 `urzua check --rules <id>[,<id>...]` runs only the named rules of your configuration, and every report gains a top-level `rules_selected` (the ids, or `null` when not restricted). A rule left out is omitted from `rules_executed` and is not run; naming a rule your configuration does not declare, or one that does not exist, exits 2.

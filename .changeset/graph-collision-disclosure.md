@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `urzua graph` used the plain, non-collision-reporting record index — unlike `check`/`audit` (since

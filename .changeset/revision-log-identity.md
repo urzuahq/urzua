@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A record type can declare how its revision log is found with `revision_log`: a `marker` line (default

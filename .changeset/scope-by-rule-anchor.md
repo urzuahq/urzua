@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 A path argument and `--base` now keep or drop each finding by what its rule reports on, declared once

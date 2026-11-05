@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Add the opt-in `citation.issue-exists` rule and the `urzua refs refresh` command. An issue or pull

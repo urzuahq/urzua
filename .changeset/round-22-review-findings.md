@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 Fixes a real nondeterminism defect found by review: a cross-type record-identifier collision's

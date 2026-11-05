@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 An absent `claim_paths` directory no longer aborts `check`. Git keeps no empty directory, so a

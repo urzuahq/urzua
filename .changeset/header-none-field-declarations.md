@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-128]
 ---
 
 Fixes `BUG-128`: `config.header-none-has-no-required-fields` only forbade a `header_shape: none` type

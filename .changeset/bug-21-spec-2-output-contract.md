@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-21]
 ---
 
 `SPEC-2`'s documented `## Output contract` example JSON was RFC-3's original, pre-implementation

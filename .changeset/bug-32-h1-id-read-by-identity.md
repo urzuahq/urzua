@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-32]
 ---
 
 `filename.title-consistency` no longer builds a record number out of the digits of a title's first word.
