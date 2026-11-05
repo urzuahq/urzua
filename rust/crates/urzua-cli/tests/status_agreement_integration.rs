@@ -494,6 +494,71 @@ fn an_unreadable_record_that_may_write_blocks_does_not_make_a_record_unblocked()
     assert_eq!(examined_and_unreadable(&report), (0, 2), "{report}");
 }
 
+// ADR-83: a value that cannot be computed is counted unreadable, not reported
+// as unblocked. A type that declares only `progress` (no written `blocked`) is
+// held to the same guard: a progress-status record with an unresolved or
+// unreadable dependency is not examined and clean.
+#[test]
+fn a_progress_record_with_a_dangling_dependency_is_unreadable_when_no_blocked_status_is_declared() {
+    for (name, status) in [
+        ("derived-dangling-inprogress", "InProgress"),
+        ("derived-dangling-done", "Done"),
+    ] {
+        let dir = repo(
+            name,
+            &derived_only(),
+            &[(
+                "docs/milestones/MILE-2-b.md",
+                status,
+                "Depends-on: MILE-999",
+            )],
+        );
+        let (_, report) = check(&dir);
+        assert!(agreement(&report).is_empty(), "{report}");
+        assert_eq!(
+            examined_and_unreadable(&report),
+            (0, 1),
+            "{status}: {report}"
+        );
+    }
+}
+
+#[test]
+fn a_progress_record_depending_on_an_unreadable_record_is_unreadable_when_no_blocked_status_is_declared(
+) {
+    let dir = repo(
+        "derived-unreadable-target",
+        &derived_only(),
+        &[
+            ("docs/milestones/MILE-1-a.md", "[unclosed", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "InProgress",
+                "Depends-on: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    assert!(agreement(&report).is_empty(), "{report}");
+    assert_eq!(examined_and_unreadable(&report), (0, 2), "{report}");
+}
+
+#[test]
+fn a_progress_record_is_unreadable_when_an_unreadable_record_may_write_blocks_and_no_blocked_status_is_declared(
+) {
+    let dir = repo(
+        "derived-unreadable-writer",
+        &derived_only(),
+        &[
+            ("docs/milestones/MILE-1-a.md", "[unclosed", "Blocks: MILE-2"),
+            ("docs/milestones/MILE-2-b.md", "InProgress", ""),
+        ],
+    );
+    let (_, report) = check(&dir);
+    assert!(agreement(&report).is_empty(), "{report}");
+    assert_eq!(examined_and_unreadable(&report), (0, 2), "{report}");
+}
+
 #[test]
 fn enabling_the_rule_with_no_type_declaring_blocked_or_progress_fails_to_load() {
     let config = derived_only().replace("      progress: [InProgress, Done]\n", "");

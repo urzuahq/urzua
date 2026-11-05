@@ -11,12 +11,13 @@ use urzua_core::report::{ExplainReport, ReportStatus, ScopeExplanation};
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
+use urzua_core::report::Failure;
 
 pub fn run(config_path: Option<PathBuf>, path: String) -> ExitCode {
     emit_or_not_run(run_inner(config_path, path))
 }
 
-fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, String> {
+fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Failure> {
     let Session {
         config,
         records,
@@ -27,7 +28,8 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Str
     if parsed.anchor.is_some() {
         return Err(format!(
             "'{path}' carries an anchor; give `path` or `path#scope`, the pin is printed for you"
-        ));
+        )
+        .into());
     }
     let governing_records = urzua_core::graph::explain(&records, &parsed.path, &config);
     let (population, notice) = urzua_core::graph::read_population(&records, &config, "explain");

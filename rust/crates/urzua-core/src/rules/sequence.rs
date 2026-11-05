@@ -395,10 +395,12 @@ fn shortest_cycle(
 /// status the type declares in `blocked` while nothing blocks it. A status that
 /// does not claim progress, `Planned` for instance, is right for a blocked
 /// record. Only a type declaring `blocked` or `progress` is examined. A blocked
-/// value that cannot be computed is not guessed: a record that would be
-/// reported unblocked is counted unreadable when it names a dependency that
-/// does not resolve or whose header cannot be read, or when a record that may
-/// write an inverse claim has an unreadable header.
+/// value that cannot be computed is not guessed: a record in a blocked or a
+/// progress status that would be reported unblocked is counted unreadable when
+/// it names a dependency that does not resolve or whose header cannot be read,
+/// or when a record that may write an inverse claim has an unreadable header.
+/// This holds for a type declaring only `progress` as for one that also writes
+/// `blocked` (`ADR-83`).
 pub fn sequence_status_agreement(
     records: &[Record],
     config: &Config,
@@ -513,20 +515,28 @@ pub fn sequence_status_agreement(
                         ),
                     );
                 }
-            } else if decl.is_blocked_status(status) {
-                // "Nothing blocks it" is only known when every claim was read.
-                if unreadable_dependencies.contains(&id)
-                    || unresolved_claimants.contains(&id)
-                    || unreadable_writers
+            } else {
+                // "Nothing blocks it" is only known when every claim was read,
+                // and it is the answer both for a written blocked status (is it
+                // contradicted?) and for a progress status (is it contradicted
+                // by a blocker?), so a type declaring only `progress` is guarded
+                // too (`ADR-83`).
+                let judged = decl.is_blocked_status(status) || decl.is_progress_status(status);
+                if judged
+                    && (unreadable_dependencies.contains(&id)
+                        || unresolved_claimants.contains(&id)
+                        || unreadable_writers)
                 {
                     return Outcome::Unreadable;
                 }
-                push(
-                    ActionSource::new("status-blocked-unblocked").field(status_field),
-                    format!(
-                        "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
-                    ),
-                );
+                if decl.is_blocked_status(status) {
+                    push(
+                        ActionSource::new("status-blocked-unblocked").field(status_field),
+                        format!(
+                            "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
+                        ),
+                    );
+                }
             }
             Outcome::Examined
         },

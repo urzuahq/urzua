@@ -325,12 +325,19 @@ fn audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one() 
             ("docs/adr/ADR-2-a-decision.md", &n2(new_both)),
         ],
     );
+    // `audit` is `check` over every declared rule now (ADR-79), so a fixture
+    // repo that lacks this repository's source directories reports other
+    // rules; what this test pins is that a reciprocated supersession is not
+    // reported.
     let out = urzua(&good, &["audit"]);
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&out.stdout)
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !json(&out)["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"] == "relation.supersession-reciprocity"),
+        "{stdout}"
     );
 }
 

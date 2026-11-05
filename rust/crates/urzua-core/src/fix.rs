@@ -563,6 +563,8 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -686,6 +688,8 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),
