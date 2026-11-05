@@ -155,7 +155,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_POINTER_RESOLUTION,
-        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted.",
+        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted. A reference to a record whose file exists on disk but is not tracked by git is told apart from one that exists nowhere (`BUG-13`): a different finding variant, naming the file, because discovery reads only tracked and staged files; the same holds for `relation.supersession-reciprocity`, `relation.pair-reciprocity` and `sequence.unresolved-blocker`.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
@@ -166,10 +166,11 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pointer-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("pointer-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
         ],
         phase: Phase::Main,
         run: |c| {
-            pointer_resolution(c.records, c.config, c.index)
+            pointer_resolution(c.records, c.config, c.index, c.untracked_records)
         },
     },
     RuleDef {
@@ -252,7 +253,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_FILENAME_TITLE_CONSISTENCY,
-        description: "The filename's display number and the H1's display number agree (ADR-3).",
+        description: "The filename's display number and the H1's display number agree (ADR-3). The H1's id is read the way a filename's is (`BUG-32`): with a declared `identity` pattern, the leading token must be the pattern's `prefix` and a number (`SPEC-3`); with none, a leading `PREFIX-N` or a bare `N`. A title that does not match, such as `# 2026-09-16 Notes` or `# v1.2 Release`, is reported as carrying no record id and never read as a number, and a number too large to compare is reported as such.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
@@ -282,10 +283,11 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("supersession-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("supersession-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("supersession-unreciprocated", ActionDecl::FIELD_APPEND),
         ],
         phase: Phase::Main,
-        run: |c| supersession_reciprocity(c.records, c.config, c.index),
+        run: |c| supersession_reciprocity(c.records, c.config, c.index, c.untracked_records),
     },
     RuleDef {
         id: RULE_RELATION_PAIR_RECIPROCITY,
@@ -300,11 +302,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pair-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("pair-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("pair-unreciprocated", ActionDecl::FIELD_APPEND),
         ],
         phase: Phase::Main,
         run: |c| {
-            relation_pair_reciprocity(c.records, c.config, c.index)
+            relation_pair_reciprocity(c.records, c.config, c.index, c.untracked_records)
         },
     },
     RuleDef {
@@ -356,10 +359,11 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("blocker-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("blocker-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("blocker-not-a-reference", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
-        run: |c| sequence_unresolved_blocker(c.records, c.config, c.index),
+        run: |c| sequence_unresolved_blocker(c.records, c.config, c.index, c.untracked_records),
     },
     RuleDef {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
@@ -528,7 +532,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -540,6 +544,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("locator-empty", ActionDecl::FIELD_SET),
             VariantAction::new("locator-missing", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("locator-malformed", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
@@ -564,7 +569,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 // so only a definite absence counts.
                 (c.may_exist)(path)
             };
-            embodiment_locator_exists(c.records, c.config, &present, c.read_text)
+            // Real, but not tracked: the repair is `git add`, not a new locator.
+            let untracked_on_disk = |p: &str| {
+                let path = std::path::Path::new(p);
+                !tracked.contains(path) && (c.may_exist)(path)
+            };
+            embodiment_locator_exists(c.records, c.config, &present, c.read_text, &untracked_on_disk)
         },
     },
     RuleDef {
@@ -1190,7 +1200,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
-        description: "A record identifier (any identifier carrying a configured type prefix, resolvable or not) is cited from inside a `published_paths` entry (a path prefix, normalised at config load; globs are not supported and a glob is treated literally), which publishes a pointer no external reader can resolve (`RFC-11`/`ADR-9`, `MILE-125`). An identifier split across lines is not detected. A declared path matching no tracked file is itself a finding, never a clean pass; the rule's level is the boundary's severity.",
+        description: "Declared boundaries (`boundaries`: path globs with a `kind` of `published`, `vendored` or `generated`, a required `reason` and a `severity`; `published_paths` is read as one published boundary with no reason required, and is not deprecated) and what follows from each kind (`RFC-11`/`ADR-9`/`ADR-80`, `MILE-125`). A record identifier (any identifier carrying a configured type prefix, resolvable or not, in prose as well as in a marker) inside a `published` boundary is a violation, because it publishes a pointer no external reader can resolve; a back-pointer (`Implements:` or `Verifies:`) inside a `generated` boundary is reported, and a plain record identifier there is not; a `vendored` boundary is declared and prohibits nothing. A boundary's `severity` is the level of its findings and the rule's `level` only enables the rule. A boundary's `exclude` globs remove paths from its violation check only, and the declared `ignore_marker` excuses the one line it is on. An `exclude` entry, a boundary path or an `ignore_marker` use that matches or suppresses nothing is itself a finding, never a clean pass. The violation matcher is wide and the evidence collector's stays narrow: a back-pointer inside a `published` boundary is not realization evidence. An identifier split across lines is not detected.",
         scope: Scope::Files,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1198,13 +1208,25 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         reads_declaration: None,
         header_none: HeaderNone::Exempt("population is published files, not records"),
-        options: &["published_paths"],
+        options: &["published_paths", "boundaries", "ignore_marker"],
         actions: &[
             VariantAction::new("published-path-reference", ActionDecl::Exempt("the edit is to a published non-record file, and no action kind addresses a non-record file yet")),
             VariantAction::new("published-path-uncovered", ActionDecl::CONFIG_SET),
+            VariantAction::new("generated-back-pointer", ActionDecl::Exempt("the edit is to a generated non-record file, which is overwritten, and no action kind addresses a non-record file yet")),
+            VariantAction::new("boundary-uncovered", ActionDecl::CONFIG_SET),
+            VariantAction::new("boundary-exclude-unused", ActionDecl::CONFIG_REMOVE),
+            VariantAction::new("boundary-marker-unused", ActionDecl::Exempt("the edit removes a marker from a non-record file, and no action kind addresses a non-record file yet")),
         ],
         phase: Phase::Main,
-        run: |c| published_path_reference(c.published_files, c.published_paths, c.config),
+        run: |c| {
+            published_path_reference(
+                c.published_files,
+                c.boundaries,
+                c.ignore_marker,
+                c.config,
+                c.config_path,
+            )
+        },
     },
     RuleDef {
         id: RULE_SECTION_REQUIRED,

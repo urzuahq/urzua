@@ -27,9 +27,10 @@ Measured over every release fragment added in this repository's history:
 | References phrased as a claim | 5 |
 | Bare references (no closing verb) | 44 |
 
-`BUG-66` is the incident: five bug records shipped `Status: Open` in the branch that fixed them, from
+`BUG-66` is the incident: five bug records were `Status: Open` in the branch that fixed them, from
 a file naming all five as `(BUG-60)`. The rule read that file, examined 2 records, and reported no
-findings.
+findings. The author caught it in review, about 70 minutes after it was written, and fixed it before the
+branch merged; it was never released. (Amended 2026-11-05: this text first said the records "shipped".)
 
 The same measurement rules out the obvious fix. The bare references include `ADR-11`, `SPEC-1`,
 `RFC-9`, `ADR-0031` -- citations of the decision a change implements, not claims to close it.
@@ -110,6 +111,25 @@ of `ADR-53`; shipping at a level the evidence does not support is not.
   `ADR-34` together, and `BUG-0002`/`ADR-0036` in another -- the pre-`ADR-36` identifier shape, which
   no longer resolves against the corpus. Nothing reports those.
 
+## Amendment (2026-11-05): decided in ADR-81
+
+The maintainer decided on 2026-11-05 to take this proposal as written. `ADR-81` (Proposed) records
+it. Choices that resolve the open questions above:
+
+- Keep the closing verb and add a separate rule, `reference.bare` (provisional name). It is its own
+  rule rather than a second finding of `claim.status-agreement`, since the two want different levels.
+- This repository declares its changeset files as the scanned text. A commit message and a PR body are
+  not covered; they may want a different input mechanism.
+- `reference_paths` stays a separate option from `claim_paths`.
+- The rule ships at `warn`. Whether the open-record discriminator flags ordinary citations is still
+  unmeasured, and the pass over the 44 references gates promotion to `error`.
+- Whether a bare reference must resolve at all is not decided.
+
+Superseded in part (2026-11-05): the maintainer rejected `ADR-81` after measuring the discriminator
+(0 real claims among 19 flagged references; 6 false findings at HEAD). The direction that replaces it is
+`ADR-85` (a declared field names the records a changeset closes) and `ADR-84` (a record's status follows its
+declared evidence field), both Proposed. This RFC's `Status` is the maintainer's to change.
+
 ## Non-goals
 Changing what `claim.status-agreement` does when it *does* parse a claim -- that behaviour is correct
 and `BUG-36` is the evidence for it.
@@ -131,3 +151,5 @@ Repairing the 44 historical references. They are consumed at release and are not
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-05 | Amendment: the maintainer's decision to accept this RFC is recorded in `ADR-81`, resolving the open questions on paths, option naming and rule shape and leaving the discriminator and resolution questions open. **Why:** accepting an RFC is recorded in an ADR; `Status` unchanged. | **substantive** |
+> | 2026-11-05 | Motivation amended: the `BUG-66` incident was caught in review and never released, where the text said the records shipped. A note records that `ADR-81` was rejected on measurement and points to `ADR-84` and `ADR-85`. `Status` unchanged. **Why:** the investigation behind the rejection found the incident lived about 70 minutes in a PR branch. | **substantive** |

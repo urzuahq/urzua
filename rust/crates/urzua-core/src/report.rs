@@ -555,6 +555,9 @@ pub enum ScopeSource {
     /// Only the records changed against a base ref (`MILE-123`); the ref is
     /// reported in [`ScopeInfo::base`].
     GitDiff,
+    /// One record's proposed content read from stdin (`check --stdin-path`,
+    /// `MILE-191`); the record need not exist on disk.
+    Stdin,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -719,6 +722,10 @@ pub struct ExplainReport {
     /// a scope (`ADR-74` point 7): the authoring route for a scoped pin.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<ScopeExplanation>,
+    /// The records read to answer, as `check` reports a rule's population
+    /// (`BUG-169`): an empty answer from an unread corpus is not the same as
+    /// an empty answer from a read one.
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
@@ -754,6 +761,8 @@ impl Report for ExplainReport {
 pub struct GraphReport {
     pub status: ReportStatus,
     pub edges: Vec<crate::graph::GraphEdge>,
+    /// See [`ExplainReport::population`].
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }

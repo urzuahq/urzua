@@ -5,7 +5,8 @@
 # single run and fills the disk across thousands of them.
 #
 # usage: test-no-leak.sh [command...]   (default: cargo test --workspace --locked --no-fail-fast, from rust/)
-# exit:  the test command's own failure first; otherwise 1 when anything leaked.
+# exit:  1 when anything leaked (even if the test command also failed); otherwise the
+#        test command's own exit code.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"

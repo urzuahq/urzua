@@ -47,16 +47,12 @@ pub fn normalize_locator(raw: &str) -> String {
 /// written, normalised, so every reader still has a path to name.
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
-    for segment in value.split(',') {
-        let segment = segment.trim();
-        let Some((prefix, locator)) = segment.split_once(':') else {
-            continue;
-        };
+    for (prefix, locator) in crate::locator::realized_by_entries(value) {
         let locator = match crate::locator::parse_locator(locator) {
             Ok(l) => l.path,
             Err(_) => normalize_locator(locator),
         };
-        match prefix.trim() {
+        match prefix {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
             "test" => result.test.push(locator),
@@ -128,13 +124,17 @@ pub fn relation_field_name<'a>(
 /// a record claim verified work against a file that is not there -- and the
 /// claim reads as stronger than `Not started`, not weaker.
 ///
-/// `present` and `read` are supplied by the caller: this crate does not touch
-/// the filesystem. `read` returns a file's text for a scope to resolve in.
+/// `present`, `read` and `untracked_on_disk` are supplied by the caller: this
+/// crate does not touch the filesystem. `read` returns a file's text for a
+/// scope to resolve in. `untracked_on_disk` is true for a path that exists but
+/// that git does not track, which is its own variant (`BUG-13`) because the
+/// repair is to track the file, not to correct the locator.
 pub fn embodiment_locator_exists(
     records: &[Record],
     config: &Config,
     present: &dyn Fn(&str) -> bool,
     read: &dyn Fn(&str) -> crate::locator::SharedText,
+    untracked_on_disk: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
     use crate::locator::{self, Anchor, FileText, ScopeError};
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
@@ -206,6 +206,14 @@ pub fn embodiment_locator_exists(
                             l.path,
                             locator::GRAMMAR
                         ));
+                    } else if untracked_on_disk(&l.path) {
+                        report(
+                            "locator-untracked",
+                            format!(
+                                "{field} names '{}', which exists on disk but is not tracked by git",
+                                l.path
+                            ),
+                        );
                     } else {
                         report(
                             "locator-missing",
@@ -721,7 +729,8 @@ end: brace_balanced
                 _ => FileText::Missing,
             })
         };
-        let (_, findings) = embodiment_locator_exists(&[r], &scoped_config(), &present, &read);
+        let (_, findings) =
+            embodiment_locator_exists(&[r], &scoped_config(), &present, &read, &|_| false);
         findings.into_iter().map(|f| f.message).collect()
     }
 
@@ -796,6 +805,35 @@ end: brace_balanced
         );
         // The same text naming a file that is there passes.
         assert!(exists_messages("code:weird#1.md").is_empty());
+    }
+
+    #[test]
+    fn a_comma_inside_a_locator_path_is_part_of_the_path_observed_failing() {
+        let r = parse_realized_by("code:src/weird,name.rs, test:tests/a, b.rs");
+        assert_eq!(r.code, vec!["src/weird,name.rs".to_string()]);
+        assert_eq!(r.test, vec!["tests/a, b.rs".to_string()]);
+        let entries = crate::locator::realized_by_locators("spec:docs/x,y.md,code:src/a.rs");
+        let paths: Vec<_> = entries
+            .iter()
+            .map(|e| e.parsed.as_ref().unwrap().path.clone())
+            .collect();
+        assert_eq!(paths, vec!["docs/x,y.md", "src/a.rs"]);
+    }
+
+    #[test]
+    fn a_comma_followed_by_a_category_prefix_separates_entries() {
+        let r = parse_realized_by("code:a.rs,test:b.rs ,  spec:c.md");
+        assert_eq!(r.code, vec!["a.rs".to_string()]);
+        assert_eq!(r.test, vec!["b.rs".to_string()]);
+        assert_eq!(r.spec, vec!["c.md".to_string()]);
+    }
+
+    #[test]
+    fn a_comma_followed_by_an_unknown_prefix_stays_in_the_path() {
+        // The unknown prefix is no category, so the text is not an entry of its
+        // own; the path names nothing and `embodiment.locator-exists` reports it.
+        let r = parse_realized_by("code:a.rs, docs:b.md");
+        assert_eq!(r.code, vec!["a.rs, docs:b.md".to_string()]);
     }
 
     #[test]
@@ -917,6 +955,43 @@ end: brace_balanced
     }
 
     #[test]
+    fn a_locator_naming_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nRealized-by: code:src/real.rs, code:src/drafted.rs, code:src/gone.rs\n---\n",
+        );
+        let present = |p: &str| p == "src/real.rs";
+        let untracked_on_disk = |p: &str| p == "src/drafted.rs";
+        let (_, findings) = embodiment_locator_exists(
+            std::slice::from_ref(&r),
+            &embodiment_config(),
+            &present,
+            &crate::locator::no_file_text,
+            &untracked_on_disk,
+        );
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        let drafted = findings
+            .iter()
+            .find(|f| f.message.contains("drafted"))
+            .unwrap();
+        assert_eq!(drafted.action_source.variant, "locator-untracked");
+        assert!(
+            drafted
+                .message
+                .contains("exists on disk but is not tracked by git"),
+            "{}",
+            drafted.message
+        );
+        let gone = findings
+            .iter()
+            .find(|f| f.message.contains("gone"))
+            .unwrap();
+        assert_eq!(gone.action_source.variant, "locator-missing");
+        assert!(gone.message.contains("not in the working tree"));
+    }
+
+    #[test]
     fn a_locator_naming_a_missing_path_is_an_error_observed_failing() {
         let r = record(
             "docs/adr/ADR-1-x.md",
@@ -930,6 +1005,7 @@ end: brace_balanced
             &embodiment_config(),
             &present,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         // One candidate per declared slot, whatever its locator count: the
         // population is the rule's input, not its work count.
@@ -945,6 +1021,7 @@ end: brace_balanced
             &embodiment_config(),
             &all_there,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         assert!(none.is_empty(), "{none:?}");
 
@@ -960,6 +1037,7 @@ end: brace_balanced
             &embodiment_config(),
             &all_there,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(
@@ -984,6 +1062,7 @@ end: brace_balanced
                 &embodiment_config(),
                 &present,
                 &crate::locator::no_file_text,
+                &|_| false,
             );
             assert!(findings.is_empty(), "{spelled}: {findings:?}");
         }
@@ -1018,6 +1097,7 @@ end: brace_balanced
             &config,
             &present,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");

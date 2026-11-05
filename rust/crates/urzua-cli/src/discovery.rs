@@ -23,6 +23,8 @@ pub(crate) fn scope_source(source: urzua_io::DiscoverySource) -> ScopeSource {
     }
 }
 
+/// There is no fallback that walks the directory (`BUG-170`, SPEC-2): discovery
+/// is the tracked set, so a command that reads a repository needs one.
 pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
     let start = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
     let mut dir = start
@@ -40,7 +42,12 @@ pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
         }
         match dir.parent() {
             Some(parent) => dir = parent.to_path_buf(),
-            None => return Err("no .git directory found above the given path".to_string()),
+            None => {
+                return Err(
+                    "urzua needs a git repository: no .git directory found above the given path"
+                        .to_string(),
+                )
+            }
         }
     }
 }
@@ -143,6 +150,55 @@ pub(crate) fn load_records(
     Ok((records, full_text))
 }
 
+/// Record files that exist on disk directly in a record type's directories but
+/// that git does not track, by identifier (`BUG-13`). Discovery reads only
+/// tracked and staged files (`ADR-6`), so a reference to a record drafted but
+/// not yet `git add`ed resolves to nothing; this is the on-disk fact that lets
+/// a rule say so, supplied here because `urzua-core` touches no filesystem.
+/// Read with the loader's own identity rules. A file that cannot be read yields
+/// no entry: the hint is lost and the reference reads as missing, as before.
+pub(crate) fn untracked_records(
+    repo_root: &Path,
+    config: &Config,
+    tracked: &[PathBuf],
+) -> urzua_core::rules::UntrackedRecords {
+    let tracked: std::collections::HashSet<&Path> = tracked.iter().map(PathBuf::as_path).collect();
+    let mut on_disk: Vec<PathBuf> = Vec::new();
+    for type_config in config.record_types.values() {
+        for dir in type_config.all_dirs() {
+            let Ok(entries) = std::fs::read_dir(repo_root.join(dir)) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if !entry.file_type().is_ok_and(|t| t.is_file()) {
+                    continue;
+                }
+                let rel = Path::new(dir).join(entry.file_name());
+                if !tracked.contains(rel.as_path()) {
+                    on_disk.push(rel);
+                }
+            }
+        }
+    }
+    on_disk.sort();
+    on_disk.dedup();
+    let Ok((records, _)) = load_records(
+        repo_root,
+        &on_disk,
+        &std::collections::HashSet::new(),
+        config,
+    ) else {
+        return Default::default();
+    };
+    records
+        .iter()
+        .filter_map(|record| {
+            urzua_core::rules::record_id(record)
+                .map(|id| (urzua_core::values::RecordId::new(&id), record.path.clone()))
+        })
+        .collect()
+}
+
 /// Parses `content` as the record at `rel_path` would be loaded, though the
 /// file need not exist: the type is the one whose directory holds the path,
 /// under the same filename rules `load_records` applies. For the proposed
@@ -186,6 +242,36 @@ pub(crate) fn parse_prospective_record(
         "no record type governs {} (a record type governs the .md files directly in its `dir`, other than excluded and underscore-prefixed names)",
         rel_path.display()
     ))
+}
+
+/// `p` (absolute, or relative to the working directory) as a repo-relative
+/// path, without requiring that it exist.
+pub(crate) fn relative_to_root(
+    repo_root: &std::path::Path,
+    p: &std::path::Path,
+) -> Result<PathBuf, String> {
+    let cwd = std::env::current_dir()
+        .and_then(|c| c.canonicalize())
+        .unwrap_or_default();
+    let joined = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    };
+    let mut normal = PathBuf::new();
+    for c in joined.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                normal.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normal.push(other),
+        }
+    }
+    normal
+        .strip_prefix(repo_root)
+        .map(PathBuf::from)
+        .map_err(|_| format!("{} is outside the repository", p.display()))
 }
 
 /// Restrict discovered files to those under any of the requested paths,
@@ -688,13 +774,37 @@ pub(crate) fn read_files_under(
     prefixes: &[String],
     rule: &str,
 ) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        prefixes
+            .iter()
+            .any(|entry| rules::path_is_published(path, entry))
+    })
+}
+
+/// [`read_files_under`] for entries that are a prefix or a glob (`MILE-158`):
+/// the boundary rule's paths.
+pub(crate) fn read_files_matching(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    entries: &[String],
+    rule: &str,
+) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        entries
+            .iter()
+            .any(|entry| rules::path_matches_entry(path, entry))
+    })
+}
+
+fn read_files_where(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    rule: &str,
+    wanted: impl Fn(&std::path::Path) -> bool,
+) -> Result<Vec<rules::PublishedFile>, String> {
     let mut out = Vec::new();
     for path in &discovered.paths {
-        if discovered.staged_deletions.contains(path)
-            || !prefixes
-                .iter()
-                .any(|entry| rules::path_is_published(path, entry))
-        {
+        if discovered.staged_deletions.contains(path) || !wanted(path) {
             continue;
         }
         let full = repo_root.join(path);

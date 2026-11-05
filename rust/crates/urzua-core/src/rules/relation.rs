@@ -8,6 +8,7 @@ pub fn supersession_reciprocity(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
     let mut findings = Vec::new();
@@ -53,6 +54,13 @@ pub fn supersession_reciprocity(
 
             for reference in extract_references(value) {
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
+                    let (variant, message) = unresolved_reference(
+                        field,
+                        &reference,
+                        untracked,
+                        ("supersession-unresolved", "supersession-untracked"),
+                        "",
+                    );
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Error,
@@ -61,10 +69,8 @@ pub fn supersession_reciprocity(
                         waived: None,
                         declared_severity: None,
                         suggested_action: None,
-                        action_source: ActionSource::new("supersession-unresolved").field(field),
-                        message: format!(
-                            "{field}: {reference} does not resolve to any discovered record"
-                        ),
+                        action_source: ActionSource::new(variant).field(field),
+                        message,
                     });
                     continue;
                 };
@@ -344,6 +350,7 @@ pub fn relation_pair_reciprocity(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_PAIR_RECIPROCITY;
     let mut findings = Vec::new();
@@ -371,6 +378,13 @@ pub fn relation_pair_reciprocity(
             let mut scoped_out = 0;
             for reference in &references {
                 let Some(target) = index.get(&crate::values::RecordId::new(reference)) else {
+                    let (variant, message) = unresolved_reference(
+                        field,
+                        reference,
+                        untracked,
+                        ("pair-unresolved", "pair-untracked"),
+                        "",
+                    );
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Error,
@@ -379,10 +393,8 @@ pub fn relation_pair_reciprocity(
                         waived: None,
                         declared_severity: None,
                         suggested_action: None,
-                        action_source: ActionSource::new("pair-unresolved").field(field),
-                        message: format!(
-                            "{field}: {reference} does not resolve to any discovered record"
-                        ),
+                        action_source: ActionSource::new(variant).field(field),
+                        message,
                     });
                     continue;
                 };
@@ -539,6 +551,69 @@ mod tests {
     use crate::rules::tests::*;
 
     #[test]
+    fn a_supersession_to_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        let new = record(
+            "docs/adr/ADR-2-y.md",
+            "adr",
+            "---\nSupersedes / Superseded-by: ADR-1, ADR-7\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&["Supersedes / Superseded-by"], None, None, None),
+        )]);
+        let records = [new];
+        let index = build_normalized_index(&records);
+        let untracked: UntrackedRecords = [(
+            crate::values::RecordId::new("ADR-1"),
+            PathBuf::from("docs/adr/ADR-1-old.md"),
+        )]
+        .into();
+        let (_, findings) = supersession_reciprocity(&records, &config, &index, &untracked);
+        let variant = |id: &str| {
+            findings
+                .iter()
+                .find(|f| f.message.contains(id))
+                .map(|f| f.action_source.variant)
+        };
+        assert_eq!(
+            variant("ADR-1"),
+            Some("supersession-untracked"),
+            "{findings:?}"
+        );
+        assert_eq!(
+            variant("ADR-7"),
+            Some("supersession-unresolved"),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_pair_claim_on_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        let config = amend_config();
+        let rfc = record(
+            "docs/rfc/RFC-1-a.md",
+            "rfc",
+            "---\nAmends: RFC-2, RFC-3\n---\n",
+        );
+        let records = [rfc];
+        let index = build_normalized_index(&records);
+        let untracked: UntrackedRecords = [(
+            crate::values::RecordId::new("RFC-2"),
+            PathBuf::from("docs/rfc/RFC-2-b.md"),
+        )]
+        .into();
+        let (_, findings) = relation_pair_reciprocity(&records, &config, &index, &untracked);
+        let variant = |id: &str| {
+            findings
+                .iter()
+                .find(|f| f.message.contains(id))
+                .map(|f| f.action_source.variant)
+        };
+        assert_eq!(variant("RFC-2"), Some("pair-untracked"), "{findings:?}");
+        assert_eq!(variant("RFC-3"), Some("pair-unresolved"), "{findings:?}");
+    }
+
+    #[test]
     fn a_supersession_slot_declared_only_as_required_is_still_declared() {
         let old = record(
             "docs/adr/ADR-1-x.md",
@@ -557,7 +632,8 @@ mod tests {
 
         let records = [old, new];
         let index = build_normalized_index(&records);
-        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -586,7 +662,8 @@ mod tests {
         )]);
         let records = [old, new];
         let index = build_normalized_index(&records);
-        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -619,7 +696,8 @@ mod tests {
         )]);
         let records = [old, new];
         let index = build_normalized_index(&records);
-        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -639,7 +717,8 @@ mod tests {
         )]);
         let records = [r];
         let index = build_normalized_index(&records);
-        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -671,7 +750,8 @@ mod tests {
         )]);
         let records = [citer, target];
         let index = build_normalized_index(&records);
-        let (_exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (_exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         assert!(
             findings.is_empty(),
             "the target's own parse failure is not the citer's fault: {findings:?}"
@@ -700,7 +780,8 @@ mod tests {
         )]);
         let records = [old, new];
         let index = build_normalized_index(&records);
-        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -722,7 +803,8 @@ mod tests {
         )]);
         let records = [r];
         let index = build_normalized_index(&records);
-        let (exec, findings) = supersession_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            supersession_reciprocity(&records, &config, &index, &Default::default());
         let population = exec
             .population
             .expect("the rule must state what it was handed");
@@ -831,7 +913,7 @@ mod tests {
 
     fn run_pairs(config: &Config, records: &[Record]) -> (RuleExecution, Vec<Finding>) {
         let index = build_normalized_index(records);
-        relation_pair_reciprocity(records, config, &index)
+        relation_pair_reciprocity(records, config, &index, &Default::default())
     }
 
     #[test]
@@ -1009,7 +1091,8 @@ Resolves: BUG-7
         let adr = record("docs/adr/ADR-2-b.md", "adr", "---\nAmended-by: —\n---\n");
         let records = [rfc, adr];
         let index = build_normalized_index(&records);
-        let (exec, findings) = relation_pair_reciprocity(&records, &config, &index);
+        let (exec, findings) =
+            relation_pair_reciprocity(&records, &config, &index, &Default::default());
         assert!(findings.is_empty(), "excluded, not judged: {findings:?}");
         assert_eq!(exec.population.unwrap().out_of_scope(), 1);
         let (cross_exec, cross) = relation_cross_type_disallowed(&records, &config, &index);

@@ -23,8 +23,13 @@ pub struct TempDir {
 
 impl TempDir {
     /// Creates `<temp dir>/<label>-<pid>-<n>`. `label` should start with
-    /// `urzua-` so a stray directory is attributable.
+    /// `urzua-` so a stray directory is attributable; the leak check
+    /// (`.github/scripts/test-no-leak.sh`) only sees `urzua-*` entries.
     pub fn new(label: &str) -> TempDir {
+        assert!(
+            label.starts_with("urzua-"),
+            "TempDir label `{label}` must start with `urzua-` or the leak check cannot see it"
+        );
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         // Canonical, so a test that compares paths the binary prints sees the

@@ -1,5 +1,5 @@
 ---
-Version: '0.70'
+Version: '0.73'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -193,7 +193,7 @@ Two details carry weight:
   population, so `ADR-7` in `docs/adr-archive` resolves from a pointer in `docs/adr` and collides with an
   `ADR-7` in `docs/adr`. `urzua new` writes to `dir` and numbers past the highest id in any of the
   directories, and past a number claimed in any of them on another local or remote-tracking ref. An
-  entry is validated like `dir` (it names a directory below the repository root); a directory listed
+  entry is validated like `dir` (it names a directory below the repository root, written in canonical form: no `./` or empty component and no trailing `/`, so `./docs/adr`, `docs/adr/` and `docs//adr` are load errors that name `docs/adr`); a directory listed
   twice, and a directory owned by two types, are load errors; an `extra_dirs` entry that does not
   exist is reported by `type.dir-matches-nothing`, and `urzua new` numbers without it and says so on
   stderr. `exclude_files` names files in any of the directories. Two types sharing a prefix remain
@@ -230,7 +230,7 @@ Two details carry weight:
     pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
     The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
-    finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
+    finding. The H1's id is read the way the file name's is (`BUG-32`): the declared `prefix`, a hyphen and an ASCII number, padded or not; any other leading token carries no id and is never reduced to digits. A type with no pattern keeps a strict read, a leading `PREFIX-N` or a bare `N`. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
     zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
   - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`
     and `none` are the existing shapes (`blockquote` and `bold-list` were removed and fail the load,
@@ -683,8 +683,60 @@ rules:
     exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
 ```
 
-A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
-`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
+A glob that cannot compile (an unclosed `[`) is refused at load. `back_pointer_paths` stays a
+prefix list: a `*` in it is a literal character. `published_paths` and a boundary's `paths` and
+`exclude` take the same prefix-or-glob entries (see "Boundaries").
+
+## Boundaries
+
+`boundary.published-path-reference` reads **declared boundaries** (`RFC-11` sections 1 to 3,
+`ADR-80`, `MILE-125`): paths that publish beyond the corpus, each with a kind, a reason and a
+severity. A boundary is a declared fact, and the prohibitions follow from its kind.
+
+```yaml
+rules:
+  boundary.published-path-reference:
+    level: error                # enables the rule; each boundary's severity sets its findings' level
+    ignore_marker: "record-id-ok"   # optional; declared, never compiled in
+    boundaries:
+      - paths: ["packages/*/src"]     # prefixes or globs (MILE-158)
+        kind: published               # published | vendored | generated
+        reason: "Published to the registry."   # required, non-blank
+        severity: error               # error | warn
+        exclude: ["packages/*/src/fixtures"]   # optional, the violation check only
+    published_paths: ["pkg/sdk"]      # the compatible form, still supported
+```
+
+- **`paths`** (required, non-empty), **`kind`**, **`reason`** and **`severity`** are required. Any
+  other `kind`, a blank `reason`, a `severity` other than `error` or `warn`, or a path that is
+  absolute, contains `..` or a backslash, or is an invalid glob is refused at load.
+- **A boundary's `severity` is the level of every finding it produces.** The rule's `level` only
+  enables the rule: `level: warn` over a boundary declaring `error` reports errors, and
+  `level: error` over a boundary declaring `warn` reports warnings.
+- **`published`:** a record identifier inside it is a violation. Any identifier carrying a declared
+  type prefix counts, in prose as well as in a marker, resolvable or not.
+- **`generated`:** a back-pointer inside it (an `Implements:` or `Verifies:` comment citing a
+  record) is reported, because a human-authored marker there is overwritten. A plain record
+  identifier is not reported.
+- **`vendored`:** declared, with no prohibition. A file only a vendored boundary covers is counted
+  eligible and unexamined.
+- **`published_paths` is read as a published boundary** with no reason required and the rule's
+  `level` as its severity. It is not deprecated; when both forms are declared both apply. The rule
+  needs at least one boundary or one `published_paths` entry to load.
+- **Violation and evidence are separate matchers.** The boundary check reads any record
+  identifier; the evidence collector keeps its narrow `Implements:` / `Verifies:` reader and skips
+  every file under a `published` boundary's `paths`, whether or not the file is also excluded. A
+  marker inside a published path is therefore never evidence, and prose citing a record is never
+  evidence anywhere. The skip applies only while the boundary rule is enabled.
+- **Exceptions are declared, at the width of the thing excused.** A boundary's `exclude` entries
+  (prefixes or globs) remove paths from that boundary's violation check only; the excluded files
+  stay in the population as eligible and unexamined, not out of scope, so
+  `config.scope-matches-nothing` does not read a deliberate exclusion as an unreachable boundary. The declared `ignore_marker` text excuses the single line it appears
+  on and no other. The engine compiles in no marker.
+- **Nothing declared may match nothing silently.** Each of these is a finding at the boundary's
+  severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
+  matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
+  it suppresses nothing. The uncovered `paths` entry carries an `edit-config` `set` action with no value, naming the entry, so a person picks the corrected path and coverage is never shrunk; the unused `exclude` entry carries an `edit-config` `remove` action naming it.
 
 ## Relation pairs
 
@@ -1311,3 +1363,6 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
 > | 2026-11-05 | Bumped to `0.69`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
+> | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |

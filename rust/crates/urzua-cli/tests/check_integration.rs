@@ -615,6 +615,161 @@ fn graph_could_not_run_emits_json() {
     assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
 }
 
+/// `BUG-13`: a reference to a record drafted beside the citing one but not yet
+/// `git add`ed read exactly like a typo. The on-disk fact is the CLI's to
+/// supply; the finding for an untracked file is its own variant.
+#[test]
+fn a_reference_to_an_untracked_file_is_told_apart_from_a_missing_one_observed_failing() {
+    let dir = fixture_repo("untracked-ref");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {pointer.resolution: error, embodiment.locator-exists: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    pointer_fields: [\"Derives-from\"]\n    known_fields: [\"Status\", \"Derives-from\", \"Embodiment\", \"Realized-by\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-3-a.md"),
+        "---\nStatus: Accepted\nDerives-from: ADR-9, ADR-8\nRealized-by: code:src/drafted.rs, code:src/gone.rs\n---\n# ADR-3\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    std::fs::write(
+        dir.join("docs/adr/ADR-9-untracked.md"),
+        "---\nStatus: Draft\n---\n# ADR-9\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/drafted.rs"), "fn main() {}\n").unwrap();
+
+    let findings = |dir: &Path| {
+        let output = run_urzua(dir, &["check"]);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let parsed = assert_valid_json_object(&stdout);
+        parsed["findings"].as_array().unwrap().clone()
+    };
+    let message_of = |findings: &[serde_json::Value], needle: &str| -> String {
+        findings
+            .iter()
+            .find(|f| f["message"].as_str().unwrap().contains(needle))
+            .unwrap_or_else(|| panic!("no finding names {needle}: {findings:?}"))["message"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    let before = findings(&dir);
+    let untracked_ref = message_of(&before, "ADR-9");
+    assert!(
+        untracked_ref.contains("docs/adr/ADR-9-untracked.md")
+            && untracked_ref.contains("not tracked by git"),
+        "{untracked_ref}"
+    );
+    assert_eq!(
+        message_of(&before, "ADR-8"),
+        "Derives-from: ADR-8 does not resolve to any discovered record"
+    );
+    assert!(
+        message_of(&before, "drafted").contains("exists on disk but is not tracked by git"),
+        "{before:?}"
+    );
+    assert!(message_of(&before, "gone").contains("not in the working tree"));
+
+    // Tracking the files clears exactly the untracked findings.
+    git(
+        &dir,
+        &["add", "docs/adr/ADR-9-untracked.md", "src/drafted.rs"],
+    );
+    let after = findings(&dir);
+    assert!(
+        !after.iter().any(|f| {
+            let m = f["message"].as_str().unwrap();
+            m.contains("ADR-9") || m.contains("drafted")
+        }),
+        "{after:?}"
+    );
+    assert!(after
+        .iter()
+        .any(|f| f["message"].as_str().unwrap().contains("ADR-8")));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `BUG-169`: `graph` and `explain` answered `ok` whatever the records
+/// contributed, so an unreadable header dropped its edges with no sign. Both
+/// now carry the population block `check` reports, plus a warning notice that
+/// lists the records left out; the status stays `ok`.
+#[test]
+fn graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_failing() {
+    let dir = fixture_repo("graph-population");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    pointer_fields: [\"Derives-from\"]\n    known_fields: [\"Status\", \"Derives-from\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        "---\nStatus: Accepted\n---\n# ADR-1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-b.md"),
+        "---\nStatus: Accepted\nDerives-from: ADR-1: bad: yaml\n---\n# ADR-2\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    for args in [&["graph"][..], &["explain", "src/nonexistent.rs"][..]] {
+        let output = run_urzua(&dir, args);
+        assert_eq!(output.status.code(), Some(0), "{args:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "ok", "{args:?}: {stdout}");
+        let population = &parsed["population"];
+        assert_eq!(population["unit"], "record", "{args:?}: {stdout}");
+        assert_eq!(population["eligible"], 2, "{args:?}: {stdout}");
+        assert_eq!(population["examined"], 1, "{args:?}: {stdout}");
+        assert_eq!(population["unreadable"], 1, "{args:?}: {stdout}");
+        let notices = parsed["notices"].as_array().unwrap();
+        assert!(
+            notices.iter().any(|n| n["severity"] == "warning"
+                && n["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("docs/adr/ADR-2-b.md")
+                && !n["message"].as_str().unwrap().contains("ADR-1-a.md")),
+            "{args:?}: {stdout}"
+        );
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice() {
+    let dir = fixture_repo("graph-empty");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    for args in [&["graph"][..], &["explain", "src/a.rs"][..]] {
+        let output = run_urzua(&dir, args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "ok", "{args:?}: {stdout}");
+        assert_eq!(parsed["population"]["eligible"], 0, "{args:?}: {stdout}");
+        assert_eq!(parsed["population"]["examined"], 0, "{args:?}: {stdout}");
+        assert!(parsed.get("notices").is_none(), "{args:?}: {stdout}");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// A found-in-review gap: `graph` used to build its index with the lossy
 /// `build_normalized_index` and never disclosed a collision at all, unlike
 /// `check`/`audit`. An edge naming a colliding identifier could silently

@@ -61,21 +61,42 @@ fn assert_not_run(out: &Output, error: &str, what: &str) {
     );
 }
 
+const NEEDS_A_GIT_REPOSITORY: &str =
+    "urzua needs a git repository: no .git directory found above the given path";
+
 #[test]
-fn every_corpus_command_reports_a_missing_repository() {
+fn every_command_that_reads_a_repository_exits_2_outside_one_observed_failing() {
+    // BUG-170: outside a git repository there is no fallback that walks the
+    // directory (SPEC-2). Every command that reads a repository says so and
+    // exits 2, even when a config and a corpus sit right there on disk.
     let dir = scratch("no-repo");
-    for args in CORPUS_COMMANDS
-        .iter()
-        .copied()
-        .chain([&["doctor"][..], &["new", "adr", "T"][..]])
-    {
-        let out = run(&dir, args);
-        assert_not_run(
-            &out,
-            "no .git directory found above the given path",
-            &args.join(" "),
-        );
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# ADR-1 — x\n",
+    )
+    .unwrap();
+    for args in CORPUS_COMMANDS.iter().copied().chain([
+        &["doctor"][..],
+        &["init"][..],
+        &["new", "adr", "T"][..],
+        &["index"][..],
+        &["refs", "refresh"][..],
+        &["check", "docs/adr/ADR-1-x.md"][..],
+        &["check", "docs"][..],
+    ]) {
+        assert_not_run(&run(&dir, args), NEEDS_A_GIT_REPOSITORY, &args.join(" "));
     }
+}
+
+#[test]
+fn rules_reads_no_repository_and_runs_outside_one() {
+    let out = run(&scratch("rules-no-repo"), &["rules"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(json["rules"].as_array().is_some_and(|r| !r.is_empty()));
 }
 
 #[test]
@@ -123,5 +144,40 @@ fn every_corpus_command_reports_an_unreadable_tracked_record() {
     let error = "could not read 1 tracked record(s): docs/adr/ADR-1-x.md: No such file or directory (os error 2)";
     for args in CORPUS_COMMANDS {
         assert_not_run(&run(&dir, args), error, &args.join(" "));
+    }
+}
+
+#[test]
+fn every_corpus_command_refuses_a_non_canonical_dir_and_names_the_canonical_form() {
+    // BUG-168: `dir: ./docs/adr` parsed, matched nothing and ran as `not-run`
+    // with no reason. It is a load error that names the spelling to write.
+    for bad in ["./docs/adr", "docs/adr/", "docs//adr"] {
+        let dir = repo("non-canonical-dir");
+        std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+        std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            CONFIG.replace("\"docs/adr\"", &format!("\"{bad}\"")),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("docs/adr/ADR-1-x.md"),
+            "---\nStatus: Accepted\n---\n# ADR-1 — x\n",
+        )
+        .unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "fixture"]);
+        for args in CORPUS_COMMANDS {
+            let out = run(&dir, args);
+            assert_eq!(out.status.code(), Some(2), "{bad} {args:?}: {out:?}");
+            let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            assert_eq!(json["status"], "not-run", "{bad} {args:?}");
+            let error = json["error"].as_str().unwrap_or_default();
+            assert!(
+                error.contains(&format!("declares dir '{bad}'"))
+                    && error.contains("write 'docs/adr'"),
+                "{bad} {args:?}: {error}"
+            );
+        }
     }
 }

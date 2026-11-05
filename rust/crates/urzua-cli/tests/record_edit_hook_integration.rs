@@ -22,12 +22,16 @@ fn git(dir: &Path, args: &[&str]) {
         .success());
 }
 
-const CONFIG: &str = "schema_version: 2\nrules: {embodiment.consistency: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
+const CONFIG: &str = "schema_version: 2\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\nrules: {embodiment.consistency: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - [embodiment_state, embodiment_locator]\n";
 const RECORD: &str =
     "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\nprose\n";
 
 /// A clean git repo; `Realized-by: code:src/a.rs` computes `Implemented`.
 fn fixture(name: &str, record: &str) -> common::TempDir {
+    fixture_with(name, record, CONFIG)
+}
+
+fn fixture_with(name: &str, record: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-hook-{name}"));
     for d in ["docs/adr", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
@@ -35,7 +39,7 @@ fn fixture(name: &str, record: &str) -> common::TempDir {
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "t@example.com"]);
     git(&dir, &["config", "user.name", "t"]);
-    std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
     std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
     std::fs::write(dir.join("docs/adr/ADR-1-a.md"), record).unwrap();
     git(&dir, &["add", "-A"]);
@@ -118,11 +122,18 @@ fn a_hand_set_embodiment_is_blocked_with_the_computed_value_and_evidence() {
         assert!(denied(&v), "{name}: {v}");
         let why = hook(&v)["permissionDecisionReason"].as_str().unwrap();
         assert!(
-            why.contains("\"Verified\"") && why.contains("computes \"Implemented\""),
+            why.contains("'Verified'") && why.contains("'Implemented'"),
             "{why}"
         );
-        assert!(why.contains("Realized-by: code:src/a.rs"), "{why}");
-        assert!(why.contains(":2:"), "names the line: {why}");
+        assert!(why.contains("computed from Realized-by"), "{why}");
+        assert!(
+            why.contains("[embodiment.consistency]"),
+            "names the rule: {why}"
+        );
+        assert!(
+            why.contains("docs/adr/ADR-1-a.md"),
+            "names the record: {why}"
+        );
     }
 }
 
@@ -137,12 +148,12 @@ fn the_computed_value_and_edits_to_other_fields_pass() {
     }
     let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], RECORD);
     assert_eq!(code, 0, "{v}");
-    assert_eq!(v["verdict"], "allow");
+    assert_eq!(v["verdict"], "allow-with-warnings");
     assert!(
         v["message"]
             .as_str()
             .unwrap()
-            .contains("Already disagreeing on disk"),
+            .contains("Already failing on disk"),
         "{v}"
     );
 }
@@ -159,8 +170,13 @@ fn an_ungoverned_path_and_other_tools_are_not_touched() {
 #[test]
 fn when_urzua_cannot_judge_the_edit_proceeds_and_says_so() {
     let root = fixture("unjudged", RECORD);
-    // The record states no Embodiment: urzua answers not-run.
-    let v = adapter(&root, "write-no-embodiment", &[]);
+    // No rule is enabled: urzua answers not-run, which is not a clean pass.
+    let silent = fixture_with(
+        "unjudged-no-rules",
+        RECORD,
+        "schema_version: 2\nrules: {}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    );
+    let v = adapter(&silent, "write-no-embodiment", &[]);
     assert!(!denied(&v));
     assert!(
         v["systemMessage"]
@@ -235,7 +251,7 @@ fn a_named_override_lets_the_edit_through_and_appears_in_the_output() {
     assert!(!denied(&v), "{v}");
     let msg = v["systemMessage"].as_str().unwrap();
     assert!(
-        msg.contains("OVERRIDE 'alice-reviewed'") && msg.contains("computes \"Implemented\""),
+        msg.contains("OVERRIDE 'alice-reviewed'") && msg.contains("'Implemented'"),
         "{msg}"
     );
 
@@ -271,4 +287,113 @@ fn a_new_record_is_judged_from_the_proposal_alone() {
     let new = RECORD.replace("ADR-1: T", "ADR-3: V");
     let (code, v) = core(&root, &["docs/adr/ADR-3-c.md"], &[], &new);
     assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+}
+
+const WIDE: &str = "schema_version: 2\nrules: {header.required-fields: error, section.required: warn, embodiment.consistency: error}\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n  none: Not started\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - [embodiment_state, embodiment_locator]\n    sections:\n      from: headings\n      required:\n        - {name: Context}\n";
+const GOOD: &str =
+    "---\nStatus: Proposed\nDate: 2026-01-01\n---\n# ADR-1: T\n\n## Context\n\nwhy\n";
+
+#[test]
+fn a_header_error_in_the_edited_record_blocks_and_a_warning_is_shown() {
+    let root = fixture_with("wide", GOOD, WIDE);
+    // The Date header is gone: an error the old, Embodiment-only hook never saw.
+    let no_date = GOOD.replace("Date: 2026-01-01\n", "");
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], &no_date);
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    let msg = v["message"].as_str().unwrap();
+    assert!(
+        msg.contains("[header.required-fields]") && msg.contains("'Date'"),
+        "{msg}"
+    );
+
+    // A missing section is a warning here: shown, not blocking.
+    let no_context = GOOD.replace("## Context\n\nwhy\n", "prose\n");
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], &no_context);
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-with-warnings")),
+        "{v}"
+    );
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("[section.required]"),
+        "{v}"
+    );
+
+    // The adapter relays the warning to the agent and does not deny.
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], GOOD);
+    assert_eq!((code, v["verdict"].as_str()), (0, Some("allow")), "{v}");
+}
+
+#[test]
+fn an_error_already_on_disk_does_not_block_an_unrelated_edit() {
+    // The record on disk already lacks Date. An edit to its prose is not
+    // blocked; an edit that adds a new error is.
+    let broken = GOOD.replace("Date: 2026-01-01\n", "");
+    let root = fixture_with("preexisting", &broken, WIDE);
+    let edited = broken.replace("why", "because");
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], &edited);
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-with-warnings")),
+        "{v}"
+    );
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("Already failing on disk"),
+        "{v}"
+    );
+    let worse = edited.replace(
+        "---\nStatus",
+        "---\nEmbodiment: Verified\nRealized-by: code:src/a.rs\nStatus",
+    );
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], &worse);
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("[embodiment.consistency]"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_header_error_can_be_overridden_by_name() {
+    let root = fixture_with("wide-override", GOOD, WIDE);
+    let no_date = GOOD.replace("Date: 2026-01-01\n", "");
+    let (code, v) = core(
+        &root,
+        &["--override", "carol", "docs/adr/ADR-1-a.md"],
+        &[],
+        &no_date,
+    );
+    assert_eq!(
+        (code, v["verdict"].as_str(), v["override"].as_str()),
+        (0, Some("allow-override"), Some("carol")),
+        "{v}"
+    );
+}
+
+#[test]
+fn the_allow_message_names_what_ran_and_what_could_not_be_judged() {
+    let root = fixture_with("ran", GOOD, WIDE);
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], GOOD);
+    assert_eq!((code, v["verdict"].as_str()), (0, Some("allow")), "{v}");
+    let msg = v["message"].as_str().unwrap();
+    assert!(!msg.contains("every enabled rule"), "{msg}");
+    assert!(msg.contains(" rules ran on this record"), "{msg}");
+}
+
+#[test]
+fn a_rule_anchored_outside_the_record_is_listed_as_not_judged() {
+    let config = WIDE.replace("rules: {", "rules: {type.no-declared-spec: warn, ");
+    let root = fixture_with("notjudged", GOOD, &config);
+    let (_, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], GOOD);
+    let msg = v["message"].as_str().unwrap();
+    assert!(msg.contains("type.no-declared-spec"), "{msg}");
 }

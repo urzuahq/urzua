@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Renders urzua's JSON reports for a pull request. A consumer of the JSON
-# contract, outside the engine: stdout of `urzua check` stays JSON (ADR-23) and
+# contract, outside the engine: stdout of `urzua check` stays JSON and
 # this reads it.
 #
 #   render.sh OUT_MD [LABEL REPORT_JSON EXIT_CODE]...

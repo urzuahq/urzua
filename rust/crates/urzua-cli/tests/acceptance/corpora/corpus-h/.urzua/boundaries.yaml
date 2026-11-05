@@ -1,0 +1,28 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records/adr
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+
+rules:
+  header.required-fields: error
+  boundary.published-path-reference:
+    level: error
+    ignore_marker: "record-id-ok"
+    boundaries:
+      - paths: [mirror]
+        kind: published
+        reason: "The mirror is public; its readers cannot resolve a record id."
+        severity: warn
+        exclude: [mirror/fixtures]
+      - paths: [gen]
+        kind: generated
+        reason: "Rewritten wholesale by the generator."
+        severity: error
+      - paths: [vendor]
+        kind: vendored
+        reason: "Code the repository does not author."
+        severity: error
