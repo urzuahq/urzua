@@ -38,11 +38,14 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, String> {
         &narrative_fields_by_type,
     );
 
-    let notices = rules::identity_collision_notices(&collisions);
+    let mut notices = rules::identity_collision_notices(&collisions);
+    let (population, left_out) = urzua_core::graph::read_population(&records, &config, "graph");
+    notices.extend(left_out);
 
     Ok(emit(&GraphReport {
         status: ReportStatus::Ok,
         edges,
+        population,
         notices,
     }))
 }
