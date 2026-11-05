@@ -203,6 +203,43 @@ pub fn unevidenced_successes(
         .collect()
 }
 
+/// How a stated value reads in prose: the value in code spans, or "no value"
+/// when the field was empty, `null` or `~`.
+fn describe_stated(value: &str) -> String {
+    if value.is_empty() {
+        "no value".to_string()
+    } else {
+        format!("`{value}`")
+    }
+}
+
+/// A YAML value that states nothing: empty, `~` or `null` in any case.
+fn is_empty_yaml_value(value: &str) -> bool {
+    let v = value.trim();
+    v.is_empty() || v == "~" || v.eq_ignore_ascii_case("null")
+}
+
+/// Replaces the value after `field:` on `line`, keeping everything before the
+/// value (a `> ` prefix, the key and the spacing) byte for byte. `None` when the
+/// line is not that field's own line or its value is not the stated one. A
+/// stated value of `""` matches an empty, `~` or `null` value.
+fn replace_field_value(line: &str, field: &str, stated: &str, computed: &str) -> Option<String> {
+    let body = line.trim_start_matches(['>', ' ', '\t']);
+    let rest = body.strip_prefix(field)?.strip_prefix(':')?;
+    let matches = if stated.is_empty() {
+        is_empty_yaml_value(rest)
+    } else {
+        rest.trim() == stated
+    };
+    if !matches {
+        return None;
+    }
+    let value_start = line.len() - rest.len();
+    let gap: &str = &rest[..rest.len() - rest.trim_start().len()];
+    let gap = if gap.is_empty() { " " } else { gap };
+    Some(format!("{}{gap}{computed}", &line[..value_start]))
+}
+
 /// Computes the new file content for applying one Tier-1 repair. Pure --
 /// returns the new text; the caller performs the actual write, the identity
 /// resolution, and the re-verification-before-write RFC-0008 §4 requires.
@@ -222,25 +259,22 @@ pub fn apply_repair(
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
 
-    // The field's own line first (`Status: Planned`), so a title or a prose line
-    // that mentions both words is not the one edited.
-    let own_line = format!("{}:", repair.field);
-    let field_line = doc
-        .find_line(|l| l.starts_with(&own_line) && l.contains(&repair.current_value))
-        .or_else(|| {
-            doc.find_line(|l| l.contains(&repair.field) && l.contains(&repair.current_value))
+    // Edit by field position: the value after `Field:` on the field's own line,
+    // never a substring match (an empty or null stated value is a substring of
+    // everything and would be inserted at column 0).
+    let (field_line, edited_line) = (1..)
+        .map_while(|n| doc.line(n).map(|l| (n, l)))
+        .find_map(|(n, line)| {
+            replace_field_value(line, &repair.field, &repair.current_value, &repair.computed_value)
+                .map(|edited| (n, edited))
         })
         .ok_or_else(|| {
             format!(
-                "could not find a line containing both '{}' and '{}' to edit -- the record may have changed since detect ran",
-                repair.field, repair.current_value
+                "could not find a '{}:' line stating {} to edit -- the record may have changed since detect ran",
+                repair.field,
+                describe_stated(&repair.current_value)
             )
         })?;
-    let edited_line = doc.line(field_line).unwrap_or_default().replacen(
-        &repair.current_value,
-        &repair.computed_value,
-        1,
-    );
     doc.replace_line(field_line, edited_line);
 
     if !log_required {
@@ -267,8 +301,11 @@ pub fn apply_repair(
         .unwrap_or("> ")
         .to_string();
     let new_row = format!(
-        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated `{}` disagreed with the computed value `{}`. | **structural** |",
-        repair.field, repair.evidence, repair.current_value, repair.computed_value
+        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`. | **structural** |",
+        repair.field,
+        repair.evidence,
+        describe_stated(&repair.current_value),
+        repair.computed_value
     );
     doc.insert_after(last_entry.line, new_row);
 
@@ -657,6 +694,80 @@ mod tests {
         assert!(result.contains("**structural**"));
         // the original row survives untouched
         assert!(result.contains("| 2026-08-20 | Initial. | **structural** |"));
+    }
+
+    fn empty_value_repair() -> Repair {
+        Repair {
+            current_value: String::new(),
+            computed_value: "Implemented".to_string(),
+            ..sample_repair()
+        }
+    }
+
+    #[test]
+    fn apply_repair_fills_a_null_tilde_or_empty_value_by_position_observed_failing() {
+        for raw in ["null", "~", "", "Null", "NULL"] {
+            let content = format!(
+                "---\nEmbodiment: {raw}\nRealized-by: code:src/lib.rs\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-08-20 | Initial. | **structural** |\n"
+            );
+            let result = apply_repair(
+                &content,
+                &empty_value_repair(),
+                "2026-09-05",
+                "beau",
+                &Default::default(),
+                true,
+            )
+            .unwrap();
+            assert!(
+                result.contains("\nEmbodiment: Implemented\n"),
+                "{raw:?}: {result}"
+            );
+            assert!(!result.contains("ImplementedEmbodiment"), "{raw:?}");
+            assert!(result.contains("stated no value disagreed"), "{raw:?}");
+            assert!(!result.contains("stated `` disagreed"), "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn apply_repair_does_not_touch_a_substring_of_the_field_name_or_prose_observed_failing() {
+        // The stated value "Done" also occurs inside "Done-when:" and prose; only the
+        // value after `Status:` may change.
+        let repair = Repair {
+            field: "Status".to_string(),
+            current_value: "Done".to_string(),
+            computed_value: "Planned".to_string(),
+            ..sample_repair()
+        };
+        let content = "---\nDone-when: Done\nStatus: Done\n---\n# Done\n";
+        let result = apply_repair(
+            content,
+            &repair,
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            "---\nDone-when: Done\nStatus: Planned\n---\n# Done\n"
+        );
+    }
+
+    #[test]
+    fn apply_repair_refuses_an_empty_stated_value_when_the_field_now_has_one() {
+        let content = "---\nEmbodiment: Verified\n---\n# 0001 — X\n";
+        let err = apply_repair(
+            content,
+            &empty_value_repair(),
+            "2026-09-05",
+            "beau",
+            &Default::default(),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("could not find"), "{err}");
     }
 
     #[test]
