@@ -106,7 +106,7 @@ much, which is overridden often (and recorded as such by item 1), or a log nobod
 
 ## Amendment (2026-11-05): the editor hook blocks on errors the edit introduces, and `block_on` may widen that to every error
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-05 at the maintainer's request). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted 2026-11-05 at the maintainer's request). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
 Item 2 says "an error blocks the edit; a warning is shown and does not". It does not say whose error. The
 merged hook (`MILE-191`, #308) reads it as an error the edit introduces: it runs `urzua check --stdin-path` on
@@ -164,3 +164,4 @@ revision row.
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Amendment added: the editor hook blocks on errors the edit introduces by default, and a `block_on: introduced \| all` option widens it to every error in the edited record. **Why:** `MILE-191` (#308) merged with the introduced-only behaviour, #305 trimmed `MILE-191`'s Done means, and no ADR sets either; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment (`block_on`) accepted, together with `MILE-191`'s restored Done means. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NH5DR5GP88XJEVRXGBA1B1
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -92,6 +93,12 @@ without failing the run, accepting a third severity in the report.
 9. **This repository enables `MILE-189`'s rule at `info`.** Once the level is built, `MILE-189`'s Done means is
    met by enabling `embodiment.locator-on-back-pointer-path` at `info` in `.urzua/config.yaml`; its 308
    findings are reported and fail nothing. `MILE-189` stays Planned until then.
+10. **A declared severity never overrides `info`, and no level maps silently.** Where a rule's findings take a
+   severity from a declaration (a boundary's `severity`, a `field_levels` entry), `info` is an accepted value
+   there too, and a rule set to `info` never emits a finding above `info` because a declaration said
+   otherwise (today `rules/runner.rs:133` lets a declared severity win). Any mapping from a level string to a
+   severity is exhaustive: an unknown or unhandled value is a load error, never a fallback to `error`
+   (today `options.rs:82-84` falls back with `_ => Error`). The build tests both.
 
 ## Reversibility
 
@@ -135,3 +142,4 @@ contains `info` unless the repository chose it.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. Added point 10 from the independent review: a declared severity never overrides `info`, and a level string never maps silently to `error`. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
