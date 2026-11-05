@@ -4469,12 +4469,14 @@ record_types:
         .unwrap_err();
         assert!(matches!(err, ConfigError::InvalidBoundary { .. }), "{err}");
         assert!(err.to_string().contains("reason"), "{err}");
-        for sev in ["off", "info"] {
+        for sev in ["off", "fatal"] {
             assert!(
                 parse(&boundary_config(&GOOD_BOUNDARY.replace("warn", sev))).is_err(),
                 "{sev}"
             );
         }
+        // `info` is a declared severity too (`ADR-87` point 10).
+        assert!(parse(&boundary_config(&GOOD_BOUNDARY.replace("warn", "info"))).is_ok());
     }
 
     #[test]
