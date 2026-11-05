@@ -72,6 +72,7 @@ finish)
     echo "draft-record: urzua check examined no records; $path is NOT verified" >&2
     exit 1
   fi
+  rm -f -- "$scaffold"
   echo "draft-record: wrote $path; urzua check examined $examined record(s)" >&2
   exit "$rc"
   ;;
