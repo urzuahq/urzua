@@ -408,7 +408,7 @@ fn open_session(
     config_path: Option<PathBuf>,
     base: Option<&str>,
     stdin_path: Option<&Path>,
-) -> Result<Opened, String> {
+) -> Result<Opened, Failure> {
     let mut requested_scopes = Vec::new();
     let mut changed = None;
     let session = Session::open_with(paths, config_path, |repo_root, _config, discovered| {
