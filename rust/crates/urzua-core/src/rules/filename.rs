@@ -30,6 +30,8 @@ pub fn filename_title_consistency(
                     line,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("title-mismatch"),
                     message,
                 });
             };
@@ -297,6 +299,8 @@ pub fn filename_identity_pattern(
                 line: None,
                 waived: None,
                 declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("identity-pattern-none-match"),
                 message: format!(
                     "none of record type '{type_name}''s {} file(s) matches {convention}, so \
                      no identity-reading rule can examine any of them; rename each: {}",
@@ -316,6 +320,8 @@ pub fn filename_identity_pattern(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("identity-pattern-mismatch"),
                     message: format!(
                         "file name does not match {convention} for record type '{type_name}', \
                          so it has no identity and identity-reading rules skip it; rename: {}",

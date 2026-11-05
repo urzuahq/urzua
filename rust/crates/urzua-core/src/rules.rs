@@ -6,13 +6,15 @@ use crate::config::Config;
 use crate::field_state::{classify, classify_with};
 use crate::record::Record;
 use crate::report::{
-    census, census_records, Finding, FindingSeverity, Notice, NoticeSeverity, Outcome, Population,
-    PopulationUnit, RuleExecution, RuleStatus,
+    census, census_records, ActionKind, ActionOp, ActionSource, ActionTarget, Finding,
+    FindingSeverity, Notice, NoticeSeverity, Outcome, Population, PopulationUnit, RuleExecution,
+    RuleStatus,
 };
 use crate::FieldState;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+mod action;
 mod back_pointer;
 mod boundary;
 mod catalog;
@@ -41,6 +43,7 @@ mod table;
 mod type_scope;
 mod waiver;
 
+pub use action::*;
 pub use back_pointer::*;
 pub use boundary::*;
 pub use catalog::*;

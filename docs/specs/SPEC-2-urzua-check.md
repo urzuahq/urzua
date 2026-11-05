@@ -1,5 +1,5 @@
 ---
-Version: '0.70'
+Version: '0.71'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -387,6 +387,141 @@ Every finding's `file` is relative to the repository root, including a finding a
 (`.urzua/config.yaml`), so a report compares and baselines across checkouts (`BUG-185`). A `--config`
 outside the repository has no relative form and is named as given.
 
+### Suggested action
+
+`ADR-73` decides this field; this section reproduces its vocabulary. A finding may carry one
+`suggested_action`: the machine-actionable form of what to do about it, so an agent need not read
+`message`. It is additive: a finding without one is unchanged, and `message` is always present.
+
+```json
+{
+  "rule": "field.quality",
+  "severity": "error",
+  "file": "docs/bugs/BUG-9-x.md",
+  "line": null,
+  "message": "field 'Regression-test' is Blank -- not a real, present value",
+  "suggested_action": {
+    "kind": "edit-field",
+    "op": "set",
+    "target": { "file": "docs/bugs/BUG-9-x.md", "field": "Regression-test" }
+  }
+}
+```
+
+Keys are snake_case and kinds kebab-case, like the rest of the report. The vocabulary (a value in
+`kind`, the `op` an edit takes, the `target` keys and the `value`):
+
+| kind | required `target` keys | optional `target` keys | `op` (required) | `value` |
+|---|---|---|---|---|
+| `edit-field` | `file`, `field` | `line` | `set`, `remove`, `append`, `rename` | a string (a list-valued header uses the comma-separated form `SPEC-2` reads). For `set`, `append` and `rename` (the new name) only when derivable and single-valued; omitted means a human chooses. For `remove`, omitted removes the whole field and a value names the entry removed from a list field |
+| `edit-section` | `file`, `section` | `line` | `add`, `set`, `remove` | never (prose) |
+| `edit-config` | `file`, `key_path` (array of path segments, never a dotted string) | | `set`, `remove`, `append` | only when single-valued: the YAML value as JSON (a string, a list of strings, or a boolean). For `remove`, omitted removes the whole key and a value names the entry removed from a list |
+| `add-record` | | `type` (omitted when not determinable), `file` (path to create, if known) | none | never |
+| `run-command` | `argv` (array) | | none | never |
+
+- `file` is repository-root-relative, as in findings (`SPEC-2`, `BUG-185`), and need not equal the finding's `file`: for the reciprocity rules the finding sits on the claimant and the edit belongs on the counterpart. `line` is given only where it differs from the finding's. `field` is the declared spelling.
+- One flat key vocabulary: `file`, `field`, `section`, `type`, `rule`, `scope`, `key_path`, `argv`, `line`. A new key is added to this table, not invented per rule.
+- `value` is any JSON value of the types in the table: a string, a list of strings, or a boolean; no other type occurs in the appendix. A key or `value` that was not computed is omitted, never `null`. The same holds for an absent `suggested_action`.
+- `argv` is concrete in the emitted finding (no placeholders), `argv[0]` is `urzua`, and a consumer adds `--by` only when no identity resolves (`SPEC-8`).
+- `run-command` means: run exactly this command; the command is the source of truth for what it writes. For `fix` and `index --apply` it is offered only when the command would produce that repair for this finding (a test checks each): `urzua fix --apply --ids <record>` for `embodiment.consistency` and `status.delivery-agreement`, `urzua index --apply` for `index.freshness`, `urzua refs refresh` for `citation.issue-exists`, which is not judged by that test: it needs the network and a token, and an unresolved citation may be a typo, so that command is a lead and `citation.issue-exists` declares `edit-section` set as its action instead. Because it carries no `value`, a `fix` repair stays the one place its computed value lives; `edit-field` carries a value only where no `fix` repair exists (relation reciprocity, `field.untrimmed-value`, `header.field-case-mismatch`, `config.pointer-declaration-missing`). "Derivable" follows `ADR-15`'s eligibility clauses. A test asserts that every finding offering `urzua fix` has a matching repair in `urzua fix` output for that record and field. A `run-command` can still be refused by the command's own gates (`--ids`, revision-log requirements); the finding promises the command, not its success.
+- `waive` is not in the first release. A finding carries exactly one `suggested_action`, so there is no slot for a secondary action, and a kind with no producing rule would be a contract without a test. Adding `waive` (a waiver is a record of the `waiver` type, `ADR-11`) and a secondary-action mechanism such as an `alternatives` array are a later, separate decision; both are non-breaking under the compatibility rule.
+- There is no `note` key: `message` is the prose and is always present.
+
+Declaration. The declaration is a data table, not a function, in `RULE_TABLE` (`MILE-171`): each rule lists, in `actions`, one `VariantAction` per finding variant it can emit, naming the variant and an `ActionDecl`, which is either an action (a `kind` and, where the kind has several, an `op`) or `Exempt(&'static str)` with a reason, modelled on `HeaderNone::Exempt`. A rule never builds an action: it attaches an `ActionSource` to the finding, naming the variant and carrying only what it computed (a field name, a configuration key path, a value), and the engine joins that to the declaration. A variant with neither an action nor an exemption, a variant a rule emits that is not declared, and a declared variant no rule emits fail a coverage test; a source missing a key its declared kind requires asserts in a debug build. Exemption reasons are shown by `urzua rules`, so "no action by design" is discoverable although it is an omitted field on the wire. A waived finding carries its action unchanged.
+
+Compatibility. The set of kinds, `op` values and `target` keys is closed per release and extensible across releases. Adding a kind, an `op` value or an optional `target` key is non-breaking. Renaming or removing one, changing its meaning, or changing which keys are required is breaking. Consumers MUST treat an unrecognised `kind`, or an unrecognised `op` on a known kind, as non-actionable and fall back to `message`, and MUST ignore unrecognised `target` keys. `SPEC-2` states this in its output contract. The report has no output version field today; if one is added it is a separate record and kind additions stay minor.
+
+The action each finding variant declares, or the reason it declares none, is generated from the same
+rule table as the table above (`urzua rules` lists it as each rule's `actions`; an exemption shows
+its `exempt` reason), so this section and the rule table cannot disagree. Regenerate with
+`make rule-table`.
+
+<!-- action-table:start -->
+| Rule id | Variant | Declared action |
+|---|---|---|
+| `header.required-fields` | `header-region-missing` | exempt: the header region is neither a field nor a section, so no action kind addresses it |
+| `header.required-fields` | `duplicate-key` | `edit-field` `remove` |
+| `header.required-fields` | `field-missing` | `edit-field` `set` |
+| `pointer.resolution` | `pointer-unresolved` | `edit-field` `set` |
+| `pointer.target-status` | `pointer-target-status` | `edit-field` `set` |
+| `field.quality` | `field-quality` | `edit-field` `set` |
+| `field.pending` | `field-pending` | `edit-field` `set` |
+| `claim.status-agreement` | `claim-status-disagrees` | exempt: the rule catches a claim that may be false, so the right fix is often the claim file, a non-record file with no action kind yet, and editing the record Status would be the mechanical answer and possibly the wrong one |
+| `filename.title-consistency` | `title-mismatch` | exempt: the fix is a rename or an H1 edit, and no action kind addresses either yet |
+| `relation.supersession-reciprocity` | `supersession-unresolved` | `edit-field` `set` |
+| `relation.supersession-reciprocity` | `supersession-unreciprocated` | `edit-field` `append` |
+| `relation.pair-reciprocity` | `pair-unresolved` | `edit-field` `set` |
+| `relation.pair-reciprocity` | `pair-unreciprocated` | `edit-field` `append` |
+| `relation.cross-type-disallowed` | `cross-type-claim` | `edit-field` `remove` |
+| `relation.target-status-undeclared` | `target-status-undeclared` | `edit-config` `set` |
+| `revision-log.change-class-required` | `change-class-missing` | `edit-section` `set` |
+| `embodiment.consistency` | `embodiment-drift` | `run-command` |
+| `embodiment.consistency` | `embodiment-unevidenced` | `edit-field` `set` |
+| `embodiment.consistency` | `last-audit-date-invalid` | `edit-field` `set` |
+| `embodiment.consistency` | `claim-too-old` | exempt: the remedy is re-verifying the claim, which may need no edit, and touching the field to reset the age without checking would defeat the rule |
+| `embodiment.requires-accepted-status` | `embodiment-state-not-accepted` | `edit-field` `set` |
+| `embodiment.back-pointer-resolution` | `back-pointer-unresolved` | exempt: the edit is to a source file comment, and no action kind addresses a non-record file yet |
+| `embodiment.back-pointer-resolution` | `back-pointer-uncovered-path` | `edit-config` `set` |
+| `embodiment.back-pointer-resolution` | `back-pointer-uncovered-test-path` | `edit-config` `set` |
+| `embodiment.back-pointer-decision-accepted` | `decision-not-implementable` | exempt: the edit is to a source file comment or to the cited record, and no action kind addresses a non-record file yet |
+| `embodiment.back-pointer-decision-accepted` | `decision-unjudgeable` | exempt: the edit is to a type or rule declaration that depends on which statuses permit implementation, a policy choice with no single target |
+| `embodiment.back-pointer-decision-accepted` | `decision-uncovered-path` | `edit-config` `set` |
+| `embodiment.locator-exists` | `locator-empty` | `edit-field` `set` |
+| `embodiment.locator-exists` | `locator-missing` | `edit-field` `set` |
+| `embodiment.locator-promotion-candidate` | `locator-promotion-candidate` | exempt: an advisory nudge that is never auto-promoted |
+| `header.field-set-consistency` | `undeclared-field` | `edit-field` `remove` |
+| `field.untrimmed-value` | `untrimmed-value` | `edit-field` `set` |
+| `field.leading-reserved-indicator` | `leading-reserved-indicator` | `edit-field` `set` |
+| `header.field-case-mismatch` | `field-case-mismatch` | `edit-field` `rename` |
+| `header.case-variant-key` | `case-variant-key` | exempt: the rule reads the keys a record wrote, not a declared vocabulary, so it cannot tell the declared spelling from the stray one and a remove could delete the declared key |
+| `narrative-field.stale` | `narrative-field-stale` | `edit-field` `set` |
+| `type.dir-matches-nothing` | `exclude-files-matches-nothing` | `edit-config` `set` |
+| `type.dir-matches-nothing` | `extra-dir-missing` | `edit-config` `set` |
+| `type.dir-matches-nothing` | `dir-missing` | `edit-config` `set` |
+| `identity.collision` | `identifier-collision` | exempt: the fix is a renumber, and no action kind addresses a rename yet (`urzua migrate ids` exists) |
+| `type.record-outside-declared-dir` | `record-outside-declared-dir` | exempt: the fix is a move, and no action kind addresses a move yet |
+| `type.no-declared-spec` | `no-declared-spec` | exempt: a signal to review, never a mandate |
+| `header.pointer-field-clean` | `pointer-field-not-clean` | `edit-field` `set` |
+| `config.companion-declaration-missing` | `companion-field-missing` | `edit-config` `append` |
+| `config.companion-declaration-missing` | `companion-pair-undeclared` | `edit-config` `append` |
+| `config.pointer-declaration-missing` | `pointer-declaration-missing` | `edit-config` `set` |
+| `config.pointer-field-not-known` | `pointer-field-not-known` | `edit-config` `append` |
+| `config.pointer-narrative-overlap` | `pointer-narrative-overlap` | exempt: a field named in both lists could belong in either, and which list should keep it is the author's decision, not a computable repair |
+| `config.header-none-has-no-required-fields` | `header-none-field` | `edit-config` `remove` |
+| `config.relation-field-not-known` | `relation-field-not-known` | `edit-config` `append` |
+| `config.known-fields-declaration-missing` | `known-fields-declaration-missing` | `edit-config` `set` |
+| `filename.identity-pattern` | `identity-pattern-none-match` | exempt: the fix is a rename, and no action kind addresses a rename yet |
+| `filename.identity-pattern` | `identity-pattern-mismatch` | exempt: the fix is a rename, and no action kind addresses a rename yet |
+| `status.undeclared-value` | `status-undeclared-value` | `edit-field` `set` |
+| `status.required-field-missing` | `status-required-field-missing` | `edit-field` `set` |
+| `status.forbidden-field-present` | `status-forbidden-field-present` | `edit-field` `remove` |
+| `status.transition-allowed` | `transition-not-allowed` | `edit-field` `set` |
+| `status.unreachable-state` | `status-unreachable` | `edit-config` `set` |
+| `status.delivery-agreement` | `delivery-not-done` | `run-command` |
+| `status.delivery-agreement` | `delivery-without-evidence` | exempt: no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer |
+| `date.field-valid` | `date-invalid` | `edit-field` `set` |
+| `date.field-order` | `date-order` | `edit-field` `set` |
+| `citation.resolution` | `citation-unresolved` | exempt: the fix edits prose located by line, and no action kind addresses a line in prose yet |
+| `citation.resolution` | `non-reference-malformed` | `edit-field` `set` |
+| `citation.resolution` | `non-reference-uncited` | `edit-field` `remove` |
+| `citation.path-exists` | `path-missing` | `edit-section` `set` |
+| `citation.issue-exists` | `issue-missing-in-section` | `edit-section` `set` |
+| `citation.issue-exists` | `issue-missing-in-field` | `edit-field` `set` |
+| `citation.issue-exists` | `snapshot-unusable` | exempt: regenerating the snapshot with `urzua refs refresh` needs the network and a token, so the command is named in the message and not offered as an action |
+| `boundary.published-path-reference` | `published-path-reference` | exempt: the edit is to a published non-record file, and no action kind addresses a non-record file yet |
+| `boundary.published-path-reference` | `published-path-uncovered` | `edit-config` `set` |
+| `section.required` | `section-missing` | `edit-section` `add` |
+| `section.shape` | `section-shape` | `edit-section` `set` |
+| `index.freshness` | `index-stale` | `run-command` |
+| `index.freshness` | `index-unregenerable` | exempt: `urzua index --apply` cannot regenerate this artifact (not text, a missing marker or an unparsable format), so the artifact or the declaration is edited by hand |
+| `diff.source-requires-record` | `source-without-record` | `add-record` |
+| `diff.source-and-records-mixed` | `source-and-records-mixed` | exempt: process advice, no file edit |
+| `config.scope-matches-nothing` | `scope-matches-nothing` | `edit-config` `set` |
+| `waiver.matches-nothing` | `waiver-expired` | `edit-field` `set` |
+| `waiver.matches-nothing` | `waiver-unknown-rule` | `edit-field` `set` |
+| `waiver.matches-nothing` | `waiver-matches-no-finding` | `edit-field` `set` |
+<!-- action-table:end -->
+
 ## Exit codes
 
 | Code | When |
@@ -544,4 +679,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.67`. Added `config.companion-declaration-missing` to the generated rule table: a type declaring one field of a declared `companion_fields` pair without the other is reported. **Why:** `BUG-41` -- a type declaring `Embodiment` without `Realized-by` let records claim a state `embodiment.consistency` could not check. | **substantive** |
 > | 2026-11-04 | Bumped to `0.68`. The rule table gains `status.transition-allowed`, which compares a changed record's `Status` at the merge base with the change under check and is not-applicable without `--base`, and `status.unreachable-state`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.69`. `citation.resolution` takes an optional `non_reference_field` option: a declared id in the named header field is not resolved or reported in that record, a declared id never cited and a malformed entry are findings, and `check` prints one aggregated Info notice for declared ids that now match a real record. The rule table is regenerated. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
-> | 2026-11-04 | Bumped to `0.70`. `field.quality` gains the optional `template_placeholders` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-22`; `SPEC-3` states the option. | **substantive** |
+> | 2026-11-04 | Bumped to `0.70`. A finding may carry `suggested_action` (`ADR-73`, `MILE-44`): a `kind` from a vocabulary closed per release, an `op` where the kind has several, a flat `target` and a `value` only where one is derivable, each omitted rather than `null` when not computed. The output contract reproduces `ADR-73`'s per-kind table and compatibility rule; each rule's table entry declares an action or a reasoned exemption for every finding variant it emits, `urzua rules` lists them as `actions`, and the generated action table below the contract is read from the same entries. **Why:** `MILE-44` -- a finding said what was wrong and never what to do; additive to `check` JSON. | **substantive** |
+> | 2026-11-04 | Bumped to `0.71`. `field.quality` gains the optional `template_placeholders` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-22`; `SPEC-3` states the option. | **substantive** |

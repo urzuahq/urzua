@@ -62,6 +62,8 @@ pub fn type_record_outside_declared_dir(
                 .to_string(),
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("record-outside-declared-dir"),
         });
     }
 
@@ -127,6 +129,8 @@ pub fn type_dir_matches_nothing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("exclude-files-matches-nothing").key_path(["record_types", name, "exclude_files"]),
                     message: format!(
                         "record type '{name}' declares exclude_files entry '{entry}', but no such file is \
                          directly in {} -- the exclusion does nothing; remove it or correct the name",
@@ -151,6 +155,8 @@ pub fn type_dir_matches_nothing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("extra-dir-missing").key_path(["record_types", name, "extra_dirs"]),
                     message: format!(
                         "record type '{name}' declares extra_dirs entry '{dir}', which does not exist -- \
                          its records are not examined and its ids are not counted in the type's namespace"
@@ -174,6 +180,12 @@ pub fn type_dir_matches_nothing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("dir-missing").key_path([
+                        "record_types",
+                        name,
+                        "dir",
+                    ]),
                     message: format!(
                         "record type '{name}' declares dir '{dir}', which does not exist -- \
                          every rule for this type examines nothing"
@@ -240,6 +252,8 @@ pub fn type_no_declared_spec(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("no-declared-spec"),
                     message: format!(
                         "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
                     ),
@@ -291,6 +305,9 @@ pub fn config_scope_matches_nothing(
             line: None,
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("scope-matches-nothing")
+                .key_path(["rules", exec.rule.as_str()]),
             message: format!(
                 "'{}' was handed {} candidate(s) the configuration does not reach -- \
                  {} of {} are outside what this repository declared, so the rule cannot \

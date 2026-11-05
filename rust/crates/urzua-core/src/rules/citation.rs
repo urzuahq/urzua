@@ -121,6 +121,8 @@ pub fn citation_resolution(
                     line: Some(c.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("citation-unresolved"),
                     message: format!("{} is cited in prose but resolves to no record", c.token),
                 });
             }
@@ -137,7 +139,7 @@ pub fn citation_resolution(
     paths.sort();
     for path in paths {
         let d = &declarations[path];
-        let mut report = |message: String| {
+        let mut report = |message: String, source: ActionSource| {
             findings.push(Finding {
                 rule: RULE_ID.to_string(),
                 severity: FindingSeverity::Error,
@@ -145,17 +147,25 @@ pub fn citation_resolution(
                 line: Some(d.line),
                 waived: None,
                 declared_severity: None,
+                suggested_action: None,
+                action_source: source,
                 message,
             });
         };
         for (entry, reason) in &d.malformed {
-            report(format!("{field} entry '{entry}' {reason}"));
+            report(
+                format!("{field} entry '{entry}' {reason}"),
+                ActionSource::new("non-reference-malformed").field(field),
+            );
         }
         for (i, (entry, _)) in d.ids.iter().enumerate() {
             if !cited_entries.contains(&(path.clone(), i)) {
-                report(format!(
-                    "{field} declares {entry}, which this record never cites in prose"
-                ));
+                report(
+                    format!("{field} declares {entry}, which this record never cites in prose"),
+                    ActionSource::new("non-reference-uncited")
+                        .field(field)
+                        .text(entry.as_str()),
+                );
             }
         }
     }
@@ -306,6 +316,8 @@ pub fn citation_path_exists(
         line: usize,
         raw: String,
         path: String,
+        /// The reference section it was read from, where the edit lands.
+        section: String,
     }
     let mut candidates: Vec<Cited> = Vec::new();
     for record in records {
@@ -333,6 +345,7 @@ pub fn citation_path_exists(
                             line,
                             raw: span,
                             path,
+                            section: section.heading.clone(),
                         });
                     }
                 }
@@ -354,6 +367,8 @@ pub fn citation_path_exists(
                     line: Some(c.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("path-missing").section(c.section.as_str()),
                     message: format!("cites `{}`, which is not in the working tree", c.raw),
                 });
             }
@@ -425,6 +440,8 @@ pub fn citation_issue_exists(
         number: u64,
         /// The header field it was read from; `None` for a reference section.
         field: Option<String>,
+        /// The reference section it was read from; `None` for a header field.
+        section: Option<String>,
     }
     let mut candidates: Vec<Cited> = Vec::new();
     // Citations in one piece of text: (offset, raw, number), in text order.
@@ -474,6 +491,7 @@ pub fn citation_issue_exists(
                     raw,
                     number,
                     field: Some(name.clone()),
+                    section: None,
                 });
             }
         }
@@ -501,6 +519,7 @@ pub fn citation_issue_exists(
                         raw,
                         number,
                         field: None,
+                        section: Some(section.heading.clone()),
                     });
                 }
             }
@@ -516,6 +535,8 @@ pub fn citation_issue_exists(
             line: None,
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("snapshot-unusable"),
             message: format!(
                 "the snapshot of issue and pull request numbers could not be used, so no citation was checked: {reason}; run `urzua refs refresh`"
             ),
@@ -537,6 +558,12 @@ pub fn citation_issue_exists(
                     line: Some(c.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: match (&c.field, &c.section) {
+                        (Some(field), _) => ActionSource::new("issue-missing-in-field").field(field.as_str()),
+                        (None, section) => ActionSource::new("issue-missing-in-section")
+                            .section(section.clone().unwrap_or_default()),
+                    },
                     message: format!(
                         "cites {}{}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
                         c.raw,

@@ -49,6 +49,8 @@ pub fn revision_log_change_class(
                     line: Some(entry.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("change-class-missing").section(config.revision_log_id(&record.record_type).name()),
                     message: format!(
                         "revision log entry dated {} has no real change_class (found {:?}) -- expected \"substantive\" or \"structural\"",
                         entry.date, entry.change_class

@@ -40,6 +40,8 @@ pub fn header_required_fields(
                 line: None,
  waived: None,
  declared_severity: None,
+ suggested_action: None,
+ action_source: ActionSource::new("header-region-missing"),
                 message: format!(
                     "no header-shaped region found -- required fields {required:?} cannot be checked{detail}"
                 ),
@@ -55,6 +57,8 @@ pub fn header_required_fields(
                 line: None,
  waived: None,
  declared_severity: None,
+ suggested_action: None,
+ action_source: ActionSource::new("duplicate-key").field(dup.as_str()),
                 message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
             });
         }
@@ -84,6 +88,8 @@ pub fn header_required_fields(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("field-missing").field(field.as_str()),
                     message: format!(
                         "missing required header field '{field}' for record type '{}'",
                         record.record_type
@@ -198,6 +204,8 @@ pub fn header_field_set_consistency(
                     line: Some(field.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("undeclared-field").field(field.key.as_str()),
                     message: match near_miss(&field.key, allowed) {
                         Some(declared) => format!(
                             "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case",
@@ -275,6 +283,8 @@ pub fn header_field_case_mismatch(
                 line: Some(found.line),
                 waived: None,
                 declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("field-case-mismatch").field(found.key.as_str()).text(field.as_str()),
                 message: format!(
                     "declared field '{field}' found as '{}' -- field names compare exactly (ADR-57); rename it",
                     found.key
@@ -357,6 +367,8 @@ pub fn header_case_variant_key(
                     line: Some(spellings[0].1),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("case-variant-key").field(spellings[0].0),
                     message: format!(
                         "header writes keys differing only by case: {named} -- field names compare exactly (ADR-57), so these are different fields; this reports the difference, not which spelling is right"
                     ),

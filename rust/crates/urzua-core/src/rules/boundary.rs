@@ -156,6 +156,8 @@ pub fn published_path_reference(
                     ),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("published-path-reference"),
                 });
             }
         }
@@ -178,6 +180,12 @@ pub fn published_path_reference(
                 ),
                 waived: None,
                 declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("published-path-uncovered").key_path([
+                    "rules",
+                    RULE_ID,
+                    "published_paths",
+                ]),
             });
         }
     }
