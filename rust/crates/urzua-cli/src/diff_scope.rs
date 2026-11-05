@@ -92,14 +92,15 @@ fn touched_waiver_scopes(
     records: &[Record],
     changes: &urzua_io::GitChanges,
 ) -> Result<Vec<String>, String> {
-    let type_name = config.suppression_type();
+    let suppression_type = urzua_core::waiver::SuppressionType::from_config(config);
+    let type_name = suppression_type.name.as_str();
     let mut waivers = urzua_core::waiver::load_suppressions(
         &records
             .iter()
             .filter(|r| changes.changed.contains(&r.path))
             .cloned()
             .collect::<Vec<_>>(),
-        type_name,
+        &suppression_type,
     );
     if let Some(type_config) = config.record_types.get(type_name) {
         for path in &changes.changed {
@@ -127,7 +128,10 @@ fn touched_waiver_scopes(
                     .clone()
                     .unwrap_or_else(|| type_name.to_ascii_uppercase()),
             );
-            waivers.extend(urzua_core::waiver::load_suppressions(&[record], type_name));
+            waivers.extend(urzua_core::waiver::load_suppressions(
+                &[record],
+                &suppression_type,
+            ));
         }
     }
     Ok(waivers.into_iter().map(|w| w.scope).collect())

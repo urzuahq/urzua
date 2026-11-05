@@ -1,5 +1,5 @@
 ---
-Version: '0.62'
+Version: '0.63'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -134,6 +134,23 @@ Two details carry weight:
   `waiver` is the suppression type, so a config written before the declaration existed keeps its
   suppression unchanged. Once a type declares the role, a type merely named `waiver` suppresses
   nothing. A config with neither a declaring type nor a type named `waiver` has no suppression.
+- **The suppression type may declare the fields a suppression needs to take effect:
+  `effective_requires`** (`BUG-177`). A list of field names the type declares (`required_fields` or
+  `known_fields`); only on the type with `role: suppression`:
+
+  ```yaml
+  record_types:
+    waiver:
+      role: suppression
+      effective_requires: [Reason]
+  ```
+
+  A suppression whose listed field is absent, blank, a placeholder or pending (the type's
+  `statuses.pending` vocabulary when it declares one) takes no effect: the finding it targets is
+  reported again, and with `waiver.matches-nothing` enabled the waiver itself is reported
+  (`waiver-ineffective`, naming the field). Omitted, a suppression needs only `Rule` and `Scope`, as
+  before. An empty list, a blank or repeated name, a name the type does not declare, or the key on a
+  type without the role is a load error.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -1134,3 +1151,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.60`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the readings `ADR-76` decides for each question `RFC-48` leaves open, including that a written `Blocks` is an edge and that `sequence.unresolved-blocker` yields to enabled pointer rules. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |
 > | 2026-11-04 | Bumped to `0.61`. Documented the `revision_log.version_bump` declaration: a field name and a list of change classes whose added revision-log rows require that field to change, read by `revision-log.version-bump-required`. **Why:** `BUG-51`, maintainer decision of 2026-11-04; `SPEC-18` requires a `Version` bump with every substantive or structural entry and nothing checked it. Off for every type unless declared. | **substantive** |
 > | 2026-11-05 | Bumped to `0.62`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
+> | 2026-11-05 | Bumped to `0.63`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |

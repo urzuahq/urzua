@@ -4,8 +4,45 @@
 //! config-level ignore list. A waived finding is listed, never omitted;
 //! `status`/`blocking` are computed from non-waived findings only.
 
+use crate::config::Config;
+use crate::field_state::classify_with;
 use crate::record::Record;
 use crate::report::Finding;
+use crate::status_model::StatusDecl;
+use crate::FieldState;
+
+/// What the config declares about the suppression type: its name, the fields
+/// a suppression must carry to take effect (`effective_requires`, `BUG-177`)
+/// and the type's pending vocabulary, which decides what counts as a pending
+/// value there.
+#[derive(Debug, Clone, Default)]
+pub struct SuppressionType {
+    pub name: String,
+    pub effective_requires: Vec<String>,
+    pub declared: Option<StatusDecl>,
+}
+
+impl SuppressionType {
+    /// A suppression type that requires nothing beyond `Rule` and `Scope`.
+    pub fn named(name: &str) -> Self {
+        SuppressionType {
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    pub fn from_config(config: &Config) -> Self {
+        let name = config.suppression_type();
+        let declared = config.record_types.get(name);
+        SuppressionType {
+            name: name.to_string(),
+            effective_requires: declared
+                .and_then(|t| t.effective_requires.clone())
+                .unwrap_or_default(),
+            declared: declared.and_then(|t| t.status_decl()),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Suppression {
@@ -16,6 +53,9 @@ pub struct Suppression {
     /// `YYYY-MM-DD`. `None` means permanent (RFC-0015 §1: a structural
     /// exception, not merely one nobody got around to fixing).
     pub expires: Option<String>,
+    /// The `effective_requires` fields this suppression lacks: absent, blank,
+    /// a placeholder or pending. Empty means it takes effect (`BUG-177`).
+    pub unmet: Vec<String>,
 }
 
 impl Suppression {
@@ -35,6 +75,13 @@ impl Suppression {
         }
     }
 
+    /// Whether it carries every field the type requires for it to take effect.
+    /// Separate from `is_active`: an ineffective suppression is reported as
+    /// such, where an expired one is reported as expired.
+    pub fn is_effective(&self) -> bool {
+        self.unmet.is_empty()
+    }
+
     pub fn covers(&self, finding: &Finding) -> bool {
         if self.rule != finding.rule {
             return false;
@@ -50,10 +97,13 @@ impl Suppression {
 /// `Rule` or `Scope` is skipped rather than crashing the run -- a malformed
 /// waiver should never take down `check` itself, and an un-parseable waiver
 /// simply waives nothing, which fails toward more findings, not fewer.
-pub fn load_suppressions(records: &[Record], suppression_type: &str) -> Vec<Suppression> {
+pub fn load_suppressions(
+    records: &[Record],
+    suppression_type: &SuppressionType,
+) -> Vec<Suppression> {
     records
         .iter()
-        .filter(|r| r.record_type == suppression_type)
+        .filter(|r| r.record_type == suppression_type.name)
         .filter_map(|r| {
             // Reserved keys (Header::get_reserved), not adopter vocabulary --
             // a waiver record spelling these in another case has made a typo,
@@ -62,11 +112,21 @@ pub fn load_suppressions(records: &[Record], suppression_type: &str) -> Vec<Supp
             let rule = r.header.get_reserved("Rule")?.to_string();
             let scope = r.header.get_reserved("Scope")?.to_string();
             let expires = r.header.get_reserved("Expires").map(|s| s.to_string());
+            let unmet = suppression_type
+                .effective_requires
+                .iter()
+                .filter(|field| {
+                    classify_with(r.header.get(field), suppression_type.declared.as_ref())
+                        != FieldState::Present
+                })
+                .cloned()
+                .collect();
             Some(Suppression {
                 id: r.path.to_string_lossy().to_string(),
                 rule,
                 scope,
                 expires,
+                unmet,
             })
         })
         .collect()
@@ -89,7 +149,10 @@ fn is_iso_date(value: &str) -> bool {
 /// itself skip waived findings; this function does not touch severity.
 pub fn apply_suppressions(findings: &mut [Finding], waivers: &[Suppression], today: &str) {
     for finding in findings.iter_mut() {
-        for waiver in waivers.iter().filter(|w| w.is_active(today)) {
+        for waiver in waivers
+            .iter()
+            .filter(|w| w.is_active(today) && w.is_effective())
+        {
             if waiver.covers(finding) {
                 finding.waived = Some(waiver.id.clone());
                 break;
@@ -133,7 +196,7 @@ scope: docs/adr/ADR-1-x.md
 ---
 ",
         );
-        let waivers = load_suppressions(&[r], "waiver");
+        let waivers = load_suppressions(&[r], &SuppressionType::named("waiver"));
         assert_eq!(
             waivers.len(),
             1,
@@ -150,6 +213,7 @@ scope: docs/adr/ADR-1-x.md
             rule: "r".into(),
             scope: "*".into(),
             expires: None,
+            unmet: Vec::new(),
         };
         assert!(w.is_active("2020-01-01"));
         assert!(w.is_active("2099-01-01"));
@@ -162,6 +226,7 @@ scope: docs/adr/ADR-1-x.md
             rule: "r".into(),
             scope: "*".into(),
             expires: Some("2026-01-01".into()),
+            unmet: Vec::new(),
         };
         assert!(w.is_active("2025-12-31"));
         assert!(!w.is_active("2026-01-02"));
@@ -179,6 +244,7 @@ scope: docs/adr/ADR-1-x.md
                 rule: "r".into(),
                 scope: "*".into(),
                 expires: Some(bad.into()),
+                unmet: Vec::new(),
             };
             assert!(
                 !w.is_active("2026-09-16"),
@@ -195,6 +261,7 @@ scope: docs/adr/ADR-1-x.md
             rule: "field.quality".into(),
             scope: "docs/adr/0001-x.md".into(),
             expires: None,
+            unmet: Vec::new(),
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -217,6 +284,7 @@ scope: docs/adr/ADR-1-x.md
             rule: "field.quality".into(),
             scope: "*".into(),
             expires: None,
+            unmet: Vec::new(),
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -236,9 +304,65 @@ scope: docs/adr/ADR-1-x.md
             rule: "field.quality".into(),
             scope: "*".into(),
             expires: Some("2020-01-01".into()),
+            unmet: Vec::new(),
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
         assert!(findings[0].waived.is_none());
+    }
+
+    fn reason_record(reason: Option<&str>) -> Record {
+        let reason = reason.map(|r| format!("Reason: {r}\n")).unwrap_or_default();
+        Record::parse(
+            std::path::PathBuf::from("docs/waiver/WAIVER-1-x.md"),
+            "waiver".to_string(),
+            &format!("---\nRule: field.quality\nScope: '*'\n{reason}---\n"),
+        )
+    }
+
+    fn requiring_reason() -> SuppressionType {
+        SuppressionType {
+            name: "waiver".into(),
+            effective_requires: vec!["Reason".into()],
+            declared: None,
+        }
+    }
+
+    /// `BUG-177`: a suppression lacking a declared field, or holding a blank,
+    /// placeholder or pending value, is loaded (so it can be reported) but
+    /// does not suppress.
+    #[test]
+    fn a_suppression_lacking_a_required_field_does_not_suppress_observed_failing() {
+        for (case, reason) in [
+            ("absent", None),
+            ("blank", Some("''")),
+            ("placeholder", Some("TBD")),
+            ("pending", Some("pending")),
+        ] {
+            let loaded = load_suppressions(&[reason_record(reason)], &requiring_reason());
+            assert_eq!(loaded.len(), 1, "{case}");
+            assert_eq!(loaded[0].unmet, vec!["Reason".to_string()], "{case}");
+            let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
+            apply_suppressions(&mut findings, &loaded, "2026-11-05");
+            assert!(findings[0].waived.is_none(), "{case}");
+        }
+    }
+
+    #[test]
+    fn a_suppression_carrying_the_required_field_suppresses() {
+        let loaded = load_suppressions(
+            &[reason_record(Some("a structural exception"))],
+            &requiring_reason(),
+        );
+        assert!(loaded[0].is_effective());
+        let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
+        apply_suppressions(&mut findings, &loaded, "2026-11-05");
+        assert!(findings[0].waived.is_some());
+    }
+
+    #[test]
+    fn without_effective_requires_a_reasonless_suppression_suppresses() {
+        let loaded = load_suppressions(&[reason_record(None)], &SuppressionType::named("waiver"));
+        assert!(loaded[0].is_effective());
     }
 }

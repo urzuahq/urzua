@@ -1,5 +1,5 @@
 ---
-Version: '0.73'
+Version: '0.74'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -292,7 +292,7 @@ which stays only for what genuinely isn't built yet.
 | `diff.source-requires-record` | A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. |
 | `diff.source-and-records-mixed` | A `--base` diff changes both a governed record and a path under a declared `application_paths` entry, a prefix or a glob (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean. |
 | `config.scope-matches-nothing` | Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). |
-| `waiver.matches-nothing` | A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Three cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records. |
+| `waiver.matches-nothing` | A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there, so it suppresses nothing and its finding is reported again); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records. |
 <!-- rule-table:end -->
 
 ### Not yet built
@@ -525,6 +525,7 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `diff.source-and-records-mixed` | `source-and-records-mixed` | exempt: process advice, no file edit |
 | `config.scope-matches-nothing` | `scope-matches-nothing` | `edit-config` `set` |
 | `waiver.matches-nothing` | `waiver-expired` | `edit-field` `set` |
+| `waiver.matches-nothing` | `waiver-ineffective` | `edit-field` `set` |
 | `waiver.matches-nothing` | `waiver-unknown-rule` | `edit-field` `set` |
 | `waiver.matches-nothing` | `waiver-matches-no-finding` | `edit-field` `set` |
 <!-- action-table:end -->
@@ -690,3 +691,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.71`. `field.quality` gains the optional `template_placeholders` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-22`; `SPEC-3` states the option. | **substantive** |
 > | 2026-11-04 | Bumped to `0.72`. `sequence.cycle` and `sequence.unresolved-blocker` added to the generated rule table; both read only `relation_pairs` entries that set `acyclic: true` (`SPEC-3`), and enabling either with no such pair is a config load error. **Why:** `MILE-27` -- the sequencing relation `RFC-48` section 1 proposes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.73`. Added `revision-log.version-bump-required` to the rule table (regenerated from `RULE_METADATA`): a diff rule that compares a changed record's revision log and version field against the merge base's copy, read by the CLI and handed to the rules as data. **Why:** `BUG-51`; `SPEC-3` states the declaration. | **substantive** |
+> | 2026-11-05 | Bumped to `0.74`. `waiver.matches-nothing` gains the finding variant `waiver-ineffective` (`edit-field` `set` on the first missing field), reported on a waiver that lacks a field its type's `effective_requires` names; the waiver suppresses nothing. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |

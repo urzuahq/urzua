@@ -1,5 +1,5 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -67,6 +67,14 @@ fails toward more findings, not fewer) then `apply_waivers`, which annotates mat
 `waived: <waiver's own path>` and never removes them from the report. `status`/`blocking` are
 computed from non-waived findings only.
 
+`Reason` is required by the table above but, by default, only `header.required-fields` enforces it,
+and a waiver without one still suppresses. The type may instead declare `effective_requires: [Reason]`
+(`SPEC-3`, `BUG-177`): a waiver then takes effect only once each listed field holds a real value,
+that is present and neither blank, a placeholder nor pending. Otherwise it suppresses nothing, so its
+target finding appears again (failing toward more findings, as for a missing `Rule`), and with
+`waiver.matches-nothing` enabled a finding on the waiver names the missing field. The default is
+unchanged.
+
 ## What's deliberately not built
 
 - **Role enforcement on granting a waiver** (does it need the same Decider rigor as an ADR) — named
@@ -96,3 +104,4 @@ computed from non-waived findings only.
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. Dropped the reference to the removed `header_layout` option. **Why:** `MILE-85`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.7`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |

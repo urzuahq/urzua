@@ -1325,7 +1325,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_WAIVER_MATCHES_NOTHING,
-        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Three cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
+        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there, so it suppresses nothing and its finding is reported again); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
         scope: Scope::Run,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1336,6 +1336,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("waiver-expired", ActionDecl::FIELD_SET),
+            VariantAction::new("waiver-ineffective", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-unknown-rule", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-matches-no-finding", ActionDecl::FIELD_SET),
         ],
