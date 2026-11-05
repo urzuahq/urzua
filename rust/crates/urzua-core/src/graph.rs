@@ -158,6 +158,7 @@ mod tests {
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -172,6 +173,7 @@ mod tests {
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),

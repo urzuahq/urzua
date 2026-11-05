@@ -3,7 +3,7 @@ Stable-Id: 01M6M5FASC120FA01WG74QWH7A
 Status: Planned
 Phase: '0'
 Track: embodiment-model
-Implements: ADR-67
+Implements: ADR-74
 Blocked-on: —
 ---
 # 185 — Evidence pins can be scoped to one symbol or line range so unrelated edits to a volatile file stop going stale
@@ -67,3 +67,4 @@ Accepted.
 > | 2026-11-04 | `Blocked-on` cleared. **Why:** it named `ADR-67` as Proposed, and the maintainer accepted it on 2026-11-04. The scoped-pin syntax still needs its own deciding ADR, as the What says. | **structural** |
 > | 2026-11-04 | Deciding ADR drafted: `ADR-74` (Proposed) sets out the scoped-locator grammar, declared symbol resolvers, the shared slot for `MILE-84`'s commit anchor and the reporting of a scope that stops resolving, with six open questions. `Status` and `Blocked-on` unchanged. **Why:** the What says the syntax needs its own deciding ADR before this milestone is built; the maintainer accepts or amends it. | **substantive** |
 > | 2026-11-04 | Done means extended: a symbol may be a member of a type or of a trait impl, and a commit-anchored locator is reported as not yet supported. **Why:** the maintainer chose to include methods in the first build of `ADR-74` and its amendment specifies how a member is found across several `impl` blocks. `Status` unchanged. | **substantive** |
+> | 2026-11-04 | `Implements` set to `ADR-74`, the deciding ADR (Accepted). First of three PRs built: the locator grammar and parse, declared resolvers and `resolve_scope`, the hashed bytes, every failure reason reported by `embodiment.locator-exists`, the normative vectors in `SPEC-3`, and the Rust and YAML resolvers in this repository's config. Drift, `fix --rebaseline`, `explain` and the corpus migration follow. `Status` unchanged. **Why:** `ADR-74` sets this milestone's build order. | **structural** |

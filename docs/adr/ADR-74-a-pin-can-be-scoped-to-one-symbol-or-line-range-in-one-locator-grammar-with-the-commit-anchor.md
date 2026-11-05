@@ -5,7 +5,7 @@ Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Implemented
 Supersedes / Superseded-by: null
 Derives-from: RFC-5, ADR-67
 ---
@@ -304,3 +304,4 @@ scoped locator at file level, the state the corpus is in today.
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed, then amended after independent review and two re-checks: full locator grammar and parse order, hashed bytes specified, one authoring route, no file-based grace for a scoped pin, unpinned scopes reported, append-only end kinds, and member resolution for Rust (several container spans, direct-child depth, trait impls, a `semicolon` end kind). | **substantive** |
 > | 2026-11-04 | Status changed from Proposed to Accepted, with methods in the first build. **Why:** Maintainer decision, 2026-11-04, conditional on review; the final re-check left one blocker (member span and depth), now resolved. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by source back-pointers` -- stated `` disagreed with the computed value `Implemented`. | **structural** |

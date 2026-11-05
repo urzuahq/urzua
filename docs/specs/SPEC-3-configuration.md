@@ -1,5 +1,5 @@
 ---
-Version: '0.57'
+Version: '0.58'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -784,10 +784,138 @@ rules:
   (`sha256sum path/to/file.rs`). A pinned locator drifts exactly when the file's current hash
   differs, and git history is not consulted for it, so an unrelated commit never reports and a
   change made after the record was written does. Any other suffix is not a pin and stays part of the
-  path. Re-pinning is a hand edit of the hash on the `Realized-by` line.
+  path. Re-pinning is `urzua fix --rebaseline` (`SPEC-8`), or a hand edit of the hash on the `Realized-by` line.
+  A locator may also carry a scope and be pinned to one item (below).
 
 Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
 option-on-a-rule-that-does-not-take-it load error.
+
+### Scoped evidence pins and locator resolvers (`ADR-74`, `MILE-185`)
+
+A `Realized-by` locator may carry a scope between its path and its pin, so a pin hashes one item
+and not the whole file. A repository that writes no scope and declares no resolver sees no change,
+and a file-level pin keeps the meaning above.
+
+**Grammar and parse order.** After the `spec:`, `code:` or `test:` prefix:
+
+```text
+locator := path [ "#" scope ] [ "@" anchor ]
+scope   := range | symbol
+range   := "L" N [ "-L" M ]      N and M decimal, no leading zero, 1 <= N <= M
+symbol  := seg ( "::" ( seg | "<" seg ">" ) )*     seg := [A-Za-z_] [A-Za-z0-9_.-]*
+anchor  := "sha256:" 64 lowercase hex  |  7 to 64 lowercase hex (a commit)
+```
+
+The parser takes, in order: (1) a trailing `@sha256:` and exactly 64 lowercase hex; (2) otherwise a
+trailing `@` and 7 to 64 lowercase hex, the reserved commit anchor; (3) in what remains, the text
+after the last `#` as the scope only if it matches `scope`, else the whole text is the path. A
+scope that begins `L` and a digit is never a symbol: it is a range or malformed (`L10` is a range;
+`L10x`, `L0`, `L010`, `L10-40` and `L40-L10` are malformed). `<Trait>` is never the first segment. A
+locator with both anchors, a `@sha256:` that is not a pin, or a glob with a scope is malformed. A
+path that contains `#` and fails the grammar is reported as malformed, never as a path missing from
+the tree; there is no escape, so a file whose name ends `#word` cannot be cited. A commit anchor
+parses and is reported `commit anchor not yet supported` (it is reserved for `MILE-84`).
+
+**The hashed bytes.** A scope resolves to a contiguous span of whole lines. The pinned bytes are
+those lines, each with at most one trailing `\r` removed, joined by `\n`, with no trailing newline,
+read as UTF-8 with a leading U+FEFF dropped. Lines are split on `\n`; a final newline does not
+start a line. A file that is not valid UTF-8 cannot carry a scoped pin. Nothing else is normalised:
+a whitespace or comment edit inside the item is drift. The pin is the lowercase hex SHA-256 of those
+bytes: `urzua explain <path>#<scope>` prints it, and for a span it reproduces with
+`sed -n '<start>,<end>p' <path> | tr -d '\r' | sed -z 's/\n$//' | sha256sum` on a file without a BOM
+or a bare `\r`. A file-level pin is unchanged and still hashes the raw bytes of the file.
+
+**Resolvers.** `locator_resolvers` is a top-level list. The engine ships no language knowledge; a
+symbol scope needs a resolver covering the file, and a line range needs none.
+
+```yaml
+locator_resolvers:
+  - name: rust                  # required, unique
+    glob: "**/*.rs"             # the files it covers; one resolver per file
+    start: '^\s*(pub\s+)?(fn|struct)\s+{symbol}\b'   # first line of a plain symbol
+    end: brace_balanced
+    leading: '^\s*(#\[|///)'    # optional: contiguous lines above that are part of the item
+    container:                  # optional: `Type::member` is found inside these spans
+      start: '^\s*impl(<.*?>)?\s+{symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      end: brace_balanced       # brace_balanced, indent or heading
+      spans: all                # `all`: every match is a candidate span; default `one`: exactly one
+    member:                     # the item inside a container span, with its own start and end kind
+      start: '^\s*(pub\s+)?fn\s+{symbol}\b'
+      end: brace_balanced
+    trait_container:            # `Type::<Trait>` and `Type::<Trait>::member`
+      start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
+      end: brace_balanced
+      spans: all
+```
+
+Patterns are regular expressions matched against one line. `{symbol}` (and `{trait}`) are replaced by
+the regular-expression-escaped text from the record, so a `.` in a symbol is a literal dot. A
+`start`, `container.start` and `member.start` must contain `{symbol}`, a `trait_container.start`
+also `{trait}`; a malformed pattern or glob, a missing placeholder, a `member` with no `container`
+or `trait_container` or the reverse for `container`, a `container` end kind other than
+`brace_balanced`, `indent` or `heading`, an unknown key, a repeated name and two resolvers with the
+same glob are config-load errors. A file covered by two different globs is reported where a scope
+in it is resolved, never resolved by the first.
+
+**End kinds (normative, append-only).** An end kind finds the last line of an item from its first
+line. A shipped kind never changes; a fix ships under a new name.
+
+| Kind | The last line is | Blind to |
+|---|---|---|
+| `brace_balanced` | the first line at which the count of `{` minus `}`, counted over every character from the first line, returns to zero after a `{` has been seen | braces in strings and comments |
+| `indent` | the last non-blank line before the next non-blank line indented no deeper than the first (leading whitespace characters counted; the end of file also ends it) | tabs, odd blank lines |
+| `heading` | the last non-blank line before the next Markdown heading of the same or a higher level; the first line must be a heading (`#` to `######` and a space) | `#` lines in fenced code |
+| `blank_line` | the line before the next blank (whitespace-only) line, or the last line | |
+| `semicolon` | the first line, counting braces from the item's first line, at which the brace count is zero and the line ends in `;` (after trailing whitespace) | |
+
+**Resolution.** A plain `Name` is the lines whose text matches `start`, anywhere in the file:
+none is not found, more than one is ambiguous and reported with the line of each candidate, exactly
+one is the item (extended upward over `leading`). `Type::member` finds the container spans of
+`Type` (none: container not found; several without `spans: all`: ambiguous), then the lines
+matching `member.start` that are direct children of any of those spans, counted together: none is
+not found, more than one is ambiguous, one is the item. A direct child of a `brace_balanced`
+container is a line that starts at brace depth one; of an `indent` container, a line at the
+indentation of the container's first non-blank body line; of a `heading` container, a heading one
+level deeper. A match deeper inside another member (a nested `fn`) is not a candidate. A member's
+end is searched only within its container span. `Type::<Trait>::member` is the same over the
+`trait_container` spans; `Type::<Trait>` alone is the whole impl, which must be unique. A member of
+a member (`A::b::c`) and a form the resolver declares nothing for are reported unsupported. Types
+of the same name in different inline modules are one namespace in the first build.
+
+**Reasons.** `embodiment.locator-exists` reports, once per locator, with the locator and the cause:
+the path is missing or untracked; the locator does not parse (naming the grammar); the file is not
+valid UTF-8; no resolver covers the file, or several do; the symbol, container or member is not
+found; it is ambiguous (with the candidate lines); the form is unsupported for that resolver; the
+end is not found; the range lies beyond the end of the file; a commit anchor is not yet supported;
+and a scope given without a pin (drift is then judged on the whole file). A locator reported this
+way is not also judged for drift.
+
+**Test vectors (normative).** Each row is a resolver, a text and a scope, with the span (1-based,
+inclusive) or the failure. Rows 1 to 12 use the `rust` resolver above with the `leading` pattern;
+`T` is the text shown, lines numbered from 1.
+
+| # | Text `T` (lines) | Scope | Result |
+|---|---|---|---|
+| 1 | `/// d` / `#[derive(X)]` / `struct A {` / `  a: u8,` / `}` | `A` | 1-5 (leading doc and attribute included) |
+| 2 | `fn f() {` / `}` / `fn f() {` / `}` | `f` | ambiguous: lines 1, 3 |
+| 3 | `fn f() {}` | `g` | not found |
+| 4 | `fn o() {` / `  if x {` / `}` | `o` | the end is not found |
+| 5 | `fn s() {` / `  let a = "}";` / `}` / `  more();` / `}` | `s` | 1-2 (the early end is not detected) |
+| 6 | `impl A {` / `  fn f(&self) {}` / `}` / `impl<T> A {` / `  fn g(&self) {}` / `}` | `A::g` | 5-5 (found in the second block) |
+| 7 | `impl A {` / `  fn f(&self) {}` / `}` / `impl A {` / `  fn f(&self) {}` / `}` | `A::f` | ambiguous: lines 2, 5 |
+| 8 | `impl A {` / `  fn f(&self) {` / `    fn n() {}` / `  }` / `}` | `A::n` | not found (not a direct child) |
+| 9 | `impl fmt::Display for A {` / `  fn fmt(&self) {}` / `}` | `A::<Display>::fmt` | 2-2 |
+| 10 | `impl fmt::Display for A {` / `  fn fmt(&self) {}` / `}` | `A::<Display>` | 1-3 |
+| 11 | `impl From<u8> for A {` / `  fn from(a: u8) {}` / `}` / `impl From<u16> for A {` / `  fn from(a: u16) {}` / `}` | `A::<From>::from` | ambiguous: lines 2, 5 |
+| 12 | `impl A {` / `  fn f(&self) {}` / `}` | `A::f::g` | unsupported (member of a member) |
+| 13 | `a` / `b` / `c` | `L2-L3` (no resolver) | 2-3 |
+| 14 | `a` / `b` / `c` | `L2-L4` (no resolver) | the range lies beyond the end (3 lines) |
+| 15 | `a:` / `  x: 1` / `` / `  y:` / `    z: 2` / `` / `b:` (`indent`, start `^\s*{symbol}:`) | `a` | 1-5 (trailing blank excluded) |
+| 16 | `# T` / `## One` / `text` / `### Sub` / `more` / `## Two` (`heading`, start `^#+\s+{symbol}$`) | `One` | 2-5 |
+| 17 | `k1:` / `  v` / `` / `k2:` (`blank_line`) | `k1` | 1-2 |
+| 18 | `impl A {` / `  const X: Foo = Foo {` / `    a: 1;` / `  };` / `  const Y: u8 = 3;` / `}` (member `end: semicolon`, start `^\s*const\s+{symbol}\b`) | `A::X` | 2-4 |
+| 19 | the bytes `a\r\nb\r\r\nc\n`, lines 1-3 | | pinned bytes `a\nb\r\nc` |
+| 20 | the bytes `\uFEFFfn a() {\n}\n`, lines 1-2 | | pinned bytes `fn a() {\n}` |
 
 ### Source back-pointers as evidence (`MILE-128`, `MILE-146`, `MILE-149`)
 
@@ -1011,3 +1139,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.55`. `sections.depth` now drives the section reading: a type declaring `depth: 2` has its `###` headings parsed as sections nested under their `##`, and a required section may declare `level` and `under` to be asked for one. A type declaring no `level` is read as before. **Why:** `MILE-98` -- this repository's own `###` headings were invisible to the section rules and a corpus that checks a considered option's subsection needs `###` to be checked at all. | **substantive** |
 > | 2026-11-04 | Bumped to `0.56`. Documented the per-type `companion_fields` declaration: a list of pairs of relation role keys (`status`, `embodiment_state`, `embodiment_locator`, `supersession`) whose fields the type declares together, resolved through `relation_fields`; an entry that is not two distinct role keys is refused at load, and `config.companion-declaration-missing` reports a pair the type declares one half of or neither. **Why:** `BUG-41` -- the one companion pair checked was hardcoded. | **substantive** |
 > | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
+> | 2026-11-04 | Bumped to `0.58`. Documented scoped evidence pins: the locator grammar and parse order, the hashed bytes, the top-level `locator_resolvers` declaration (`start`, `end`, `leading`, `container`, `member`, `trait_container`), the five end kinds, resolution and its failure reasons, with normative test vectors. **Why:** `MILE-185` / `ADR-74` -- a pin on a volatile file went stale on edits unrelated to its decision; resolvers are repository configuration, not engine knowledge. | **substantive** |

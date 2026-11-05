@@ -21,6 +21,7 @@ use urzua_core::report::{CouldNotRun, Report};
 mod commands;
 mod diff_scope;
 mod discovery;
+mod file_texts;
 mod gate;
 mod session;
 

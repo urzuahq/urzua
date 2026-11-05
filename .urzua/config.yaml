@@ -13,6 +13,43 @@ embodiment:
     - {state: Implemented, evidence: code, claims_built: true}
     - {state: Specified, evidence: spec}
   none: Not started
+# Symbol resolvers for scoped evidence pins (ADR-74, MILE-185): how a `Realized-by`
+# locator `path#Symbol` finds the item it pins. The engine knows no language; each
+# file type a decision cites at symbol level is declared here, with its own
+# test vectors in SPEC-3. A line range (`#L10-L40`) needs no resolver.
+locator_resolvers:
+  - name: rust
+    glob: "**/*.rs"
+    # A type, function, trait, constant or module, with its visibility and qualifiers.
+    start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*(fn|struct|enum|trait|type|static|mod|const|union)\s+{symbol}\b'
+    end: brace_balanced
+    # Doc comments and attributes directly above an item are part of it.
+    leading: '^\s*(#\[|///|//!)'
+    # `Type::member`: an inherent `impl Type {` or `impl<T> Type<T> {`, in as many blocks as the file has.
+    container:
+      start: '^\s*impl(<.*?>)?\s+{symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      end: brace_balanced
+      spans: all
+    member:
+      start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*fn\s+{symbol}\b'
+      end: brace_balanced
+    # `Type::<Trait>::member`: `impl Trait for Type {`, with an optional path before the trait.
+    trait_container:
+      start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
+      end: brace_balanced
+      spans: all
+  # `record_types::bug` pins the `bug` entry of this file; `rules::embodiment.consistency` one rule.
+  - name: yaml
+    glob: "**/*.yaml"
+    start: '^\s*{symbol}:'
+    end: indent
+    container:
+      start: '^{symbol}:'
+      end: indent
+    member:
+      start: '^\s+{symbol}:'
+      end: indent
+
 record_types:
   adr:
     dir: "docs/adr"
