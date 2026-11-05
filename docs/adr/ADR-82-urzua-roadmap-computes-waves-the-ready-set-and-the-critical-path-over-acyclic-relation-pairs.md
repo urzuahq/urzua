@@ -8,7 +8,7 @@ Embodiment: null
 Supersedes / Superseded-by: null
 Derives-from: RFC-48, ADR-76
 ---
-# 80 — urzua roadmap computes waves, the ready set and the critical path over acyclic relation pairs
+# 82 — urzua roadmap computes waves, the ready set and the critical path over acyclic relation pairs
 
 ## Context
 

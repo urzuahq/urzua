@@ -52,3 +52,4 @@ claims at all.
 > |---|---|---|
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. A changeset reading `Names ADR-1 without closing it.` gives `claim.status-agreement` `eligible: 0, examined: 0` and no finding. **Why:** what counts as a claim is `RFC-36`, still Draft. | **substantive** |
 > | 2026-11-05 | Waits on `RFC-36`; `Status` stays `Open`. **Why:** Maintainer decision, 2026-11-05: what counts as a claim is `RFC-36`'s to decide, so this bug is not worked until it is decided. | **substantive** |
+> | 2026-11-05 | Unblocked by `ADR-81` (Proposed), which records the decision to accept `RFC-36`: keep the closing verb and add an opt-in rule for a bare reference to an open record in declared text. `Status` stays `Open`. **Why:** the block was on `RFC-36`'s decision; the fix waits only for the rule to be built. | **substantive** |
