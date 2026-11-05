@@ -1,5 +1,5 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-07
 Status: Accepted
 Embodiment: Verified
@@ -59,6 +59,17 @@ Each edge is tagged:
 
 No filtering (`--type`, `--format dot`) — dumps every edge.
 
+## Population and notices
+
+Both reports carry the population block `check` reports for a rule (`BUG-169`, `SPEC-1`'s "a check that
+finds nothing must be distinguishable from one that ran on nothing"): `population` with `unit: "record"`,
+`eligible` (every loaded record), `examined` (records whose header was read), `out_of_scope` (records of a
+`header_shape: none` type, which have no header) and `unreadable` (records whose header could not be read).
+When any record is unreadable a `warning` notice lists the records left out, since their relationships are
+missing from the output. `status` stays `ok` and the exit code `0`: the query ran, and the population says
+what it ran on. An empty `governing_records` or `edges` beside `eligible: 0` is an empty corpus, and beside
+`unreadable: 1` is a corpus that could not be fully read.
+
 ## Shared implementation
 
 Both reuse `record_id`/`extract_references`/`parse_realized_by` (`rules.rs`) rather than
@@ -96,3 +107,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-05 | Bumped to `0.5`. `explain <path>#<scope>` resolves a scope and prints the span and its pin; `governing_records` entries name the scope a record pins. **Why:** `MILE-185` / `ADR-74` -- a person cannot reproduce a resolver by hand, so `explain` is the authoring route for a scoped pin. | **substantive** |
 > | 2026-11-05 | Bumped to `0.6`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `explain_names_the_governing_record_and_graph_reports_kind_and_dangling_per_edge`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs, code:rust/crates/urzua-cli/src/commands/graph.rs, code:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.7`. `graph` and `explain` report the `check` population block (`eligible`, `examined`, `out_of_scope`, `unreadable`) and a warning notice listing the records left out for an unreadable header; status stays `ok`. **Why:** `BUG-169`, maintainer decision 2026-11-05; an unreadable header used to drop its edges with no disclosure. | **substantive** |
