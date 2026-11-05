@@ -2,7 +2,7 @@
 Stable-Id: 01M2WG81X2FW1A4T3833PXVEMP
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_claim_paths_entry_naming_a_file_does_not_load"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_claim_paths_entry_naming_a_file_does_not_load@sha256:f44cc84357b45888a6a7762e7835a156dcc7bf1ba2990f901cc9b256ec7b510f
 ---
 # 68 — The claim_paths guard accepts a file so the rule scans nothing and reports a clean run
 
@@ -40,3 +40,4 @@ The guard has no test that a non-directory is rejected; `BUG-56`'s tests cover t
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

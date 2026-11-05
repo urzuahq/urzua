@@ -2,7 +2,6 @@
 Stable-Id: 01M2YR3J3H6MGCCA71FXNGZC5V
 Status: Fixed
 Found-in: "Round 10 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-core/src/rules.rs::claim_status_agreement counts records resolved against"
 ---
 # 90 — claim.status-agreement counted claim files in a field that reports records examined
 
@@ -32,7 +31,12 @@ corpus contains.
 - `BUG-78`, `BUG-81`, `BUG-83` -- the same field untrue for other reasons.
 - `ADR-55`.
 
+## Regression test
+
+rust/crates/urzua-core/src/rules.rs::claim_status_agreement counts records resolved against
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

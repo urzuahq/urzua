@@ -2,7 +2,7 @@
 Stable-Id: 01M34MYQ7YW4RZH9GDS01AGS1S
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_date_named_file_is_not_a_record_number_observed_failing, new_record.rs"
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing@sha256:6ca017966198815957858e378903ea615d88292f45839d578747685c59733855
 ---
 # 112 — the date filename heuristic requires zero-padded month and day segments
 
@@ -34,3 +34,4 @@ the month range regardless of length.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test observed failing against the length-2 requirement before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

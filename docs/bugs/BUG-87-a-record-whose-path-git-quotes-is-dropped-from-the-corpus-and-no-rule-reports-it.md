@@ -2,7 +2,7 @@
 Stable-Id: 01M2YR3GD6J5NXWZ28MZ5EFVP9
 Status: Fixed
 Found-in: "Round 10 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_record_whose_name_git_quotes_is_still_examined"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_record_whose_name_git_quotes_is_still_examined@sha256:f9d65ede5e244716232ab607ea210f4fc20ef96a4718f74c11844ae92684703c
 ---
 # 87 — A record whose path git quotes is dropped from the corpus and no rule reports it
 
@@ -48,3 +48,4 @@ ordinary in most of the world and would have been the adopter's first encounter 
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

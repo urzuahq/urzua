@@ -2,7 +2,7 @@
 Stable-Id: 01M26CKB9RQXDTJ7PP53THBQ1F
 Status: Fixed
 Found-in: 'surfaced while scoping a new RFC to amend RFC-2 -- asked why `Amends` has no `relation.supersession-reciprocity`-style check the way `Supersedes / Superseded-by` does, and found no ADR or RFC ever actually decided the asymmetry either way'
-Regression-test: 'rust/crates/urzua-core/src/rules/relation.rs::an_inverse_claim_the_forward_side_does_not_echo_is_a_finding, rust/crates/urzua-cli/tests/provisional_claim_integration.rs::an_accepted_amendment_the_peer_has_not_echoed_is_an_error'
+Realized-by: test:rust/crates/urzua-core/src/rules/relation.rs#an_inverse_claim_the_forward_side_does_not_echo_is_a_finding@sha256:4b7a28c106941bb21338aa8b220ba2c9c2eb06d7378e6d246e382451b9901955, test:rust/crates/urzua-cli/tests/provisional_claim_integration.rs#an_accepted_amendment_the_peer_has_not_echoed_is_an_error@sha256:51ca8c61a9ff08a6df2928883e0fbc13b6de005fa9d3ac983a877c10885c69d2
 ---
 # 17 — Amends has no reciprocal field or reciprocity check, unlike Supersedes / Superseded-by
 
@@ -49,3 +49,4 @@ real decision, which is exactly how this was found.
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right fix is a reciprocal `Amended-by` field, a reciprocity check reusing the existing combined-field pattern, or a deliberate decision that one-directional is correct after all (and documenting that decision explicitly, closing this without a code change) is not yet decided. | **structural** |
 > | 2026-11-04 | `relation_pairs` (`MILE-122`) now lets a repository declare `Amends` / `Amended-by` and have it echoed; this repository declares no pair, so the finding set is unchanged. Whether `Amends` should be one-way here is still undecided, so `Status` and the fix scope stand. **Why:** the general mechanism the fix needed now exists. | **substantive** |
 > | 2026-11-04 | `Status` set to `Fixed`; `Regression-test` filled. Fixed in #163 (`MILE-122`: declared `relation_pairs` and a general reciprocity rule); this repository declares the `amendment` pair (`Amends` / `Amended-by`, `reciprocity: required`, `rfc` only) in `.urzua/config.yaml`, with a provisional level while the claimant is a Draft (`MILE-155`, `MILE-163`). **Why:** `Amends` is now checked for a reciprocal field the way `Supersedes / Superseded-by` is, and the pair is declared per repository rather than hardcoded to one relation. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

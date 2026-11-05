@@ -2,8 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1Y4J5XTVNAA89BBJYT4VX95
 Found-in: manual testing while building the `milestone` record type -- ran `check docs/milestones/` expecting a narrow result and got the whole 55-file corpus back, identical to `check docs/`
-Regression-test: check_scopes_to_the_requested_path_not_the_whole_corpus (rust/crates/urzua-cli/tests/check_integration.rs)
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#check_scopes_to_the_requested_path_not_the_whole_corpus@sha256:a28350ca40cd9f633129ecac2082cfa8001b02b28895d1b5d50fa77b099bd7be
 ---
 # 1 — check's paths argument was silently ignored for scoping
 
@@ -43,3 +42,4 @@ repo root, and filters `discover_tracked_files`'s output to entries under any re
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial record: defect found, fixed, and verified same-day. | **structural** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

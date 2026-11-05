@@ -2,7 +2,6 @@
 Stable-Id: 01M371W49G54XZ0GQA1BR9XPYH
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 25"
-Regression-test: "none -- pure extraction, no behavior change; existing tests for both call sites (header_pointer_field_clean, supersession_reciprocity) cover the em-dash case unchanged"
 ---
 # 138 — the no-value em-dash sentinel is duplicated in two rules instead of shared
 
@@ -31,8 +30,13 @@ constant used in two places stays defined in one.
   domain primitive.
 - `SPEC-22` — the duplication-on-second-occurrence rule this was already past.
 
+## Regression test
+
+none -- pure extraction, no behavior change; existing tests for both call sites (header_pointer_field_clean, supersession_reciprocity) cover the em-dash case unchanged
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review. Extracted `values::is_no_value_sentinel`; both call sites now share it. No behavior change -- both existing call sites' own tests cover the em-dash case unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

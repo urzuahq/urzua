@@ -2,7 +2,6 @@
 Stable-Id: 01M2MQK99NNTQZ6V91PJEWE5GE
 Status: Fixed
 Found-in: 'merging BUG-33''s own fix (#41) -- the merge was meant to exercise the no-release path and instead opened a 0.2.2 release PR'
-Regression-test: 'knope is configured to ignore Conventional Commits entirely, so a commit prefix can no longer compute a release -- the trigger is removed rather than checked; observable on the next no-changeset merge, which must leave prepare-release green with no release PR'
 Realized-by: code:knope.toml
 ---
 # 35 — A Conventional Commit prefix cut a release for a CI-only change
@@ -72,8 +71,13 @@ prefix except the mistaken one this record exists for.
   rejected there, which this instance proves correct.
 - SPEC-20 -- the CI/CD reference.
 
+## Regression test
+
+knope is configured to ignore Conventional Commits entirely, so a commit prefix can no longer compute a release -- the trigger is removed rather than checked; observable on the next no-changeset merge, which must leave prepare-release green with no release PR
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** found by merging another fix and watching the result rather than assuming it -- the merge was expected to exercise `BUG-33`'s no-release path and did something else entirely. Worth recording that the trap had existed unsprung since `ADR-29`, and that the first commit to spring it was written by an agent working on the release pipeline. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

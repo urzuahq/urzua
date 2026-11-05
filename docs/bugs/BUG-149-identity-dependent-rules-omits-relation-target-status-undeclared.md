@@ -2,7 +2,7 @@
 Stable-Id: 01M37DNT002P07Y8HC0KQG96N3
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Regression-test: "init.rs's a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire test, which asserts relation.target-status-undeclared is not proposed for a prefix-less corpus"
+Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire@sha256:ff03c4b54c4a718d96c6c3d62c89577bb96abae9918214bdab009f1065c03ac4
 ---
 # 149 — IDENTITY_DEPENDENT_RULES omits relation.target-status-undeclared
 
@@ -38,3 +38,4 @@ Added `RULE_RELATION_TARGET_STATUS_UNDECLARED` to `IDENTITY_DEPENDENT_RULES`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-24 | Filed and fixed in one pass, found by a full-release code review. **Why:** a rule added after this list's last review shared the exact identity-dependency shape the list exists to track, and was missed. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

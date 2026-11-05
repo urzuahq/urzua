@@ -2,7 +2,6 @@
 Stable-Id: 01M376A49FF9QM8YWCKQARWKW2
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 26"
-Regression-test: "none -- pure extraction, no behavior change; each rule's own existing tests are unchanged and pass"
 ---
 # 144 — pointer.target-status and relation.target-status-undeclared duplicate the same resolved-target walk
 
@@ -30,8 +29,13 @@ full test suite and real-corpus finding count unchanged.
 - `BUG-140`/`BUG-141` -- the same duplication-drift shape found in the same review, at other places in
   this file.
 
+## Regression test
+
+none -- pure extraction, no behavior change; each rule's own existing tests are unchanged and pass
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by a full-release code review. **Why:** two rules shared the identical resolved-target walk, differing only in their final predicate. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

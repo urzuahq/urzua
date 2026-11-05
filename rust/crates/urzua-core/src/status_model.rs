@@ -81,13 +81,24 @@ pub struct DeliveryDecl {
     /// drift ignored) that say the work exists.
     pub delivered_tiers: Vec<String>,
     /// Computed tiers that say nothing was delivered. A success status with one
-    /// of these is a status with no evidence.
+    /// of these is a status with no evidence. May be empty: the type then never
+    /// reports a success status for lack of evidence (`ADR-84`).
     pub unevidenced_tiers: Vec<String>,
     /// Statuses that say the work is not done. Delivered evidence under one of
     /// them is a disagreement.
     pub not_done: Vec<String>,
     /// The `success` status `urzua fix` writes when the evidence says delivered.
     pub set_status: String,
+    /// Whether a source or test back-pointer that cites the record counts as
+    /// delivery evidence beside the evidence field (`ADR-84`). Omitted keeps
+    /// today's behaviour: it counts. `false` holds the type to its declared
+    /// evidence field alone.
+    #[serde(default = "back_pointer_evidence_default")]
+    pub back_pointer_evidence: bool,
+}
+
+fn back_pointer_evidence_default() -> bool {
+    true
 }
 
 /// One entry of `statuses.pending` (`MILE-162`): a whole value, or a pattern
@@ -440,10 +451,14 @@ fn validate_delivery(
 ) -> Result<(), String> {
     let tiers: Vec<&str> = embodiment.evidence_states().collect();
     check_list("delivery.delivered_tiers", &delivery.delivered_tiers, false)?;
+    // Empty declares the type never reports a success status for lack of
+    // evidence (`ADR-84`): a type whose evidence is legitimately absent for
+    // some done records (a documentation or performance change) opts out of
+    // that direction and keeps the other.
     check_list(
         "delivery.unevidenced_tiers",
         &delivery.unevidenced_tiers,
-        false,
+        true,
     )?;
     check_list("delivery.not_done", &delivery.not_done, false)?;
     for (what, list) in [

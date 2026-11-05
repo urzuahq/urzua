@@ -2,7 +2,7 @@
 Stable-Id: 01M2YPPQY0H0CZX2ECQY9CPME2
 Status: Fixed
 Found-in: "Round 9 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::an_unstaged_deletion_of_a_tracked_record_stops_the_run"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_unstaged_deletion_of_a_tracked_record_stops_the_run@sha256:518faffdda85ef709789029d68136e5ddf08dff2c8943fb38d4af06fe538eb89
 ---
 # 82 — Every missing file was treated as a staged deletion so an unstaged rm shrinks the corpus in silence
 
@@ -47,3 +47,4 @@ the value being tested carried that information. It did not.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

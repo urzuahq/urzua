@@ -2,7 +2,7 @@
 Stable-Id: 01M33QPKPE2N3KVVE69P6GDRDB
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_declared_field_written_under_a_different_case_is_reported_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/header.rs#a_declared_field_written_under_a_different_case_is_reported_observed_failing@sha256:0c71d968d7835acd7e6ee1602e78dca9399ff92bdd359f6f871c5f7e86ebef8e
 ---
 # 101 — embodiment rules fail closed silently on a case differently written declared field
 
@@ -59,3 +59,4 @@ diagnosis.
 > |---|---|---|
 > | 2026-09-22 | Filed, with a reproduction and a diagnosis of the shared root cause with `BUG-100`. **Why:** found by a full-release code review. | **substantive** |
 > | 2026-09-22 | `Status: Open` → `Fixed`, by `ADR-58`'s decision on `RFC-40`. **Why:** the shared contract closed both this bug and `BUG-100` in one pass. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

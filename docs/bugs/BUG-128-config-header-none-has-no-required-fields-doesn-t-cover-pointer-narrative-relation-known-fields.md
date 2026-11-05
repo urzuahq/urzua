@@ -2,7 +2,7 @@
 Stable-Id: 01M36HC1J96P0329KDV0X4TVQR
 Status: Fixed
 Found-in: "Investigating a follow-up question during round 21's PR review: whether Header's region/parse_error Option pair (BUG-125's root shape) recurs elsewhere in the codebase"
-Regression-test: "a_header_none_type_with_known_fields_is_a_contradiction_observed_failing, a_header_none_type_with_pointer_fields_is_a_contradiction_observed_failing, a_header_none_type_with_narrative_fields_is_a_contradiction_observed_failing, a_header_none_type_with_a_relation_field_override_is_a_contradiction_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/declaration.rs#a_header_none_type_with_known_fields_is_a_contradiction_observed_failing@sha256:3032695535be950cdfb385ca5fada5444fcf13f5905ddc4db4758d48d4d490ef, test:rust/crates/urzua-core/src/rules/declaration.rs#a_header_none_type_with_pointer_fields_is_a_contradiction_observed_failing@sha256:a683316a84f728d9a0dff90cdb0103e375fe031742a8fffc5e6296c92948347e, test:rust/crates/urzua-core/src/rules/declaration.rs#a_header_none_type_with_narrative_fields_is_a_contradiction_observed_failing@sha256:08250d458c59068bf079720808bc05133aafc8d05348b8b055c0fc8f187954d4, test:rust/crates/urzua-core/src/rules/declaration.rs#a_header_none_type_with_a_relation_field_override_is_a_contradiction_observed_failing@sha256:d101d71c7f0e32e293e2b3f16a71450ba5b21c581c9b480418206a5b1d7d50da
 ---
 # 128 — config.header-none-has-no-required-fields doesn't cover pointer/narrative/relation/known fields
 
@@ -66,3 +66,4 @@ explicit empty list as a conscious "zero fields" choice, not a gap.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by generalizing `BUG-125`'s root shape (a type representing a narrower state space than it allows) to ask whether it recurred elsewhere in the codebase; confirmed reachable via a real config shape, currently a no-op on this repository's own config, and fixed with four new planted-violation tests each observed failing before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 4 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

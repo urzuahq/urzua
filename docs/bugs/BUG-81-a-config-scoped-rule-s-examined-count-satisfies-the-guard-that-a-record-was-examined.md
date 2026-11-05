@@ -2,7 +2,7 @@
 Stable-Id: 01M2YNYXPM0WMY00DWZKV6E1M3
 Status: Fixed
 Found-in: "Review of the BUG-77 fix, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_config_scoped_rule_alone_discloses_that_it_read_no_record"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_config_scoped_rule_alone_discloses_that_it_read_no_record@sha256:5075d3d016fd15302507afdbccce1990bae56fd6ad84bc4f4413e9e5ee51b311
 ---
 # 81 — A config-scoped rule's examined count satisfies the guard that a record was examined
 
@@ -41,3 +41,4 @@ it never inspected. Neither was visible until something depended on the number b
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-21 | Regression test rewritten, `Status: Fixed` unchanged. **Why:** this record makes two claims and only the second changes. The first -- `type.no-declared-spec` reported configuration declarations as `records_examined` -- was the real defect, and it is now fixed structurally rather than by a label: the count carries its unit (`record-type`), so it cannot be read as records by anything. The second -- that the untrue count satisfied the gate -- no longer applies, because the gate no longer asks a second question; declaring only this rule is a thin config, which `ADR-53` makes the adopter's call. The rewritten test asserts what the bug was actually about: the rule's population reports `unit: record-type`, and `records_read_by_any_rule` is 0. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

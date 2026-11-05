@@ -2,8 +2,7 @@
 Stable-Id: 01M28H5J5BV7WN2ER002C7M37A
 Status: Fixed
 Found-in: 'migrated from GitHub issue #1 (Phase 8.1, filed 2026-09-05), which ran `urzua check` against foreign ADR corpora -- npryce/adr-tools and upstream adr/madr -- and reported a uniform "no H1 title found" against records whose H1 was plainly present. See the correction below: only one of the two cited shapes can still reach that branch.'
-Regression-test: 'rust/crates/urzua-core/src/rules.rs :: filename_title_consistency_distinguishes_an_unnumbered_h1_observed_failing, filename_title_consistency_keeps_the_absent_h1_message, filename_title_consistency_treats_an_empty_h1_as_absent'
-Realized-by: code:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_distinguishes_an_unnumbered_h1_observed_failing@sha256:2fcccbfefa84724c2a3a52bcd4972c4cede8f7301ec17acb7c9c69fdc5d97151, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_keeps_the_absent_h1_message@sha256:d0d9191840bc2bb04809129fb0c88ea19fa306d1aad5066bd3f7693c33e4e734, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_treats_an_empty_h1_as_absent@sha256:cfc25a76b0c1eba289913e8d913119b67c0c4d8a73fede10c0485ce6f095d750
 ---
 # 23 — filename.title-consistency reports "no H1 title found" when an H1 exists without a number
 
@@ -110,3 +109,4 @@ declare otherwise. That gap is `RFC-29`; treating this record's fix as closing i
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`. Migrated from GitHub issue #1's second half (RFC-26); the header-shape half stays with MILE-22. Not yet fixed. | **structural** |
 > | 2026-09-16 | Fixed, and this record's own `Found-in` narrowed. **Why:** the fix is the smaller half -- reproducing the bug first showed that one of the two cited corpus shapes is skipped by a guard that landed after this was filed, and that the same function held two worse defects (`BUG-29`, `BUG-30`), one of which fabricates findings rather than merely wording them badly. Correcting the reproduction matters because a record marked `Fixed` on top of a stale repro cannot be re-verified by the next reader. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

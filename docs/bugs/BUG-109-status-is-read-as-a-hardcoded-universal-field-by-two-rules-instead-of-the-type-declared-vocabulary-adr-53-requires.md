@@ -2,7 +2,7 @@
 Stable-Id: 01M33YAYC6AZ4P9K5GEA910BBQ
 Status: Fixed
 Found-in: "A /code-review 104 pass over round-15-field-case-mismatch"
-Regression-test: "a_claim_against_a_target_whose_type_never_declares_status_is_not_judged_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/claim.rs#a_claim_against_a_target_whose_type_never_declares_status_is_not_judged_observed_failing@sha256:58ef55c7132e6375ef9567237823c026f7eae13e4251863970de4c64237e8342
 ---
 # 109 — Status is read as a hardcoded universal field by two rules instead of the type-declared vocabulary ADR-53 requires
 
@@ -49,3 +49,4 @@ narrowing `header.field-case-mismatch` already imposes.
 > |---|---|---|
 > | 2026-09-22 | Filed, not fixed. **Why:** found by code review on the RFC-40/RFC-39 branch; the fix required a design decision (gate the lookup, or formally reserve `Status`) that neither RFC decided, so filing it rather than picking one under review pressure. | **substantive** |
 > | 2026-09-22 | Fixed by `ADR-60`. **Why:** the user asked to fix this before the 0.4.0 release; `ADR-60` decided to gate the read on declaration rather than reserve `Status`, since reserving it would contradict `ADR-57` everywhere else `Status` is read. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

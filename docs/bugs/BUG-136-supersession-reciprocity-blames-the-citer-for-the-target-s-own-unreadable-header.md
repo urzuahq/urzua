@@ -2,7 +2,7 @@
 Stable-Id: 01M371VXJRK2JTHEJACPC7WHET
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 25"
-Regression-test: "a_target_with_an_unreadable_header_is_not_blamed_for_failing_to_reciprocate_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/relation.rs#a_target_with_an_unreadable_header_is_not_blamed_for_failing_to_reciprocate_observed_failing@sha256:2caebe1a175119338c1471902cb3cf8968071f1c0c4723969f9e47af27d20d74
 ---
 # 136 — supersession_reciprocity blames the citer for the target's own unreadable header
 
@@ -39,3 +39,4 @@ already correctly guarded.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test observed failing (a spurious finding against the citer) before the fix, confirming clean after. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

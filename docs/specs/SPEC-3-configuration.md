@@ -1,5 +1,5 @@
 ---
-Version: '0.74'
+Version: '0.75'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -394,16 +394,27 @@ Two details carry weight:
           unevidenced_tiers: ["Not started"]         # computed tiers that say nothing was delivered
           not_done: [Planned, InProgress, Blocked]   # statuses that say it is not done
           set_status: Done                           # what `urzua fix --apply` writes
+          back_pointer_evidence: true                # optional; false: only the evidence field counts
   ```
 
   The tier is computed as `Embodiment` is, from the record's evidence field (the type's
   `Realized-by`, or its declared name for that role) and from source back-pointers, with drift
-  ignored: drift says the evidence is stale, not that nothing was delivered. All four keys are
-  required. A tier must be one of `Verified`, `Implemented`, `Specified`, `Not started` and may not
+  ignored: drift says the evidence is stale, not that nothing was delivered. The declaration applies
+  to any record type, whatever it is called (`ADR-84`): a bug's `Realized-by` with `test:` locators
+  computes to `Verified` exactly as a milestone's does, and a type that keeps its evidence in a
+  separate test field moves the values into `Realized-by` as `test:path#name@sha256:<pin>` entries.
+  `back_pointer_evidence` (optional, default `true`) says whether a source or test back-pointer that
+  cites the record counts as evidence beside the evidence field; `false` holds the type to its
+  declared field alone, and a type that declares nothing keeps today's reading. The other four keys are
+  required; `unevidenced_tiers` may be an empty list, which declares that the type never reports a
+  `success` status for lack of evidence (a done record may legitimately have none) and keeps the other
+  direction. A deliberately open record with evidence is waived, not given a status: a `waiver` record
+  whose `Scope` is the record's path and whose `Rule` is `status.delivery-agreement`, with a `Reason`
+  and an `Expires` (`SPEC-10`). A tier must be one of `Verified`, `Implemented`, `Specified`, `Not started` and may not
   be in both tier lists; `not_done` must be declared `values` and none of them a `success` or
   `failure` status; `set_status` must be a `success` status; the evidence field must be in the
   type's `required_fields` or `known_fields`. Any breach is a load-time error naming the type and
-  `statuses`. A type declaring no `delivery` is not examined by `status.delivery-agreement`.
+  `statuses`. A type declaring no `delivery` is not examined by `status.delivery-agreement`. The type must carry its evidence field, `Realized-by` unless `relation_fields.embodiment_locator` names another, in `required_fields` or `known_fields`; a type that does not is refused at load, not left with an inert rule.
 
   A type that declares no `statuses` behaves exactly as before. A declaration is read by:
 
@@ -1402,3 +1413,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
+> | 2026-11-05 | Bumped to `0.75`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |

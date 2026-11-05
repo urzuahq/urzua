@@ -2,8 +2,7 @@
 Stable-Id: 01M26JPHSH390CDZV1VQVP45FG
 Status: Fixed
 Found-in: 'reviewing where resolve_identity''s gh-vs-by divergence warning should live -- asked whether there''s a single generic output function every command already goes through, and found there isn''t'
-Regression-test: 'rust/crates/urzua-core/src/report.rs::tests::notices_never_move_a_successful_exit_code, rust/crates/urzua-cli/tests/check_integration.rs::fix_could_not_run_emits_json/explain_could_not_run_emits_json/graph_could_not_run_emits_json/doctor_missing_config_emits_parseable_json_with_checks'
-Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/main.rs
+Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-core/src/report.rs#notices_never_move_a_successful_exit_code@sha256:f58623bec0dbe0a8d66f5597c2684eace7cddafcacbb31163e11ab163a9d6f5f, test:rust/crates/urzua-cli/tests/check_integration.rs#fix_could_not_run_emits_json@sha256:61ac67a58509aca0d1f0a07e1d55fa7d84497e96cd73a51a7e3fac3e66051f62, test:rust/crates/urzua-cli/tests/check_integration.rs#explain_could_not_run_emits_json@sha256:ca1589422ef2bfca0c9281bf74ce6000d218d72bd6974f3ae84e3b4d5f22d0be, test:rust/crates/urzua-cli/tests/check_integration.rs#graph_could_not_run_emits_json@sha256:4cade01073a00cf0bfb00062580f65e972215641e525b3495a2686071c68782c, test:rust/crates/urzua-cli/tests/check_integration.rs#doctor_missing_config_emits_parseable_json_with_checks@sha256:edc92f45f48b2332a7a513b7c4109cb0ce6747b824c5cbc2ba54cfea03566384
 ---
 # 19 — Five CLI commands hand-roll their own JSON shape instead of one shared contract
 
@@ -69,3 +68,4 @@ looked locally reasonable in isolation.
 > |---|---|---|
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right shape is one generic envelope every command adopts, a narrower shared `warnings: Vec<String>` convention, or something else is not yet decided. | **structural** |
 > | 2026-09-11 | `Status: Fixed` (ADR-46). Neither candidate named above: a generic envelope was tried and killed by a confirmed duplicate-JSON-key bug (`#[serde(flatten)]`-composing a shared `status` field into `CheckReport`, which already owns one); `warnings: Vec<String>` was replaced, not kept, since a bare string can't carry `severity`/`subject`. Landed instead: a `Report` trait (`notices()`/`exit_code()`) plus a real `Notice` type, no shared struct composition. `check`/`fix`/`new`/`explain`/`graph`/`doctor` all migrated; `init`/`migrate ids` remain out of scope (plain-text prose end to end, filed separately). | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 5 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -278,7 +278,6 @@ record_types:
     required_fields:
       - "Status"
       - "Found-in"
-      - "Regression-test"
     header_shape: "yaml-frontmatter"
     known_fields:
       - "Realized-by"
@@ -299,17 +298,27 @@ record_types:
         WontFix: ["Open"]
         "Not a bug": ["Open"]
         Rejected: ["Open"]
-      # Whole values only (BUG-65): a Regression-test that merely mentions
-      # the word, or names a test called a_pending_..., is a real value.
+      # Whole values only (BUG-65): a field that merely mentions the word is
+      # a real value, and a placeholder like these is not.
       pending:
         - "pending"
         - "not yet written"
         - {pattern: '(?i)^(not yet written|planned:)'}
-      # A placeholder Regression-test is legitimate while a bug is Open and a
-      # gap once it is Fixed (MILE-169): status.required-field-missing flags the
-      # Fixed ones, and field.pending (pending_until_required) stays quiet until then.
-      require:
-        - {when: ["Fixed"], fields: ["Regression-test"]}
+      # Status is held to the evidence (ADR-84): a bug's evidence is its
+      # Realized-by, as for every other type. A `test:` locator computes to
+      # Verified, a `code:` locator to Implemented; either under Open is a
+      # disagreement `urzua fix --apply` repairs, and a deliberately open bug
+      # with evidence is waived with a reason and an expiry. A Fixed bug with
+      # no evidence is legitimate (a documentation, performance or workflow
+      # change has no test), so this type declares no unevidenced tier and
+      # reports only the first direction. A source back-pointer is not
+      # evidence here: only the declared field counts.
+      delivery:
+        delivered_tiers: ["Verified", "Implemented"]
+        unevidenced_tiers: []
+        not_done: ["Open"]
+        set_status: "Fixed"
+        back_pointer_evidence: false
     # Bug records name their first section "What was wrong" or, in older ones,
     # one of the aliases below: they are accepted, and `urzua check` discloses
     # which records use one (MILE-165).

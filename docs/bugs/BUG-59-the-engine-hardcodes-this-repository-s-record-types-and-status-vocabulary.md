@@ -2,7 +2,7 @@
 Stable-Id: 01M2WAHT989S733NTEAKQ3Y3Q8
 Status: Fixed
 Found-in: 'Reviewing a comment that named `waiver` inside a core rule, which surfaced that the engine names the type in its behaviour too'
-Regression-test: "rust/crates/urzua-core/src/rules.rs::narrative_field_stale_judges_a_type_the_engine_has_never_heard_of"
+Realized-by: test:rust/crates/urzua-core/src/rules/narrative.rs#narrative_field_stale_judges_a_type_the_engine_has_never_heard_of@sha256:9ff22eddf40d702af11b5007272d8b04a0419d657475521083aff5ab2784f3c9
 ---
 # 59 — The engine hardcodes this repository's record types and status vocabulary
 
@@ -95,3 +95,4 @@ a second list beside the first.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** noticed while removing a `waiver` reference from a comment in a core rule -- the comment was a symptom, and the engine names the type in its behaviour. `is_terminal_status` has been quoted in eight records this week as the archetype of a rule that silently stops applying, and it is still live. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

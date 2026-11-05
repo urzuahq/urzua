@@ -2,8 +2,7 @@
 
 > Status: Open | Fixed | WontFix
 > Found-in: how/where this was actually discovered
-> Regression-test: path/name of the test proving this is fixed
-> Realized-by: code:path/to/the/fix (optional)
+> Realized-by: test:path/to/test.rs#test_name (the test proving this is fixed; several: test:a.rs#one, test:b.rs#two)
 
 ## What was wrong
 

@@ -2,7 +2,6 @@
 Stable-Id: 01M2WG83F1V7Q6DP9622KQTFE5
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-core/src/rules.rs::the existing reference tests, with !prefix.is_empty() added at both call sites"
 ---
 # 72 — An empty type prefix passes the reference test so a bare hyphen-number token is read as a reference
 
@@ -28,7 +27,12 @@ The rules' tests supply well-formed references, so the vacuous-truth branch is n
 
 - `BUG-7`, an earlier defect in the same reference-recognition code.
 
+## Regression test
+
+rust/crates/urzua-core/src/rules.rs::the existing reference tests, with !prefix.is_empty() added at both call sites
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

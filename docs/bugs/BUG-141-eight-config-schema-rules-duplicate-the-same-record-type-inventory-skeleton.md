@@ -2,7 +2,6 @@
 Stable-Id: 01M373DZ7A16RH97KE4VCPHT66
 Status: Fixed
 Found-in: "MILE-112's duplication sweep"
-Regression-test: "none -- pure extraction, no behavior change; each of the 8 rules' own existing tests are unchanged and pass"
 ---
 # 141 — eight config-schema rules duplicate the same record-type inventory skeleton
 
@@ -52,8 +51,13 @@ findings.
 - `BUG-139`/`BUG-140` -- the other two duplication instances the same sweep found and fixed.
 - `SPEC-22` -- the duplication-on-second-occurrence rule this was eight occurrences past.
 
+## Regression test
+
+none -- pure extraction, no behavior change; each of the 8 rules' own existing tests are unchanged and pass
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by MILE-112's duplication sweep. **Why:** eight config-schema rules shared one skeleton, self-acknowledged as "the same shape" in six of their own doc comments but never extracted. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

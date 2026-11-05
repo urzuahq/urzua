@@ -2,7 +2,7 @@
 Stable-Id: 01M6D2KHK1DJNCNTC7R5VSSZAS
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 29"
-Regression-test: 'rust/crates/urzua-core/src/config.rs::a_non_canonical_dir_is_a_load_error_naming_the_canonical_form_observed_failing, rust/crates/urzua-cli/tests/could_not_run_integration.rs::every_corpus_command_refuses_a_non_canonical_dir_and_names_the_canonical_form'
+Realized-by: test:rust/crates/urzua-core/src/config.rs#a_non_canonical_dir_is_a_load_error_naming_the_canonical_form_observed_failing@sha256:0569bccec51fa7069caeddd60c0cfbe097a2ae226d22b9ddf2ffda2d5da0f00f, test:rust/crates/urzua-cli/tests/could_not_run_integration.rs#every_corpus_command_refuses_a_non_canonical_dir_and_names_the_canonical_form@sha256:325fe95d7887442ec00debbbd15ed5c3e73f5ffe49e0658b394b5ae4719b8815
 ---
 # 168 — two record types may declare the same dir, so every record is loaded and validated once per type
 
@@ -50,3 +50,4 @@ dir). No ADR decides what two types over one directory should mean.
 > | 2026-11-02 | Filed. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture. Left `Status: Open` -- the fix needs a decision, not a quick edit. | **substantive** |
 > | 2026-11-04 | Triage: half fixed, half still real; `Status` stays `Open`. The overlap half is fixed in #259 (`MILE-130`): two types declaring one `dir` is a config error (`record types 'adr' and 'rfc' both own directory 'docs/adr'`, exit 2, `ConfigError::SharedDir`). The `./` half reproduces on main: with `adr: {dir: ./docs/adr}` in a repository holding three ADRs, `urzua check` reports `status: not-run`, `files_examined: 0` and no reason. **Why:** what is left is the decision this record already names (normalise `./docs/adr` at parse time, or refuse it as `InvalidDir`). | **substantive** |
 > | 2026-11-05 | Fixed. **Why:** maintainer decision 2026-11-05: a non-canonical `dir` is a config load error that names the canonical form (the overlap half was fixed in #259). | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

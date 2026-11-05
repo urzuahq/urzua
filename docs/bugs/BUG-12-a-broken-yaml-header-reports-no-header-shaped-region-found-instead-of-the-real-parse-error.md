@@ -2,7 +2,7 @@
 Stable-Id: 01M2405KW390GQJDF7XSRR3JX8
 Status: Fixed
 Found-in: 'hit live, twice in one session: a hand-written Subject value starting with a backtick (an invalid unquoted YAML plain-scalar start) on 9 specs, and an unquoted colon-space inside a plain scalar on a bug record''s own header -- both produced the same unhelpful message'
-Regression-test: 'rust/crates/urzua-core/src/header.rs :: a_value_starting_with_a_backtick_surfaces_the_real_parse_error_observed_failing, invalid_yaml_surfaces_the_real_parse_error_observed_failing; rust/crates/urzua-core/src/rules.rs :: a_broken_yaml_header_surfaces_the_real_parse_error_observed_failing'
+Realized-by: test:rust/crates/urzua-core/src/header.rs#a_value_starting_with_a_backtick_surfaces_the_real_parse_error_observed_failing@sha256:db1a1f385b10c313ce3bc409bfac88e0bd77da751f38d9a28f45c17266506d10, test:rust/crates/urzua-core/src/header.rs#invalid_yaml_surfaces_the_real_parse_error_observed_failing@sha256:c0dcf7428babf7fc2edd46505ed6f8ad2552449b0fc3221f142cb1c43efd5235, test:rust/crates/urzua-core/src/rules/header.rs#a_broken_yaml_header_surfaces_the_real_parse_error_observed_failing@sha256:abfaef51fe663ca153919645540729e5237e0851cf3fa8428a92a5e36909dd7c
 ---
 # 12 — A broken YAML header reports "no header-shaped region found" instead of the real parse error
 
@@ -55,3 +55,4 @@ diagnosis every time.
 > |---|---|---|
 > | 2026-09-09 | Initial bug record, `Status: Open`. Not yet fixed -- whether to surface `yaml_serde`'s raw error message verbatim, or wrap it in a still-generic-but-more-specific diagnosis, is not yet decided. | **structural** |
 > | 2026-09-10 | Fixed: `Header` gains a `parse_error: Option<String>` field, populated for `yaml-frontmatter` with `yaml_serde`'s own error verbatim on a genuine syntax failure, or a specific "must be a mapping" message when the YAML parses but isn't the right shape. `header.required-fields`'s message now appends `-- YAML parse error: <detail>` when present, instead of the same generic "no header-shaped region found" every other `None` case reports. Scope decision: surface the raw message verbatim (not a re-wrapped diagnosis) -- `yaml_serde` already includes a line and reason, and re-deriving that ourselves would just be a second, likely-drifting copy of the same information. `Status: Fixed`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

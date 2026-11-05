@@ -52,8 +52,9 @@ examples. What each is *for*, not just its fields:
   what any *other* type's own schema is defined in (see above).
 - **`milestone`** — this project's own backlog: decided-but-unbuilt work, explicitly deferred work,
   unrouted research findings. *Planned* work moving toward done.
-- **`bug`** — a real defect already found, retrospective rather than planned, with a required
-  `Regression-test` pointer so "nobody verified this is actually fixed" can't happen by accident.
+- **`bug`** — a real defect already found, retrospective rather than planned, whose
+  `Status` follows its `Realized-by` evidence (`ADR-84`), so "nobody verified this is actually fixed" is
+  a finding and not a judgement.
 - **`waiver`** — a reviewed, time-boxed exception to a specific rule finding, never a config-level
   ignore list. A waived finding still appears in `check`'s output, only excluded from the blocking
   exit code.
@@ -135,8 +136,11 @@ conversation history. If you're doing multi-step work worth remembering:
   `Track`, and `Implements` (comma-separated, pointing at whichever RFC/ADR it realizes) honestly.
   A milestone with no `Implements` yet is valid if the decision doesn't exist yet either.
 - **Track it as a `bug`** (`urzua new bug "..."`) if you find a real defect — even one you fix in
-  the same turn. `Regression-test` is required: name the specific test that proves it, or the test
-  you plan to write. Cross-link the milestone that plans the fix and the bug that describes the
+  the same turn. Name the test that proves it in `Realized-by` as
+  `test:path#name@sha256:<pin>` (`urzua explain path#name` prints the pin), and file the bug already
+  `Fixed` in the PR that fixes it; a bug left `Open` while its `Realized-by` names a test is a
+  `status.delivery-agreement` finding that `urzua fix --apply` repairs. A bug that is open on
+  purpose with evidence is waived with a reason and an expiry, not given a new status. Cross-link the milestone that plans the fix and the bug that describes the
   defect via a real `Implements` pointer, not just a prose mention — verify the edge actually
   resolves with `urzua graph` before treating the record as done.
 - **Every finding is checked against both our own workflow configuration and the engine.** When a finding

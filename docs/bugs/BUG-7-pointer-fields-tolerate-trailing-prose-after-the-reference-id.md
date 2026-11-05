@@ -2,7 +2,7 @@
 Stable-Id: 01M2165QW5JTT3P8PJ74Y9M4N1
 Status: Fixed
 Found-in: discussed live while designing RFC-21's structured References field -- asked whether References should tolerate trailing prose the way Parent already does, which surfaced that Parent's tolerance was itself never a deliberate design decision; a further audit found Derives-from's "(Status)" annotation was the same anti-pattern, applied consistently across 33 files
-Regression-test: urzua-core::rules::tests::a_derives_from_status_annotation_is_flagged_observed_failing, a_parent_field_with_freeform_trailing_prose_is_flagged, a_clean_bare_reference_is_not_flagged, multiple_clean_references_are_not_flagged, blocked_on_is_excluded_even_with_trailing_prose
+Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#a_derives_from_status_annotation_is_flagged_observed_failing@sha256:df6914a07bf9f7e3f64ca7caf6c6a0373a375202866c1d2fcf4e2661390de0de, test:rust/crates/urzua-core/src/rules/pointer.rs#a_parent_field_with_freeform_trailing_prose_is_flagged@sha256:9950b0de59e79d623886abf84bfa6042a5191213e37e30dd76ba1d58360bb4ae, test:rust/crates/urzua-core/src/rules/pointer.rs#a_clean_bare_reference_is_not_flagged@sha256:9f9af19e98e53864890c96772adf1f1ef48e8bf79758978768651d9ab2320884, test:rust/crates/urzua-core/src/rules/pointer.rs#multiple_clean_references_are_not_flagged@sha256:87cd80caf78185260202af88f26b2cfe08dfd552a10ff2f97a21901d6b093bbe, test:rust/crates/urzua-core/src/rules/pointer.rs#narrative_fields_are_excluded_even_with_trailing_prose@sha256:b8d84a1bd58315b137eec0bc34020c881aceaeea5b3e6724286cc70f9c981e49
 ---
 # 7 — Pointer fields tolerate trailing prose after the reference ID
 
@@ -65,9 +65,14 @@ All 63 findings resolved; `header.pointer-field-clean` is silent on the real cor
 - SPEC-6 -- `Blocked-on`'s documented free-text-plus-optional-reference shape, the reason this
   fix couldn't be a blanket change to `extract_references`.
 
+## Regression test
+
+urzua-core::rules::tests::a_derives_from_status_annotation_is_flagged_observed_failing, a_parent_field_with_freeform_trailing_prose_is_flagged, a_clean_bare_reference_is_not_flagged, multiple_clean_references_are_not_flagged, blocked_on_is_excluded_even_with_trailing_prose
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial bug record, `Status: Open`. Not yet fixed -- fix scope (tighten the parser to reject trailing prose, and/or clean up the two existing instances) still to be decided. | **structural** |
 > | 2026-09-08 | `Status: Fixed`. Built `header.pointer-field-clean` (additive, `Implements`/`Derives-from`/`Parent` only, `Blocked-on` deliberately excluded); cleaned all 50 real corpus files (33 `Derives-from`, 17 `Parent`), 2 of which (`Parent`) had real content moved into `## Purpose`. Verified: the new rule fires 63 findings before the fix, zero after -- more than 50 because several files carry more than one dirty comma-separated entry in a single field (e.g. `Derives-from: RFC-8 (Accepted), ADR-15 (Accepted), ADR-19 (Accepted)` is 1 file but 3 findings); `urzua graph` shows zero dangling edges post-cleanup. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 5 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

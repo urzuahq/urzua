@@ -2,7 +2,6 @@
 Stable-Id: 01M373DYSJ4RC12J0XKH8EJRYG
 Status: Fixed
 Found-in: "MILE-112's duplication sweep"
-Regression-test: "none -- pure extraction, no behavior change; each of the 4 rules' own existing tests cover the unreadable/absent/empty-references cases unchanged"
 ---
 # 140 — four reference-resolving rules duplicate the same declared-field guard chain
 
@@ -47,8 +46,13 @@ findings.
 - `BUG-133`/`BUG-134`/`BUG-135`/`BUG-138` -- the same duplication-drift shape found earlier in the same
   sweep, at other places in this file.
 
+## Regression test
+
+none -- pure extraction, no behavior change; each of the 4 rules' own existing tests cover the unreadable/absent/empty-references cases unchanged
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by MILE-112's duplication sweep. **Why:** four rules independently re-derived the identical declared-field resolution guard chain. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

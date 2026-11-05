@@ -158,8 +158,10 @@ pub fn judge_delivery(
         Err(Outcome::Absent) => None,
         Err(outcome) => return Err(outcome),
     };
-    let cited_by_code = back_pointed.code.contains(&record.path);
-    let cited_by_test = back_pointed.test.contains(&record.path);
+    // `back_pointer_evidence: false` (`ADR-84`) holds the type to its declared
+    // evidence field: a back-pointer that cites the record is then not read.
+    let cited_by_code = delivery.back_pointer_evidence && back_pointed.code.contains(&record.path);
+    let cited_by_test = delivery.back_pointer_evidence && back_pointed.test.contains(&record.path);
     let tier = compute_embodiment(
         &config.embodiment,
         &realized_by.map(parse_realized_by).unwrap_or_default(),

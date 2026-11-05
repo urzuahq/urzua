@@ -2,8 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1Y7W55XWYY7DJF2GF8PZX9T
 Found-in: found live while writing ADR-33 -- flipped adr's header_shape to yaml-frontmatter and ran `urzua new adr`, expecting YAML frontmatter output, and got blockquote content back unchanged
-Regression-test: rust/crates/urzua-cli/tests/new_integration.rs::new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present -- observed failing against the pre-fix code (blockquote leaked through) before confirming it passes post-fix
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:4e3d1af68adb6538758921e8f34988b2cbd3cb7e25f06e9b32d9398fe39f57a9
 ---
 # 3 — urzua new ignores the configured header_shape when a template file exists
 
@@ -45,3 +44,4 @@ unchanged.
 > |---|---|---|
 > | 2026-09-07 | Initial record: defect diagnosed, not yet fixed. | **structural** |
 > | 2026-09-07 | Fixed: configured header_shape wins unconditionally over a template's own shape; template body still spliced in under synthesized frontmatter. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

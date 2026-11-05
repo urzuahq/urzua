@@ -2,7 +2,6 @@
 Stable-Id: 01M6D5VM1F4HBHKT51JKMX3HJZ
 Status: Open
 Found-in: "A /code-review pass, round 30"
-Regression-test: "planned: a rules.rs test pinning the decided behavior for Realized-by: code:<existing directory>"
 ---
 # 176 — whether a directory is a legal Realized-by locator is undecided and locator-exists rejects it as not in the working tree
 
@@ -28,9 +27,14 @@ establish for an existing directory or an untracked file.
 
 `BUG-175`.
 
+## Regression test
+
+planned: a rules.rs test pinning the decided behavior for Realized-by: code:<existing directory>
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed, left `Status: Open`. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. With `Realized-by: code:src` where `src` is an existing tracked directory, `urzua check` reports `embodiment.locator-exists: Realized-by names 'src', which is not in the working tree`. **Why:** whether a locator may name a tree is the decision the record names. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

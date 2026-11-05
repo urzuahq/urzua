@@ -2,7 +2,7 @@
 Stable-Id: 01M35T9QHFVNYZEDK6X18YTPWJ
 Status: Fixed
 Found-in: "A /code-review 108 pass, reviewing RFC-42/ADR-61's implementation"
-Regression-test: "a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing, fix.rs"
+Realized-by: test:rust/crates/urzua-core/src/fix.rs#a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing@sha256:5aa5095668deac3c451b69e897bd298ff755f204a272c8f87c9362e257e561c4
 ---
 # 118 — urzua fix ignores a type's relation_fields override for Embodiment and Realized-by
 
@@ -41,3 +41,4 @@ hardcoded literal.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-PR code review of `RFC-42`'s implementation; a planted-violation test observed failing against the hardcoded literals before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

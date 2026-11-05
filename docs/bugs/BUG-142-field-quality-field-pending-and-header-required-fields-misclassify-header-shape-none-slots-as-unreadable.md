@@ -2,7 +2,6 @@
 Stable-Id: 01M376A35AT56F862RWJKPXTH3
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 26"
-Regression-test: "three planted-violation tests in rules.rs, one per affected rule -- see References"
 ---
 # 142 — field.quality, field.pending, and header.required-fields misclassify header-shape-none slots as unreadable
 
@@ -41,8 +40,13 @@ record-scoped loop was already correct; only its separate per-slot population lo
   `a_header_none_type_is_out_of_scope_not_unreadable_for_field_pending_observed_failing`, and
   `a_header_none_type_is_out_of_scope_not_unreadable_for_header_required_fields_observed_failing`.
 
+## Regression test
+
+three planted-violation tests in rules.rs, one per affected rule -- see References
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by a full-release code review. **Why:** the same `ADR-50` gating gap `BUG-137` fixed in one place recurred in three more. Three planted-violation tests observed failing before the fix, passing after. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M33S5SSE41F78KF9K703078X
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_leading_underscore_is_a_template_not_a_record, a_non_markdown_file_is_not_a_record, an_unnumbered_markdown_file_is_still_governed, record.rs"
+Realized-by: test:rust/crates/urzua-core/src/record.rs#a_leading_underscore_is_a_template_not_a_record@sha256:d1c6faf967a168ecd73bf4a0c4a011c8a63908e97bfeb07d908438686c270533, test:rust/crates/urzua-core/src/record.rs#a_non_markdown_file_is_not_a_record@sha256:a5774fdc859adf387fec5027e40aaebb0212e73e86849df519e457c5f6983cb8, test:rust/crates/urzua-core/src/record.rs#an_unnumbered_markdown_file_is_still_governed@sha256:b7ff44035f31edf0095e799687dee77eb38aca1f683b308a40df45b2167ec25f
 ---
 # 108 — three independent and disagreeing definitions of record-shaped file
 
@@ -44,3 +44,4 @@ Both are correct answers to different questions, not a third guess.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; the fix was a mechanical extraction with no design decision to defer, unlike `BUG-100`/`BUG-101`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

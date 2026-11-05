@@ -2,7 +2,7 @@
 Stable-Id: 01M6D5VKQZHEFD36V5YQVV0CSG
 Status: Fixed
 Found-in: "A /code-review pass, round 30"
-Regression-test: "rules::tests::a_dot_or_dotdot_spelled_locator_resolves_to_the_tracked_file_observed_failing"
+Realized-by: test:rust/crates/urzua-core/src/rules/embodiment.rs#a_dot_or_dotdot_spelled_locator_resolves_to_the_tracked_file_observed_failing@sha256:743c032e12708e68d852660cd7acede4f633b060ad9185c0dbe0995f0f80358f
 ---
 # 175 — embodiment.locator-exists reports dot and dotdot spelled locators of tracked files as not in the working tree
 
@@ -33,3 +33,4 @@ path. Whether a directory locator is legal is `BUG-176`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

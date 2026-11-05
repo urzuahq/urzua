@@ -2,7 +2,7 @@
 Stable-Id: 01M34QAPNDG4YZVQDZVQKVMSZY
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_hyphenated_type_prefix_parses_observed_failing, new_record.rs"
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_hyphenated_type_prefix_parses_observed_failing@sha256:7fb83ce7673050b5f61a75d0566ffb29f6aa1dd0544e3f8f935314302e65d932
 ---
 # 114 — a digit-bearing type prefix is silently rejected by the filename parser
 
@@ -37,3 +37,4 @@ alphanumeric prefix can never be confused with the number segment.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; the existing hyphenated-prefix test already covered the right shape, extended with a digit-bearing case. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

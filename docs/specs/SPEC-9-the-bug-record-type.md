@@ -1,11 +1,11 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
 Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs
 Author: beauwilliams
-Subject: 'The `bug` record type -- real, already-found defects and required regression-test accountability.'
+Subject: 'The `bug` record type -- real, already-found defects and a Status that follows the test evidence in Realized-by.'
 Implements: ADR-35
 Parent: —
 ---
@@ -14,7 +14,7 @@ Parent: —
 ## Purpose
 
 Tracks a real defect this project's own tooling had — retrospective, not prospective: what was
-actually wrong, how it was found, and a named, checkable pointer to the test proving it's fixed.
+actually wrong, how it was found, and a named, checkable pointer to the test proving it's fixed, in `Realized-by`.
 `bug` is a sibling of `milestone` (SPEC-6) and `waiver` (SPEC-10), all configured record types with
 zero `urzua-core` changes, but answers a genuinely different question than either: a milestone is
 *planned* work moving toward done, a bug is *what already broke*.
@@ -33,9 +33,19 @@ accident.
 record_types:
   bug:
     dir: "docs/bugs"
-    required_fields: ["Status", "Found-in", "Regression-test"]
+    required_fields: ["Status", "Found-in"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Realized-by", "Stable-Id", "Implements"]
+    known_fields: ["Realized-by", "Stable-Id", "Implements", "Blocked-on"]
+    statuses:
+      values: ["Open", "Fixed", "WontFix", "Not a bug", "Rejected"]
+      success: ["Fixed"]
+      failure: ["WontFix", "Not a bug", "Rejected"]
+      delivery:
+        delivered_tiers: ["Verified", "Implemented"]
+        unevidenced_tiers: []
+        not_done: ["Open"]
+        set_status: "Fixed"
+        back_pointer_evidence: false
     spec: "SPEC-9"
     pointer_fields: ["Implements"]
     narrative_fields: []
@@ -45,10 +55,26 @@ record_types:
 |---|---|---|
 | `Status` | `Open` \| `Fixed` \| `WontFix` | The bug's own lifecycle, independent of any milestone or ADR. |
 | `Found-in` | free text | How/where it was actually discovered — a narrative, not a resolvable reference (e.g. `"check docs/adr/ vs check docs/ compared by hand"`). |
-| `Regression-test` | free text | The specific test name/path proving the fix — **required, not optional**. A `Status: Fixed` bug with a blank or placeholder `Regression-test` is a `field.quality` finding for free; no new rule was needed. |
-| `Realized-by` | optional, `known_fields` | Reused, generic — points at the actual fix commit/function, same evidence field every other type uses. |
+| `Realized-by` | optional, `known_fields` | The evidence field, the same one every other type uses (`ADR-84`). The test proving the fix is a `test:path#name@sha256:<pin>` entry (`urzua explain <path>#<name>` prints the pin); several are comma-separated before each `test:` prefix. A `test:` entry computes to the test tier, a `code:` entry to the code tier. The bug's `Status` follows it, see below. |
 | `Stable-Id` | optional, `known_fields` | Assigned by `urzua new bug` or backfilled by `migrate ids` (SPEC-14), same as any other type. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this bug's fix realizes, when the bug arose from following one. Not yet used by any bug record in this corpus, but declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — no `narrative_fields` for `bug`. |
+
+### Status follows the evidence (`ADR-84`)
+
+`statuses.delivery` holds a bug's `Status` to its `Realized-by`, as `SPEC-6` does for a milestone. A
+bug that is `Open` while its `Realized-by` computes to `Verified` or `Implemented` is a
+`status.delivery-agreement` finding, and `urzua fix --apply --ids <bug>` sets `Fixed` with a
+structural revision row. A bug that is deliberately open with evidence (a partial fix) is not given a
+new status: it is waived with the existing `waiver` record, scoped to the bug's path, with the rule
+set to `status.delivery-agreement`, a `Reason` and an `Expires`. This type declares no unevidenced
+tier, so a `Fixed` bug with no evidence (a documentation, performance or workflow change has no
+test) is not reported, and `back_pointer_evidence: false` makes a source back-pointer that cites the
+bug not count.
+
+The retired `Regression-test` field is no longer known to the type; its values were migrated into
+`Realized-by` as locators. A value that named no test (prose, `none`, a test that no longer exists)
+is not evidence: the original text of such a record is kept under a `## Regression test` heading in
+its body.
 
 No `Phase`/`Track` — a bug isn't planned or grouped the way a milestone is; it either exists because
 something broke, or it doesn't exist yet.
@@ -79,3 +105,4 @@ something broke, or it doesn't exist yet.
 > | 2026-11-05 | Bumped to `0.6`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `a_bug_needs_found_in_and_regression_test_and_a_what_was_wrong_section`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.7`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.8`. The `Regression-test` field is retired: its values moved into `Realized-by` as `test:` locators, `required_fields` is `Status` and `Found-in`, and the type declares `statuses.delivery` (`ADR-84`), so a bug's `Status` follows its `Realized-by`. A deliberately open bug with evidence is a scoped, expiring waiver. **Why:** `ADR-84` makes `Realized-by` the one evidence field for every type, accepted by the maintainer on 2026-11-05. | **substantive** |

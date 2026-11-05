@@ -2,7 +2,7 @@
 Stable-Id: 01M30VE5PPB5TVTF85WW5BRH8H
 Status: Open
 Found-in: "Reviewing what the 0.4.0 population work did and did not fix; reproduced against a scratch repository built to the prefixless shape"
-Regression-test: "init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared, check_integration.rs"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared@sha256:f5d40868d67144bc8ead135255e1ed75f64526e5ef9ebb9284afa12827eb98cd
 ---
 # 99 — urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
 
@@ -94,3 +94,4 @@ arguing rather than assuming.
 > | 2026-09-21 | Re-diagnosed and `Blocked-on: RFC-38` declared. **Why:** filed as an empty-rule-set edge case with three candidate patches. Examining why `audit` has a rule set at all showed the edge case is a symptom of a read-only subset command that outlived `ADR-53`, and that `BUG-42` and `BUG-84` share that root. A bug record that misdiagnoses its own cause is the artifact this project keeps finding in review; corrected before it shipped rather than after. | **substantive** |
 > | 2026-09-21 | Filed, with a reproduction. **Why:** named during the 0.4.0 population planning as a live `BUG-84` variant "under investigation, to be filed separately" and then not filed, so it existed only in a plan document no rule reads. Reproduced before filing rather than carried forward on the original assertion. | **substantive** |
 > | 2026-11-04 | Triage: reproduction closed, root cause still open; `Status` stays `Open`. On main, `urzua init` on a prefixless two-record corpus followed by `urzua audit` reports `findings-present`, exit 0, with `pointer.resolution` and `relation.supersession-reciprocity` `not-enabled` (`audit` runs `identity.collision` too, per the 2026-09-23 row). `audit` still owns a hardcoded rule set (`urzua --help` lists it as its own command), so `RFC-38`'s implementation, which folds it into `check`, is not built. **Why:** the record stays open until `audit` is a preset of `check`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

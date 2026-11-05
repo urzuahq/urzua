@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN7XW36XM92HNEQJEBE23
 Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "rust/crates/urzua-cli/src/commands/init.rs::a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity and ::a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire"
+Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity@sha256:72f13d1a7e48f540396a91f27e1694758dabffbc8714590f0f4c1fea9d3d207b, test:rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire@sha256:ff03c4b54c4a718d96c6c3d62c89577bb96abae9918214bdab009f1065c03ac4
 ---
 # 61 — init writes no prefix so the rules it proposes examine zero records on the corpus it adopted
 
@@ -41,3 +41,4 @@ applies to a rule whose shape assumption it cannot satisfy, and was not extended
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
