@@ -225,7 +225,7 @@ the same `PATHS` scoping.
   spelling as written. Each listed pin of a scoped locator carries `span` (`start`, `end` and the
   pinned `text`), so the reviewer diffs exactly those lines and sees that the resolver found the
   item the decision is about; the revision row names the lines. A scoped pin that does not resolve
-  (renamed, deleted, ambiguous, no resolver, range past the end of the file) is never re-pinned,
+  (renamed, deleted, ambiguous, no resolver, range past the end of the file, file missing or unreadable) is never re-pinned,
   because re-hashing whatever is there now would turn a deleted symbol into a silent pass. It is
   listed under `failed_pins` (`record`, `locator`, `reason`), per pin and not per record, status is
   `partial-failure`, and the record's other stale pins still move. A rename is repaired by editing

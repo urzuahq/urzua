@@ -20,8 +20,10 @@ embodiment:
 locator_resolvers:
   - name: rust
     glob: "**/*.rs"
-    # A type, function, trait, constant or module, with its visibility and qualifiers.
-    start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*(fn|struct|enum|trait|type|static|mod|const|union)\s+{symbol}\b'
+    # A type, function, trait or union, with its visibility and qualifiers (`const fn` included).
+    # `const`, `static`, `type` and `mod x;` end at a `;`, not a brace, so a brace_balanced end would
+    # run on into the next item: they are not addressable by symbol; pin a line range instead.
+    start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*(fn|struct|enum|trait|union)\s+{symbol}\b'
     end: brace_balanced
     # Doc comments and attributes directly above an item are part of it.
     leading: '^\s*(#\[|///|//!)'

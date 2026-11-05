@@ -360,6 +360,21 @@ pub fn detect_rebaselines(
                 continue;
             };
             match read(&locator) {
+                // A scoped pin on a file that cannot be read cannot be
+                // re-pinned either: list it rather than skip it silently.
+                PinRead::Unreadable if locator.scope.is_some() => {
+                    let display = locator.display();
+                    if !failed
+                        .iter()
+                        .any(|f: &FailedPin| f.record == record.path && f.locator == display)
+                    {
+                        failed.push(FailedPin {
+                            record: record.path.clone(),
+                            locator: display,
+                            reason: format!("file not found or unreadable: {}", locator.path),
+                        });
+                    }
+                }
                 PinRead::Unreadable => {}
                 PinRead::Failed(reason) => {
                     let display = locator.display();

@@ -432,3 +432,55 @@ fn rebaseline_shows_the_span_re_pins_in_its_spelling_and_lists_failed_pins() {
         "{rec}"
     );
 }
+
+/// A commit-anchored locator is reported as unsupported and is not also judged
+/// for drift on the file's history; the same locator without the anchor is.
+#[test]
+fn a_commit_anchored_locator_is_not_judged_for_drift() {
+    for (anchored, expect_drift) in [(true, false), (false, true)] {
+        let locator = if anchored {
+            "code:src/a.rs@abcdef1"
+        } else {
+            "code:src/a.rs"
+        };
+        let dir = repo(
+            if anchored { "anchor" } else { "plain" },
+            RESOLVERS,
+            locator,
+        );
+        std::fs::write(dir.join(".urzua/config.yaml"), config_with("error")).unwrap();
+        commit_all(&dir);
+        std::fs::write(
+            dir.join("src/a.rs"),
+            std::fs::read_to_string(dir.join("src/a.rs"))
+                .unwrap()
+                .replace("    1;", "    2;"),
+        )
+        .unwrap();
+        commit_all(&dir);
+        let drifted = drift_messages(&dir)
+            .iter()
+            .any(|m| m.contains("Drift detected"));
+        assert_eq!(drifted, expect_drift, "anchored={anchored}");
+    }
+}
+
+#[test]
+fn rebaseline_lists_a_scoped_pin_on_a_missing_file_as_failed() {
+    let dir = pinned_repo("rebase-missing", "error", "#alpha");
+    let rec = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        rec.replace(
+            "Realized-by: 'code:",
+            &format!("Realized-by: 'code:src/gone.rs#alpha@sha256:{ZEROS}, code:"),
+        ),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let listed = json(&run_urzua(&dir, &["fix", "--rebaseline"]));
+    let failed = listed["failed_pins"].as_array().unwrap();
+    assert_eq!(failed.len(), 1, "{listed}");
+    assert_eq!(failed[0]["locator"], "src/gone.rs#alpha");
+    assert!(failed[0]["reason"].as_str().unwrap().contains("not found"));
+}
