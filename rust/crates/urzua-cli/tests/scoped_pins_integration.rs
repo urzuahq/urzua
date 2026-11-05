@@ -277,7 +277,8 @@ fn explain_names_the_scope_each_citing_record_pins() {
 
 #[test]
 fn an_edit_elsewhere_in_the_file_is_not_drift_and_an_edit_to_the_item_is() {
-    for consistency in ["error"] {
+    {
+        let consistency = "error";
         let dir = pinned_repo("drift", consistency, "#alpha");
         // Unrelated edit, even with the default (no grace) window.
         let src = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
@@ -310,12 +311,8 @@ fn an_edit_elsewhere_in_the_file_is_not_drift_and_an_edit_to_the_item_is() {
 #[test]
 fn a_scoped_pin_has_no_file_based_grace_window_but_an_audit_date_still_applies() {
     let with_grace = |dir: &Path, audit: Option<&str>| {
-        let mut c =
+        let c =
             config_with("{level: error, drift_grace_days: 14, drift_audit_field: Last-audited}");
-        c = c.replace(
-            "drift_audit_field: Last-audited",
-            "drift_audit_field: Last-audited",
-        );
         std::fs::write(dir.join(".urzua/config.yaml"), c).unwrap();
         let rec = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
         let rec = match audit {

@@ -365,6 +365,7 @@ fn build_fix_report(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_report(
     population: urzua_core::report::Population,
     repairs: Vec<urzua_core::fix::Repair>,
