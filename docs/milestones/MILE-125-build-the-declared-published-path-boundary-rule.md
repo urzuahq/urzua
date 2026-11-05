@@ -4,6 +4,7 @@ Status: Planned
 Phase: '0'
 Track: schema-governance
 Implements: RFC-11
+Depends-on: ADR-80
 ---
 # 125 — Build the declared published-path boundary rule
 
@@ -38,3 +39,4 @@ A declared set of published paths (`published_paths`) makes `boundary.published-
 > | 2026-11-03 | Built `boundary.published-path-reference` (`published_paths` option; the rule's level is the boundary's severity) in `rules/boundary.rs`. **Why:** `RFC-11` sections 1 to 3 decided it. Section 1's `kind` and `reason`, glob matching, and the ignore-marker and fixture-exclusion questions are not built; `Status` is unchanged. | **substantive** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** `boundary.published-path-reference` (`rules/boundary.rs`, `published_boundary_integration.rs`, merged in #158) is built; `RFC-11` section 1's `kind` and `reason`, glob matching and the ignore-marker and fixture-exclusion questions are not. `Status` stays Planned. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: ADR-80` added. **Why:** `ADR-80` (Proposed) is the decision record for building `RFC-11` sections 1 to 3 and names `MILE-125` as the milestone it unblocks; building part of an RFC needs its own accepted ADR. Proposed for maintainer review; `Status` unchanged. | **structural** |
