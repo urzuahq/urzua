@@ -262,6 +262,9 @@ fn prefix_line_field(line: &str, line_no: usize) -> Option<HeaderField> {
 /// isn't a top-level mapping has `region: None` -- reportable, same contract
 /// every other shape honors, never a silently empty header.
 fn parse_yaml_frontmatter(content: &str) -> Header {
+    // A leading byte-order mark is not part of the document: every other
+    // reader of a record strips it, and left in place it hid the opening `---`.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut lines = content.lines();
     let Some(first) = lines.next() else {
         return Header {
@@ -334,14 +337,22 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
 
     let fields = mapping
         .iter()
-        .filter_map(|(key, value)| {
-            let key = key.as_str()?.to_string();
-            let line = find_key_line(&yaml_text, &key).unwrap_or(2);
-            Some(HeaderField {
+        .map(|(key, value)| {
+            // A non-string key (`1: x`, `true: x`) keeps its stringified form
+            // rather than vanishing from the header.
+            let key = match key {
+                yaml_serde::Value::Null => "null".to_string(),
+                other => stringify_yaml_value(other),
+            };
+            let line = find_key_line(&yaml_text, &key);
+            let value = line
+                .and_then(|line| scalar_source_text(&yaml_text, line, value))
+                .unwrap_or_else(|| stringify_yaml_value(value));
+            HeaderField {
                 key: crate::values::FieldName::new(key),
-                value: stringify_yaml_value(value),
-                line,
-            })
+                value,
+                line: line.unwrap_or(2),
+            }
         })
         .collect();
 
@@ -357,11 +368,58 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
 /// mapping (`{a: 1, b: 2}` on one line) falls back to the block's first
 /// content line via the caller's default.
 fn find_key_line(yaml_text: &str, key: &str) -> Option<usize> {
-    yaml_text.lines().enumerate().find_map(|(idx, line)| {
-        let trimmed = line.trim_start();
-        (trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}: ")))
-            .then_some(idx + 2)
-    })
+    let find = |top_level_only: bool| {
+        yaml_text.lines().enumerate().find_map(|(idx, line)| {
+            if top_level_only && line.starts_with(char::is_whitespace) {
+                return None;
+            }
+            let trimmed = line.trim_start();
+            (trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}: ")))
+                .then_some(idx + 2)
+        })
+    };
+    // An unindented line is the top-level key; an indented one of the same name
+    // belongs to a nested mapping and is only a fallback.
+    find(true).or_else(|| find(false))
+}
+
+/// The text a number or boolean was written as (`1.10`, `0x1F`, `1e3`), read
+/// from its own line, so the header holds what the file says and not a
+/// re-rendering of the parsed value. `None` when the value is not a plain
+/// single-line number or boolean, or the text does not read back as the same
+/// value; the caller then falls back to the parsed rendering.
+fn scalar_source_text(
+    yaml_text: &str,
+    line_no: usize,
+    value: &yaml_serde::Value,
+) -> Option<String> {
+    if !matches!(
+        value,
+        yaml_serde::Value::Number(_) | yaml_serde::Value::Bool(_)
+    ) {
+        return None;
+    }
+    let line = yaml_text.lines().nth(line_no.checked_sub(2)?)?;
+    // Only a top-level key's line: an indented line of the same name belongs
+    // to a nested mapping or a block scalar, not to this value.
+    if line.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let (_, rest) = line.split_once(':')?;
+    // A comment starts at a `#` that follows a space or a tab.
+    let comment = rest
+        .char_indices()
+        .find(|&(i, c)| c == '#' && rest[..i].ends_with([' ', '\t']))
+        .map_or(rest.len(), |(i, _)| i);
+    let rest = rest[..comment].trim();
+    if rest.is_empty() || rest.contains(['\'', '"', '[', '{', '&', '*', '!', '|', '>']) {
+        return None;
+    }
+    (yaml_serde::from_str::<yaml_serde::Value>(rest)
+        .ok()
+        .as_ref()
+        == Some(value))
+    .then(|| rest.to_string())
 }
 
 fn stringify_yaml_value(value: &yaml_serde::Value) -> String {
@@ -386,6 +444,40 @@ fn stringify_yaml_value(value: &yaml_serde::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn yaml_scalars_keep_the_text_the_file_wrote() {
+        let h = parse_yaml_frontmatter(
+            "---\nVersion: 1.10\nA: 0x1F\nC: 1e3 # note\nD: True\nE: 7\n---\n",
+        );
+        assert_eq!(h.get("Version"), Some("1.10"));
+        assert_eq!(h.get("A"), Some("0x1F"));
+        assert_eq!(h.get("C"), Some("1e3"));
+        assert_eq!(h.get("D"), Some("True"));
+        assert_eq!(h.get("E"), Some("7"));
+    }
+
+    #[test]
+    fn a_tab_before_a_comment_and_a_nested_key_of_the_same_name_do_not_leak_into_the_value() {
+        let h = parse_yaml_frontmatter("---\nA: 1.10\t# note\n---\n");
+        assert_eq!(h.get("A"), Some("1.10"));
+        let h = parse_yaml_frontmatter("---\nMeta:\n  Version: 1.1\nVersion: 1.10\n---\n");
+        assert_eq!(h.get("Version"), Some("1.10"));
+    }
+
+    #[test]
+    fn a_leading_bom_does_not_hide_the_frontmatter() {
+        let h = parse_yaml_frontmatter("\u{feff}---\nStatus: Accepted\n---\n");
+        assert_eq!(h.get("Status"), Some("Accepted"));
+        assert_eq!(h.region, Some((1, 3)));
+    }
+
+    #[test]
+    fn a_non_string_key_is_kept_not_dropped() {
+        let h = parse_yaml_frontmatter("---\n1: x\ntrue: y\n---\n");
+        assert_eq!(h.get("1"), Some("x"));
+        assert_eq!(h.get("true"), Some("y"));
+    }
 
     #[test]
     fn prefix_lines_reads_bare_key_value_lines_before_the_first_section() {

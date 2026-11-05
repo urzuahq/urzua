@@ -108,10 +108,10 @@ runs:
         # Relative paths are relative to the workspace, whatever job-level
         # defaults.run.working-directory a caller set.
         cd "$GITHUB_WORKSPACE"
-        BIN="$(realpath "$BIN")"
+        BIN="$(realpath "$BIN")" || exit 2
         out="$RUNNER_TEMP/urzua-gate"
         mkdir -p "$out"
-        cd "$WORKDIR"
+        cd "$WORKDIR" || exit 2
         # Exit codes: 0 pass, 1 blocking findings, 2 could not run. Every run
         # is kept and reported before the verdict is given.
         "$BIN" check >"$out/check.json"

@@ -33,7 +33,7 @@ jobs:
   # commit and the default checkout ref is a third -- verifying the released
   # tree means naming it, not inferring it.
   verify:
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release' && github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/checks.yml
     # checks.yml's gate can comment on a pull request; a caller must grant
     # what the called workflow asks for. Nothing comments on a release tag.
@@ -58,6 +58,8 @@ jobs:
         with:
           persist-credentials: true
           fetch-depth: 0
+          # The commit `verify` tested, not the default ref.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: install knope 0.23.0 (pinned, checksummed)
         run: |

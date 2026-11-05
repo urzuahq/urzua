@@ -66,7 +66,7 @@ rust-check: ## cargo check the workspace
 	cd $(RUST_DIR) && cargo check --workspace --all-targets --locked
 
 rust-test: ## cargo test the workspace
-	cd $(RUST_DIR) && cargo test --workspace --locked
+	@.github/scripts/test-no-leak.sh
 
 rust-fmt: ## cargo fmt
 	cd $(RUST_DIR) && cargo fmt --all

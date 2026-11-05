@@ -29,6 +29,31 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
         .expect("urzua binary should run")
 }
 
+/// Runs urzua with a `gh` on PATH that behaves as given, so the identity tier
+/// that reads the authenticated login does not depend on the machine's own
+/// `gh`. `None` is a `gh` that fails (not logged in).
+fn run_urzua_with_gh(dir: &Path, args: &[&str], login: Option<&str>) -> std::process::Output {
+    use std::os::unix::fs::PermissionsExt;
+    let stub = common::TempDir::new("urzua-rebase-stub-gh");
+    let body = match login {
+        Some(l) => format!("#!/bin/sh\necho '{l}'\n"),
+        None => "#!/bin/sh\nexit 1\n".to_string(),
+    };
+    std::fs::write(stub.join("gh"), body).unwrap();
+    std::fs::set_permissions(stub.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        stub.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(args)
+        .env("PATH", path)
+        .current_dir(dir)
+        .output()
+        .expect("urzua binary should run")
+}
+
 fn json(out: &std::process::Output) -> serde_json::Value {
     serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("stdout is not JSON ({e}): {out:?}"))
@@ -109,7 +134,7 @@ fn detect_lists_each_stale_pin_with_both_hashes_and_writes_nothing_observed_fail
 fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observed_failing() {
     let dir = fixture("apply");
     let b_before = std::fs::read_to_string(dir.join(B)).unwrap();
-    let out = run_urzua(
+    let out = run_urzua_with_gh(
         &dir,
         &[
             "fix",
@@ -122,6 +147,7 @@ fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observe
             "--reason",
             "Read the diff; the claim holds.",
         ],
+        None,
     );
     let parsed = json(&out);
     assert_eq!(parsed["status"], "applied", "{parsed} {out:?}");
@@ -130,8 +156,25 @@ fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observe
         "Realized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs'",
         sha256(V2)
     )));
-    assert!(a.contains("attested by"), "{a}");
-    assert!(a.contains("Read the diff; the claim holds."), "{a}");
+    // Exactly one new row, three cells, naming who attested and why.
+    let rows: Vec<&str> = a.lines().filter(|l| l.contains("Re-baselined")).collect();
+    assert_eq!(rows.len(), 1, "{a}");
+    assert!(
+        rows[0].starts_with("> | 20") && rows[0].ends_with("| **structural** |"),
+        "{}",
+        rows[0]
+    );
+    assert_eq!(rows[0].matches('|').count(), 4, "{}", rows[0]);
+    assert!(
+        rows[0].contains("Re-baselined (attested by ana): re-pinned"),
+        "{}",
+        rows[0]
+    );
+    assert!(
+        rows[0].contains("Reason: Read the diff; the claim holds."),
+        "{}",
+        rows[0]
+    );
     assert_eq!(std::fs::read_to_string(dir.join(B)).unwrap(), b_before);
 
     // The re-pinned record clears; the other one is still listed.
@@ -225,4 +268,89 @@ fn rebaseline_cannot_be_combined_with_stdin_path() {
     let dir = fixture("stdin");
     let out = run_urzua(&dir, &["fix", "--rebaseline", "--stdin-path", A]);
     assert_eq!(out.status.code(), Some(2));
+}
+
+#[test]
+fn an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed() {
+    let dir = fixture("gh-wins");
+    let out = run_urzua_with_gh(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "r",
+        ],
+        Some("gh-login"),
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    let a = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(a.contains("(attested by gh-login)"), "{a}");
+    assert!(!a.contains("attested by ana"), "{a}");
+    assert!(
+        parsed["notices"]
+            .to_string()
+            .contains("differs from the authenticated gh login"),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn an_identity_that_would_break_the_revision_row_is_refused_and_writes_nothing() {
+    for by in ["ana | bob", "ana\nbob"] {
+        let dir = fixture("by-pipe");
+        let before = std::fs::read_to_string(dir.join(A)).unwrap();
+        let out = run_urzua_with_gh(
+            &dir,
+            &[
+                "fix",
+                "--rebaseline",
+                "--apply",
+                "--ids",
+                A,
+                "--by",
+                by,
+                "--reason",
+                "r",
+            ],
+            None,
+        );
+        assert_eq!(out.status.code(), Some(2), "{by:?}: {out:?}");
+        let parsed = json(&out);
+        assert_eq!(parsed["status"], "not-run", "{parsed}");
+        assert!(
+            parsed["error"].as_str().unwrap().contains("--by"),
+            "{parsed}"
+        );
+        assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+    }
+}
+
+#[test]
+fn a_git_user_name_with_a_pipe_is_refused_for_the_row_too() {
+    let dir = fixture("name-pipe");
+    git(&dir, &["config", "user.name", "ana | bob"]);
+    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+    let out = run_urzua_with_gh(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--reason",
+            "r",
+        ],
+        None,
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "not-run", "{parsed}");
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
 }

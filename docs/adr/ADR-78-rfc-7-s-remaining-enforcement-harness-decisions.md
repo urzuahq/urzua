@@ -147,6 +147,56 @@ item 2 is unchanged, and a hook-blocked edit still leaves no revision record (it
 The build is `MILE-195`. `MILE-191`'s Done means states the allowance again as the default behaviour, with a
 revision row.
 
+## Amendment (2026-11-05): after any Bash command the harness runs `check` on the records git shows as changed
+
+*Status of this amendment: proposed, pending maintainer acceptance (decided by the maintainer on 2026-11-05, drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Item 2 puts the judgement of a record at the editor. The editor hook sees three tools: its matcher is
+`Write|Edit|MultiEdit` (`.claude/settings.json:5`) and its adapter returns for any other tool
+(`scripts/hooks/claude-code-record-edit.py:55`). A record written or changed by a Bash command (`sed -i`, a
+heredoc, `tee`, `cp`, an interpreter one-liner) is not judged there, so `ADR-71`'s "one gate at the editor"
+holds for three tools and not for the fourth. This amendment adds a check after the command, and does not
+change item 2.
+
+**1. After any Bash command, `check` runs on the records git shows as changed.** The harness lists the changed
+paths from git, keeps the ones a record type governs (the engine's own discovery decides, not the hook), and
+runs `urzua check` on exactly those paths, then reports the unwaived findings to the agent as context. It
+does not read the command: no parsing of shell, no list of write verbs, no guess about which files a script
+touched. Git's view of the working tree is the ground truth and a Bash command that changes a record by any
+route changes it.
+
+**2. The list includes untracked files, and they are judged from their content.** The merge-base diff
+`check --base` uses is `git diff --name-status` (`rust/crates/urzua-io/src/lib.rs:179-189`) and lists tracked
+changes only, and discovery reads the union of `git ls-files` and staged files
+(`lib.rs:56`, `:75`), so a record a Bash command creates is neither in the changed set nor examined by
+`check PATHS` until it is staged. The post-command check takes its paths from `git status --porcelain -z`,
+which names modified, added and untracked files; it runs `urzua check PATHS` on the tracked ones and relays
+each untracked record's content through `urzua check --stdin-path` (which needs no tracked file), and it
+does not stage anything. A deleted record is not judged.
+
+**3. It reports; it does not block.** The command has already run, so the check cannot refuse it. It
+reports each finding with its file, rule and message, says which are errors, and says that pre-commit and CI
+remain the hard gate (`ADR-71`). `block_on` (above) does not apply, since nothing is being written. A record
+that was already failing before the command is listed as it is today, under the pre-existing note, by comparing
+with the copy at `HEAD`. A repeat of an unchanged record's findings is not re-reported on later commands:
+the report is keyed by the record's content hash, kept under `.urzua/cache`.
+
+**4. It cannot judge a command it did not see, and says so.** When `git` is absent, the working tree is not
+a repository, or `check` cannot run, the report says the command's effect on records was NOT judged, the same
+loud "not judged" form as item 2 (`ADR-71`); a missing check is never a quiet pass.
+
+| | Pre-command matcher on Bash (rejected) | Post-command check on git state (chosen) |
+|---|---|---|
+| Pros | Could refuse the write | Needs no knowledge of what the command does; cannot be evaded by a different spelling; one rule for every route |
+| Cons | Parsing shell is fuzzy (variables, heredocs, `python -c`); a miss reads as clearance; it needs a list of verbs that grows | Reports after the fact; the record is already changed on disk |
+
+A record that a Bash command moved to an accepting status is reported with the same finding the acceptance
+guardrail of `ADR-89` gives an editor edit; it cannot be prevented here, and is stopped by the commit hook
+and by CI there.
+
+The build is `MILE-202`. Switching the post-command check off is a per-guardrail option in `ADR-89`'s
+`harness` configuration, on only when named.
+
 ## References
 
 - `RFC-7` -- the enforcement harness; sections 2 to 6 and its open questions.
@@ -165,3 +215,4 @@ revision row.
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Amendment added: the editor hook blocks on errors the edit introduces by default, and a `block_on: introduced \| all` option widens it to every error in the edited record. **Why:** `MILE-191` (#308) merged with the introduced-only behaviour, #305 trimmed `MILE-191`'s Done means, and no ADR sets either; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Amendment (`block_on`) accepted, together with `MILE-191`'s restored Done means. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Amendment added: after any Bash command the harness runs `check` on the records git shows as changed, untracked included, and reports the findings to the agent without parsing the command; it reports and does not block, and pre-commit and CI stay the hard gate. **Why:** the editor hook's matcher does not cover Bash (`.claude/settings.json:5`), so a record written by a shell command is never judged at the editor; maintainer decision, 2026-11-05; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |

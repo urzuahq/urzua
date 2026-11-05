@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use urzua_core::config::{Config, RelationRole};
 use urzua_core::record::Record;
-use urzua_core::report::DiffScope;
+use urzua_core::report::{DiffScope, Notice, NoticeSeverity};
 use urzua_core::rules::{self, CommittedStatus};
 
 /// The examined set and the account of how it was reached.
@@ -209,12 +209,16 @@ fn deleted_by_stable_id(
 /// rename as a deletion plus an addition (`BUG-191`): a renamed record is
 /// judged against the status it had before. One with no match, or no
 /// `Stable-Id`, reads as new; one matching several deleted records is
-/// unreadable, since which of them it was cannot be told.
+/// unreadable, since which of them it was cannot be told. A base copy that
+/// exists but cannot be read (not UTF-8, a missing object) is unreadable too,
+/// with a notice carrying the error: only a path the base lacks reads as new,
+/// since treating a read error as new would skip the transition check.
 pub(crate) fn committed_statuses(
     repo_root: &Path,
     config: &Config,
     records: &[Record],
     changes: &urzua_io::GitChanges,
+    notices: &mut Vec<Notice>,
 ) -> HashMap<PathBuf, CommittedStatus> {
     let mut out = HashMap::new();
     // The deleted records' Stable-Ids, read once per type and only when a
@@ -233,9 +237,23 @@ pub(crate) fn committed_statuses(
         {
             continue;
         }
-        let committed = match urzua_io::read_at_commit(repo_root, &changes.merge_base, &record.path)
-        {
-            Err(_) => {
+        let committed = match urzua_io::read_at_commit_if_present(
+            repo_root,
+            &changes.merge_base,
+            &record.path,
+        ) {
+            Err(e) => {
+                notices.push(Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: rules::RULE_STATUS_TRANSITION_ALLOWED.to_string(),
+                    message: format!(
+                        "{}: could not read the merge base's copy, so its Status transition is not judged: {e}",
+                        record.path.display()
+                    ),
+                });
+                CommittedStatus::Unreadable
+            }
+            Ok(None) => {
                 let field =
                     rules::relation_field_name(config, &record.record_type, RelationRole::Status);
                 let deleted = renamed_from
@@ -251,7 +269,7 @@ pub(crate) fn committed_statuses(
                     },
                 }
             }
-            Ok(content) => {
+            Ok(Some(content)) => {
                 let old = Record::parse_with_shape_and_prefix(
                     record.path.clone(),
                     record.record_type.clone(),
@@ -360,6 +378,18 @@ pub(crate) fn examine(
             // An empty locator is a path prefix of everything.
             if locator.is_empty() {
                 return false;
+            }
+            if rules::is_path_glob(locator) {
+                // A glob locator covers files, not a path prefix: match it
+                // with the matcher locator resolution uses. A glob that does
+                // not compile cannot be matched, and locator resolution
+                // reports it on the record.
+                return rules::path_glob_regex(locator).is_ok_and(|re| {
+                    changes
+                        .changed
+                        .iter()
+                        .any(|c| re.is_match(&c.to_string_lossy()))
+                });
             }
             let path = Path::new(locator);
             changes.changed.iter().any(|c| c.starts_with(path))

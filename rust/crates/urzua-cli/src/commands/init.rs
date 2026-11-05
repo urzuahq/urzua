@@ -430,7 +430,7 @@ pub fn run(dry_run: bool) -> ExitCode {
     if let Err(e) = std::fs::create_dir_all(config_path.parent().unwrap()) {
         return emit(&CouldNotRun::from(format!("could not create .urzua/: {e}")));
     }
-    if let Err(e) = std::fs::write(&config_path, &rendered) {
+    if let Err(e) = urzua_io::write_atomic(&config_path, &rendered) {
         return emit(&CouldNotRun::from(format!(
             "could not write {}: {e}",
             config_path.display()

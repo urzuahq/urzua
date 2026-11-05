@@ -201,14 +201,16 @@ impl Report for DoctorReport {
 /// Emits one report, JSON, unconditionally (ADR-23) -- BUG-4 was `doctor`
 /// printing `[OK]`/`[WARN]`/`[ERROR]` lines instead, the one command that
 /// hadn't caught up with every other command's output contract.
-pub fn run() -> ExitCode {
+pub fn run(config: Option<PathBuf>) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     let mut checks = Vec::new();
-    let config_path = crate::discovery::default_config_path(&repo_root);
+    // The global `--config`, as every other command reads it: reporting on the
+    // default file instead would be a silent no-op.
+    let config_path = config.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
 
     if !config_path.exists() {
         checks.push(DoctorCheck {
