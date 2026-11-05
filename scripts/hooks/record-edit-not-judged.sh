@@ -9,7 +9,7 @@
 # (name "(unjudged)", Reviewed-by blank) so `override.unreviewed` shows it in review.
 # Always exits 0. Prints the notice on stdout too, for a caller that relays it.
 why="${1:-unknown reason}"
-msg="record-edit-hook: the edit was NOT judged ($why). It is allowed; run 'urzua check' before committing."
+msg="record-edit-hook: urzua did NOT judge this edit ($why). It is allowed; run 'urzua check' before committing."
 printf '%s\n' "$msg" >&2
 root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/../.." && pwd))}"
 log="$(awk '/^override_log:[ \t]/ { sub(/^override_log:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); sub(/[ \t]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit }' "$root/.urzua/config.yaml" 2>/dev/null)"

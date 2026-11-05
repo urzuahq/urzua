@@ -46,7 +46,7 @@ def not_judged(why):
         sys.stderr.write(p.stderr)
         return p.stdout.strip()
     except OSError:
-        msg = f"record-edit-hook: the edit was NOT judged ({why}). It is allowed."
+        msg = f"record-edit-hook: urzua did NOT judge this edit ({why}). It is allowed."
         sys.stderr.write(msg + "\n")
         return msg
 
