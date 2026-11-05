@@ -2299,6 +2299,22 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    // A status-agreement rule with no type declaring `statuses.blocked` examines
+    // nothing (`MILE-144`, ADR-7).
+    if config
+        .rules
+        .get(crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+        && !config
+            .record_types
+            .values()
+            .any(|t| t.status_decl().is_some_and(|d| !d.blocked.is_empty()))
+    {
+        return bad(format!(
+            "rule '{}' is enabled but no record type declares statuses.blocked, so it would examine nothing",
+            crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+        ));
+    }
     // A version-bump rule with no type declaring a bump is a check that ran on
     // nothing (`BUG-51`).
     if config

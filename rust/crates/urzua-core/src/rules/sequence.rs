@@ -19,36 +19,7 @@ pub fn sequence_cycle(
     let mut findings = Vec::new();
     let slots = pair_slots(records, config, |p| p.acyclic);
 
-    // One graph per pair, built from every readable claim.
-    type Graph = BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
-    let mut graphs: BTreeMap<&str, Graph> = BTreeMap::new();
-    for slot in &slots {
-        let Ok(references) = pair_slot_claims(slot) else {
-            continue;
-        };
-        let Some(own) = record_id(slot.record) else {
-            continue;
-        };
-        let own = crate::values::RecordId::new(&own);
-        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
-        graph.entry(own.clone()).or_default();
-        for reference in references {
-            let target = crate::values::RecordId::new(&reference);
-            let Some(record) = index.get(&target) else {
-                continue;
-            };
-            if record.header.is_unreadable() || !pair_carried_by(slot.pair, &record.record_type) {
-                continue;
-            }
-            graph.entry(target.clone()).or_default();
-            let (from, to) = if slot.forward {
-                (own.clone(), target)
-            } else {
-                (target, own.clone())
-            };
-            graph.entry(from).or_default().insert(to);
-        }
-    }
+    let graphs = sequence_graphs(&slots, index).graphs;
 
     // The records on a cycle, per pair, each with its cycle path.
     let mut on_cycle: BTreeMap<(&str, crate::values::RecordId), String> = BTreeMap::new();
@@ -115,6 +86,67 @@ pub fn sequence_cycle(
         },
         findings,
     )
+}
+
+pub(super) type SequenceGraph =
+    BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
+
+/// The sequencing graph of every `acyclic` pair, built from the claims of the
+/// given slots. An edge `X -> Y` reads "X depends on Y": `A.forward = B` is
+/// `A -> B` and `A.inverse = B` is `B -> A`, so a record that writes only the
+/// inverse side still takes part. A claim that resolves to no record, or to a
+/// type the pair does not carry, is no edge (`sequence.unresolved-blocker`
+/// reports the first), and neither is a claim on a record whose header cannot
+/// be read (`ADR-76`); the dependent of such a claim is disclosed in
+/// `unreadable_dependencies` so a rule that judges it can say so.
+pub(super) struct SequenceGraphs<'a> {
+    pub graphs: BTreeMap<&'a str, SequenceGraph>,
+    pub unreadable_dependencies: BTreeSet<crate::values::RecordId>,
+}
+
+pub(super) fn sequence_graphs<'a>(
+    slots: &[super::relation::PairSlot<'a>],
+    index: &RecordIndex,
+) -> SequenceGraphs<'a> {
+    let mut graphs: BTreeMap<&'a str, SequenceGraph> = BTreeMap::new();
+    let mut unreadable_dependencies = BTreeSet::new();
+    for slot in slots {
+        let Ok(references) = pair_slot_claims(slot) else {
+            continue;
+        };
+        let Some(own) = record_id(slot.record) else {
+            continue;
+        };
+        let own = crate::values::RecordId::new(&own);
+        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
+        graph.entry(own.clone()).or_default();
+        for reference in references {
+            let target = crate::values::RecordId::new(&reference);
+            let Some(record) = index.get(&target) else {
+                continue;
+            };
+            if !pair_carried_by(slot.pair, &record.record_type) {
+                continue;
+            }
+            if record.header.is_unreadable() {
+                if slot.forward {
+                    unreadable_dependencies.insert(own.clone());
+                }
+                continue;
+            }
+            graph.entry(target.clone()).or_default();
+            let (from, to) = if slot.forward {
+                (own.clone(), target)
+            } else {
+                (target, own.clone())
+            };
+            graph.entry(from).or_default().insert(to);
+        }
+    }
+    SequenceGraphs {
+        graphs,
+        unreadable_dependencies,
+    }
 }
 
 /// Rule (`RFC-48`, `MILE-27`): a value in either field of an `acyclic` pair
@@ -310,6 +342,148 @@ fn shortest_cycle(
         }
     }
     None
+}
+
+/// Rule (`RFC-48`, `MILE-144`, `ADR-64`): a record's written `Status` is held
+/// to the derived `blocked` value. A record is blocked when any of its
+/// dependencies, over every `acyclic` pair, is not in a status its own type
+/// declares `success`: the same edges `sequence.cycle` checks, so a written
+/// `Blocks` counts. A dependency whose type declares no `success`, or whose
+/// `Status` is absent, is not in a declared success status and so blocks.
+///
+/// Two disagreements are reported, both on the dependent: a status the type
+/// declares in `statuses.blocked` while nothing blocks it, and a derived
+/// blocked record that states an `implementable` status (including one that
+/// says it is finished). Only a type declaring `statuses.blocked` is examined.
+/// A record with a claim on a record whose header cannot be read is counted
+/// unreadable, since its blocked value cannot be computed.
+pub fn sequence_status_agreement(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_SEQUENCE_STATUS_AGREEMENT;
+    let mut findings = Vec::new();
+    let declared = statuses_by_type(config);
+    let slots = pair_slots(records, config, |p| p.acyclic);
+    let SequenceGraphs {
+        graphs,
+        unreadable_dependencies,
+    } = sequence_graphs(&slots, index);
+
+    let candidates: Vec<&Record> = records
+        .iter()
+        .filter(|r| {
+            declared
+                .get(&r.record_type)
+                .is_some_and(|d| !d.blocked.is_empty())
+        })
+        .collect();
+
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Record,
+        candidates,
+        |record| *record,
+        |record| {
+            let decl = &declared[&record.record_type];
+            let Some(id) = record_id(record) else {
+                return Outcome::OutOfScope;
+            };
+            let id = crate::values::RecordId::new(&id);
+            let status_field = relation_field_name(
+                config,
+                &record.record_type,
+                crate::config::RelationRole::Status,
+            );
+            let status = match declared_value(record, status_field) {
+                Ok(v) if !v.trim().is_empty() => v.trim(),
+                Ok(_) => return Outcome::Absent,
+                Err(outcome) => return outcome,
+            };
+            if unreadable_dependencies.contains(&id) {
+                return Outcome::Unreadable;
+            }
+            // Every dependency over every acyclic pair that is not finished.
+            let mut open: Vec<String> = Vec::new();
+            for graph in graphs.values() {
+                for dependency in graph.get(&id).into_iter().flatten() {
+                    let Some(target) = index.get(dependency) else {
+                        continue;
+                    };
+                    let target_field = relation_field_name(
+                        config,
+                        &target.record_type,
+                        crate::config::RelationRole::Status,
+                    );
+                    let target_status = target.header.get(target_field).map(str::trim);
+                    let finished = target_status.is_some_and(|s| {
+                        declared
+                            .get(&target.record_type)
+                            .is_some_and(|d| d.is_success(s))
+                    });
+                    if !finished {
+                        let shown = format!(
+                            "{dependency} ({})",
+                            target_status
+                                .filter(|s| !s.is_empty())
+                                .unwrap_or("no status")
+                        );
+                        if !open.contains(&shown) {
+                            open.push(shown);
+                        }
+                    }
+                }
+            }
+            let blocked = !open.is_empty();
+            let mut push = |source: ActionSource, message: String| {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: source,
+                    message,
+                });
+            };
+            if decl.is_blocked_status(status) && !blocked {
+                push(
+                    ActionSource::new("status-blocked-unblocked").field(status_field),
+                    format!(
+                        "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
+                    ),
+                );
+            } else if blocked && decl.implementable.iter().any(|s| s == status) {
+                let mut source = ActionSource::new("status-blocked-derived").field(status_field);
+                // A single declared blocked status is the computed answer.
+                if let [only] = decl.blocked.as_slice() {
+                    source = source.text(only.clone());
+                }
+                push(
+                    source,
+                    format!(
+                        "{id} is blocked by {} but {status_field} is '{status}', an implementable status; state a blocked status ({})",
+                        open.join(", "),
+                        decl.blocked.join(", ")
+                    ),
+                );
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 ---
-Status: Blocked
+Status: Planned
 Stable-Id: 01M1Y5JQ7E7PXJZ2N7QSX0BVTS
 Phase: '1'
 Track: interop
@@ -26,3 +26,4 @@ Decided (own the schema, be AgDR-compatible on export), correctly left unbuilt -
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Status` Blocked -> Planned; `Blocked-on` unchanged. **Why:** `sequence.status-agreement` (`MILE-144`) treats `Blocked` as derived from `Depends-on`, and this record has none: what it waits on (real adopter demand for AgDR round-tripping) is a fact or a decision, not a record, so nothing blocks it as far as the engine can compute. `RFC-48` moves a written `Blocked` to `Planned` for this repository and expresses such a wait as a `Depends-on` to a condition record, which does not exist yet; `Blocked-on` keeps the wait stated. | **substantive** |

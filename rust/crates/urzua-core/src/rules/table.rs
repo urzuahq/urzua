@@ -34,6 +34,8 @@ pub enum Declaration {
     PointerFields,
     /// `revision_log.version_bump` (`BUG-51`).
     VersionBump,
+    /// `statuses.blocked` (`MILE-144`).
+    Blocked,
 }
 
 impl Declaration {
@@ -44,6 +46,7 @@ impl Declaration {
             Declaration::KnownFields => "known_fields",
             Declaration::PointerFields => "pointer_fields",
             Declaration::VersionBump => "revision_log.version_bump",
+            Declaration::Blocked => "statuses.blocked",
         }
     }
 }
@@ -360,6 +363,24 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::Main,
         run: |c| sequence_unresolved_blocker(c.records, c.config, c.index),
+    },
+    RuleDef {
+        id: RULE_SEQUENCE_STATUS_AGREEMENT,
+        description: "A record's written `Status` contradicts the derived `blocked` value (`MILE-144`, `RFC-48`, `ADR-64`). A record is blocked when any record it depends on, over every `acyclic` pair in either field, is not in a status its own type declares `success`; a dependency whose type declares no `success`, or that states no `Status`, is not in a declared success status and so blocks. Reports a status the type lists in `statuses.blocked` while nothing blocks the record, and a blocked record that states an `implementable` status, `Done` included when the type lists it. Opt-in per type: only a type that declares `statuses.blocked` is examined, and enabling the rule with no type declaring it, or with no `acyclic` pair, is a config load error. A record with a claim on a record whose header cannot be read is counted unreadable.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        needs_identity_index: true,
+        requires_relation_pairs: true,
+        requires_acyclic_pair: true,
+        reads_declaration: Some(Declaration::Blocked),
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        actions: &[
+            VariantAction::new("status-blocked-unblocked", ActionDecl::FIELD_SET),
+            VariantAction::new("status-blocked-derived", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        run: |c| sequence_status_agreement(c.records, c.config, c.index),
     },
     RuleDef {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
@@ -1474,6 +1495,7 @@ mod tests {
             vec![
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (RULE_SEQUENCE_STATUS_AGREEMENT, Declaration::Blocked),
                 (
                     RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                     Declaration::VersionBump

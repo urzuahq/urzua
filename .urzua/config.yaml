@@ -226,6 +226,11 @@ record_types:
       values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
+      # Blocked is derived (MILE-144): a milestone is blocked when a Depends-on
+      # target is not Done. A written Blocked must agree with that, and an
+      # implementable status must not be written while it is blocked
+      # (sequence.status-agreement).
+      blocked: ["Blocked"]
       # Done is implementable: code that implements a delivered milestone keeps
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.
@@ -432,6 +437,8 @@ rules:
   # names nothing.
   sequence.cycle: error
   sequence.unresolved-blocker: error
+  # The written Status agrees with the derived blocked value (MILE-144).
+  sequence.status-agreement: error
   revision-log.change-class-required: error
   # Judged on a `--base` run against the merge base's copy of the record
   # (BUG-51); `not-applicable` on a whole-repo run.

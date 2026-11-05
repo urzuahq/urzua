@@ -362,7 +362,7 @@ mod tests {
                     sections: None,
                     statuses: Some(
                         yaml_serde::from_str(
-                            "{values: [Open, Done], success: [Done], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
+                            "{values: [Open, Done], success: [Done], blocked: [Open], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
                         )
                         .unwrap(),
                     ),
@@ -478,6 +478,10 @@ mod tests {
             (
                 "sequence.unresolved-blocker",
                 rules::sequence_unresolved_blocker(&records, &config, &record_index),
+            ),
+            (
+                "sequence.status-agreement",
+                rules::sequence_status_agreement(&records, &config, &record_index),
             ),
             (
                 "embodiment.consistency",

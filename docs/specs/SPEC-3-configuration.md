@@ -1,5 +1,5 @@
 ---
-Version: '0.69'
+Version: '0.70'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -365,7 +365,24 @@ Two details carry weight:
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
   committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
-  derived `blocked` value is not part of this declaration (`MILE-27`).
+  derived `blocked` value is the next declaration.
+
+  `blocked` (optional, `MILE-144`, `RFC-48`, `ADR-64`) names the non-terminal statuses a person writes
+  to say a record is waiting on a dependency, for example `Blocked`; it must be a subset of `values`
+  and disjoint from `success` and `failure`. With a sequencing relation declared (`relation_pairs`
+  with `acyclic: true`), `blocked` is also a derived value: a record is blocked when any record it
+  depends on, over every acyclic pair and in either field (a written `Blocks` counts), is not in a
+  status its own type declares `success`. `success` is the one list of done statuses; there is no
+  second list. A dependency in a `failure` status, a status the type does not declare as `success`,
+  a type that declares no `success`, or no `Status` at all, therefore blocks. The opt-in rule
+  `sequence.status-agreement` holds the written `Status` to the derived value, and reports two
+  disagreements as errors: a status listed in `blocked` while nothing blocks the record, and a blocked
+  record that states an `implementable` status (`Done` included when the type lists it). Only a type
+  that declares `blocked` is examined, so a repository that wants a computed `Blocked` and no
+  hand-written one simply omits the list. The rule's finding offers `edit-field` `set` on `Status`,
+  carrying the declared blocked status as the value when the type declares exactly one. A record with
+  a claim on a record whose header cannot be read is counted unreadable. Enabling the rule with no
+  acyclic pair, or with no type declaring `blocked`, is a load error.
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -792,12 +809,13 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   enabled, and a prose entry when `header.pointer-field-clean` is enabled. In a repository that follows
   `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
   guard for the roadmap: the graph is only computed when no claim was dropped.
+- **The derived `blocked` value** is read from these same edges by `sequence.status-agreement` (see
+  `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
-  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
-  `MILE-182`).
+  `sequence.terminal-parent-open-child`, the `condition` record type and `urzua roadmap` are
+  `RFC-48`'s other parts and belong to other milestones (`MILE-182`).
 
-Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
+Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
@@ -1306,3 +1324,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.67`. Documented that `status.transition-allowed` matches a renamed record to its merge-base copy by `Stable-Id`. **Why:** `BUG-191` -- a rename read as a deletion plus an addition, so the record was judged as new. | **substantive** |
 > | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
 > | 2026-11-05 | Bumped to `0.69`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.70`. A type's `statuses` declaration gains `blocked`, and the opt-in rule `sequence.status-agreement` holds the written `Status` to the derived `blocked` value (a record is blocked when any record it depends on is not in its own type's `success`). **Why:** `MILE-144`, per `ADR-64` clause 4 (a derived value is computed and a hand-written value it contradicts is an error). | **substantive** |
