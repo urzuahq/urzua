@@ -327,6 +327,11 @@ pub enum PopulationUnit {
     File,
     /// One path in the changed set of a `--base` run.
     ChangedPath,
+    /// One entry of a declared header field's list (`MILE-186`, `ADR-75`
+    /// clause 3): an id a record names without citing it as a reference. The
+    /// entry exists because the record declares it, so an uncited or malformed
+    /// one is still counted.
+    FieldEntry,
     /// The configuration file itself, for a rule that judges how it was read.
     ConfigFile,
     /// One entry of a committed log a rule reads (`override.unreviewed`).

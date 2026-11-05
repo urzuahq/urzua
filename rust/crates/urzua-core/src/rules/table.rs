@@ -48,6 +48,10 @@ impl Declaration {
     }
 }
 
+/// A rule's second population: its execution and findings, or `None` when the
+/// rule has nothing to judge in that unit on this run.
+pub type CompanionFn = fn(&RuleCtx<'_>) -> Option<(RuleExecution, Vec<Finding>)>;
+
 /// One rule, with every property of it that anything outside the rule needs.
 /// The single place a rule is registered: the shipped rule set, `urzua rules`,
 /// `SPEC-2`'s rule table, config validation and `init`'s proposal are all
@@ -92,6 +96,13 @@ pub struct RuleDef {
     /// Judges the run's inputs; never called for a rule the repository has not
     /// enabled, and its findings are given the declared severity by the runner.
     pub run: fn(&RuleCtx<'_>) -> (RuleExecution, Vec<Finding>),
+    /// A second population the rule judges in a unit of its own, reported as a
+    /// second `rules_executed` entry under the same rule id (`MILE-186`): a
+    /// rule has one population, and a second unit is a second execution, not a
+    /// second denominator under one name. `None` from the function means the
+    /// rule has nothing to judge in that unit on this run (its option is
+    /// unset). Gated and given severities exactly as `run` is.
+    pub companion: Option<CompanionFn>,
 }
 
 /// What a rule's findings sit on. A scoped `check` (a path argument or
@@ -153,6 +164,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("field-missing", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             header_required_fields(c.records, c.config)
         },
@@ -174,6 +186,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pointer-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             pointer_resolution(c.records, c.config, c.index, c.untracked_records)
         },
@@ -194,6 +207,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pointer-target-status", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let opts: PointerTargetOpts = c.config.rule_opts(RULE_POINTER_TARGET_STATUS);
             pointer_target_status(c.records, c.config, &opts.not_in, opts.fields.as_deref(), c.index)
@@ -215,6 +229,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("field-quality", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             field_quality(c.records, c.config, c.templates)
         },
@@ -235,6 +250,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("field-pending", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             field_pending(c.records, c.config)
         },
@@ -255,6 +271,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("claim-status-disagrees", ActionDecl::Exempt("the rule catches a claim that may be false, so the right fix is often the claim file, a non-record file with no action kind yet, and editing the record Status would be the mechanical answer and possibly the wrong one")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let opts: ClaimOpts = c.config.rule_opts(RULE_CLAIM_STATUS_AGREEMENT);
             claim_status_agreement(c.claims, &opts.closed_statuses, c.config, c.index)
@@ -276,6 +293,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("title-mismatch", ActionDecl::Exempt("the fix is a rename or an H1 edit, and no action kind addresses either yet")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             filename_title_consistency(c.records, c.full_text)
         },
@@ -298,6 +316,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("supersession-unreciprocated", ActionDecl::FIELD_APPEND),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| supersession_reciprocity(c.records, c.config, c.index, c.untracked_records),
     },
     RuleDef {
@@ -318,6 +337,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pair-unreciprocated", ActionDecl::FIELD_APPEND),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             relation_pair_reciprocity(c.records, c.config, c.index, c.untracked_records)
         },
@@ -338,6 +358,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("cross-type-claim", ActionDecl::FIELD_REMOVE),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             relation_cross_type_disallowed(c.records, c.config, c.index)
         },
@@ -358,6 +379,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("sequence-cycle", ActionDecl::Exempt("breaking a cycle means choosing which dependency to drop, a decision the tool cannot compute")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| sequence_cycle(c.records, c.config, c.index),
     },
     RuleDef {
@@ -378,6 +400,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("blocker-not-a-reference", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| sequence_unresolved_blocker(c.records, c.config, c.index, c.untracked_records),
     },
     RuleDef {
@@ -396,6 +419,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("target-status-undeclared", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| relation_target_status_undeclared(c.records, c.config, c.config_path, c.index),
     },
     RuleDef {
@@ -415,6 +439,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("revision-log-missing", ActionDecl::SECTION_ADD),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| revision_log_change_class(c.records, c.config, c.full_text),
     },
     RuleDef {
@@ -433,6 +458,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("version-bump", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| revision_log_version_bump(c.records, c.config, c.full_text, c.changed_paths, c.base_text),
     },
     RuleDef {
@@ -454,6 +480,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("claim-too-old", ActionDecl::Exempt("the remedy is re-verifying the claim, which may need no edit, and touching the field to reset the age without checking would defeat the rule")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             embodiment_consistency(
                 c.records,
@@ -481,6 +508,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("embodiment-state-not-accepted", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| embodiment_requires_accepted_status(c.records, c.config),
     },
     RuleDef {
@@ -501,6 +529,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("back-pointer-uncovered-test-path", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
                 let (files, paths, tests): (&[_], &[String], &[String]) =
                     match c.back_pointer_sources {
@@ -534,6 +563,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("decision-uncovered-path", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
                 let (files, paths): (&[_], &[String]) = match c.decision_gate_sources {
                     Some(s) => (&s.files, &s.back_pointer_paths),
@@ -574,6 +604,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             // Tracked *and* on disk: tracked alone passes a staged deletion,
             // since discovery unions `ls-files` with the cached diff, and on
@@ -616,6 +647,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-promotion-candidate", ActionDecl::Exempt("an advisory nudge that is never auto-promoted")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| embodiment_locator_promotion_candidate(c.records, c.config),
     },
     RuleDef {
@@ -634,6 +666,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("undeclared-field", ActionDecl::FIELD_REMOVE),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             header_field_set_consistency(c.records, c.config)
         },
@@ -654,6 +687,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("untrimmed-value", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             field_untrimmed_value(c.records, c.config)
         },
@@ -674,6 +708,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("leading-reserved-indicator", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| field_leading_reserved_indicator(c.records, c.config),
     },
     RuleDef {
@@ -692,6 +727,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("field-case-mismatch", ActionDecl::FIELD_RENAME),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             header_field_case_mismatch(c.records, c.config)
         },
@@ -712,6 +748,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("case-variant-key", ActionDecl::Exempt("the rule reads the keys a record wrote, not a declared vocabulary, so it cannot tell the declared spelling from the stray one and a remove could delete the declared key")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             header_case_variant_key(c.records, c.config)
         },
@@ -732,6 +769,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("narrative-field-stale", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let opts: NarrativeStaleOpts = c.config.rule_opts(RULE_NARRATIVE_FIELD_STALE);
             narrative_field_stale(c.records, c.config, &opts.terminal_statuses, c.index)
@@ -755,6 +793,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("dir-missing", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let mut matched: HashMap<String, usize> = HashMap::new();
             for r in c.records {
@@ -780,6 +819,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("identifier-collision", ActionDecl::Exempt("the fix is a renumber, and no action kind addresses a rename yet (`urzua migrate ids` exists)")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             identity_collision(c.records, c.collisions)
         },
@@ -800,6 +840,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("record-outside-declared-dir", ActionDecl::Exempt("the fix is a move, and no action kind addresses a move yet")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
                 // A staged deletion is going away, not a real ownership
                 // question to raise (`BUG-71`/`BUG-82`'s shape, one level up:
@@ -825,6 +866,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("no-declared-spec", ActionDecl::Exempt("a signal to review, never a mandate")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             type_no_declared_spec(c.config, c.config_path)
         },
@@ -845,6 +887,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pointer-field-not-clean", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             header_pointer_field_clean(c.records, c.config)
         },
@@ -866,6 +909,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("companion-pair-undeclared", ActionDecl::CONFIG_APPEND),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| config_companion_declaration_missing(c.config, c.config_path),
     },
     RuleDef {
@@ -884,6 +928,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pointer-declaration-missing", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| config_pointer_declaration_missing(c.config, c.config_path),
     },
     RuleDef {
@@ -902,6 +947,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pointer-field-not-known", ActionDecl::CONFIG_APPEND),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             config_pointer_field_not_known(c.config, c.config_path)
         },
@@ -922,6 +968,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("pointer-narrative-overlap", ActionDecl::Exempt("a field named in both lists could belong in either, and which list should keep it is the author's decision, not a computable repair")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| config_pointer_narrative_overlap(c.config, c.config_path),
     },
     RuleDef {
@@ -940,6 +987,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("header-none-field", ActionDecl::CONFIG_REMOVE),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| config_header_none_has_no_required_fields(c.config, c.config_path),
     },
     RuleDef {
@@ -958,6 +1006,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("relation-field-not-known", ActionDecl::CONFIG_APPEND),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             config_relation_field_not_known(c.config, c.config_path)
         },
@@ -978,6 +1027,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("known-fields-declaration-missing", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| config_known_fields_declaration_missing(c.config, c.config_path),
     },
     RuleDef {
@@ -996,6 +1046,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("schema-version-outdated", ActionDecl::RUN_COMMAND),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| config_schema_version_outdated(c.config, c.config_path),
     },
     RuleDef {
@@ -1015,6 +1066,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("identity-pattern-mismatch", ActionDecl::Exempt("the fix is a rename, and no action kind addresses a rename yet")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             filename_identity_pattern(c.records, c.config)
         },
@@ -1035,6 +1087,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("status-undeclared-value", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             status_undeclared_value(c.records, c.config)
         },
@@ -1055,6 +1108,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("status-required-field-missing", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             status_required_field_missing(c.records, c.config)
         },
@@ -1075,6 +1129,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("status-forbidden-field-present", ActionDecl::FIELD_REMOVE),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             status_forbidden_field_present(c.records, c.config)
         },
@@ -1095,6 +1150,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("transition-not-allowed", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             status_transition_allowed(c.records, c.config, c.committed_statuses)
         },
@@ -1115,6 +1171,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("status-unreachable", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             status_unreachable(c.config, c.config_path)
         },
@@ -1136,6 +1193,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("delivery-without-evidence", ActionDecl::Exempt("no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             status_delivery_agreement(c.records, c.config, c.back_pointed)
         },
@@ -1156,6 +1214,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("date-invalid", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             date_field_valid(c.records, c.config)
         },
@@ -1176,13 +1235,14 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("date-order", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             date_field_order(c.records, c.config)
         },
     },
     RuleDef {
         id: RULE_CITATION_RESOLUTION,
-        description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in. The optional `external_ids` option (`MILE-156`) lists ids that share a record prefix but are not records, each an exact id (`RFC-4122`) or an inclusive numeric range written `PREFIX-LOW..HIGH` under a declared prefix; a matching citation is counted as eligible and unexamined, never resolved or reported, and not as out of scope, so `config.scope-matches-nothing` does not read a declared id as a misconfiguration. An entry under no declared prefix is a config error. Its population counts the citations, so a run over none is distinguishable from a clean one, and external citations are visible as eligible and unexamined. The optional `skip_revision_log` option, when `true`, leaves each record's revision log (the table under its type's declared `revision_log` identity) unread, so append-only history that cites an id as it was is not reported; it is `false` by default (`MILE-156`). The optional `non_reference_field` option (`BUG-190`, `ADR-75`) names a header field in which a record lists, as comma-separated exact ids (`ADR-72`; no ranges, compared by value), the ids it names without citing as a reference: a citation of a listed id in that record only is counted as eligible and unexamined, neither resolved nor reported, with `external_ids` taking precedence. A listed id the record never cites in the prose the rule reads, and an entry that is not an exact id of a declared prefix, are findings on the record naming the field and its line. The field must be listed in a record type's `known_fields` and must not be a pointer, narrative or relation-role field, or the config does not load. `check` prints one aggregated Info notice naming declared ids that now match a real record; a notice never changes the exit code.",
+        description: "A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in. The optional `external_ids` option (`MILE-156`) lists ids that share a record prefix but are not records, each an exact id (`RFC-4122`) or an inclusive numeric range written `PREFIX-LOW..HIGH` under a declared prefix; a matching citation is counted as eligible and unexamined, never resolved or reported, and not as out of scope, so `config.scope-matches-nothing` does not read a declared id as a misconfiguration. An entry under no declared prefix is a config error. Its population counts the citations, so a run over none is distinguishable from a clean one, and external citations are visible as eligible and unexamined. The optional `skip_revision_log` option, when `true`, leaves each record's revision log (the table under its type's declared `revision_log` identity) unread, so append-only history that cites an id as it was is not reported; it is `false` by default (`MILE-156`). The optional `non_reference_field` option (`BUG-190`, `ADR-75`) names a header field in which a record lists, as comma-separated exact ids (`ADR-72`; no ranges, compared by value), the ids it names without citing as a reference: a citation of a listed id in that record only is counted as eligible and unexamined, neither resolved nor reported, with `external_ids` taking precedence. A listed id the record never cites in the prose the rule reads, and an entry that is not an exact id of a declared prefix, are findings on the record naming the field and its line. With the option set, those declared entries are judged in a population of their own (`MILE-186`, `ADR-75` clause 3): a second `rules_executed` entry for this rule whose unit is `field-entry`, with one candidate per entry a record declares (valid, uncited and malformed alike, all examined, none out of scope), and zero eligible when no record declares any; the uncited and malformed findings are counted there and not in the citation population. The field must be listed in a record type's `known_fields` and must not be a pointer, narrative or relation-role field, or the config does not load. `check` prints one aggregated Info notice naming declared ids that now match a real record; a notice never changes the exit code.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1198,6 +1258,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("non-reference-uncited", ActionDecl::FIELD_REMOVE),
         ],
         phase: Phase::Main,
+        companion: Some(|c| citation_non_reference(c.records, c.config, c.full_text)),
         run: |c| {
             citation_resolution(c.records, c.config, c.full_text, c.index)
         },
@@ -1218,6 +1279,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("path-missing", ActionDecl::SECTION_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             // A file is present when tracked and on disk (as for
             // `embodiment.locator-exists`); a directory when a tracked file
@@ -1266,6 +1328,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("snapshot-unusable", ActionDecl::Exempt("regenerating the snapshot with `urzua refs refresh` needs the network and a token, so the command is named in the message and not offered as an action")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             citation_issue_exists(c.records, c.config, c.full_text, c.refs_snapshot)
         },
@@ -1291,6 +1354,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("boundary-marker-unused", ActionDecl::Exempt("the edit removes a marker from a non-record file, and no action kind addresses a non-record file yet")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             published_path_reference(
                 c.published_files,
@@ -1317,6 +1381,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("section-missing", ActionDecl::SECTION_ADD),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             section_required(c.records, c.config, c.full_text)
         },
@@ -1337,6 +1402,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("section-shape", ActionDecl::SECTION_SET),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             section_shape(c.records, c.config, c.full_text)
         },
@@ -1358,6 +1424,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("index-unregenerable", ActionDecl::Exempt("`urzua index --apply` cannot regenerate this artifact (not text, a missing marker or an unparsable format), so the artifact or the declaration is edited by hand")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             index_freshness(c.records, c.full_text, c.index_artifacts)
         },
@@ -1378,6 +1445,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("source-without-record", ActionDecl::ADD_RECORD),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let opts: SourceRequiresRecordOpts =
                 c.config.rule_opts(RULE_DIFF_SOURCE_REQUIRES_RECORD);
@@ -1400,6 +1468,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("source-and-records-mixed", ActionDecl::Exempt("process advice, no file edit")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let opts: SourceAndRecordsMixedOpts =
                 c.config.rule_opts(RULE_DIFF_SOURCE_AND_RECORDS_MIXED);
@@ -1429,6 +1498,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("override-log-malformed", ActionDecl::Exempt("the log is not a record: a malformed row is repaired by editing the log file, which no action kind addresses")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| override_unreviewed(c.override_log, c.config),
     },
     RuleDef {
@@ -1448,6 +1518,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-on-back-pointer-path-sole", ActionDecl::Exempt("the repair is a comment in a source file, and no action kind addresses a non-record file yet; dropping the only locator first would leave the record with no evidence")),
         ],
         phase: Phase::Main,
+        companion: None,
         run: |c| {
             let opts = c
                 .config
@@ -1477,6 +1548,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("scope-matches-nothing", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::AfterRules,
+        companion: None,
         run: |c| config_scope_matches_nothing(c.run.executions, c.config_path),
     },
     RuleDef {
@@ -1498,6 +1570,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("waiver-matches-no-finding", ActionDecl::FIELD_SET),
         ],
         phase: Phase::AfterScoping,
+        companion: None,
         run: |c| waiver_matches_nothing(
             c.run.waivers,
             c.run.findings,

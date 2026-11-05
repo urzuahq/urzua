@@ -143,6 +143,9 @@ pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding
 }
 
 /// Every rule of `phase`, in table order.
+///
+/// A rule with a companion population (`MILE-186`) contributes its second
+/// execution straight after its first, so `rules_executed` keeps table order.
 pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
     run_phase_with(phase, ctx, &PhasePlan::default())
 }
@@ -167,30 +170,41 @@ pub fn run_phase_with(
     ctx: &RuleCtx<'_>,
     plan: &PhasePlan<'_>,
 ) -> Vec<(RuleExecution, Vec<Finding>)> {
-    RULE_TABLE
-        .iter()
-        .filter(|d| d.phase == phase)
-        .filter(|d| plan.selected.is_none_or(|s| s.contains(d.id)))
-        .map(|d| {
-            let can_report_on_a_record =
-                matches!(d.anchor, Anchor::Record | Anchor::RecordOrDeclaredFile(_));
-            if plan.record_only && !can_report_on_a_record {
-                gate_and_run(ctx.config, d.id, || {
-                    (
-                        RuleExecution {
-                            rule: d.id.to_string(),
-                            population: None,
-                            status: RuleStatus::NotApplicable,
-                            examined_records: Vec::new(),
-                        },
-                        Vec::new(),
-                    )
-                })
-            } else {
-                run_rule(d, ctx)
+    let mut out = Vec::new();
+    for d in RULE_TABLE.iter().filter(|d| d.phase == phase) {
+        if plan.selected.is_some_and(|s| !s.contains(d.id)) {
+            continue;
+        }
+        let can_report_on_a_record =
+            matches!(d.anchor, Anchor::Record | Anchor::RecordOrDeclaredFile(_));
+        if plan.record_only && !can_report_on_a_record {
+            out.push(gate_and_run(ctx.config, d.id, || {
+                (
+                    RuleExecution {
+                        rule: d.id.to_string(),
+                        population: None,
+                        status: RuleStatus::NotApplicable,
+                        examined_records: Vec::new(),
+                    },
+                    Vec::new(),
+                )
+            }));
+            continue;
+        }
+        out.push(run_rule(d, ctx));
+        if let Some(companion) = d.companion {
+            // Never called for a rule the repository has not enabled.
+            let enabled = ctx
+                .config
+                .rules
+                .get(d.id)
+                .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
+            if let Some(extra) = enabled.then(|| companion(ctx)).flatten() {
+                out.push(gate_and_run(ctx.config, d.id, || extra));
             }
-        })
-        .collect()
+        }
+    }
+    out
 }
 
 /// How a run narrows what it reports on.
