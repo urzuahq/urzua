@@ -37,7 +37,7 @@ pub fn revision_log_change_class(
             };
             let id = config.revision_log_id(&record.record_type);
             let Some(entries) = find_revision_log_entries(content, &id) else {
-                if !config.revision_log_required(&record.record_type) {
+                if !config.revision_log_declared_required(&record.record_type) {
                     return Outcome::Absent;
                 }
                 findings.push(Finding {
@@ -334,16 +334,27 @@ mod tests {
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
+    fn log_decl(required: Option<bool>) -> crate::config::RevisionLogDecl {
+        crate::config::RevisionLogDecl {
+            marker: None,
+            heading: None,
+            required,
+            version_bump: None,
+        }
+    }
+
     #[test]
-    fn a_record_of_a_requiring_type_with_no_revision_log_section_is_a_finding() {
+    fn a_record_of_a_type_declaring_required_true_with_no_revision_log_section_is_a_finding() {
         // BUG-50: absence of the section is a finding, with the add-section action.
         let content = "---\nStatus: Draft\n---\n# 0001 — X\n";
         let r = record("docs/adr/0001-x.md", "adr", content);
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());
+        let mut t = type_config(None);
+        t.revision_log = Some(log_decl(Some(true)));
 
         let (exec, findings) =
-            revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
+            revision_log_change_class(&[r], &config_with_types(vec![("adr", t)]), &full_text);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].action_source.variant, "revision-log-missing");
@@ -352,6 +363,25 @@ mod tests {
             Some("**Revision log**")
         );
         assert!(findings[0].message.contains("no revision log"));
+    }
+
+    #[test]
+    fn a_record_of_a_type_that_does_not_declare_revision_log_with_no_log_is_absent_and_silent() {
+        // Opt-in: a config that never declared `revision_log` is unchanged.
+        let content = "---\nStatus: Draft\n---\n# 0001 — X\n";
+        for t in [type_config(None), {
+            let mut t = type_config(None);
+            t.revision_log = Some(log_decl(None));
+            t
+        }] {
+            let r = record("docs/adr/0001-x.md", "adr", content);
+            let mut full_text = HashMap::new();
+            full_text.insert(r.path.clone(), content.to_string());
+            let (exec, findings) =
+                revision_log_change_class(&[r], &config_with_types(vec![("adr", t)]), &full_text);
+            assert_eq!(examined(&exec), 0);
+            assert!(findings.is_empty(), "{findings:?}");
+        }
     }
 
     #[test]
@@ -397,7 +427,9 @@ mod tests {
     #[test]
     fn a_marker_inside_a_fenced_block_is_not_the_log() {
         let content = format!("# 1\n\n```\n**Revision log**\n{LOG}```\n");
-        let (exec, findings) = check(&config_with_types(vec![]), &content);
+        let mut t = type_config(None);
+        t.revision_log = Some(log_decl(Some(true)));
+        let (exec, findings) = check(&config_with_types(vec![("spec", t)]), &content);
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].action_source.variant, "revision-log-missing");
@@ -409,7 +441,7 @@ mod tests {
         t.revision_log = Some(crate::config::RevisionLogDecl {
             marker: None,
             heading: Some("History".into()),
-            required: None,
+            required: Some(true),
             version_bump: None,
         });
         let config = config_with_types(vec![("spec", t)]);

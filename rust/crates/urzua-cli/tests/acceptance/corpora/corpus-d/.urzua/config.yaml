@@ -14,9 +14,6 @@ record_types:
       pending: [pending, unknown]
       require:
         - {when: [Accepted], fields: [Deciders]}
-    # These records exercise header reading, not the revision log (BUG-50): the
-    # type declares it carries none, so a record without one is not a finding.
-    revision_log: {required: false}
     pointer_fields: [Implements, "Supersedes / Superseded-by"]
     narrative_fields: []
     sections:

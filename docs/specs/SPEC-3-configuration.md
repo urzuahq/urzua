@@ -110,9 +110,9 @@ Two details carry weight:
   `urzua fix --apply` needs the section. Required, a record with no section fails that write with a
   message naming the identity looked for; `required: false` writes the field without a log row.
   `revision-log.change-class-required` reads the same flag (`BUG-50`): a record of a type that
-  requires a log and has no such section is a finding, with the `edit-section` `add` action naming
-  the identity to add; a type declaring `required: false` carries no log by declaration, and its
-  records without one are eligible and unexamined.
+  declares `required: true` and has no such section is a finding, with the `edit-section` `add` action naming
+  the identity to add; a type that does not declare `required: true` (omitted, or `false`) is not held to a log by that
+  rule, and its records without one are eligible and unexamined.
   `required` may stand alone (`revision_log: {required: false}`), leaving the identity at its
   default; an empty `{}` is still an error. `revision-log.change-class-required`,
   `urzua fix`'s revision row and the `skip_revision_log` option of `citation.path-exists` and `citation.resolution` all read it.
@@ -1121,4 +1121,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.59`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |
 > | 2026-11-04 | Bumped to `0.60`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the readings `ADR-76` decides for each question `RFC-48` leaves open, including that a written `Blocks` is an edge and that `sequence.unresolved-blocker` yields to enabled pointer rules. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |
 > | 2026-11-04 | Bumped to `0.61`. Documented the `revision_log.version_bump` declaration: a field name and a list of change classes whose added revision-log rows require that field to change, read by `revision-log.version-bump-required`. **Why:** `BUG-51`, maintainer decision of 2026-11-04; `SPEC-18` requires a `Version` bump with every substantive or structural entry and nothing checked it. Off for every type unless declared. | **substantive** |
-> | 2026-11-05 | Bumped to `0.62`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the default (`true`) now applies the rule to every record of a type that does not declare otherwise. | **substantive** |
+> | 2026-11-05 | Bumped to `0.62`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |

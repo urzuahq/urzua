@@ -2098,16 +2098,22 @@ fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
 }
 
 #[test]
-fn a_record_with_no_revision_log_is_a_finding_when_its_type_requires_one() {
+fn a_record_with_no_revision_log_is_a_finding_when_its_type_declares_one_required() {
     // BUG-50: "absence is indistinguishable from compliance". SPEC-1 lost 18
     // revision rows by losing one marker line and the rule stayed green. A type
-    // whose `revision_log.required` is true (the default) now reports a record
+    // declaring `revision_log: {required: true}` now reports a record
     // with no log, and the finding offers the ADR-73 `edit-section` `add` action.
     let dir = one_adr_repo(
         "revision-log-absent",
         "{revision-log.change-class-required: error}",
         "---\nStatus: Accepted\n---\n# 1 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
     );
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{config}    revision_log: {{required: true}}\n"),
+    )
+    .unwrap();
     // A second record with no revision log at all.
     std::fs::write(
         dir.join("docs/adr/ADR-2-y.md"),

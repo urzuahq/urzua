@@ -380,7 +380,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
-        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. A record of a type whose `revision_log.required` is true (the default) with no revision-log section is a finding too (`BUG-50`); a type declaring `required: false` carries none by declaration and its records without one stay unexamined. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
+        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. A record of a type that declares `revision_log: {required: true}` with no revision-log section is a finding too (`BUG-50`); a type that does not declare it, or declares `false`, is not held to a log and its records without one stay unexamined. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
