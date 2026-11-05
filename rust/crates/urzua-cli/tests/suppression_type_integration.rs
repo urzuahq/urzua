@@ -146,3 +146,112 @@ fn two_types_declaring_the_role_are_refused_at_load() {
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("suppression"), "{text}");
 }
+
+// BUG-177: `effective_requires` makes a suppression take effect only once it
+// carries the declared fields.
+
+fn declared_type(requires: Option<&str>) -> String {
+    let requires = requires
+        .map(|r| format!("    effective_requires: {r}\n"))
+        .unwrap_or_default();
+    format!(
+        "  waiver:\n    dir: docs/waiver\n    role: suppression\n{requires}    required_fields: [Rule, Scope]\n    known_fields: [Reason]\n    statuses:\n      values: [Open]\n      pending: [pending]\n    header_shape: yaml-frontmatter\n"
+    )
+}
+
+fn with_reason(dir: &Path, reason: Option<&str>) {
+    let reason = reason.map(|r| format!("Reason: {r}\n")).unwrap_or_default();
+    std::fs::write(
+        dir.join("docs/waiver/WAIVER-1-x.md"),
+        format!(
+            "---\nRule: header.required-fields\nScope: docs/adr/ADR-1-a.md\n{reason}---\n# x\n"
+        ),
+    )
+    .unwrap();
+    assert!(Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(dir)
+        .status()
+        .unwrap()
+        .success());
+}
+
+fn config_with_matches_nothing(types: &str) -> String {
+    config(types).replace("rules:\n", "rules:\n  waiver.matches-nothing: warn\n")
+}
+
+fn findings_of<'a>(report: &'a serde_json::Value, rule: &str) -> Vec<&'a serde_json::Value> {
+    report["findings"]
+        .as_array()
+        .map(|f| f.iter().filter(|f| f["rule"] == rule).collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_suppression_missing_a_required_field_does_not_suppress_and_is_reported_observed_failing() {
+    let cfg = config_with_matches_nothing(&declared_type(Some("[Reason]")));
+    let dir = corpus("req-missing", &cfg, &[("docs/waiver", "WAIVER-1-x.md")]);
+    for (case, reason) in [
+        ("absent", None),
+        ("blank", Some("''")),
+        ("placeholder", Some("TBD")),
+        ("pending", Some("pending")),
+    ] {
+        with_reason(&dir, reason);
+        let (ok, report) = run(&dir);
+        assert_eq!(waived_by(&report), None, "{case}: {report}");
+        assert!(!ok, "{case}: the target finding must block again: {report}");
+        let on_waiver = findings_of(&report, "waiver.matches-nothing");
+        assert_eq!(on_waiver.len(), 1, "{case}: {report}");
+        assert_eq!(on_waiver[0]["file"], "docs/waiver/WAIVER-1-x.md");
+        assert!(
+            on_waiver[0]["message"].as_str().unwrap().contains("Reason"),
+            "{case}: {report}"
+        );
+    }
+}
+
+#[test]
+fn a_suppression_carrying_the_required_field_suppresses() {
+    let cfg = config_with_matches_nothing(&declared_type(Some("[Reason]")));
+    let dir = corpus("req-present", &cfg, &[("docs/waiver", "WAIVER-1-x.md")]);
+    with_reason(&dir, Some("a structural exception"));
+    let (ok, report) = run(&dir);
+    assert_eq!(
+        waived_by(&report).as_deref(),
+        Some("docs/waiver/WAIVER-1-x.md"),
+        "{report}"
+    );
+    assert!(ok, "{report}");
+    assert!(findings_of(&report, "waiver.matches-nothing").is_empty());
+}
+
+#[test]
+fn without_the_declaration_a_reasonless_suppression_still_suppresses() {
+    let cfg = config_with_matches_nothing(&declared_type(None));
+    let dir = corpus("req-default", &cfg, &[("docs/waiver", "WAIVER-1-x.md")]);
+    with_reason(&dir, None);
+    let (ok, report) = run(&dir);
+    assert_eq!(
+        waived_by(&report).as_deref(),
+        Some("docs/waiver/WAIVER-1-x.md"),
+        "{report}"
+    );
+    assert!(ok, "{report}");
+}
+
+#[test]
+fn effective_requires_on_a_type_without_the_role_is_refused_at_load() {
+    let cfg = config(
+        "  waiver:\n    dir: docs/waiver\n    effective_requires: [Reason]\n    required_fields: [Rule, Scope, Reason]\n    header_shape: yaml-frontmatter\n",
+    );
+    let dir = corpus("req-norole", &cfg, &[]);
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .arg("check")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(text.contains("effective_requires"), "{text}");
+}
