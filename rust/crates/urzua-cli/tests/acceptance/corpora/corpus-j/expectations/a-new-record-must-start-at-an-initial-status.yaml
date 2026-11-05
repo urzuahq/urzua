@@ -1,0 +1,11 @@
+id: a-new-record-must-start-at-an-initial-status
+corpus: corpus-j
+commits:
+  - write:
+      records/ADR-0005-new.md: "---\nStatus: Accepted\n---\n# ADR-0005 \u2014 Starts decided\n\nEdited.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: status.transition-allowed
+    file: records/ADR-0005-new.md
+    message_contains: "not an initial status"

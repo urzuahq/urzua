@@ -1,0 +1,7 @@
+id: a-graph-naming-an-undeclared-status-is-refused
+corpus: corpus-j
+invocation: [--config, .urzua/bad-graph.yaml, check]
+expect_exit: 2
+expect_stdout_contains:
+  - Approved
+mutation_exempt: a config that fails to load; no rule runs, so there is no rule to switch off.

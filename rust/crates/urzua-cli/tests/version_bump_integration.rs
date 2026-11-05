@@ -79,6 +79,11 @@ fn hits(v: &serde_json::Value) -> usize {
         .count()
 }
 
+fn write_at(dir: &Path, rel: &str, text: String) {
+    std::fs::write(dir.join(rel), text).unwrap();
+    git(dir, &["add", "-A"]);
+}
+
 fn write(dir: &Path, text: String) {
     std::fs::write(dir.join("docs/specs/SPEC-1-x.md"), text).unwrap();
     git(dir, &["add", "-A"]);
@@ -90,6 +95,33 @@ fn a_substantive_row_without_a_version_bump_is_reported_observed_failing() {
     write(&dir, spec("0.1", &[ROW1, ROW2]));
     let v = run(&dir, &["--base", "base"]);
     assert_eq!(hits(&v), 1, "{v}");
+    let f = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == RULE)
+        .unwrap();
+    // ADR-73: set the version field, with no value (the author picks it).
+    assert_eq!(
+        f["suggested_action"],
+        serde_json::json!({
+            "kind": "edit-field",
+            "op": "set",
+            "target": { "file": "docs/specs/SPEC-1-x.md", "field": "Version" }
+        }),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_renamed_record_is_unexamined() {
+    let dir = fixture("rename", DECL);
+    git(
+        &dir,
+        &["mv", "docs/specs/SPEC-1-x.md", "docs/specs/SPEC-1-y.md"],
+    );
+    write_at(&dir, "docs/specs/SPEC-1-y.md", spec("0.1", &[ROW1, ROW2]));
+    assert_eq!(hits(&run(&dir, &["--base", "base"])), 0);
 }
 
 #[test]

@@ -7,3 +7,4 @@ expect_findings:
     file: records/ADR-0017-twin-a.md
     severity: error
     message_contains: "ADR-17"
+    no_suggested_action: true

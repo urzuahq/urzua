@@ -24,6 +24,8 @@ pub fn config_pointer_declaration_missing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("pointer-declaration-missing").key_path(["record_types", type_name, if type_config.pointer_fields.is_none() { "pointer_fields" } else { "narrative_fields" }]).list(Vec::<String>::new()),
                     message: format!(
                         "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
                     ),
@@ -61,6 +63,8 @@ pub fn config_known_fields_declaration_missing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("known-fields-declaration-missing").key_path(["record_types", type_name, "known_fields"]),
                     message: format!(
                         "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
                     ),
@@ -76,7 +80,10 @@ pub fn config_known_fields_declaration_missing(
 /// `config.relation-field-not-known`).
 fn undeclared_alias_finding(
     rule_id: &str,
+    variant: &'static str,
     config_path: &std::path::Path,
+    type_name: &str,
+    field: &str,
     message: String,
 ) -> Finding {
     Finding {
@@ -86,6 +93,10 @@ fn undeclared_alias_finding(
         line: None,
         waived: None,
         declared_severity: None,
+        suggested_action: None,
+        action_source: ActionSource::new(variant)
+            .key_path(["record_types", type_name, "known_fields"])
+            .text(field),
         message,
     }
 }
@@ -117,7 +128,10 @@ pub fn config_pointer_field_not_known(
                 if !declared.contains(field.as_str()) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
+                        "pointer-field-not-known",
                         config_path,
+                        type_name,
+                        field,
                         format!(
                             "record type '{type_name}' declares '{field}' as a pointer/narrative field, but it isn't in required_fields or known_fields"
                         ),
@@ -149,7 +163,10 @@ pub fn config_relation_field_not_known(
                 if !declared.contains(field) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
+                        "relation-field-not-known",
                         config_path,
+                        type_name,
+                        field,
                         format!(
                             "record type '{type_name}' declares '{field}' for relation_fields.{key}, but it isn't in required_fields or known_fields"
                         ),
@@ -187,6 +204,8 @@ pub fn config_pointer_narrative_overlap(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("pointer-narrative-overlap").key_path(["record_types", type_name, "narrative_fields"]).text(field.as_str()),
                         message: format!(
                             "record type '{type_name}' declares '{field}' in both pointer_fields and narrative_fields -- a field must be exactly one kind"
                         ),
@@ -234,6 +253,8 @@ pub fn config_header_none_has_no_required_fields(
                             line: None,
                             waived: None,
                             declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("header-none-field").key_path(["record_types", type_name, field]),
                             message: format!(
                                 "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
                             ),

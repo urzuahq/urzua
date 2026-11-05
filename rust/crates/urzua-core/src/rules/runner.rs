@@ -65,6 +65,9 @@ pub struct RuleCtx<'a> {
     pub base_text: &'a HashMap<PathBuf, String>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
+    /// Each changed record's `Status` at the merge base, for the types that
+    /// declare `transitions`; `None` on a run with no `--base` (`ADR-72`).
+    pub committed_statuses: Option<&'a HashMap<PathBuf, CommittedStatus>>,
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
@@ -109,6 +112,7 @@ pub fn gate_and_run(
                 RuleLevel::Off => unreachable!("handled above"),
             };
             let (exec, mut findings) = run();
+            resolve_actions(id, &mut findings);
             for f in &mut findings {
                 // A level the rule declared for this finding's own field
                 // (`field_levels`, `MILE-140`) outranks the rule level; every
@@ -190,6 +194,8 @@ mod tests {
             line: None,
             waived: None,
             declared_severity: declared,
+            suggested_action: None,
+            action_source: ActionSource::default(),
             message: String::new(),
         }
     }

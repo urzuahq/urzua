@@ -49,6 +49,8 @@ pub fn revision_log_change_class(
                     line: Some(entry.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("change-class-missing").section(config.revision_log_id(&record.record_type).name()),
                     message: format!(
                         "revision log entry dated {} has no real change_class (found {:?}) -- expected \"substantive\" or \"structural\"",
                         entry.date, entry.change_class
@@ -77,7 +79,8 @@ pub fn revision_log_change_class(
 /// paths and the merge base's text of each changed record as data; the core
 /// stays pure. A run with no diff reports `not-applicable`. A record with no
 /// base text is new at this change and has nothing to bump from, so it is
-/// eligible and unexamined.
+/// eligible and unexamined; a renamed record is the same (a rename reads as a
+/// deletion plus an addition).
 pub fn revision_log_version_bump(
     records: &[Record],
     config: &Config,
@@ -173,6 +176,8 @@ pub fn revision_log_version_bump(
                     line: Some(first.line),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("version-bump").field(field),
                     message: format!(
                         "revision log entry dated {} adds a {} change but '{field}' is unchanged from the merge base ({}) -- bump it",
                         first.date,

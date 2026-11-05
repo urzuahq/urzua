@@ -51,6 +51,8 @@ pub const RULE_STATUS_UNDECLARED_VALUE: &str = "status.undeclared-value";
 pub const RULE_STATUS_REQUIRED_FIELD_MISSING: &str = "status.required-field-missing";
 pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-present";
 pub const RULE_STATUS_DELIVERY_AGREEMENT: &str = "status.delivery-agreement";
+pub const RULE_STATUS_TRANSITION_ALLOWED: &str = "status.transition-allowed";
+pub const RULE_STATUS_UNREACHABLE: &str = "status.unreachable-state";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";

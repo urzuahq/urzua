@@ -137,6 +137,10 @@ pub struct GitChanges {
     pub changed: std::collections::HashSet<PathBuf>,
     /// The subset of `changed` that no longer exists in the working tree.
     pub deleted: std::collections::HashSet<PathBuf>,
+    /// The subset of `changed` that did not exist at the merge base. With
+    /// `--no-renames` a renamed file is a deletion plus an addition, so the
+    /// new name is in here.
+    pub added: std::collections::HashSet<PathBuf>,
 }
 
 /// Every path that differs between the merge base of `base` and `HEAD` and
@@ -185,11 +189,15 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
     )?;
     let mut changed = std::collections::HashSet::new();
     let mut deleted = std::collections::HashSet::new();
+    let mut added = std::collections::HashSet::new();
     let mut fields = diff.split('\0').filter(|f| !f.is_empty());
     while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
         let path = PathBuf::from(path);
         if status.starts_with('D') {
             deleted.insert(path.clone());
+        }
+        if status.starts_with('A') {
+            added.insert(path.clone());
         }
         changed.insert(path);
     }
@@ -197,6 +205,7 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
         merge_base,
         changed,
         deleted,
+        added,
     })
 }
 

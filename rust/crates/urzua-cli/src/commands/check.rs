@@ -73,6 +73,7 @@ struct Context<'a> {
     collisions: Vec<rules::IdentifierCollision<'a>>,
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
+    committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
 }
@@ -84,6 +85,7 @@ struct Context<'a> {
 fn load_base_text(
     session: &Session,
     scope: &ReportScope,
+    notices: &mut Vec<Notice>,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut out = HashMap::new();
     let (Some(changes), Some(_)) = (
@@ -104,11 +106,25 @@ fn load_base_text(
         if !declares || !changes.changed.contains(&record.path) {
             continue;
         }
-        // A path added since the merge base has no copy there: not an error.
-        if let Ok(text) =
-            urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path)
-        {
-            out.insert(record.path.clone(), text);
+        // A path added since the merge base (a rename's new name too) has no
+        // copy there: not an error, and not examined. Any other failure to read
+        // the merge base's copy is disclosed, since the record then goes
+        // unexamined.
+        if changes.added.contains(&record.path) {
+            continue;
+        }
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path) {
+            Ok(text) => {
+                out.insert(record.path.clone(), text);
+            }
+            Err(e) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
+                message: format!(
+                    "{}: could not read the merge base's copy, so the record is not examined: {e}",
+                    record.path.display()
+                ),
+            }),
         }
     }
     Ok(out)
@@ -141,6 +157,7 @@ impl<'a> Context<'a> {
             claim_ages: &self.claim_ages,
             base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
+            committed_statuses: self.committed_statuses.as_ref(),
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
             live_paths: &self.live_paths,
@@ -437,10 +454,20 @@ fn load_context<'a>(
         ));
     }
 
+    // A declared non-reference id that now matches a real record is disclosed
+    // (`ADR-75`), only when `citation.resolution` is on.
+    if enabled_setting(config, rules::RULE_CITATION_RESOLUTION).is_some() {
+        notices.extend(rules::non_reference_notices(
+            &session.records,
+            config,
+            &record_index,
+        ));
+    }
+
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
-    let base_text = load_base_text(session, scope)?;
+    let base_text = load_base_text(session, scope, &mut notices)?;
 
     Ok((
         Context {
@@ -468,6 +495,14 @@ fn load_context<'a>(
                 .changed
                 .as_ref()
                 .map(|c| c.changed.iter().cloned().collect()),
+            committed_statuses: scope.changed.as_ref().map(|c| {
+                crate::diff_scope::committed_statuses(
+                    repo_root,
+                    &session.config,
+                    &session.records,
+                    c,
+                )
+            }),
             repo_root: repo_root.clone(),
             base_text,
         },
@@ -580,10 +615,21 @@ fn scope_findings(session: &Session, scope: &ReportScope, findings: &mut Vec<Fin
     // The config rules were handed the loaded (absolute) path, so the same
     // finding differed by checkout (BUG-185). Relativized after the filters
     // above compare against the loaded path, and before waivers match on it.
+    // A suggested edit to the configuration names the same file, so it is
+    // relativized with the finding (`ADR-73`: `file` is repository-relative).
     for f in findings.iter_mut() {
         if f.file == session.config_path.as_path() {
             if let Ok(rel) = f.file.strip_prefix(&session.repo_root) {
                 f.file = rel.to_path_buf();
+            }
+        }
+        if let Some(action) = f.suggested_action.as_mut() {
+            if let Some(file) = action.target.file.as_mut() {
+                if file == session.config_path.as_path() {
+                    if let Ok(rel) = file.strip_prefix(&session.repo_root) {
+                        *file = rel.to_path_buf();
+                    }
+                }
             }
         }
     }
