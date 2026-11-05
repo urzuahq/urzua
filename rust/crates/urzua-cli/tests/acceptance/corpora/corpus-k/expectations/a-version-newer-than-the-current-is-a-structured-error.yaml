@@ -1,0 +1,10 @@
+id: a-version-newer-than-the-current-is-a-structured-error
+corpus: corpus-k
+invocation: [--config, .urzua/config-v3.yaml, check]
+expect_exit: 2
+expect_json:
+  - {at: /schema_version_error/found, equals: 3}
+  - {at: /schema_version_error/current, equals: 2}
+expect_stdout_contains:
+  - upgrade urzua
+mutation_exempt: a config that fails to load; no rule runs, so there is no rule to switch off.

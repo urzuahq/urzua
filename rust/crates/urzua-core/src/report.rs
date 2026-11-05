@@ -332,6 +332,8 @@ pub enum PopulationUnit {
     /// entry exists because the record declares it, so an uncited or malformed
     /// one is still counted.
     FieldEntry,
+    /// The configuration file itself, for a rule that judges how it was read.
+    ConfigFile,
     /// One entry of a committed log a rule reads (`override.unreviewed`).
     Entry,
 }
@@ -700,17 +702,65 @@ impl Report for CheckReport {
 pub struct CouldNotRun {
     pub status: ReportStatus,
     pub error: String,
+    /// Present when the config's `schema_version` is outside the window this
+    /// build reads (`ADR-77`): the same facts `error` states, as data an agent
+    /// can branch on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_version_error: Option<crate::schema_version::SchemaVersionError>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
 
 impl CouldNotRun {
-    pub fn from(error: impl Into<String>) -> Self {
+    pub fn from(error: impl Into<Failure>) -> Self {
+        let Failure {
+            message,
+            schema_version,
+        } = error.into();
         CouldNotRun {
             status: ReportStatus::NotRun,
-            error: error.into(),
+            error: message,
+            schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
         }
+    }
+}
+
+/// Why a command could not run: a message, and the structured form of the
+/// cause when it has one. Every `String` error converts into it, so a command
+/// that only has a sentence is unchanged; the config loader is the one source
+/// of the structured part (`ADR-77`).
+#[derive(Debug, Clone)]
+pub struct Failure {
+    pub message: String,
+    /// Boxed so a `Result<_, Failure>` stays small on the success path.
+    pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Failure {
+            message,
+            schema_version: None,
+        }
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(message: &str) -> Self {
+        Failure::from(message.to_string())
+    }
+}
+
+impl From<Failure> for String {
+    fn from(failure: Failure) -> Self {
+        failure.message
     }
 }
 

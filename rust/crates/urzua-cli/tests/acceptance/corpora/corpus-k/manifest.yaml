@@ -1,0 +1,13 @@
+fixtures:
+- path: .urzua/config.yaml
+  irregularity: the current schema version, 2; the configuration config-v1.yaml upgrades to. Not a record.
+- path: .urzua/config-v1.yaml
+  irregularity: the previous schema version, 1, with a `header_layout` that version 2 no longer has and no `rules` table. Not a record.
+- path: .urzua/config-v0.yaml
+  irregularity: a schema version older than the window (0). Not a record.
+- path: .urzua/config-v3.yaml
+  irregularity: a schema version newer than the current (3). Not a record.
+- path: records/ADR-0001-first.md
+  irregularity: none -- a clean record both supported versions govern.
+- path: records/ADR-0002-second.md
+  irregularity: none -- cites ADR-0001 through the declared Derives-from pointer.
