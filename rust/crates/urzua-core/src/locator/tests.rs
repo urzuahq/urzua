@@ -209,8 +209,10 @@ fn a_scope_displays_as_written() {
 }
 
 #[test]
-fn realized_by_locators_keeps_category_order_and_skips_unknown_categories() {
-    let v = format!("spec:s.md, code:a.rs#Foo@sha256:{SHA}, doc:x.md, test:t.rs#L1-L2");
+fn realized_by_locators_keeps_category_order_and_skips_text_before_the_first_category() {
+    // Text before the first category prefix belongs to no entry. After one, a
+    // comma followed by anything but a category stays in the path (`BUG-129`).
+    let v = format!("doc:x.md, spec:s.md, code:a.rs#Foo@sha256:{SHA}, test:t.rs#L1-L2");
     let got = realized_by_locators(&v);
     let cats: Vec<&str> = got.iter().map(|e| e.category.as_str()).collect();
     assert_eq!(cats, ["spec", "code", "test"]);

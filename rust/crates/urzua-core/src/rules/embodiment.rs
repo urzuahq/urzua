@@ -47,16 +47,12 @@ pub fn normalize_locator(raw: &str) -> String {
 /// written, normalised, so every reader still has a path to name.
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
-    for segment in value.split(',') {
-        let segment = segment.trim();
-        let Some((prefix, locator)) = segment.split_once(':') else {
-            continue;
-        };
+    for (prefix, locator) in crate::locator::realized_by_entries(value) {
         let locator = match crate::locator::parse_locator(locator) {
             Ok(l) => l.path,
             Err(_) => normalize_locator(locator),
         };
-        match prefix.trim() {
+        match prefix {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
             "test" => result.test.push(locator),
@@ -874,6 +870,35 @@ end: brace_balanced
         );
         // The same text naming a file that is there passes.
         assert!(exists_messages("code:weird#1.md").is_empty());
+    }
+
+    #[test]
+    fn a_comma_inside_a_locator_path_is_part_of_the_path_observed_failing() {
+        let r = parse_realized_by("code:src/weird,name.rs, test:tests/a, b.rs");
+        assert_eq!(r.code, vec!["src/weird,name.rs".to_string()]);
+        assert_eq!(r.test, vec!["tests/a, b.rs".to_string()]);
+        let entries = crate::locator::realized_by_locators("spec:docs/x,y.md,code:src/a.rs");
+        let paths: Vec<_> = entries
+            .iter()
+            .map(|e| e.parsed.as_ref().unwrap().path.clone())
+            .collect();
+        assert_eq!(paths, vec!["docs/x,y.md", "src/a.rs"]);
+    }
+
+    #[test]
+    fn a_comma_followed_by_a_category_prefix_separates_entries() {
+        let r = parse_realized_by("code:a.rs,test:b.rs ,  spec:c.md");
+        assert_eq!(r.code, vec!["a.rs".to_string()]);
+        assert_eq!(r.test, vec!["b.rs".to_string()]);
+        assert_eq!(r.spec, vec!["c.md".to_string()]);
+    }
+
+    #[test]
+    fn a_comma_followed_by_an_unknown_prefix_stays_in_the_path() {
+        // The unknown prefix is no category, so the text is not an entry of its
+        // own; the path names nothing and `embodiment.locator-exists` reports it.
+        let r = parse_realized_by("code:a.rs, docs:b.md");
+        assert_eq!(r.code, vec!["a.rs, docs:b.md".to_string()]);
     }
 
     #[test]

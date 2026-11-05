@@ -226,20 +226,49 @@ pub struct LocatorEntry {
 /// Every locator of a `Realized-by` value, in the order written. An
 /// unrecognised category is dropped, as everywhere else.
 pub fn realized_by_locators(value: &str) -> Vec<LocatorEntry> {
-    let mut out = Vec::new();
-    for segment in value.split(',') {
-        let Some((prefix, locator)) = segment.trim().split_once(':') else {
-            continue;
-        };
-        let category = prefix.trim();
-        if !matches!(category, "spec" | "code" | "test") {
-            continue;
-        }
-        out.push(LocatorEntry {
+    realized_by_entries(value)
+        .into_iter()
+        .map(|(category, locator)| LocatorEntry {
             category: category.to_string(),
             raw: locator.trim().to_string(),
             parsed: parse_locator(locator),
-        });
+        })
+        .collect()
+}
+
+/// The categories a `Realized-by` entry can carry: the declared evidence
+/// categories.
+const CATEGORIES: [&str; 3] = ["spec", "code", "test"];
+
+/// True when `rest` begins an entry: a category, then `:`.
+fn starts_entry(rest: &str) -> bool {
+    rest.trim_start()
+        .split_once(':')
+        .is_some_and(|(prefix, _)| CATEGORIES.contains(&prefix.trim()))
+}
+
+/// Splits a `Realized-by` value into `(category, locator text)` entries, the
+/// one splitter every reader of the field shares. A comma separates entries
+/// only when a `category:` prefix follows it; any other comma belongs to the
+/// path (`BUG-129`). Text before the first category prefix belongs to no
+/// entry. A path that itself contains `,<category>:` is the one ambiguous
+/// shape; it reads as two entries.
+pub fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
+    let mut starts = Vec::new();
+    if starts_entry(value) {
+        starts.push(0);
+    }
+    for (i, _) in value.match_indices(',') {
+        if starts_entry(&value[i + 1..]) {
+            starts.push(i + 1);
+        }
+    }
+    let mut out = Vec::new();
+    for (n, &start) in starts.iter().enumerate() {
+        let end = starts.get(n + 1).map_or(value.len(), |next| next - 1);
+        if let Some((prefix, locator)) = value[start..end].split_once(':') {
+            out.push((prefix.trim(), locator));
+        }
     }
     out
 }
