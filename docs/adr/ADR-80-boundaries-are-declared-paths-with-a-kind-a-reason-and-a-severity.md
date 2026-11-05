@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N33VQH2FQYGG0GDG80FV6X
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -152,3 +153,4 @@ matchers is cheap to keep and costly to lose, because merging them silently infl
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 to build `RFC-11` sections 1 to 3 for `MILE-125`; building part of an RFC needs its own decision record, and the maintainer approves before it is Accepted. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted, with the drafted choices on RFC-11's gaps. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
