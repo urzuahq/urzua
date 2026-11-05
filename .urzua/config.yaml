@@ -530,6 +530,13 @@ rules:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # Advisory (MILE-189, ADR-87): a `Realized-by` locator on a file under these paths
+  # could be an `Implements:` or `Verifies:` comment in that file. At `info` the
+  # findings are reported and counted but never fail `fail_on: warning`.
+  embodiment.locator-on-back-pointer-path:
+    level: info
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with
   # why, and what each kind forbids. A boundary's severity is the level of its
   # findings; the rule's level only turns the rule on.

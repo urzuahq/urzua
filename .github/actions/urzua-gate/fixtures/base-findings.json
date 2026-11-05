@@ -4,6 +4,7 @@
   "scope": {"source": "git-diff", "base": "origin/main"},
   "findings": [
     {"rule": "header.required-fields", "severity": "error", "file": "docs/adr/ADR-9-x.md", "line": null, "message": "missing required header field 'Status' for record type 'adr'"},
-    {"rule": "pointer.resolution", "severity": "warning", "file": "docs/milestones/MILE-3-a.md", "line": 4, "message": "Implements: ADR-1 | does not resolve,\nsecond line: 100%"}
+    {"rule": "pointer.resolution", "severity": "warning", "file": "docs/milestones/MILE-3-a.md", "line": 4, "message": "Implements: ADR-1 | does not resolve,\nsecond line: 100%"},
+    {"rule": "embodiment.locator-on-back-pointer-path", "severity": "info", "file": "docs/milestones/MILE-4-b.md", "line": null, "message": "advisory"}
   ]
 }

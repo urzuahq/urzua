@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6MP8RMWGBF9ZH42721R8CKS
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-78
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/locator_mechanism.rs, code:rust/crates/urzua-core/src/rules/table.rs, code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/locator_mechanism_integration.rs, spec:docs/specs/SPEC-3-configuration.md
 ---
 # 189 — An opt-in warning flags a Realized-by locator on a file under back_pointer_paths and nudges toward an Implements or Verifies comment
 
@@ -31,3 +32,4 @@ An opt-in warning rule that flags a `Realized-by` locator naming a file under `b
 > | 2026-11-05 | The rule is built as `embodiment.locator-on-back-pointer-path` (`SPEC-2`, `SPEC-3`) in #310: a `code:` locator on a file under `back_pointer_paths` and a `test:` locator on a file under `test_paths` are warned, with an `edit-field` action; a `spec:` locator, a `test:` locator outside `test_paths` and a scoped or pinned locator are left. Not enabled in this repository's `.urzua/config.yaml` yet, so `Status` stays `Planned` and no `Realized-by` is set: enabled over this corpus it reports 308 warnings on 129 records (188 `code:` and 120 `test:` locators, 265 of them on milestones), and this repository fails CI on any warning (`fail_on: warning`). Whether to move that evidence into `Implements:` and `Verifies:` comments, waive it for a period, or keep the rule off here is the maintainer's decision; enabling it is one entry under `rules:` with `back_pointer_paths` and `test_paths` as `embodiment.back-pointer-resolution` declares them. **Why:** Done means asks for the rule enabled in this repository's own configuration, and that cannot be done without either red CI or a decision this milestone does not carry. | **substantive** |
 > | 2026-11-05 | Fixed after review of #310: the suggested action is declared exempt with a reason (the repair is a comment in a source file, and dropping the locator first deleted the evidence before the comment existed, leaving `Embodiment` drifted), the action value is no longer built by splitting `Realized-by` on commas, and the stale revision rows on `SPEC-2` and `SPEC-3` are gone. **Why:** the reviewer applied the action to `ADR-8` and the record went from clean to drifted. | **substantive** |
 > | 2026-11-05 | Noted the way to meet Done means here: `ADR-87` (Proposed) adds a `level: info` that reports and counts findings and never trips `fail_on`, and `MILE-194` builds it. With the rule enabled at `info` in `.urzua/config.yaml`, its 308 findings are reported and CI stays green, and the Done means item on this repository's own configuration is met. `Status` stays `Planned` until then. **Why:** the row of 2026-11-05 above left enabling the rule to a maintainer decision; `info` is that decision's option that fails nothing. | **substantive** |
+> | 2026-11-05 | Enabled in `.urzua/config.yaml` at `level: info` (`ADR-87`, built by `MILE-194`): `urzua check` reports the rule's findings as `info`, counts them and exits 0 under `fail_on: warning`, so the evidence is neither hidden nor widened out of the list and CI stays green. Whether to move that evidence into `Implements:` and `Verifies:` comments is left to the findings, by decision. `Realized-by` added and `Status` set to `Done`. **Why:** the last unmet item of Done means, the rule enabled in this repository's own configuration, is met by the level the 2026-11-05 row above named. | **substantive** |

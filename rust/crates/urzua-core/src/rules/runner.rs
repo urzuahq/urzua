@@ -119,18 +119,23 @@ pub fn gate_and_run(
             Vec::new(),
         ),
         Some(level) => {
-            let severity = match level {
-                RuleLevel::Error => FindingSeverity::Error,
-                RuleLevel::Warn => FindingSeverity::Warning,
-                RuleLevel::Off => unreachable!("handled above"),
-            };
+            let severity = level
+                .severity()
+                .expect("a level other than off has a severity");
             let (exec, mut findings) = run();
             resolve_actions(id, &mut findings);
             for f in &mut findings {
                 // A level the rule declared for this finding's own field
-                // (`field_levels`, `MILE-140`) outranks the rule level; every
+                // (`field_levels`, `MILE-140`) or boundary outranks the rule
+                // level, except that a rule set to `info` is advisory
+                // whatever a declaration says (`ADR-87` point 10); every
                 // other finding takes the rule level.
-                f.severity = f.declared_severity.unwrap_or(severity);
+                // Implements: ADR-87 (a declared severity never lifts a rule set to info)
+                f.severity = match (level, f.declared_severity) {
+                    (RuleLevel::Info, _) => severity,
+                    (_, Some(declared)) => declared,
+                    (_, None) => severity,
+                };
             }
             (exec, findings)
         }
