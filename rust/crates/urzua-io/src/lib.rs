@@ -541,6 +541,16 @@ pub fn sha256_hex_of_file(path: &Path) -> Option<String> {
     Some(digest.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// Lowercase hex SHA-256 of a string's UTF-8 bytes (`ADR-74`: the pinned
+/// bytes of a scoped span).
+pub fn sha256_hex_of_str(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 fn run_git(dir: &Path, args: &[&str]) -> Result<String, DiscoveryError> {
     let args_str = args.join(" ");
     let output = Command::new("git")

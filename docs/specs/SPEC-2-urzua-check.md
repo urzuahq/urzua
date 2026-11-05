@@ -1,5 +1,5 @@
 ---
-Version: '0.71'
+Version: '0.72'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -685,3 +685,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.69`. `citation.resolution` takes an optional `non_reference_field` option: a declared id in the named header field is not resolved or reported in that record, a declared id never cited and a malformed entry are findings, and `check` prints one aggregated Info notice for declared ids that now match a real record. The rule table is regenerated. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.70`. A finding may carry `suggested_action` (`ADR-73`, `MILE-44`): a `kind` from a vocabulary closed per release, an `op` where the kind has several, a flat `target` and a `value` only where one is derivable, each omitted rather than `null` when not computed. The output contract reproduces `ADR-73`'s per-kind table and compatibility rule; each rule's table entry declares an action or a reasoned exemption for every finding variant it emits, `urzua rules` lists them as `actions`, and the generated action table below the contract is read from the same entries. **Why:** `MILE-44` -- a finding said what was wrong and never what to do; additive to `check` JSON. | **substantive** |
 > | 2026-11-04 | Bumped to `0.71`. `embodiment.locator-exists` also reports a locator that does not parse, a scope that does not resolve in the file (with the reason), a scope given without a pin and a commit anchor (not yet supported); the rule table is regenerated. **Why:** `MILE-185` / `ADR-74` -- a scope that stops resolving must be reported, never passed; `SPEC-3` lists every reason. | **substantive** |
+> | 2026-11-05 | Bumped to `0.72`. `embodiment.consistency` judges a scoped pin by the hash of its resolved span: an edit elsewhere in the file is not drift, there is no file-based grace window for it, and a scope that does not resolve is reported by `embodiment.locator-exists` and not also as drift. **Why:** `MILE-185` / `ADR-74`. | **substantive** |

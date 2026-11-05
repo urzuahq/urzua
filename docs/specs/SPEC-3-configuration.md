@@ -1,5 +1,5 @@
 ---
-Version: '0.59'
+Version: '0.60'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -926,6 +926,15 @@ end is not found; the range lies beyond the end of the file; a commit anchor is 
 and a scope given without a pin (drift is then judged on the whole file). A locator reported this
 way is not also judged for drift.
 
+**Drift.** A scoped pin drifts when the hash of its resolved span differs from the pin. The cited
+file's last commit says nothing about the scope, so there is no file-based grace window for it: a
+mismatch is drift at once, unless the record declares an audit date (`drift_audit_field`), in which
+case the window counts from that date as for a file-level pin. A scope without a pin has no effect
+on drift, which is judged on the whole file, and is reported as above. `embodiment.locator-promotion-candidate`
+and `urzua explain` key on the path. `urzua fix --rebaseline` re-pins a scoped pin and refuses one
+that does not resolve (`SPEC-8`), and `urzua explain <path>#<scope>` prints the span and the pin to
+write (`SPEC-13`).
+
 **Test vectors (normative).** Each row is a resolver, a text and a scope, with the span (1-based,
 inclusive) or the failure. Rows 1 to 12 use the `rust` resolver above with the `leading` pattern;
 `T` is the text shown, lines numbered from 1.
@@ -1177,3 +1186,4 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.58`. Documented the optional `non_reference_field` option of `citation.resolution`: a header field listing the exact ids a record names without citing as a reference, set aside in that record only, with a finding for a declared id never cited and for a malformed entry, a load error for a field that is unknown or a pointer, narrative or relation-role field, and an aggregated Info notice for ids that now match a real record. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.59`. Documented scoped evidence pins: the locator grammar and parse order, the hashed bytes, the top-level `locator_resolvers` declaration (`start`, `end`, `leading`, `container`, `member`, `trait_container`), the five end kinds, resolution and its failure reasons, with normative test vectors. **Why:** `MILE-185` / `ADR-74` -- a pin on a volatile file went stale on edits unrelated to its decision; resolvers are repository configuration, not engine knowledge. | **substantive** |
+> | 2026-11-05 | Bumped to `0.60`. Documented the drift rule for a scoped pin: no file-based grace window, an audit date still applies, and a scope without a pin is judged on the whole file. **Why:** `MILE-185` / `ADR-74` point 8. | **substantive** |

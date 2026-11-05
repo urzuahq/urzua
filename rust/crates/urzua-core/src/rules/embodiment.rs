@@ -43,27 +43,6 @@ pub fn normalize_locator(raw: &str) -> String {
     parts.join("/")
 }
 
-// Implements: ADR-74 (the locator grammar; `crate::locator` parses it)
-/// Every file-level locator with its optional pinned digest (`MILE-129`), in
-/// the order written. The path is normalised exactly as [`parse_realized_by`]
-/// does. A locator with a scope and a pin is not file-level: it is judged on
-/// its resolved span ([`crate::locator::realized_by_locators`]), so it is
-/// absent here; a scope without a pin is judged on the whole file (`ADR-74`
-/// point 8). A locator that does not parse is absent too:
-/// `embodiment.locator-exists` reports it.
-pub fn realized_by_pinned_locators(value: &str) -> Vec<(String, Option<String>)> {
-    use crate::locator::Anchor;
-    crate::locator::realized_by_locators(value)
-        .into_iter()
-        .filter_map(|entry| entry.parsed.ok())
-        .filter_map(|l| match (&l.scope, l.anchor) {
-            (Some(_), Some(Anchor::Pin(_))) => None,
-            (_, Some(Anchor::Pin(hash))) => Some((l.path, Some(hash))),
-            (_, _) => Some((l.path, None)),
-        })
-        .collect()
-}
-
 /// A locator that parses is its normalised path; one that does not stays as
 /// written, normalised, so every reader still has a path to name.
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
@@ -695,25 +674,17 @@ mod tests {
     use crate::rules::tests::*;
 
     #[test]
-    fn a_sha256_pin_is_split_off_the_locator_and_a_malformed_one_is_left_to_the_existence_rule() {
+    fn other_readers_see_the_bare_path_whatever_the_pin_or_scope() {
         let h = "a".repeat(64);
-        let value = format!("code:./src/a.rs@sha256:{h}, test:t.rs, spec:s.md@sha256:ABC");
-        assert_eq!(
-            realized_by_pinned_locators(&value),
-            vec![
-                ("src/a.rs".to_string(), Some(h.clone())),
-                ("t.rs".to_string(), None),
-            ]
-        );
+        let value = format!("code:./src/a.rs#Foo@sha256:{h}, test:t.rs, spec:s.md@sha256:ABC");
+        assert_eq!(parse_realized_by(&value).code, vec!["src/a.rs".to_string()]);
+        assert!(realized_by_locator_paths(&value).contains(&"src/a.rs".to_string()));
         // A malformed pin is neither a pin nor a path; the existence rule
-        // reports it (below), and every other reader still has a path.
+        // reports it, and every other reader still has a path to name.
         assert_eq!(
             parse_realized_by(&value).spec,
             vec!["s.md@sha256:ABC".to_string()]
         );
-        // Every other reader sees the bare path.
-        assert_eq!(parse_realized_by(&value).code, vec!["src/a.rs".to_string()]);
-        assert!(realized_by_locator_paths(&value).contains(&"src/a.rs".to_string()));
     }
 
     // ---- scoped locators (ADR-74) ------------------------------------------------
