@@ -94,4 +94,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A rule may have the level info: its findings are reported and counted but never trip fail_on](ADR-87-a-rule-may-have-the-level-info-its-findings-are-reported-and-counted-but-never-trip-fail-on.md)
 - [The closing-verb reading of claim.status-agreement can be turned off where the structured field is declared](ADR-88-the-closing-verb-reading-of-claim-status-agreement-can-be-turned-off-where-the-structured-field-is-declared.md)
 - [urzua ships an installable agent harness bundle](ADR-89-urzua-ships-an-installable-agent-harness-bundle.md)
+- [A rule may declare scope: changed so it judges only the records a --base diff adds or changes](ADR-90-a-rule-may-declare-scope-changed-so-it-judges-only-the-records-a-base-diff-adds-or-changes.md)
 <!-- urzua:index:end -->
