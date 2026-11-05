@@ -1383,7 +1383,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_OVERRIDE_UNREVIEWED,
-        description: "An editor-hook override that no one has reviewed is reported, on the committed override log the repository declares as `override_log` (`ADR-78`, `MILE-188`). The log is a Markdown table of `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason` and `Reviewed-by`; the hook appends a row, with `Reviewed-by` blank, whenever a named override lets a blocked edit through, and the entry is reviewed once a person sets `Reviewed-by` on its row in a later change. The finding names the override, the record, the rule and the reason, so it surfaces in the pull request that carries the log change. A row that is not an entry is a finding; a log that does not exist yet has nothing overridden and is counted eligible and not examined; one that is not text is unreadable. Opt-in; needs the top-level `override_log` declaration. The population counts log entries.",
+        description: "An editor-hook override that no one has reviewed is reported, on the committed override log the repository declares as `override_log` (`ADR-78`, `MILE-188`). The log is a Markdown table of `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason` and `Reviewed-by`; the hook appends a row, with `Reviewed-by` blank, whenever a named override lets a blocked edit through, and the entry is reviewed once a person names themselves in `Reviewed-by` on its row in a later change; a blank cell, a placeholder (`TBD`, `-`) and a declared pending value are not a review. The finding names the override, the record, the rule and the reason, so it surfaces in the pull request that carries the log change. A row that is not an entry is a finding; a declared log that does not exist, or is not text, is reported and counted unreadable, never read as an empty log. Opt-in; needs the top-level `override_log` declaration. The population counts log entries.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         needs_identity_index: false,
@@ -1395,10 +1395,11 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("override-unreviewed", ActionDecl::Exempt("reviewing an override is a person's act, recorded in the log's `Reviewed-by` cell; no field of a record holds it")),
+            VariantAction::new("override-log-missing", ActionDecl::Exempt("the log is not a record: creating it writes a file, which no action kind addresses (the hook creates it on the first override)")),
             VariantAction::new("override-log-malformed", ActionDecl::Exempt("the log is not a record: a malformed row is repaired by editing the log file, which no action kind addresses")),
         ],
         phase: Phase::Main,
-        run: |c| override_unreviewed(c.override_log),
+        run: |c| override_unreviewed(c.override_log, c.config),
     },
     RuleDef {
         id: RULE_CONFIG_SCOPE_MATCHES_NOTHING,

@@ -94,6 +94,22 @@ fn reviewing_the_entry_clears_the_finding() {
 }
 
 #[test]
+fn a_placeholder_or_pending_reviewer_does_not_clear_the_finding() {
+    let config = CONFIG.replace(
+        "required_fields: []\n",
+        "required_fields: []\n    statuses: {values: [Proposed], pending: [\"pending\"]}\n",
+    );
+    for cell in ["TBD", "-", "Pending", " "] {
+        let log = format!(
+            "{HEADER}| 2026-11-05 | alice | docs/adr/ADR-1-a.md | Embodiment | embodiment.consistency | draft | {cell} |\n"
+        );
+        let dir = fixture("placeholder-reviewer", &config, Some(&log));
+        let (_, v) = check(&dir);
+        assert_eq!(v["findings"].as_array().unwrap().len(), 1, "{cell:?}: {v}");
+    }
+}
+
+#[test]
 fn a_row_that_is_not_an_entry_is_reported() {
     let log = format!("{HEADER}| 2026-11-05 | alice | only three cells |\n");
     let dir = fixture("malformed", CONFIG, Some(&log));
@@ -110,14 +126,26 @@ fn a_row_that_is_not_an_entry_is_reported() {
 }
 
 #[test]
-fn a_log_that_does_not_exist_yet_is_disclosed_as_not_examined() {
+fn a_declared_log_that_does_not_exist_is_reported_never_read_as_empty() {
     let dir = fixture("absent", CONFIG, None);
     let (_, v) = check(&dir);
-    assert!(v["findings"].as_array().unwrap().is_empty(), "{v}");
+    let findings = v["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{v}");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("does not exist"),
+        "{v}"
+    );
     let p = &execution(&v)["population"];
     assert_eq!(
-        (p["eligible"].as_u64(), p["examined"].as_u64()),
-        (Some(1), Some(0)),
+        (
+            p["eligible"].as_u64(),
+            p["examined"].as_u64(),
+            p["unreadable"].as_u64()
+        ),
+        (Some(1), Some(0), Some(1)),
         "{v}"
     );
 }

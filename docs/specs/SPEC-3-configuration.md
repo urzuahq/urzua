@@ -673,15 +673,20 @@ rules:
   and `Reviewed-by`, in that order, the same table shape as a record's revision log. Prose and
   headings around the table are free. The hook writes the file's introduction and header when the
   file does not exist, and appends one row for each finding it lets through, `Reviewed-by` blank.
-- **Reviewed means a person has named themselves.** An entry is reviewed once its `Reviewed-by` cell is
-  not blank; setting it is an edit to the committed file, so the change is visible in the pull request
+- **Reviewed means a person has named themselves.** An entry is reviewed once its `Reviewed-by` cell
+  names a person: a blank cell, a placeholder (`TBD`, `todo`, `name`, or a cell of only dashes) and a
+  value the repository's record types declare as pending (their `statuses.pending` vocabulary, the
+  one `field.pending` uses) are not a review, and neither is the word `pending` where no type declares
+  a vocabulary. Setting it is an edit to the committed file, so the change is visible in the pull request
   that makes it. It is the smallest form that needs no git history, no record type and no second
   file: an alternative that asks whether a later commit acknowledged the entry would make the verdict
   depend on history a shallow checkout cannot see (the failure `ADR-69` names).
-- **`override.unreviewed`** (`SPEC-2`) reads the file and reports each entry with a blank
-  `Reviewed-by` as a warning on the log, naming the override, the record, the rule and the reason. A
-  row with the wrong number of cells is a finding, never skipped. A log that does not exist yet has
-  nothing overridden and is counted eligible and not examined; one that is not text is unreadable.
+- **`override.unreviewed`** (`SPEC-2`) reads the file and reports each entry not reviewed in that
+  sense as a warning on the log, naming the override, the record, the rule and the reason. A
+  row with the wrong number of cells is a finding, never skipped. A declared log that does not
+  exist, or that is not text, is reported and counted unreadable: it is never read as an empty log.
+  The hook creates the file on the first override, so a repository that declares `override_log`
+  commits the file with its header.
 - **Declared, never defaulted.** Enabling `override.unreviewed` without `override_log` is a load
   error (exit 2), as is a value that is blank, absolute, ends in `/` or has a `..` component. Declaring
   `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
@@ -1343,4 +1348,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
-> | 2026-11-05 | Bumped to `0.73`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
