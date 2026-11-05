@@ -184,7 +184,7 @@ pub fn embodiment_locator_exists(
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
-            let mut report = |message: String| {
+            let mut report = |variant: &'static str, message: String| {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -192,6 +192,8 @@ pub fn embodiment_locator_exists(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new(variant).field(field),
                     message,
                 });
             };
@@ -199,43 +201,52 @@ pub fn embodiment_locator_exists(
                 let l = match &entry.parsed {
                     Ok(l) => l,
                     Err(e) => {
-                        report(format!(
-                            "{field} names '{}', which does not parse: {e} (grammar: {})",
-                            entry.raw,
-                            locator::GRAMMAR
-                        ));
+                        report(
+                            "locator-malformed",
+                            format!(
+                                "{field} names '{}', which does not parse: {e} (grammar: {})",
+                                entry.raw,
+                                locator::GRAMMAR
+                            ),
+                        );
                         continue;
                     }
                 };
                 // An empty locator joins to the repository root, which exists --
                 // so it would pass while still computing to `Implemented`.
                 if l.path.trim().is_empty() {
-                    report(format!("{field} has an empty locator"));
+                    report("locator-empty", format!("{field} has an empty locator"));
                     continue;
                 }
                 if !present(&l.path) {
                     // A `#` that did not parse as a scope stayed in the path: it
                     // is a malformed scope, not a file missing from the tree.
                     if l.path.contains('#') {
-                        report(format!(
+                        report("locator-malformed", format!(
                             "{field} names '{}', whose text after `#` is not a scope and which is not a file in the working tree (grammar: {})",
                             l.path,
                             locator::GRAMMAR
                         ));
                     } else {
-                        report(format!(
-                            "{field} names '{}', which is not in the working tree",
-                            l.path
-                        ));
+                        report(
+                            "locator-missing",
+                            format!(
+                                "{field} names '{}', which is not in the working tree",
+                                l.path
+                            ),
+                        );
                     }
                     continue;
                 }
                 if matches!(l.anchor, Some(Anchor::Commit(_))) {
-                    report(format!(
-                        "{field} names '{}': {}",
-                        l.display(),
-                        ScopeError::CommitAnchor
-                    ));
+                    report(
+                        "locator-commit-anchor",
+                        format!(
+                            "{field} names '{}': {}",
+                            l.display(),
+                            ScopeError::CommitAnchor
+                        ),
+                    );
                     continue;
                 }
                 let Some(scope) = &l.scope else { continue };
@@ -250,11 +261,11 @@ pub fn embodiment_locator_exists(
                     )),
                 };
                 match resolved {
-                    Err(e) => report(format!(
+                    Err(e) => report("locator-scope-unresolved", format!(
                         "{field} names '{}', whose scope does not resolve: {e}",
                         l.display()
                     )),
-                    Ok(_) if l.anchor.is_none() => report(format!(
+                    Ok(_) if l.anchor.is_none() => report("locator-scope-unpinned", format!(
                         "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
                         l.display(),
                         l.display()
@@ -363,6 +374,8 @@ pub fn embodiment_consistency(
                             line: None,
                             waived: None,
                             declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("last-audit-date-invalid").field(field),
                             message: format!(
                                 "last-audit field {field} value '{}' {problem}, so drift_grace_days counts from the cited file's last change for this record",
                                 value.trim()
@@ -409,6 +422,8 @@ pub fn embodiment_consistency(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: if realized_by_value.is_some() || cited_by_code || cited_by_test { ActionSource::new("embodiment-drift").argv(["urzua", "fix", "--apply", "--ids", &record.path.display().to_string()]) } else { ActionSource::new("embodiment-unevidenced").field(state_field) },
                     message: format!(
                     "stated {state_field} '{}' disagrees with '{computed}', computed from {evidence}",
                     stated.trim()
@@ -424,6 +439,8 @@ pub fn embodiment_consistency(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("claim-too-old"),
                         message: format!(
                             "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
                         ),
@@ -563,6 +580,8 @@ pub fn embodiment_locator_promotion_candidate(
             line: None,
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("locator-promotion-candidate"),
             message: format!(
                 "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
                 paths.len(),
@@ -647,6 +666,8 @@ pub fn embodiment_requires_accepted_status(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("embodiment-state-not-accepted").field(state_field),
                     message: format!(
                         "{state_field} '{stated}' cannot be stated while {status_field} is '{status}' (accepted: {})",
                         accepted.join(", ")

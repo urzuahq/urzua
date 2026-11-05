@@ -135,6 +135,14 @@ struct Matcher {
     file: Option<String>,
     severity: Option<String>,
     message_contains: Option<String>,
+    /// A subset the finding's `suggested_action` must contain (`ADR-73`): every
+    /// key named here must be present and equal, recursively, and keys not
+    /// named are not compared.
+    suggested_action: Option<serde_json::Value>,
+    /// The finding must carry no `suggested_action` key: a variant declared
+    /// exempt, asserted so the exemption cannot quietly become an action.
+    #[serde(default)]
+    no_suggested_action: bool,
 }
 
 #[derive(Deserialize)]
@@ -256,6 +264,22 @@ fn matches(f: &serde_json::Value, m: &Matcher) -> bool {
         && m.message_contains
             .as_deref()
             .is_none_or(|t| field("message").contains(t))
+        && m.suggested_action.as_ref().is_none_or(|want| {
+            f.get("suggested_action")
+                .is_some_and(|got| contains(got, want))
+        })
+        && (!m.no_suggested_action || f.get("suggested_action").is_none())
+}
+
+/// Whether `got` holds everything `want` names: objects by key, recursively;
+/// anything else by equality.
+fn contains(got: &serde_json::Value, want: &serde_json::Value) -> bool {
+    match (got, want) {
+        (serde_json::Value::Object(g), serde_json::Value::Object(w)) => w
+            .iter()
+            .all(|(k, v)| g.get(k).is_some_and(|gv| contains(gv, v))),
+        _ => got == want,
+    }
 }
 
 /// Rules a case proves: the explicit list plus those it asserts on.

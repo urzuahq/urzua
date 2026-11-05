@@ -7,3 +7,4 @@ expect_findings:
     file: records/ADR-0008-no-context.md
     severity: error
     message_contains: "Context"
+    suggested_action: {kind: edit-section, op: add, target: {section: Context}}

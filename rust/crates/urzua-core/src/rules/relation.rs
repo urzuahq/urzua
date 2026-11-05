@@ -60,6 +60,8 @@ pub fn supersession_reciprocity(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("supersession-unresolved").field(field),
                         message: format!(
                             "{field}: {reference} does not resolve to any discovered record"
                         ),
@@ -92,6 +94,8 @@ pub fn supersession_reciprocity(
                     line: None,
  waived: None,
  declared_severity: None,
+ suggested_action: None,
+ action_source: ActionSource::new("supersession-unreciprocated").file(target.path.clone()).field(target_field).text(id.clone()),
                     message: format!(
                         "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
                     ),
@@ -123,6 +127,7 @@ pub fn supersession_reciprocity(
 pub fn relation_target_status_undeclared(
     records: &[Record],
     config: &Config,
+    config_path: &Path,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_RELATION_TARGET_STATUS_UNDECLARED;
@@ -161,6 +166,8 @@ pub fn relation_target_status_undeclared(
                             line: None,
                             waived: None,
                             declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("target-status-undeclared").file(config_path).key_path(["record_types", target.record_type.as_str(), "known_fields"]),
                             message: format!(
                                 "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
                                 target.record_type
@@ -371,6 +378,8 @@ pub fn relation_pair_reciprocity(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("pair-unresolved").field(field),
                         message: format!(
                             "{field}: {reference} does not resolve to any discovered record"
                         ),
@@ -429,6 +438,8 @@ pub fn relation_pair_reciprocity(
                         line: None,
                         waived: None,
                         declared_severity,
+                        suggested_action: None,
+                        action_source: ActionSource::new("pair-unreciprocated").file(target.path.clone()).field(echo).text(id.clone()),
                         message: format!(
                             "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
                             slot.pair.name
@@ -495,6 +506,8 @@ pub fn relation_cross_type_disallowed(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("cross-type-claim").field(slot.own_field()).text(reference.clone()),
                         message: format!(
                             "{}: {reference} is a '{}' record, but pair '{}' declares cross_type: false and this record is '{}'",
                             slot.own_field(),
@@ -743,7 +756,12 @@ mod tests {
         let records = [target, source];
         let index = build_normalized_index(&records);
 
-        let (exec, findings) = relation_target_status_undeclared(&records, &config, &index);
+        let (exec, findings) = relation_target_status_undeclared(
+            &records,
+            &config,
+            Path::new(".urzua/config.yaml"),
+            &index,
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("RFC-1"), "{findings:?}");
@@ -768,7 +786,12 @@ mod tests {
         let records = [target, source];
         let index = build_normalized_index(&records);
 
-        let (exec, findings) = relation_target_status_undeclared(&records, &config, &index);
+        let (exec, findings) = relation_target_status_undeclared(
+            &records,
+            &config,
+            Path::new(".urzua/config.yaml"),
+            &index,
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "{findings:?}");
     }

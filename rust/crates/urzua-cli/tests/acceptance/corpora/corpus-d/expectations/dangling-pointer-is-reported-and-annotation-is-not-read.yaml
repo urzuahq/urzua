@@ -7,3 +7,4 @@ expect_findings:
     file: records/ADR-0007-dangling.md
     severity: error
     message_contains: "ADR-0099"
+    suggested_action: {kind: edit-field, op: set}

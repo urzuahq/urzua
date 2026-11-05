@@ -223,7 +223,7 @@ pub fn index_freshness(
         |artifact| {
             let spec = &artifact.spec;
             let file = PathBuf::from(&spec.path);
-            let mut push = |line: Option<usize>, message: String| {
+            let mut push = |variant: &'static str, line: Option<usize>, message: String| {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -232,6 +232,12 @@ pub fn index_freshness(
                     message,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: if variant == "index-stale" {
+                        ActionSource::new(variant).argv(["urzua", "index", "--apply"])
+                    } else {
+                        ActionSource::new(variant)
+                    },
                 });
             };
 
@@ -239,6 +245,7 @@ pub fn index_freshness(
                 IndexContent::Text(text) => text,
                 IndexContent::Missing => {
                     push(
+                        "index-stale",
                         None,
                         format!(
                             "index file '{}' is missing; generate it or remove the declaration",
@@ -249,6 +256,7 @@ pub fn index_freshness(
                 }
                 IndexContent::NotText => {
                     push(
+                        "index-unregenerable",
                         None,
                         format!(
                             "index file '{}' is not text, so it was not compared",
@@ -262,6 +270,7 @@ pub fn index_freshness(
                 // Refused at config load; reaching here means the caller skipped
                 // that, and a silent pass would hide it.
                 push(
+                    "index-unregenerable",
                     None,
                     format!("the format '{}' cannot be parsed", spec.format),
                 );
@@ -276,6 +285,7 @@ pub fn index_freshness(
                     };
                     let Some(b) = find(begin, 0) else {
                         push(
+                            "index-unregenerable",
                             None,
                             format!(
                                 "the marker '{}' is missing from '{}'",
@@ -287,6 +297,7 @@ pub fn index_freshness(
                     };
                     let Some(e) = find(end, b + 1) else {
                         push(
+                            "index-unregenerable",
                             None,
                             format!(
                                 "the marker '{}' is missing from '{}' after '{}'",
@@ -334,6 +345,7 @@ pub fn index_freshness(
                 let (lineno, line) = region[at];
                 let Some(head) = match_entry(line, &format[0]) else {
                     push(
+                        "index-stale",
                         Some(lineno),
                         format!(
                             "line does not match the format '{}': {}",
@@ -350,6 +362,7 @@ pub fn index_freshness(
                 for (k, segments) in format.iter().enumerate().skip(1) {
                     let Some((next_no, next)) = region.get(at + k).copied() else {
                         push(
+                            "index-stale",
                             Some(lineno),
                             format!(
                                 "the entry starting here is incomplete: the format has {width} lines and the region ends after {k}"
@@ -360,6 +373,7 @@ pub fn index_freshness(
                     };
                     let Some(part) = match_entry(next, segments) else {
                         push(
+                            "index-stale",
                             Some(next_no),
                             format!(
                                 "line {} of the entry starting at line {lineno} does not match the format: {}",
@@ -387,6 +401,7 @@ pub fn index_freshness(
                 };
                 let Some(record) = found else {
                     push(
+                        "index-stale",
                         Some(lineno),
                         format!(
                             "entry {} names no {} record",
@@ -398,6 +413,7 @@ pub fn index_freshness(
                 };
                 if !listed.insert(record.path.clone()) {
                     push(
+                        "index-stale",
                         Some(lineno),
                         format!("entry {} is listed more than once", entry.name()),
                     );
@@ -407,6 +423,7 @@ pub fn index_freshness(
                 if let (Some(listed_file), Some(actual)) = (entry.file, record_file) {
                     if listed_file != actual {
                         push(
+                            "index-stale",
                             Some(lineno),
                             format!(
                                 "entry {} lists the file '{listed_file}', but the record is '{actual}'",
@@ -419,6 +436,7 @@ pub fn index_freshness(
                     match record.header.get(name).map(str::trim) {
                         Some(actual) if actual == *listed_value => {}
                         Some(actual) => push(
+                            "index-stale",
                             Some(lineno),
                             format!(
                                 "entry {} lists {name} '{listed_value}', but the record's {name} is '{actual}'",
@@ -426,6 +444,7 @@ pub fn index_freshness(
                             ),
                         ),
                         None => push(
+                            "index-stale",
                             Some(lineno),
                             format!(
                                 "entry {} lists {name} '{listed_value}', but the record has no {name} field",
@@ -439,6 +458,7 @@ pub fn index_freshness(
                 {
                     if listed_title != actual {
                         push(
+                            "index-stale",
                             Some(lineno),
                             format!(
                                 "entry {} lists the title '{listed_title}', but the record's title is '{actual}'",
@@ -451,6 +471,7 @@ pub fn index_freshness(
             for record in &expected {
                 if !listed.contains(&record.path) {
                     push(
+                        "index-stale",
                         None,
                         format!(
                             "{} has no entry in '{}'",

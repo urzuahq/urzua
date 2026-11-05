@@ -23,16 +23,23 @@ pub fn config_companion_declaration_missing(
                         .map_or(key.as_str(), |role| type_config.relation_field(role))
                 });
                 let has = names.map(|name| declared.contains(name));
+                let mut missing: Option<&str> = None;
                 let message = match has {
                     [true, true] => continue,
-                    [true, false] => format!(
+                    [true, false] => {
+                        missing = Some(names[1]);
+                        format!(
                         "record type '{type_name}' declares {} without its companion {} -- declare both, since a record can claim a state the rule reading both cannot check",
                         names[0], names[1]
-                    ),
-                    [false, true] => format!(
+                        )
+                    }
+                    [false, true] => {
+                        missing = Some(names[0]);
+                        format!(
                         "record type '{type_name}' declares {} without its companion {} -- declare both, since a record can claim a state the rule reading both cannot check",
                         names[1], names[0]
-                    ),
+                        )
+                    }
                     [false, false] => format!(
                         "record type '{type_name}' declares the companion pair {} / {} but neither field is in its required_fields or known_fields, so the pair could never examine a record",
                         names[0], names[1]
@@ -45,6 +52,23 @@ pub fn config_companion_declaration_missing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: {
+                        let source = ActionSource::new(if missing.is_some() {
+                            "companion-field-missing"
+                        } else {
+                            "companion-pair-undeclared"
+                        })
+                        .key_path([
+                            "record_types",
+                            type_name,
+                            "known_fields",
+                        ]);
+                        match missing {
+                            Some(field) => source.text(field),
+                            None => source,
+                        }
+                    },
                     message,
                 });
             }

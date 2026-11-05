@@ -569,10 +569,21 @@ fn scope_findings(session: &Session, scope: &ReportScope, findings: &mut Vec<Fin
     // The config rules were handed the loaded (absolute) path, so the same
     // finding differed by checkout (BUG-185). Relativized after the filters
     // above compare against the loaded path, and before waivers match on it.
+    // A suggested edit to the configuration names the same file, so it is
+    // relativized with the finding (`ADR-73`: `file` is repository-relative).
     for f in findings.iter_mut() {
         if f.file == session.config_path.as_path() {
             if let Ok(rel) = f.file.strip_prefix(&session.repo_root) {
                 f.file = rel.to_path_buf();
+            }
+        }
+        if let Some(action) = f.suggested_action.as_mut() {
+            if let Some(file) = action.target.file.as_mut() {
+                if file == session.config_path.as_path() {
+                    if let Ok(rel) = file.strip_prefix(&session.repo_root) {
+                        *file = rel.to_path_buf();
+                    }
+                }
             }
         }
     }

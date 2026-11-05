@@ -39,7 +39,7 @@ fn not_applicable(rule: &str) -> (RuleExecution, Vec<Finding>) {
     )
 }
 
-fn finding(rule: &str, file: PathBuf, message: String) -> Finding {
+fn finding(rule: &str, file: PathBuf, message: String, action_source: ActionSource) -> Finding {
     Finding {
         rule: rule.to_string(),
         severity: FindingSeverity::Error,
@@ -48,6 +48,8 @@ fn finding(rule: &str, file: PathBuf, message: String) -> Finding {
         message,
         waived: None,
         declared_severity: None,
+        suggested_action: None,
+        action_source,
     }
 }
 
@@ -98,6 +100,8 @@ pub fn source_requires_record(
                      change or add the record that governs {}",
                     path.display()
                 ),
+                // The record's type is not knowable from a source path.
+                ActionSource::new("source-without-record"),
             ));
         }
         Outcome::Examined
@@ -144,6 +148,7 @@ pub fn source_and_records_mixed(
                 record.display(),
                 source.display()
             ),
+            ActionSource::new("source-and-records-mixed"),
         ));
     }
     let population = census(PopulationUnit::ChangedPath, paths, |path| {
