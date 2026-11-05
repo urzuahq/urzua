@@ -8,6 +8,7 @@ Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: ADR-3, ADR-34
+Non-reference-ids: ADR-9999, ADR-10000
 ---
 # 36 — Filenames carry the type prefix going forward
 
@@ -126,3 +127,4 @@ the unedited Decision/Consequences sections and this amendment's own text.
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` d1dfa0bf3267 -> 6e014472fce7, `rust/crates/urzua-core/src/new_record.rs` 5473850e4d7d -> 15511d30876e. Reason: Re-verified: new_record.rs now matches the record's two amendments (width-padded names from the identity pattern, unpadded when open-ended). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` 6e014472fce7 -> fbf1f65873e3. Reason: Drift review of 2026-11-04, recommendation (a). The only change to filename.rs since the pin is an action_source added to three findings (ADR-73, #275); the identity-pattern and title checks are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/new_record.rs` 15511d30876e -> 850e21078331. Reason: Drift review of 2026-11-04, recommendation (a), for a later change from main (BUG-22, #276). The only change to new_record.rs since the pin is added code: a TemplateValues type, template_header_values and a test, which let field.quality read a template's declared values. Nothing the filename-prefix convention, zero-padding or slug behaviour of urzua new depends on was removed or changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `ADR-9999, ADR-10000`. **Why:** the text names these ids as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the Decision is unchanged. | **structural** |

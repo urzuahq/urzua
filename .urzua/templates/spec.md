@@ -3,8 +3,6 @@
 > Version: 0.1 | Date: YYYY-MM-DD | Status: Draft
 > Author: name
 > Subject: one line -- what feature, record type, schema, or practice this spec is about.
-> Parent: only if this spec genuinely narrows/splits off from a broader spec whose own prose says
-> so -- otherwise omit this line entirely. Not a default; see SPEC-18.
 
 ## Purpose
 

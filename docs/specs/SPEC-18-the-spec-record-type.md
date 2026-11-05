@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
@@ -28,11 +28,34 @@ record_types:
     dir: "docs/specs"
     required_fields: ["Status", "Date", "Version", "Author", "Subject"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
+    known_fields: ["Stable-Id", "Embodiment", "Realized-by", "Derives-from", "Implements", "Parent", "Last-audited"]
+    statuses:
+      values: ["Draft", "Accepted", "Shipped"]
+      success: ["Accepted", "Shipped"]
+      implementable: ["Accepted", "Shipped"]
+      initial: ["Draft"]
+      transitions:
+        Draft: ["Accepted"]
+        Accepted: ["Shipped"]
+      require:
+        - {when: ["Shipped"], fields: ["Embodiment", "Realized-by"]}
+    sections:
+      from: headings
+      required:
+        - {name: Purpose}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      version_bump: {field: "Version", classes: ["substantive", "structural"]}
     spec: "SPEC-18"
     pointer_fields: ["Derives-from", "Implements", "Parent"]
     narrative_fields: []
 ```
+
+`Status` is mechanically validated against `statuses`: `status.undeclared-value` reports a value outside
+the three, and `status.transition-allowed` reports a move the graph does not allow (on a `--base` run,
+against the merge base's copy). The lifecycle is one-way: a spec is filed `Draft`, becomes `Accepted`, then
+`Shipped`, and no move goes back or skips a step. `sections` requires a `Purpose` on every spec.
 
 | Field | Values | Notes |
 |---|---|---|
@@ -42,7 +65,8 @@ record_types:
 | `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new`, same as `adr`/`rfc` (MILE-74's accountability decision, MILE-78's precedent). Required as of version `0.2` — backfilled onto every pre-existing spec that lacked it. Written without a decorative `@` prefix (BUG-18, SPEC-16); note MILE-78's backfill predates that and used the now-retired `'@handle'` form, corrected corpus-wide by BUG-18. |
 | `Subject` | one line, free text | What feature, record type, schema, or practice the spec is actually about — readable at a glance without opening `Purpose`. No cross-reference or backlink semantics; not resolved by any rule. Required (`MILE-91`), backfilled onto every pre-existing spec. |
 | `Stable-Id` | a ULID, optional | Assigned unconditionally by `urzua new spec` (ADR-21: every type gets one), first exercised by `SPEC-19` — no earlier spec was ever created through the tool. |
-| `Embodiment` / `Realized-by` | optional; required once `Status` is `Shipped` | `SPEC-1`'s own field, kept as a project-wide optional convention rather than treated as its historical baggage (MILE-74) — any spec may use it, none but `SPEC-1` currently do. |
+| `Embodiment` / `Realized-by` | optional; required once `Status` is `Shipped` | `SPEC-1`'s own field, kept as a project-wide convention rather than treated as its historical baggage (MILE-74). Declared together (`companion_fields`), `Embodiment` is computed from the `Realized-by` locators and checked by `embodiment.consistency`; `statuses.require` makes both mandatory at `Shipped`. |
+| `Last-audited` | `YYYY-MM-DD`, optional | The day the spec's evidence was last audited. `embodiment.consistency` counts its drift grace window from this date instead of from the cited file's last change (`drift_audit_field`, `MILE-166`), since a spec's file changes for reasons unrelated to its evidence. No spec here carries it yet. |
 | `Derives-from` / `Implements` | comma-separated, optional | A spec's real lineage (which ADR/RFC/bug it realizes or derives from) lives here. Declared as two of this type's `pointer_fields` entries (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
 | `Parent` | a single spec ID, or `—`, optional | **Not** a default root pointer — a genuine narrowing/split-off relationship to a broader spec whose own prose documents the split (e.g. `SPEC-2`–`5`/`8`/`11`–`15` really were split out of `SPEC-1`, per its own child-spec table). A spec whose real lineage is already expressed by `Implements`/`Derives-from` uses `—`, not `SPEC-1` by default (`BUG-10`, `MILE-91`) — declared as this type's third `pointer_fields` entry; `pointer.resolution` still validates a non-`—` value resolves, but resolving is not the same as being correct, and nothing mechanically checks that. |
 
@@ -95,3 +119,4 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-05 | Bumped to `0.10`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.11`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.12`. The schema excerpt now shows the type as configured: `Realized-by` and `Last-audited` among the known fields, the `statuses` declaration (`initial`, the one-way `Draft` to `Accepted` to `Shipped` `transitions`, and `require` of `Embodiment` and `Realized-by` at `Shipped`), the required `Purpose` section and the `version_bump` declaration. A `Last-audited` row is added and the `Embodiment` / `Realized-by` row no longer says none but `SPEC-1` use them. **Why:** the excerpt predated `Shipped` and the lifecycle, so it did not show that the order cannot be reversed or what a `Shipped` spec must carry. | **substantive** |
