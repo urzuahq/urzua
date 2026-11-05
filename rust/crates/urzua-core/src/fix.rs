@@ -275,6 +275,27 @@ pub fn apply_repair(
     Ok(doc.to_string())
 }
 
+/// The lines a scoped pin resolved to, shown to the reviewer so they diff
+/// exactly those lines and see that the resolver found the right item
+/// (`ADR-74` point 7).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PinSpan {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+}
+
+/// What reading a pinned locator now gives (`ADR-74` point 9): the hash of
+/// what it pins, with the span for a scoped pin; a scope that does not resolve
+/// and why; or nothing, when the file cannot be read (a missing file is
+/// `embodiment.locator-exists`' finding).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PinRead {
+    Current { hash: String, span: Option<PinSpan> },
+    Failed(String),
+    Unreadable,
+}
+
 /// One pinned locator whose current content no longer matches its pin
 /// (`MILE-181`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -282,6 +303,22 @@ pub struct PinDrift {
     pub locator: String,
     pub recorded_hash: String,
     pub current_hash: String,
+    /// The resolved span of a scoped pin; absent for a file-level one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<PinSpan>,
+    /// The locator as written before its pin, which the re-pin edits in place.
+    #[serde(skip)]
+    pub spelling: String,
+}
+
+/// A scoped pin that does not resolve, so cannot be re-pinned: re-hashing
+/// "whatever is at the range now" would turn a deleted symbol into a silent
+/// pass. Per pin, not per record; a rename is repaired by editing the scope.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FailedPin {
+    pub record: PathBuf,
+    pub locator: String,
+    pub reason: String,
 }
 
 /// A record whose `Realized-by` carries one or more stale `@sha256:` pins: the
@@ -297,16 +334,19 @@ pub struct Rebaseline {
 }
 
 // Implements: ADR-67 (attributed re-baselining of a pin)
-/// Lists the records whose pinned locators changed. Pure: `current_hash` is
-/// the CLI's content-hash lookup for a repo-relative locator path. A locator
-/// whose file cannot be read is not a stale pin (`embodiment.locator-exists`
-/// reports it), and an unpinned locator has nothing to re-pin.
+// Implements: ADR-74 (a scoped pin is re-pinned from its resolved span, and refused when it does not resolve)
+/// Lists the records whose pinned locators changed. Pure: `read` is the CLI's
+/// lookup of what a pinned locator hashes to now. A locator whose file cannot
+/// be read is not a stale pin (`embodiment.locator-exists` reports it), an
+/// unpinned locator has nothing to re-pin, and a scoped pin that no longer
+/// resolves is listed as a failed pin with its reason, never re-pinned.
 pub fn detect_rebaselines(
     records: &[Record],
     config: &Config,
-    current_hash: &dyn Fn(&str) -> Option<String>,
-) -> (Population, Vec<Rebaseline>) {
+    read: &dyn Fn(&crate::locator::Locator) -> PinRead,
+) -> (Population, Vec<Rebaseline>, Vec<FailedPin>) {
     let mut found = Vec::new();
+    let mut failed = Vec::new();
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         let locator_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
@@ -314,21 +354,56 @@ pub fn detect_rebaselines(
             return Outcome::Absent;
         };
         let mut pins: Vec<PinDrift> = Vec::new();
-        for (locator, pin) in crate::rules::realized_by_pinned_locators(value) {
-            let Some(recorded) = pin else { continue };
-            let Some(current) = current_hash(&locator) else {
+        for entry in crate::locator::realized_by_locators(value) {
+            let Ok(locator) = entry.parsed else { continue };
+            let Some(crate::locator::Anchor::Pin(recorded)) = locator.anchor.clone() else {
                 continue;
             };
-            if current != recorded
-                && !pins
-                    .iter()
-                    .any(|p| p.locator == locator && p.recorded_hash == recorded)
-            {
-                pins.push(PinDrift {
-                    locator,
-                    recorded_hash: recorded,
-                    current_hash: current,
-                });
+            match read(&locator) {
+                // A scoped pin on a file that cannot be read cannot be
+                // re-pinned either: list it rather than skip it silently.
+                PinRead::Unreadable if locator.scope.is_some() => {
+                    let display = locator.display();
+                    if !failed
+                        .iter()
+                        .any(|f: &FailedPin| f.record == record.path && f.locator == display)
+                    {
+                        failed.push(FailedPin {
+                            record: record.path.clone(),
+                            locator: display,
+                            reason: format!("file not found or unreadable: {}", locator.path),
+                        });
+                    }
+                }
+                PinRead::Unreadable => {}
+                PinRead::Failed(reason) => {
+                    let display = locator.display();
+                    if !failed
+                        .iter()
+                        .any(|f: &FailedPin| f.record == record.path && f.locator == display)
+                    {
+                        failed.push(FailedPin {
+                            record: record.path.clone(),
+                            locator: display,
+                            reason,
+                        });
+                    }
+                }
+                PinRead::Current { hash, span } => {
+                    if hash != recorded
+                        && !pins
+                            .iter()
+                            .any(|p| p.spelling == locator.spelling && p.recorded_hash == recorded)
+                    {
+                        pins.push(PinDrift {
+                            locator: locator.display(),
+                            recorded_hash: recorded,
+                            current_hash: hash,
+                            span,
+                            spelling: locator.spelling.clone(),
+                        });
+                    }
+                }
             }
         }
         if !pins.is_empty() {
@@ -346,7 +421,7 @@ pub fn detect_rebaselines(
         }
         Outcome::Examined
     });
-    (population, found)
+    (population, found, failed)
 }
 
 // Implements: ADR-67 (attributed re-baselining of a pin)
@@ -375,7 +450,7 @@ pub fn apply_rebaseline(
         })?;
     let mut line = doc.line(field_line).unwrap_or_default().to_string();
     for pin in &rebaseline.pins {
-        let old = format!("{}@sha256:{}", pin.locator, pin.recorded_hash);
+        let old = format!("{}@sha256:{}", pin.spelling, pin.recorded_hash);
         if !line.contains(&old) {
             return Err(format!(
                 "the pin on '{}' is no longer on the '{}' line -- the record may have changed since detect ran",
@@ -384,7 +459,7 @@ pub fn apply_rebaseline(
         }
         line = line.replace(
             &old,
-            &format!("{}@sha256:{}", pin.locator, pin.current_hash),
+            &format!("{}@sha256:{}", pin.spelling, pin.current_hash),
         );
     }
     doc.replace_line(field_line, line);
@@ -407,8 +482,13 @@ pub fn apply_rebaseline(
         .pins
         .iter()
         .map(|p| {
+            let lines = p
+                .span
+                .as_ref()
+                .map(|s| format!(" (lines {}-{})", s.start, s.end))
+                .unwrap_or_default();
             format!(
-                "`{}` {} -> {}",
+                "`{}`{lines} {} -> {}",
                 p.locator,
                 short(&p.recorded_hash),
                 short(&p.current_hash)
@@ -778,9 +858,19 @@ mod tests {
     fn a_stale_pin_is_listed_with_both_hashes_and_a_current_one_is_not_observed_failing() {
         let stale = pinned("docs/adr/0001-x.md", H1);
         let current = pinned("docs/adr/0002-y.md", H2);
-        let lookup = |l: &str| (l == "src/a.rs").then(|| H2.to_string());
-        let (population, found) =
+        let lookup = |l: &crate::locator::Locator| {
+            if l.path == "src/a.rs" {
+                PinRead::Current {
+                    hash: H2.to_string(),
+                    span: None,
+                }
+            } else {
+                PinRead::Unreadable
+            }
+        };
+        let (population, found, failed) =
             detect_rebaselines(&[stale, current], &no_relation_field_overrides(), &lookup);
+        assert!(failed.is_empty());
         assert_eq!(population.examined(), 2);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].pins[0].recorded_hash, H1);
@@ -790,8 +880,11 @@ mod tests {
     #[test]
     fn re_pinning_moves_only_the_hash_and_logs_who_and_why_observed_failing() {
         let r = pinned("docs/adr/0001-x.md", H1);
-        let lookup = |_: &str| Some(H2.to_string());
-        let (_, found) = detect_rebaselines(&[r], &no_relation_field_overrides(), &lookup);
+        let lookup = |_: &crate::locator::Locator| PinRead::Current {
+            hash: H2.to_string(),
+            span: None,
+        };
+        let (_, found, _) = detect_rebaselines(&[r], &no_relation_field_overrides(), &lookup);
         let content = format!(
             "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{H1}, test:t.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
         );
@@ -811,6 +904,61 @@ mod tests {
         assert!(out.contains("Read the diff; the claim holds."));
         // Applying the same rebaseline again finds no pin to move.
         assert!(apply_rebaseline(&out, &found[0], "d", "ana", "r", &Default::default()).is_err());
+    }
+
+    fn scoped(path: &str, spec: &str, hash: &str) -> Record {
+        record(
+            path,
+            &format!(
+                "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs{spec}@sha256:{hash}, code:src/b.rs#Gone@sha256:{hash}'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+            ),
+        )
+    }
+
+    #[test]
+    fn a_scoped_pin_is_re_pinned_in_its_own_spelling_and_an_unresolving_one_is_a_failed_pin() {
+        let r = scoped("docs/adr/0001-x.md", "#Foo::bar", H1);
+        let lookup = |l: &crate::locator::Locator| match l.path.as_str() {
+            "src/a.rs" => PinRead::Current {
+                hash: H2.to_string(),
+                span: Some(PinSpan {
+                    start: 10,
+                    end: 14,
+                    text: "fn bar() {}".to_string(),
+                }),
+            },
+            _ => PinRead::Failed("'Gone' matches nothing".to_string()),
+        };
+        let (_, found, failed) = detect_rebaselines(
+            std::slice::from_ref(&r),
+            &no_relation_field_overrides(),
+            &lookup,
+        );
+        // Per pin, not per record: the resolvable one is listed, the other fails.
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].pins.len(), 1);
+        assert_eq!(found[0].pins[0].locator, "src/a.rs#Foo::bar");
+        assert_eq!(found[0].pins[0].span.as_ref().map(|s| s.start), Some(10));
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].locator, "src/b.rs#Gone");
+        assert!(failed[0].reason.contains("matches nothing"));
+
+        let content = format!(
+            "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs#Foo::bar@sha256:{H1}, code:src/b.rs#Gone@sha256:{H1}'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        );
+        let out = apply_rebaseline(
+            &content,
+            &found[0],
+            "2026-11-04",
+            "ana",
+            "ok.",
+            &Default::default(),
+        )
+        .unwrap();
+        assert!(out.contains(&format!(
+            "code:src/a.rs#Foo::bar@sha256:{H2}, code:src/b.rs#Gone@sha256:{H1}"
+        )));
+        assert!(out.contains("(lines 10-14)"));
     }
 
     #[test]

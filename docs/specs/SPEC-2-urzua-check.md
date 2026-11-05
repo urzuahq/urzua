@@ -1,5 +1,5 @@
 ---
-Version: '0.74'
+Version: '0.75'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -695,3 +695,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.72`. `sequence.cycle` and `sequence.unresolved-blocker` added to the generated rule table; both read only `relation_pairs` entries that set `acyclic: true` (`SPEC-3`), and enabling either with no such pair is a config load error. **Why:** `MILE-27` -- the sequencing relation `RFC-48` section 1 proposes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.73`. Added `revision-log.version-bump-required` to the rule table (regenerated from `RULE_METADATA`): a diff rule that compares a changed record's revision log and version field against the merge base's copy, read by the CLI and handed to the rules as data. **Why:** `BUG-51`; `SPEC-3` states the declaration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.74`. `embodiment.locator-exists` also reports a locator that does not parse, a scope that does not resolve in the file (with the reason), a scope given without a pin and a commit anchor (not yet supported); the rule table is regenerated. **Why:** `MILE-185` / `ADR-74` -- a scope that stops resolving must be reported, never passed; `SPEC-3` lists every reason. | **substantive** |
+> | 2026-11-05 | Bumped to `0.75`. `embodiment.consistency` judges a scoped pin by the hash of its resolved span: an edit elsewhere in the file is not drift, there is no file-based grace window for it, and a scope that does not resolve is reported by `embodiment.locator-exists` and not also as drift. **Why:** `MILE-185` / `ADR-74`. | **substantive** |

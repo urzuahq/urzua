@@ -195,3 +195,292 @@ fn an_invalid_resolver_declaration_is_a_config_load_error() {
         );
     }
 }
+
+// ---- drift, explain and re-baselining (ADR-74 points 7 and 8) ------------------
+
+fn config_with(consistency: &str) -> String {
+    format!(
+        "schema_version: 2\nrules:\n  embodiment.consistency: {consistency}\n  embodiment.locator-exists: error\n{RESOLVERS}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\", \"Last-audited\"]\n"
+    )
+}
+
+fn commit_all(dir: &Path) {
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "fixture"]);
+}
+
+/// The pin `urzua explain` prints for `path#scope`.
+fn explained_pin(dir: &Path, arg: &str) -> String {
+    let out = run_urzua(dir, &["explain", arg]);
+    assert!(out.status.success(), "{out:?}");
+    json(&out)["scope"]["pin"].as_str().unwrap().to_string()
+}
+
+fn drift_messages(dir: &Path) -> Vec<String> {
+    let parsed = json(&run_urzua(dir, &["check", "docs/"]));
+    parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "embodiment.consistency")
+        .map(|f| f["message"].as_str().unwrap().to_string())
+        .collect()
+}
+
+fn pinned_repo(name: &str, consistency: &str, scope: &str) -> PathBuf {
+    let dir = repo(name, "", "code:src/a.rs");
+    std::fs::write(dir.join(".urzua/config.yaml"), config_with(consistency)).unwrap();
+    let pin = explained_pin(&dir, &format!("src/a.rs{scope}"));
+    std::fs::write(dir.join(RECORD_PATH), record(&format!("code:{pin}"))).unwrap();
+    commit_all(&dir);
+    dir
+}
+
+#[test]
+fn explain_prints_the_resolved_span_and_a_pin_ready_to_paste() {
+    let dir = repo("explain", RESOLVERS, "code:src/a.rs");
+    let out = run_urzua(&dir, &["explain", "src/a.rs#Beta::go"]);
+    let parsed = json(&out);
+    let scope = &parsed["scope"];
+    assert_eq!(
+        (scope["start"].as_u64(), scope["end"].as_u64()),
+        (Some(11), Some(11))
+    );
+    assert_eq!(scope["text"], "    fn go(&self) {}");
+    assert_eq!(scope["resolver"], "rust");
+    let hash = scope["sha256"].as_str().unwrap();
+    assert_eq!(scope["pin"], format!("src/a.rs#Beta::go@sha256:{hash}"));
+    // The leading doc line is part of `alpha`.
+    let parsed = json(&run_urzua(&dir, &["explain", "src/a.rs#alpha"]));
+    assert_eq!(parsed["scope"]["start"], 1);
+    assert_eq!(parsed["scope"]["end"], 4);
+    // A scope that does not resolve is a could-not-run with the reason.
+    let out = run_urzua(&dir, &["explain", "src/a.rs#gone"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("matches nothing"));
+    // Without a scope it is the old query.
+    let parsed = json(&run_urzua(&dir, &["explain", "src/a.rs"]));
+    assert!(parsed.get("scope").is_none(), "{parsed}");
+}
+
+#[test]
+fn explain_names_the_scope_each_citing_record_pins() {
+    let dir = repo(
+        "explain-cited",
+        RESOLVERS,
+        &format!("code:src/a.rs#alpha@sha256:{ZEROS}"),
+    );
+    let parsed = json(&run_urzua(&dir, &["explain", "src/a.rs"]));
+    let g = &parsed["governing_records"][0];
+    assert_eq!(g["scope"], "alpha", "{parsed}");
+}
+
+#[test]
+fn an_edit_elsewhere_in_the_file_is_not_drift_and_an_edit_to_the_item_is() {
+    {
+        let consistency = "error";
+        let dir = pinned_repo("drift", consistency, "#alpha");
+        // Unrelated edit, even with the default (no grace) window.
+        let src = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
+        std::fs::write(
+            dir.join("src/a.rs"),
+            src.replace("b: u8,", "b: u8,\n    c: u8,"),
+        )
+        .unwrap();
+        commit_all(&dir);
+        assert_eq!(drift_messages(&dir), Vec::<String>::new());
+        // An edit to the pinned item.
+        std::fs::write(
+            dir.join("src/a.rs"),
+            std::fs::read_to_string(dir.join("src/a.rs"))
+                .unwrap()
+                .replace("    1;", "    2;"),
+        )
+        .unwrap();
+        commit_all(&dir);
+        assert!(
+            drift_messages(&dir)
+                .iter()
+                .any(|m| m.contains("Drift detected")),
+            "{:?}",
+            drift_messages(&dir)
+        );
+    }
+}
+
+#[test]
+fn a_scoped_pin_has_no_file_based_grace_window_but_an_audit_date_still_applies() {
+    let with_grace = |dir: &Path, audit: Option<&str>| {
+        let c =
+            config_with("{level: error, drift_grace_days: 14, drift_audit_field: Last-audited}");
+        std::fs::write(dir.join(".urzua/config.yaml"), c).unwrap();
+        let rec = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
+        let rec = match audit {
+            Some(d) => rec.replace(
+                "---\n# ADR-1",
+                &format!("Last-audited: '{d}'\n---\n# ADR-1"),
+            ),
+            None => rec,
+        };
+        std::fs::write(dir.join(RECORD_PATH), rec).unwrap();
+    };
+    // The cited file changed just now (inside any file-based window): the
+    // scoped pin is drift regardless.
+    let dir = pinned_repo("grace-none", "error", "#alpha");
+    std::fs::write(
+        dir.join("src/a.rs"),
+        std::fs::read_to_string(dir.join("src/a.rs"))
+            .unwrap()
+            .replace("    1;", "    2;"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    with_grace(&dir, None);
+    assert!(
+        drift_messages(&dir)
+            .iter()
+            .any(|m| m.contains("Drift detected")),
+        "{:?}",
+        drift_messages(&dir)
+    );
+    // A fresh declared audit date holds it back, as for a file-level pin.
+    let today =
+        String::from_utf8(Command::new("date").arg("+%F").output().unwrap().stdout).unwrap();
+    with_grace(&dir, Some(today.trim()));
+    assert_eq!(drift_messages(&dir), Vec::<String>::new());
+}
+
+#[test]
+fn a_scope_that_stops_resolving_is_reported_once_and_not_also_as_drift() {
+    let dir = pinned_repo("gone", "error", "#alpha");
+    std::fs::write(
+        dir.join("src/a.rs"),
+        std::fs::read_to_string(dir.join("src/a.rs"))
+            .unwrap()
+            .replace("fn alpha()", "fn renamed()"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    let rules: Vec<&str> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["rule"].as_str().unwrap())
+        .collect();
+    assert_eq!(rules, ["embodiment.locator-exists"], "{parsed}");
+}
+
+#[test]
+fn rebaseline_shows_the_span_re_pins_in_its_spelling_and_lists_failed_pins() {
+    let dir = pinned_repo("rebase", "error", "#alpha");
+    let stale_record = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
+    // A second pin on a scope that will not resolve.
+    let with_gone = stale_record.replace(
+        "Realized-by: 'code:",
+        &format!("Realized-by: 'code:src/a.rs#gone@sha256:{ZEROS}, code:"),
+    );
+    std::fs::write(dir.join(RECORD_PATH), with_gone).unwrap();
+    std::fs::write(
+        dir.join("src/a.rs"),
+        std::fs::read_to_string(dir.join("src/a.rs"))
+            .unwrap()
+            .replace("    1;", "    2;"),
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let listed = json(&run_urzua(&dir, &["fix", "--rebaseline"]));
+    let pin = &listed["rebaselines"][0]["pins"][0];
+    assert_eq!(pin["locator"], "src/a.rs#alpha", "{listed}");
+    assert_eq!(pin["span"]["start"], 1);
+    assert!(pin["span"]["text"].as_str().unwrap().contains("2;"));
+    let failed = listed["failed_pins"].as_array().unwrap();
+    assert_eq!(failed.len(), 1, "{listed}");
+    assert_eq!(failed[0]["locator"], "src/a.rs#gone");
+    assert!(failed[0]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("matches nothing"));
+
+    let applied = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            RECORD_PATH,
+            "--by",
+            "ana",
+            "--reason",
+            "Read the item; the claim holds.",
+        ],
+    );
+    let out = json(&applied);
+    assert_eq!(out["failed_pins"].as_array().unwrap().len(), 1, "{out}");
+    let rec = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
+    let new_hash = explained_pin(&dir, "src/a.rs#alpha");
+    assert!(rec.contains(&format!("code:{new_hash}")), "{rec}");
+    // The unresolving pin is untouched, and the row names the lines.
+    assert!(
+        rec.contains(&format!("src/a.rs#gone@sha256:{ZEROS}")),
+        "{rec}"
+    );
+    assert!(
+        rec.contains("attested by") && rec.contains("(lines 1-4)"),
+        "{rec}"
+    );
+}
+
+/// A commit-anchored locator is reported as unsupported and is not also judged
+/// for drift on the file's history; the same locator without the anchor is.
+#[test]
+fn a_commit_anchored_locator_is_not_judged_for_drift() {
+    for (anchored, expect_drift) in [(true, false), (false, true)] {
+        let locator = if anchored {
+            "code:src/a.rs@abcdef1"
+        } else {
+            "code:src/a.rs"
+        };
+        let dir = repo(
+            if anchored { "anchor" } else { "plain" },
+            RESOLVERS,
+            locator,
+        );
+        std::fs::write(dir.join(".urzua/config.yaml"), config_with("error")).unwrap();
+        commit_all(&dir);
+        std::fs::write(
+            dir.join("src/a.rs"),
+            std::fs::read_to_string(dir.join("src/a.rs"))
+                .unwrap()
+                .replace("    1;", "    2;"),
+        )
+        .unwrap();
+        commit_all(&dir);
+        let drifted = drift_messages(&dir)
+            .iter()
+            .any(|m| m.contains("Drift detected"));
+        assert_eq!(drifted, expect_drift, "anchored={anchored}");
+    }
+}
+
+#[test]
+fn rebaseline_lists_a_scoped_pin_on_a_missing_file_as_failed() {
+    let dir = pinned_repo("rebase-missing", "error", "#alpha");
+    let rec = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        rec.replace(
+            "Realized-by: 'code:",
+            &format!("Realized-by: 'code:src/gone.rs#alpha@sha256:{ZEROS}, code:"),
+        ),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let listed = json(&run_urzua(&dir, &["fix", "--rebaseline"]));
+    let failed = listed["failed_pins"].as_array().unwrap();
+    assert_eq!(failed.len(), 1, "{listed}");
+    assert_eq!(failed[0]["locator"], "src/gone.rs#alpha");
+    assert!(failed[0]["reason"].as_str().unwrap().contains("not found"));
+}
