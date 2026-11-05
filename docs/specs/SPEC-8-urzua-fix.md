@@ -1,5 +1,5 @@
 ---
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -193,7 +193,9 @@ Every one of the following is a hard gate — none are optional, none are defaul
   matched against a record's repo-relative path; accepting a record id is not defined here.
 - **Identity is required**, resolved via `urzua-io::resolve_identity` (`gh api user` wins even over
   an explicit `--by`, which wins over `git config user.name` -- ADR-31's amendment); none resolving
-  is a hard error, never a placeholder author. A `--by` that diverges from an authenticated `gh`
+  is a hard error, never a placeholder author. An identity containing `|` or a control character
+  (a line break) is refused, whichever tier supplied it, because it is written into a revision-log
+  table row (`--reason` is refused for the same reason). A `--by` that diverges from an authenticated `gh`
   login surfaces as a `notices` entry (ADR-46) rather than being silently overridden or discarded.
 - **A missing Revision log section refuses that record's write outright, where the log is required.**
   A type declares `revision_log: {required: false}` (`MILE-159`, SPEC-3) to be written without a row;
@@ -208,6 +210,9 @@ Every one of the following is a hard gate — none are optional, none are defaul
   `--apply` invocations; a second process fails loud rather than interleaving writes. No stale-lock
   cleanup exists yet — a crashed process leaves the lock file behind, requiring manual removal. A
   real, named gap, not silently accepted as fine.
+- **A write replaces the file whole or not at all.** The new text is written to a temporary file in
+  the record's directory and renamed over it, keeping the mode, so a full disk or a killed process
+  leaves the old record, never an empty or truncated one. A read-only record is refused.
 - **The edit touches only the one field's line.** Every other field and all prose is untouched,
   byte-for-byte — verified by test, not just intended.
   That includes the file's line endings and trailing-newline state, and the new revision-log row
@@ -322,4 +327,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.21`. The record-edit hook records a named override in the declared `override_log` (a reason is then required) and blocks an override it cannot record. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
 > | 2026-11-05 | Bumped to `0.22`. `--rebaseline` lists and re-pins a directory or glob pin of a kind the repository declares pinnable, each listed pin carrying the `files` it covers. **Why:** `BUG-176` -- a pin on a tree is attested over the files it covers, which the reviewer must be able to read. | **substantive** |
 > | 2026-11-05 | Bumped to `0.23`. The record-edit hook reads `block_on: introduced \| all`: `all` blocks on any unwaived error in the proposed content and skips the baseline run; the default and an absent key keep today's verdicts and messages; an unrecognised value is `allow-unjudged` naming the value; the Claude Code adapter passes the verdict through unchanged. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
-> | 2026-11-05 | Bumped to `0.24`. The record-edit hook no longer answers `allow-unjudged` for an `embodiment-drift-git` notice: it judges and blocks on what needs no history and discloses the skipped drift rule; it omits the `run:` repair hint from findings the edit introduced. **Why:** Phase 0 hardening from an adopter switchover -- every edit in a shallow clone went unjudged, and the hint answered `matched no pending repair`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.24`. `--apply` and `--rebaseline --apply` refuse an identity (`--by`, `git config user.name`, the `gh` login) containing `|` or a line break instead of writing a row with an extra cell or a split row, and write each record through a temporary file and a rename instead of truncating it first. **Why:** review of the CLI found both: a crafted `--by` corrupted the revision log, and a failed write could leave a record empty (`BUG-192` class). | **substantive** |
+> | 2026-11-05 | Bumped to `0.25`. The record-edit hook no longer answers `allow-unjudged` for an `embodiment-drift-git` notice: it judges and blocks on what needs no history and discloses the skipped drift rule; it omits the `run:` repair hint from findings the edit introduced. **Why:** Phase 0 hardening from an adopter switchover -- every edit in a shallow clone went unjudged, and the hint answered `matched no pending repair`. | **substantive** |

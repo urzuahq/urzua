@@ -249,10 +249,12 @@ fn uncovered_source_paths(
     variant: &'static str,
     files: &[SourceFile],
     source_paths: &[String],
+    config_path: &std::path::Path,
 ) -> Vec<Finding> {
     uncovered_paths(
         rule,
         variant,
+        config_path,
         files,
         source_paths,
         ("source path", "back_pointer_paths"),
@@ -265,6 +267,7 @@ fn uncovered_source_paths(
 fn uncovered_paths(
     rule: &str,
     variant: &'static str,
+    config_path: &std::path::Path,
     files: &[SourceFile],
     paths: &[String],
     (label, option): (&str, &str),
@@ -292,7 +295,11 @@ fn uncovered_paths(
             waived: None,
             declared_severity: None,
             suggested_action: None,
-            action_source: ActionSource::new(variant).key_path(["rules", rule, option]),
+            // The edit lands in the configuration, not in the finding's own
+            // file (the declared source path).
+            action_source: ActionSource::new(variant)
+                .file(config_path)
+                .key_path(["rules", rule, option]),
         })
         .collect()
 }
@@ -306,6 +313,7 @@ pub fn embodiment_back_pointer_resolution(
     source_paths: &[String],
     test_paths: &[String],
     config: &Config,
+    config_path: &std::path::Path,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
@@ -354,10 +362,12 @@ pub fn embodiment_back_pointer_resolution(
         "back-pointer-uncovered-path",
         files,
         source_paths,
+        config_path,
     ));
     findings.extend(uncovered_paths(
         RULE_ID,
         "back-pointer-uncovered-test-path",
+        config_path,
         files,
         test_paths,
         ("test path", "test_paths"),
@@ -392,6 +402,7 @@ pub fn embodiment_back_pointer_decision_accepted(
     accepted_fallback: &[String],
     changed: Option<&[PathBuf]>,
     config: &Config,
+    config_path: &std::path::Path,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED;
@@ -484,6 +495,7 @@ pub fn embodiment_back_pointer_decision_accepted(
         "decision-uncovered-path",
         files,
         source_paths,
+        config_path,
     ));
 
     (
@@ -698,6 +710,7 @@ mod tests {
             &["src".to_string()],
             &["src/tests".to_string(), "src/gone".to_string()],
             &config(),
+            std::path::Path::new(".urzua/config.yaml"),
             &index,
         );
         assert_eq!(findings.len(), 2, "{findings:?}");
@@ -726,6 +739,7 @@ mod tests {
             &["src".to_string()],
             &[],
             &config(),
+            std::path::Path::new(".urzua/config.yaml"),
             &index,
         );
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -744,6 +758,7 @@ mod tests {
             &["src".to_string(), "gone".to_string()],
             &[],
             &config(),
+            std::path::Path::new(".urzua/config.yaml"),
             &index,
         );
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -762,6 +777,7 @@ mod tests {
             &["src".to_string()],
             &[],
             &config(),
+            std::path::Path::new(".urzua/config.yaml"),
             &index,
         );
         assert!(findings.is_empty());
@@ -796,6 +812,7 @@ mod tests {
             &fallback,
             changed,
             config,
+            std::path::Path::new(".urzua/config.yaml"),
             &index,
         )
     }

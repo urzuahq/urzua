@@ -255,7 +255,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             &log_id,
             log_required,
         ) {
-            Ok(new_content) => match std::fs::write(&full_path, new_content) {
+            Ok(new_content) => match urzua_io::write_atomic(&full_path, &new_content) {
                 Ok(()) => applied.push(repair),
                 Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),
             },
@@ -468,7 +468,7 @@ fn run_rebaseline(
             reason,
             &log_id,
         ) {
-            Ok(new) => match std::fs::write(&full_path, new) {
+            Ok(new) => match urzua_io::write_atomic(&full_path, &new) {
                 Ok(()) => applied.push(rb),
                 Err(e) => failed.push((rb.record.clone(), format!("could not write: {e}"))),
             },

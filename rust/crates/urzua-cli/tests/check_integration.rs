@@ -143,8 +143,9 @@ fn an_untracked_scratch_file_is_never_examined() {
 
     let output = run_urzua(&dir, &["check", "docs/"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("\"files_examined\": 1"),
+    assert_eq!(
+        json_field(&stdout, "files_examined"),
+        1,
         "expected exactly 1 file examined (the untracked file must be excluded): {stdout}"
     );
 }
@@ -225,6 +226,42 @@ fn doctor_errors_when_no_rule_is_enabled() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
     assert!(stdout.contains("rules-enabled"), "stdout: {stdout}");
+}
+
+/// `doctor` reads the global `--config`, as every other command does: a
+/// healthy default config must not hide a broken one named on the command line.
+#[test]
+fn doctor_reports_on_the_config_named_by_the_global_flag() {
+    let dir = fixture_repo("doctor-config-flag");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {field.quality: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("other.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let default = run_urzua(&dir, &["doctor"]);
+    assert_eq!(default.status.code(), Some(0), "{default:?}");
+    let other = run_urzua(&dir, &["--config", "other.yaml", "doctor"]);
+    let stdout = String::from_utf8_lossy(&other.stdout);
+    assert_eq!(other.status.code(), Some(1), "stdout: {stdout}");
+    assert!(stdout.contains("rules-enabled"), "stdout: {stdout}");
+    assert!(stdout.contains("other.yaml exists"), "stdout: {stdout}");
+
+    let missing = run_urzua(&dir, &["--config", "nope.yaml", "doctor"]);
+    let stdout = String::from_utf8_lossy(&missing.stdout);
+    assert_eq!(missing.status.code(), Some(2), "stdout: {stdout}");
+    assert!(
+        stdout.contains("nope.yaml does not exist"),
+        "stdout: {stdout}"
+    );
 }
 
 /// Round 30 F1/F2/F5: doctor and check share config load, so an invalid
@@ -327,15 +364,17 @@ fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
 
     let scoped = run_urzua(&dir, &["check", "docs/adr/"]);
     let scoped_stdout = String::from_utf8_lossy(&scoped.stdout);
-    assert!(
-        scoped_stdout.contains("\"files_examined\": 1"),
+    assert_eq!(
+        json_field(&scoped_stdout, "files_examined"),
+        1,
         "scoping to docs/adr/ must exclude docs/rfc/: {scoped_stdout}"
     );
 
     let whole = run_urzua(&dir, &["check", "docs/"]);
     let whole_stdout = String::from_utf8_lossy(&whole.stdout);
-    assert!(
-        whole_stdout.contains("\"files_examined\": 2"),
+    assert_eq!(
+        json_field(&whole_stdout, "files_examined"),
+        2,
         "an unscoped check must still see both files: {whole_stdout}"
     );
 }
@@ -543,6 +582,15 @@ fn init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form
     // Idempotence: a second init must refuse, not clobber.
     let second_init = run_urzua(&dir, &["init"]);
     assert_eq!(second_init.status.code(), Some(2));
+}
+
+/// A top-level field of the JSON a command printed: what a test asserts on,
+/// instead of a substring that would match the same text in any other field.
+fn json_field(stdout: &str, key: &str) -> serde_json::Value {
+    assert_valid_json_object(stdout)
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| panic!("no top-level `{key}` in: {stdout}"))
 }
 
 fn assert_valid_json_object(stdout: &str) -> serde_json::Value {
@@ -1138,6 +1186,37 @@ fn migrate_ids_exits_1_on_a_real_write_failure() {
         parsed["results"][0]["outcome"], "failed",
         "stdout: {stdout}"
     );
+    // The report agrees with the exit code.
+    assert_eq!(parsed["status"], "partial-failure", "stdout: {stdout}");
+    // The read-only record is left as it was, not truncated.
+    assert_eq!(
+        std::fs::read_to_string(&record_path).unwrap(),
+        "---\nStatus: Accepted\n---\n# 0001 — X\n"
+    );
+}
+
+/// `migrate ids --apply` takes the lock `fix --apply` takes, so it cannot
+/// interleave with another writer.
+#[test]
+fn migrate_ids_apply_refuses_while_another_apply_holds_the_lock() {
+    let dir = fixture_repo("migrate-ids-locked");
+    std::fs::create_dir_all(dir.join(".urzua/cache")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    let record_path = dir.join("docs/adr/0001-x.md");
+    let text = "---\nStatus: Accepted\n---\n# 0001 — X\n";
+    std::fs::write(&record_path, text).unwrap();
+    commit_all(&dir);
+    std::fs::write(dir.join(".urzua/cache/fix.lock"), "").unwrap();
+
+    let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(2), "stdout: {stdout}");
+    assert!(stdout.contains("already exists"), "stdout: {stdout}");
+    assert_eq!(std::fs::read_to_string(&record_path).unwrap(), text);
 }
 
 /// ADR-7: "off" and "ran clean" must stay distinguishable. A rule a repository
@@ -1302,8 +1381,9 @@ fn a_path_scope_narrows_what_is_reported_on_not_what_a_pointer_resolves_against(
         !stdout.contains("does not resolve"),
         "RFC-1 exists outside the scope; scoping must not make it dangle: {stdout}"
     );
-    assert!(
-        stdout.contains("\"files_examined\": 1"),
+    assert_eq!(
+        json_field(&stdout, "files_examined"),
+        1,
         "only the in-scope record is reported on: {stdout}"
     );
     let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -1435,8 +1515,9 @@ fn a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("\"files_examined\": 1"),
+    assert_eq!(
+        json_field(&stdout, "files_examined"),
+        1,
         "RFC-35: the subdirectory record is not owned by the type: {stdout}"
     );
     assert!(
@@ -1669,8 +1750,9 @@ fn a_run_in_which_no_rule_examined_anything_is_not_ok() {
     let dir = one_adr_repo("no-rules", "{}", "---\nTitle: X\n---\n# 1 — X\n");
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        stdout.contains("\"status\": \"not-run\""),
+    assert_eq!(
+        json_field(&stdout, "status"),
+        "not-run",
         "no rule examined anything, so nothing was established: {stdout}"
     );
     assert_ne!(
@@ -1785,8 +1867,9 @@ fn audit_with_no_rule_declared_is_not_ok() {
     );
     let out = run_urzua(&dir, &["audit"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        stdout.contains("\"status\": \"not-run\""),
+    assert_eq!(
+        json_field(&stdout, "status"),
+        "not-run",
         "audit executed no rule: {stdout}"
     );
     assert_ne!(
@@ -2105,8 +2188,9 @@ fn audit_is_ok_on_a_clean_corpus_with_no_relationships() {
     );
     let out = run_urzua(&dir, &["audit"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        stdout.contains("\"status\": \"ok\""),
+    assert_eq!(
+        json_field(&stdout, "status"),
+        "ok",
         "a corpus with no relationships is clean, not unestablished: {stdout}"
     );
     assert_eq!(out.status.code(), Some(0), "exit 0: {stdout}");
@@ -2138,8 +2222,9 @@ fn a_directory_symlink_inside_claim_paths_is_treated_like_the_root() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        !stdout.contains("\"status\": \"not-run\""),
+    assert_ne!(
+        json_field(&stdout, "status"),
+        "not-run",
         "an in-repo directory symlink is accepted as a root, so it is accepted nested: {stdout}"
     );
     assert!(
@@ -2389,8 +2474,9 @@ fn a_record_whose_name_git_quotes_is_still_examined() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(
-        stdout.contains("\"files_examined\": 2"),
+    assert_eq!(
+        json_field(&stdout, "files_examined"),
+        2,
         "the accented record belongs to the corpus: {stdout}"
     );
     assert!(

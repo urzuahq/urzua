@@ -18,7 +18,8 @@ The first `make build` of a clone wires the versioned hooks: `pre-commit` runs `
 and `pre-push` runs fmt, clippy and `urzua check`. `make hooks-install` does only the wiring. When
 the binary is not built, or `check` cannot run, the commit hook prints a `NOT RUN` banner on stderr
 and lets the commit through, because CI is the guarantee (ADR-71); blocking findings stop the
-commit. `urzua doctor` reports each hook's state. If you already use a `core.hooksPath` of your own,
+commit. In Claude Code an editor hook (`.claude/settings.json`, ADR-69) also judges a `Write` or
+`Edit` of a governed record before it is written and blocks an error the edit introduced. `urzua doctor` reports each hook's state. If you already use a `core.hooksPath` of your own,
 the build leaves it alone and says so.
 
 `make help` lists every target. Native `cargo` commands work fine inside `rust/` for anyone who
@@ -85,12 +86,14 @@ tag-triggered release workflow takes it from there.
 
 ## Ground rules
 
-- **Every RFC follows [`docs/rfc/_template.md`](docs/rfc/_template.md) exactly** — banner block,
-  then Summary / Motivation / Proposal / Open questions / Non-goals / References.
+- **Start every record with `urzua new <type> "<title>"`** (or `/rfc`, `/adr`, `/milestone` in
+  Claude Code). It writes the YAML-frontmatter header and the section skeleton from
+  `.urzua/templates/`; an RFC keeps Summary / Motivation / Proposal / Open questions / Non-goals /
+  References.
 - **Open questions stay open.** Don't smooth over uncertainty to make a proposal look more decided
   than it is.
 - **A `Status` value is never silently rewritten** during an otherwise structural edit. Substantive
   changes get called out as substantive.
 - **A waiver, not an ignore list.** If `urzua check` flags something in your own corpus that's a
-  reviewed exception, see ADR-11 for the waiver record shape — don't reach for a config-level
+  reviewed exception, see SPEC-10 for the waiver record shape — don't reach for a config-level
   exclusion.

@@ -788,6 +788,7 @@ fn load_context<'a>(
                     &session.config,
                     &session.records,
                     c,
+                    &mut notices,
                 )
             }),
             repo_root: repo_root.clone(),

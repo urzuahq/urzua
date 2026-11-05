@@ -183,3 +183,64 @@ fn on_a_base_run_only_changed_source_files_are_judged() {
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0]["file"], "src/new.rs");
 }
+
+/// The suggested edit for an uncovered path lands in the configuration, not in
+/// the declared path the finding is about (`ADR-73`).
+#[test]
+fn an_uncovered_path_action_targets_the_config_file() {
+    let dir = repo("uncovered-target", true, "// Implements: ADR-1\n");
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config.replace(
+            "back_pointer_paths: [\"src\"]",
+            "back_pointer_paths: [\"src\", \"gone\"]\n    test_paths: [\"src/gone-tests\"]",
+        ),
+    )
+    .unwrap();
+    git(&dir, &["commit", "-qam", "uncovered"]);
+    let out = run_urzua(&dir, &["check"]);
+    let found = findings(&out, "embodiment.back-pointer-resolution");
+    for (path, key) in [
+        ("gone", "back_pointer_paths"),
+        ("src/gone-tests", "test_paths"),
+    ] {
+        let f = found
+            .iter()
+            .find(|f| f["file"] == path)
+            .unwrap_or_else(|| panic!("no finding for {path}: {found:?}"));
+        let action = &f["suggested_action"];
+        assert_eq!(action["kind"], "edit-config", "{f}");
+        assert_eq!(action["target"]["file"], ".urzua/config.yaml", "{f}");
+        assert_eq!(
+            action["target"]["key_path"],
+            serde_json::json!(["rules", "embodiment.back-pointer-resolution", key]),
+            "{f}"
+        );
+    }
+}
+
+#[test]
+fn a_decision_uncovered_path_action_targets_the_config_file() {
+    let dir = gate_repo("uncovered-target", "Accepted");
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config.replace(
+            "back_pointer_paths: [\"src\"]",
+            "back_pointer_paths: [\"src\", \"gone\"]",
+        ),
+    )
+    .unwrap();
+    git(&dir, &["commit", "-qam", "uncovered"]);
+    let out = run_urzua(&dir, &["check"]);
+    let found = findings(&out, "embodiment.back-pointer-decision-accepted");
+    let f = found
+        .iter()
+        .find(|f| f["file"] == "gone")
+        .unwrap_or_else(|| panic!("no finding for gone: {found:?}"));
+    assert_eq!(
+        f["suggested_action"]["target"]["file"], ".urzua/config.yaml",
+        "{f}"
+    );
+}

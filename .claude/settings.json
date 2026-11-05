@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/scripts/hooks/claude-code-record-edit.py\""
+            "command": "d=\"${CLAUDE_PROJECT_DIR:-}\"; h=\"$d/scripts/hooks\"; if [ -n \"$d\" ] && command -v python3 >/dev/null 2>&1; then exec python3 -I \"$h/claude-code-record-edit.py\"; fi; why=\"python3 is not installed\"; [ -n \"$d\" ] || { why=\"CLAUDE_PROJECT_DIR is unset\"; h=\"$(git rev-parse --show-toplevel 2>/dev/null)/scripts/hooks\"; }; bash \"$h/record-edit-not-judged.sh\" \"$why\" >/dev/null; exit 0"
           }
         ]
       }
