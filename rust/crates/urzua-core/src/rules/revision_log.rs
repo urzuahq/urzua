@@ -6,11 +6,11 @@ use super::*;
 /// "no class recorded," undetectable by any per-field presence check because
 /// the field itself is present, just not a real value.
 ///
-/// A record of a type whose `revision_log.required` is true (the default,
-/// `MILE-159`) that has no revision-log section is itself a finding
-/// (`BUG-50`): absence is not compliance. A type declaring
-/// `required: false` carries no log by declaration, and its records without
-/// one are eligible and unexamined, as before.
+/// A record of a type that declares `revision_log: {required: true}` and has
+/// no revision-log section is itself a finding (`BUG-50`): absence is not
+/// compliance. A type that does not declare it, or declares `required: false`,
+/// is not held to a log, and its records without one are eligible and
+/// unexamined, as before.
 pub fn revision_log_change_class(
     records: &[Record],
     config: &Config,

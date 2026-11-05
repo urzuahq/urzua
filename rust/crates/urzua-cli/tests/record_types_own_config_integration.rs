@@ -70,7 +70,7 @@ fn milestone(status: &str, extra: &str, done_means: bool) -> String {
         ""
     };
     format!(
-        "---\nStatus: {status}\nPhase: '1'\nTrack: t\n{extra}---\n# 1 — A milestone\n\n## What\n\nx\n{section}"
+        "---\nStatus: {status}\nPhase: '1'\nTrack: t\n{extra}---\n# 1 — A milestone\n\n## What\n\nx\n{section}\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 
@@ -128,7 +128,7 @@ fn a_milestone_status_outside_the_declared_vocabulary_is_a_finding() {
 // ---- SPEC-9: the bug type
 
 fn bug(status: &str, header_extra: &str, heading: &str) -> String {
-    format!("---\nStatus: {status}\n{header_extra}---\n# 1 — A bug\n\n## {heading}\n\nx\n")
+    format!("---\nStatus: {status}\n{header_extra}---\n# 1 — A bug\n\n## {heading}\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n")
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn n2(record: String) -> String {
 
 fn adr(status: &str, extra: &str) -> String {
     format!(
-        "---\nStatus: {status}\nDate: 2026-01-01\nAuthor: a\n{extra}---\n# 1 — A decision\n\n## Context\n\nx\n"
+        "---\nStatus: {status}\nDate: 2026-01-01\nAuthor: a\n{extra}---\n# 1 — A decision\n\n## Context\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 
@@ -244,7 +244,7 @@ fn adr_supersession_must_be_reciprocated_and_a_retired_decision_is_a_declared_st
 
 fn rfc(status: &str, extra: &str) -> String {
     format!(
-        "---\nStatus: {status}\nDate: 2026-01-01\nAuthor: a\n{extra}---\n# 1 — A proposal\n\n## Summary\n\nx\n"
+        "---\nStatus: {status}\nDate: 2026-01-01\nAuthor: a\n{extra}---\n# 1 — A proposal\n\n## Summary\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 
