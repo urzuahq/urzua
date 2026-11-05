@@ -24,7 +24,7 @@ jobs:
     # without this guard every such push would otherwise fail loudly
     # (PrepareRelease finding no pending changes) rather than just being a
     # no-op.
-    if: "!contains(github.event.head_commit.message, 'chore: prepare release')"
+    if: "!startsWith(github.event.head_commit.message, 'chore: prepare release')"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
