@@ -1,0 +1,22 @@
+id: the-previous-schema-version-loads-with-one-warning
+corpus: corpus-k
+invocation: [--config, .urzua/config-v1.yaml, check]
+# A version-1 config is upgraded in memory, so every rule runs against the
+# current shape and the repository still passes; the one thing reported is the
+# warning on the config file, with the command that rewrites it (ADR-77).
+expect_exit: 0
+expect_json:
+  - {at: /blocking, equals: false}
+expect_findings:
+  - rule: config.schema-version-outdated
+    severity: warning
+    file: .urzua/config-v1.yaml
+    message_contains: schema_version 1
+    suggested_action:
+      kind: run-command
+      target:
+        argv: [urzua, migrate, config]
+expect_rules_ran:
+  - header.required-fields
+  - pointer.resolution
+mutation_exempt: a version-1 config has no `rules` table to switch the rule off in, and the case that reads the current version proves the rule runs.

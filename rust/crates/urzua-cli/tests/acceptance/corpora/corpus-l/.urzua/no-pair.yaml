@@ -1,0 +1,17 @@
+schema_version: 2
+record_types:
+  milestone:
+    dir: records
+    prefix: MILE
+    required_fields: [Status, Phase]
+    known_fields: [Depends-on, Blocks]
+    header_shape: yaml-frontmatter
+    pointer_fields: [Depends-on, Blocks]
+    statuses:
+      values: [Planned, Done, WontDo]
+      success: [Done]
+      failure: [WontDo]
+relation_pairs:
+  - {name: sequencing, forward: Depends-on, inverse: Blocks, reciprocity: none, cross_type: true}
+rules:
+  header.required-fields: error

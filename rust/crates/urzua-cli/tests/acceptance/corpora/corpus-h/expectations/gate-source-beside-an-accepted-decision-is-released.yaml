@@ -1,0 +1,13 @@
+id: gate-source-beside-an-accepted-decision-is-released
+corpus: corpus-h
+# The positive control for the decision gate: the same source change beside an
+# edit to ADR-0001, which is Accepted.
+commits:
+  - write:
+      src/lib.rs: "fn a() { 3; }\n"
+      records/adr/ADR-0001-clean.md: "---\nStatus: Accepted\n---\n# ADR-0001 — Clean\n\n## Context\n\nThe clean positive control, edited for the gate.\n"
+invocation: [--config, .urzua/gate.yaml, check, --base, base]
+expect_exit: 0
+expect_rules_ran: [diff.source-requires-record]
+expect_no_findings:
+  - {rule: diff.source-requires-record}

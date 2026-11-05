@@ -4,7 +4,7 @@ Status: Done
 Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-69
-Blocked-on: MILE-12 (decide RFC-7)
+Blocked-on: —
 Realized-by: code:scripts/hooks/record-edit-hook.sh, code:scripts/hooks/claude-code-record-edit.py, code:.claude/settings.json, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
 ---
 # 178 — A record-edit hook for coding-agent harnesses checks an edit against urzua before it is written
@@ -31,3 +31,4 @@ This milestone builds the parts of `RFC-7` section 2 and section 3 (first bullet
 > | 2026-11-04 | `Blocked-on` now reads `MILE-12` only. **Why:** `MILE-159` is `Done` (its path-scoped run and prospective-content judgment are delivered), and `narrative-field.stale` flagged the reference; set by the delivery backfill of `MILE-183`. `Status` unchanged. | **substantive** |
 > | 2026-11-04 | Progress: `scripts/hooks/record-edit-hook.sh` (harness-neutral core), `scripts/hooks/claude-code-record-edit.py` (adapter) and `.claude/settings.json` wiring built and tested with recorded Write, Edit and MultiEdit payloads for block, permit, cannot-judge and named-override cases; about 0.19s per record through the core, 0.39s through the adapter. Override persistence and routing are not built and stay open under `MILE-12` (outside this milestone's Done-when). **Why:** `ADR-69` Accepted. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-05 | `Blocked-on` cleared. **Why:** `MILE-12` is now `Done`, so nothing blocks this record. | **structural** |

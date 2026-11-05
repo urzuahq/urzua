@@ -719,3 +719,75 @@ fn a_semicolon_ended_item_is_not_swallowed_into_the_next_fn() {
     assert_eq!(span(text, "cf"), Ok((3, 4)));
     assert_eq!(span(text, "next"), Ok((5, 6)));
 }
+
+// ---- directory and glob locators (BUG-176) -------------------------------------
+
+mod covered_files {
+    use crate::config::LocatorKind;
+    use crate::locator::{files_pin_text, match_locator_files};
+    use std::path::PathBuf;
+
+    fn tracked() -> Vec<PathBuf> {
+        [
+            "src/a.rs",
+            "src/sub/c.rs",
+            "src/b.py",
+            "docs/x.md",
+            "gone/g.rs",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    }
+
+    fn matched(path: &str) -> (Option<LocatorKind>, Vec<String>) {
+        let m = match_locator_files(path, &tracked(), &|p| {
+            p != "gone/g.rs" && tracked().iter().any(|t| t.to_str() == Some(p))
+        })
+        .unwrap();
+        (m.kind, m.files)
+    }
+
+    #[test]
+    fn a_file_a_directory_and_a_glob_are_told_apart() {
+        assert_eq!(
+            matched("src/a.rs"),
+            (Some(LocatorKind::File), vec!["src/a.rs".to_string()])
+        );
+        let (kind, files) = matched("src");
+        assert_eq!(kind, Some(LocatorKind::Directory));
+        assert_eq!(files, ["src/a.rs", "src/b.py", "src/sub/c.rs"]);
+        let (kind, files) = matched("src/*.rs");
+        assert_eq!(kind, Some(LocatorKind::Glob));
+        assert_eq!(files, ["src/a.rs"]);
+        assert_eq!(matched("src/**/*.rs").1, ["src/a.rs", "src/sub/c.rs"]);
+    }
+
+    #[test]
+    fn a_name_that_matches_nothing_has_no_kind_but_a_glob_is_always_a_glob() {
+        assert_eq!(matched("nope"), (None, Vec::new()));
+        assert_eq!(
+            matched("src/a"),
+            (None, Vec::new()),
+            "a prefix of a name is not a directory"
+        );
+        assert_eq!(matched("src/*.go"), (Some(LocatorKind::Glob), Vec::new()));
+        // A file that is not present (a staged deletion) is not matched.
+        assert_eq!(matched("gone"), (None, Vec::new()));
+        assert_eq!(matched("."), (None, Vec::new()));
+    }
+
+    #[test]
+    fn a_glob_that_cannot_compile_is_an_error() {
+        assert!(match_locator_files("src/[", &tracked(), &|_| false).is_err());
+    }
+
+    #[test]
+    fn the_pin_text_is_the_sorted_path_and_hash_lines() {
+        let a = ("src/a.rs".to_string(), "aa".to_string());
+        let b = ("src/b.rs".to_string(), "bb".to_string());
+        let text = files_pin_text(&[b.clone(), a.clone()]);
+        assert_eq!(text, "src/a.rs\taa\nsrc/b.rs\tbb\n");
+        assert_eq!(text, files_pin_text(&[a, b]));
+    }
+}

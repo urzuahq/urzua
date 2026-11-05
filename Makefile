@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records rule-table rule-table-check ci test-no-leak release-guard release-invariants gate-action-test hooks-install hooks-auto \
+.PHONY: help build check test fmt fmt-check lint clean records roadmap rule-table rule-table-check ci test-no-leak release-guard release-invariants gate-action-test hooks-install hooks-auto \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint deny rust-clean
 
 help: ## Show available commands
@@ -87,6 +87,9 @@ rust-clean: ## Remove the Rust target directory
 
 records: rust-build ## Validate this repo's own governance records
 	@$(RUST_DIR)/target/release/urzua check
+
+roadmap: rust-build ## Print this repo's computed roadmap (waves, ready set, critical path) as JSON
+	@$(RUST_DIR)/target/release/urzua roadmap
 
 rule-table: rust-build ## Regenerate SPEC-2's rule table from the shipped rule set
 	@python3 scripts/generate-rule-table.py
