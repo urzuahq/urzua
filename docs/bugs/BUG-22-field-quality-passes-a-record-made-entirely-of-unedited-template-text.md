@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M28H5J42CN3DB4DJGKMQND6B
-Status: Open
+Status: Fixed
 Found-in: 'found by an adversarial review of this record''s own first draft. The draft claimed `field_state::classify` reads unedited template header text as `Placeholder`; checking that against `PLACEHOLDER_TOKENS` rather than assuming it showed the opposite -- it classifies `Present`, and a record built entirely of unedited template text passes `check` with zero findings. The original investigation started from `urzua new` emitting `Status: null`, which turned out to be deliberate and correctly caught.'
-Regression-test: 'not yet written -- needs a planted-violation test asserting that a record whose header is verbatim template text produces `field.quality` findings, observed failing on current code first (it currently produces none). Fix scope undecided: extending PLACEHOLDER_TOKENS reaches only the exact strings this repo''s own templates use, which is the narrow-but-brittle option BUG-5 already took once.'
-Blocked-on: —
+Regression-test: 'rust/crates/urzua-cli/tests/template_placeholder_integration.rs::a_field_equal_to_its_template_text_is_a_placeholder_observed_failing, rust/crates/urzua-core/src/field_state.rs::a_value_equal_to_its_template_text_is_a_placeholder'
 ---
 # 22 — field.quality passes a record made entirely of unedited template text
 
@@ -175,6 +174,14 @@ schema distinguishes them. Candidates, none chosen:
 
 Both are schema work. Neither is a longer token list.
 
+## Fixed
+
+Maintainer decision of 2026-11-04: a field value identical (after trimming) to its type's template text for the same field is a placeholder, and the type's declared `pending` vocabulary is the only other vocabulary. `field.quality` takes the option `template_placeholders`, off unless declared `true`; declared, it reads `.urzua/templates/<type>.md` through the CLI (`urzua-core` stays pure) and no longer applies the compiled-in `PLACEHOLDER_TOKENS` or the `nnnn` heuristic. A repository that does not declare it is judged exactly as before. The option is declared on this repository's `field.quality`.
+
+The earlier reverted attempt failed two ways, and both are answered. It parsed a template with the type's header shape and so read nothing; the template header is now read in its own shape (blockquote lines or frontmatter keys), and an integration test asserts a finding appears, so a vacuous run cannot pass. It would have flagged the 107 milestones that legitimately hold `Phase: 0`, because the milestone template carried a real default; the template now reads `Phase: the phase number this milestone belongs to`, and `SPEC-3` states that a template must not carry a real default. Declaring the option when no type has a template is disclosed as a warning notice rather than a silent no-op.
+
+`SPEC-2` and `SPEC-3` are updated.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -185,3 +192,4 @@ Both are schema work. Neither is a longer token list.
 > | 2026-09-19 | `Status: Fixed` → `Open`; the template-equality fix reverted. **Why:** review found it inert here -- templates are blockquote, every type declares `yaml-frontmatter`, so the parse produced nothing and `0 field.quality findings` was misread as a clean corpus rather than as code that never ran. And it would have been wrong had it run: the milestone template's `Phase: 0` is a real value that 42 records legitimately share, so equality cannot separate *unedited* from *equal to the default*. Reverted rather than patched a third time; the approach is ruled out, not the diagnosis. | **substantive** |
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared (`MILE-98` is Done); `Status` stays Open, and the fix needs a design decision. Re-checked on main: a `Fixed` bug whose `Found-in` reads `how/where this was actually discovered`, the bug template's own instruction line, still produces no `Found-in` finding. `MILE-98`'s declared model does not by itself close it: the engine now reads a type's declared `pending` vocabulary (`MILE-153`, whole values and patterns) for `field.pending` and `statuses.require`, but `field.quality`'s `Placeholder` state is still the compiled-in `PLACEHOLDER_TOKENS`. **Why:** the open choice is whether the declared `pending` list should also feed `Placeholder`, or a type declares a separate placeholder list; the two states report differently (`field.quality` is an error and `field.pending` is `pending_until_required`), and the template-equality route is ruled out above. That belongs to the maintainer, and the templates themselves are still the retired blockquote form. | **substantive** |
+> | 2026-11-04 | `Status: Open` -> `Fixed`; `Blocked-on` removed; `Regression-test` filled. **Why:** maintainer decision of 2026-11-04 chose template-equality as the placeholder definition, opt-in per `field.quality` declaration; it is built and exercised on this repository's own corpus, with the milestone template's `Phase: 0` default replaced so correct records are not flagged. | **substantive** |

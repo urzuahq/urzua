@@ -346,6 +346,7 @@ mod tests {
                 cross_type: false,
                 provisional: None,
             types: None,
+                acyclic: true,
             }],
             rules: std::collections::BTreeMap::new(),
             record_types: [(
@@ -398,7 +399,10 @@ mod tests {
                 "header.pointer-field-clean",
                 rules::header_pointer_field_clean(&records, &config),
             ),
-            ("field.quality", rules::field_quality(&records, &config)),
+            (
+                "field.quality",
+                rules::field_quality(&records, &config, &Default::default()),
+            ),
             ("field.pending", rules::field_pending(&records, &config)),
             (
                 "field.untrimmed-value",
@@ -462,6 +466,14 @@ mod tests {
             (
                 "relation.cross-type-disallowed",
                 rules::relation_cross_type_disallowed(&records, &config, &record_index),
+            ),
+            (
+                "sequence.cycle",
+                rules::sequence_cycle(&records, &config, &record_index),
+            ),
+            (
+                "sequence.unresolved-blocker",
+                rules::sequence_unresolved_blocker(&records, &config, &record_index),
             ),
             (
                 "embodiment.consistency",
