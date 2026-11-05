@@ -390,6 +390,10 @@ relation_pairs:
 # whenever a named override lets a blocked edit through, and override.unreviewed
 # reports a row no person has reviewed, so it surfaces in the pull request.
 override_log: .urzua/override-log.md
+# Which errors the editor hook blocks on (ADR-78 amendment, MILE-195, SPEC-3): only an
+# error the edit introduces. CI holds the repository at zero findings, so a record on
+# disk with an error does not reach main; `all` is for a repository without that gate.
+block_on: introduced
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
 # (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic

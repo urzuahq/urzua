@@ -1,5 +1,5 @@
 ---
-Version: '0.83'
+Version: '0.84'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -781,6 +781,29 @@ rules:
   `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
 - The hook (`SPEC-8`) is the only other reader of the key: it takes the top-level `override_log:` line
   from `.urzua/config.yaml`, and when it is absent it says the override is not recorded.
+
+## Editor hook blocking: `block_on`
+
+A top-level `block_on` sets which errors the editor hook blocks on (`ADR-78`, amendment of 2026-11-05;
+`MILE-195`), one of two values:
+
+```yaml
+block_on: introduced   # the default
+```
+
+- **`introduced`** blocks only on an unwaived error the edit introduces: one the record as it is on disk
+  does not already report with the same rule and message. An error already on disk is listed, not blocked.
+- **`all`** blocks on any unwaived error in the proposed content of the edited record, whether or not
+  the record already had it. The hook then skips its second, on-disk `check` run, and lists nothing as
+  already failing. The named override and the `override_log` work the same under both values.
+- **Absent means `introduced`.** A configuration that does not declare the key behaves exactly as it did
+  before the key existed, and `introduced` written out is byte-identical in the hook's output.
+- **Any other value is a load error** (exit 2) naming the key and the value, never a silent default. The
+  hook reads the key itself, from the top-level `block_on:` line, as it does `override_log`; a value it
+  does not recognise gives the verdict `allow-unjudged` with a message naming the value (`SPEC-8`).
+- The engine reads no other meaning from the key: `urzua check` and `check --stdin-path` report the same
+  findings under both values, and the Claude Code adapter passes the hook's verdict through unchanged.
+  This repository declares `introduced` (`ADR-78` amendment, item 3).
 
 ## Diff rule path options
 
@@ -1746,3 +1769,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.81`. Documented the decision gate options of `diff.source-requires-record` (`decision_types`, `fix_types`, `link_fields`) and their load-time validation. **Why:** `MILE-133`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.82`. A resolver's `member` may be a list of entries, each with its own `start` and `end`, tried together (a Rust method ends `brace_balanced`, a struct field `indent`); a `container` may match a `struct` as well as an `impl`, so `Type::field` is addressable. A single mapping is read as before. Vectors 21-24 added. **Why:** `ADR-74` made the symbol the scope, but its `member` could name only an `fn`, so a decision about one struct field could pin only a line range, which shifts when anything is inserted above it; the declared resolver now reaches the field, with no language knowledge in the engine (`ADR-74` point 5: a member declares its own start pattern and end kind from the closed set). | **substantive** |
 > | 2026-11-05 | Bumped to `0.83`. Documents the `closes` and `strict` options of `claim.status-agreement`: a changeset fragment lists the records it closes in a one-line frontmatter key, each id must resolve (`claim.id-unresolved`) and be at a terminal status its own type declares, a block list or malformed value is `claim.field-malformed`, `strict` makes a fragment without the key a finding, and a file with no frontmatter is out of scope and disclosed, except that under `strict` an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed`. **Why:** `BUG-66`, decided by `ADR-85`; the fence case because the pinned release tool rejects both. | **substantive** |
+> | 2026-11-05 | Bumped to `0.84`. Documents the top-level `block_on: introduced \| all` key for the editor hook: `introduced` is the default and what an absent key means, `all` blocks on any error in the edited record, any other value is a load error. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
