@@ -23,6 +23,8 @@ pub(crate) fn scope_source(source: urzua_io::DiscoverySource) -> ScopeSource {
     }
 }
 
+/// There is no fallback that walks the directory (`BUG-170`, SPEC-2): discovery
+/// is the tracked set, so a command that reads a repository needs one.
 pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
     let start = paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
     let mut dir = start
@@ -40,7 +42,12 @@ pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
         }
         match dir.parent() {
             Some(parent) => dir = parent.to_path_buf(),
-            None => return Err("no .git directory found above the given path".to_string()),
+            None => {
+                return Err(
+                    "urzua needs a git repository: no .git directory found above the given path"
+                        .to_string(),
+                )
+            }
         }
     }
 }

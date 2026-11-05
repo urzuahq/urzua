@@ -1,5 +1,5 @@
 ---
-Version: '0.73'
+Version: '0.74'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -209,9 +209,12 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
 
-**Fallback with no git repository**: fall back to a directory walk, and say so in `scope.source`.
-Never silently — the fallback has the failure mode above, so a run using it must be identifiable
-from output alone.
+**No git repository**: there is no fallback. A directory walk has the failure mode above, so discovery is
+the tracked set or nothing. Outside a git repository, every command that reads one (`check`, `audit`,
+`explain`, `graph`, `export`, `fix`, `index`, `refs`, `migrate`, `init`, `doctor`, `new`) exits 2 with
+`{"status":"not-run","error":"urzua needs a git repository: ..."}` (`BUG-170`), whether or not a config and records
+sit on disk. `rules` prints the static rule table and reads no repository, so it runs anywhere. The
+`scope.source` table has no directory-walk value for the same reason.
 
 ## Rules
 
@@ -690,3 +693,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.71`. `field.quality` gains the optional `template_placeholders` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-22`; `SPEC-3` states the option. | **substantive** |
 > | 2026-11-04 | Bumped to `0.72`. `sequence.cycle` and `sequence.unresolved-blocker` added to the generated rule table; both read only `relation_pairs` entries that set `acyclic: true` (`SPEC-3`), and enabling either with no such pair is a config load error. **Why:** `MILE-27` -- the sequencing relation `RFC-48` section 1 proposes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.73`. Added `revision-log.version-bump-required` to the rule table (regenerated from `RULE_METADATA`): a diff rule that compares a changed record's revision log and version field against the merge base's copy, read by the CLI and handed to the rules as data. **Why:** `BUG-51`; `SPEC-3` states the declaration. | **substantive** |
+> | 2026-11-05 | Bumped to `0.74`. Removed the no-git directory-walk fallback from Discovery: outside a git repository every command that reads one exits 2 with a "needs a git repository" error, as the binary already did. **Why:** `BUG-170`, maintainer decision 2026-11-05; the spec promised behavior that never existed. | **substantive** |
