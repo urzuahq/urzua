@@ -4,6 +4,8 @@
 //!
 //! Verifies: MILE-182
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -39,9 +41,8 @@ rules:
 /// `(number, status, extra header lines)`.
 type Milestone<'a> = (u32, &'a str, &'a str);
 
-fn repo(name: &str, config: &str, milestones: &[Milestone], rfcs: &[u32]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-roadmap-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, config: &str, milestones: &[Milestone], rfcs: &[u32]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-roadmap-{name}"));
     std::fs::create_dir_all(dir.join("docs/milestones")).unwrap();
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -178,7 +179,6 @@ fn waves_ready_blocks_and_the_critical_path_match_the_hand_computed_answer() {
     );
     assert_eq!(r["needs_replan"], serde_json::json!([]));
     assert_eq!(r["cycles"], serde_json::json!([]));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -201,7 +201,6 @@ fn ids_and_map_keys_come_out_in_natural_order() {
     );
     let r = roadmap(&dir);
     assert_eq!(strings(&r["ready"]), ["MILE-5", "MILE-12", "MILE-100"]);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -240,7 +239,6 @@ fn a_blocker_in_a_failure_terminal_keeps_its_dependents_out_of_every_list() {
     assert_eq!(strings(&three["blocked_by"]), ["MILE-2"]);
     assert_eq!(strings(&three["blocks"]), ["MILE-4"]);
     assert!(r["records"].get("MILE-2").is_none());
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -277,7 +275,6 @@ fn a_cycle_is_listed_once_in_ascending_order_and_never_looped_on() {
     );
     assert_eq!(r["waves"], serde_json::json!([["MILE-8"]]));
     assert_eq!(strings(&r["ready"]), ["MILE-8"]);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -323,7 +320,6 @@ rules:
     let r = roadmap(&dir);
     assert_eq!(r["cycles"], serde_json::json!([["MILE-2", "MILE-3"]]));
     assert_eq!(strings(&r["pairs"]), ["sequencing", "gating"]);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -343,7 +339,6 @@ fn the_critical_path_is_empty_when_no_open_record_has_an_included_dependency() {
     let r = roadmap(&dir);
     assert_eq!(strings(&r["ready"]), ["MILE-1", "MILE-2", "MILE-3"]);
     assert_eq!(r["critical_path"], serde_json::json!([]));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -383,7 +378,6 @@ fn the_critical_path_is_the_smallest_sequence_not_a_greedy_walk() {
         ["MILE-11", "MILE-13", "MILE-14", "MILE-19"],
         "greedy would start 11, 12; text order would end at 100"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -399,7 +393,6 @@ fn a_pair_nothing_carries_and_a_claim_that_resolves_to_nothing_are_notes() {
     assert_eq!(found.len(), 1, "{r}");
     assert_eq!(found[0]["pair"], "sequencing");
     assert_eq!(strings(&r["ready"]), ["MILE-1", "MILE-2"]);
-    std::fs::remove_dir_all(&dir).ok();
 
     let dir = repo(
         "unresolved",
@@ -421,7 +414,6 @@ fn a_pair_nothing_carries_and_a_claim_that_resolves_to_nothing_are_notes() {
     assert_eq!(found[1]["record"], "MILE-3");
     // The resolvable half of MILE-1's claim still orders.
     assert_eq!(r["records"]["MILE-1"]["wave"], 1);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -447,7 +439,6 @@ fn no_declared_pair_is_a_stated_absence_not_an_empty_roadmap() {
     let (_, export) = run(&dir, &["export", "--format", "json"]);
     let export: serde_json::Value = serde_json::from_str(&export).unwrap();
     assert!(export.get("roadmap").is_none(), "{export}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -462,7 +453,6 @@ fn a_declared_roadmap_is_part_of_the_json_export() {
     assert_eq!(code, 0);
     let export: serde_json::Value = serde_json::from_str(&export).unwrap();
     assert_eq!(export["roadmap"], roadmap(&dir));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -493,7 +483,6 @@ fn groups_nest_in_group_by_order_with_the_null_bucket_last() {
                 {"field": "Track", "value": null, "records": ["MILE-3"]}]}
         ])
     );
-    std::fs::remove_dir_all(&dir).ok();
 
     let dir = repo(
         "groups-unset",
@@ -507,7 +496,6 @@ fn groups_nest_in_group_by_order_with_the_null_bucket_last() {
         serde_json::json!([{"field": "Track", "value": null, "records": ["MILE-1"]}])
     );
     assert_eq!(notes(&r, "group-field-unset").len(), 1, "{r}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -521,7 +509,6 @@ fn a_group_by_field_no_type_declares_is_a_load_error() {
     let (code, text) = run(&dir, &["roadmap"]);
     assert_eq!(code, 2, "{text}");
     assert!(text.contains("Nonesuch"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -534,7 +521,6 @@ fn a_roadmap_pair_that_is_not_acyclic_is_a_load_error() {
     let (code, text) = run(&dir, &["roadmap"]);
     assert_eq!(code, 2, "{text}");
     assert!(text.contains("acyclic"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -556,7 +542,6 @@ fn a_type_with_no_status_vocabulary_is_open_and_noted() {
     let found = notes(&r, "no-status-vocabulary");
     assert_eq!(found.len(), 1, "{r}");
     assert_eq!(found[0]["record"], "RFC-4");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -577,7 +562,6 @@ fn a_prose_wait_with_no_dependency_is_noted_and_nothing_open_is_distinguished() 
     assert_eq!(found[0]["record"], "MILE-1");
     assert_eq!(found[0]["field"], "Blocked-on");
     assert_eq!(found[0]["pair"], serde_json::Value::Null);
-    std::fs::remove_dir_all(&dir).ok();
 
     let dir = repo(
         "alldone",
@@ -589,7 +573,6 @@ fn a_prose_wait_with_no_dependency_is_noted_and_nothing_open_is_distinguished() 
     assert_eq!(r["waves"], serde_json::json!([]));
     assert_eq!(notes(&r, "nothing-open").len(), 1, "{r}");
     assert!(notes(&r, "no-sequencing-pair").is_empty());
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -624,5 +607,4 @@ fn notes_sort_by_kind_then_record_then_pair() {
             ("unstructured-wait", "MILE-12")
         ]
     );
-    std::fs::remove_dir_all(&dir).ok();
 }

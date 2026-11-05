@@ -1,7 +1,9 @@
 //! MILE-190: `check --rules`, `rules_selected`, and `audit` as a deprecated
 //! alias of `check` (ADR-79). Real git-repo fixtures, real binary.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -24,9 +26,8 @@ fn urzua(dir: &Path, args: &[&str]) -> (i32, serde_json::Value) {
     (out.status.code().unwrap(), v)
 }
 
-fn repo(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-audit-fold-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-audit-fold-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -44,7 +45,7 @@ const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, 
 
 /// ADR-1 lacks `Date` (header.required-fields) and claims to supersede ADR-2,
 /// which never points back (relation.supersession-reciprocity).
-fn violating(name: &str) -> PathBuf {
+fn violating(name: &str) -> common::TempDir {
     let dir = repo(name);
     std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
     std::fs::write(

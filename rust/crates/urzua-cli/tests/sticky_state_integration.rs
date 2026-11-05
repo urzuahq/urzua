@@ -2,6 +2,8 @@
 //! the repository declares as human-set is not reported as drift by `check`
 //! and not rewritten by `fix`, while a neighbour that genuinely disagrees is.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -24,9 +26,8 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
 
 /// ADR-1 states `Deprecated`, ADR-2 `Inactive`, ADR-3 `Verified`; all three
 /// carry only a `spec:` locator, so ADR-3 genuinely disagrees.
-fn repo(name: &str, sticky: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-sticky-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, sticky: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-sticky-{name}"));
     for d in ["docs/adr", "docs/spec", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -81,7 +82,6 @@ fn declared_sticky_states_are_not_drift_and_a_neighbour_still_is() {
         .find(|r| r["rule"] == "embodiment.consistency")
         .unwrap();
     assert_eq!(rule["population"]["examined"], 3, "{rule}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -95,7 +95,6 @@ fn without_a_declaration_every_stated_value_is_held_to_the_computed_one() {
         .filter(|f| f["rule"] == "embodiment.consistency")
         .count();
     assert_eq!(count, 3, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -105,7 +104,6 @@ fn fix_leaves_a_sticky_state_alone() {
     let repairs = report["repairs"].as_array().unwrap();
     assert_eq!(repairs.len(), 1, "{report}");
     assert!(repairs[0]["record"].as_str().unwrap().contains("ADR-3"));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -116,5 +114,4 @@ fn a_sticky_state_that_evidence_computes_is_refused_at_load() {
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("sticky_states"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }

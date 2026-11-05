@@ -2,6 +2,8 @@
 //! describe, exercised end to end by the real binary under this repository's own
 //! `.urzua/config.yaml`: the declarations it ships are what these tests run.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -15,9 +17,8 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// A fresh git repo holding the repository's own config and `files`.
-fn repo(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-types-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-types-{name}"));
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);

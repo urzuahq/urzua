@@ -4,6 +4,8 @@
 //! set, so the containment SPEC-0002 requires is true by construction, not
 //! assumed.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -16,9 +18,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-cli-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
@@ -61,8 +62,6 @@ fn scope_source_is_the_declared_contract_value_not_a_debug_rendering() {
     let output = run_urzua(&dir, &["check", "docs/"]);
     let parsed = assert_valid_json_object(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(parsed["scope"]["source"], "tracked-sweep");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -88,8 +87,6 @@ fn check_exits_0_on_a_clean_corpus() {
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -112,8 +109,6 @@ fn check_exits_1_on_a_missing_required_field() {
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Deciders"), "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -124,8 +119,6 @@ fn check_exits_2_when_no_config_exists() {
 
     let output = run_urzua(&dir, &["check", "docs/"]);
     assert_eq!(output.status.code(), Some(2));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -154,8 +147,6 @@ fn an_untracked_scratch_file_is_never_examined() {
         stdout.contains("\"files_examined\": 1"),
         "expected exactly 1 file examined (the untracked file must be excluded): {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -205,8 +196,6 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
         stdout.contains("\"waived\""),
         "the waived finding must still be listed, not omitted: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -217,8 +206,6 @@ fn doctor_reports_missing_config_as_exit_2() {
 
     let output = run_urzua(&dir, &["doctor"]);
     assert_eq!(output.status.code(), Some(2));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Round 30 F4: `doctor` was healthy (exit 0) for a config enabling no rule,
@@ -238,7 +225,6 @@ fn doctor_errors_when_no_rule_is_enabled() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
     assert!(stdout.contains("rules-enabled"), "stdout: {stdout}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Round 30 F1/F2/F5: doctor and check share config load, so an invalid
@@ -267,7 +253,6 @@ fn doctor_reports_an_invalid_record_type_prefix_or_dir() {
         assert_eq!(out.status.code(), Some(1), "stdout: {stdout}");
         assert!(stdout.contains("config does not parse"), "stdout: {stdout}");
         assert_ne!(run_urzua(&dir, &["check"]).status.code(), Some(0));
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
@@ -308,8 +293,6 @@ fn doctor_emits_json_not_plain_text_lines() {
         parsed["checks"].as_array().unwrap().len() >= 3,
         "expected config-exists, config-parses, and at least one record-type-dir check: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -355,8 +338,6 @@ fn check_scopes_to_the_requested_path_not_the_whole_corpus() {
         whole_stdout.contains("\"files_examined\": 2"),
         "an unscoped check must still see both files: {whole_stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -387,8 +368,6 @@ fn audit_exits_0_on_reciprocated_supersession() {
         "stdout: {}",
         String::from_utf8_lossy(&output.stdout)
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -432,8 +411,6 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
         findings(&check_out.stdout),
         "audit and check report the same findings"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-42`: `audit` called the cross-record rules directly, so a repository
@@ -457,7 +434,6 @@ fn audit_honours_the_declared_level_of_a_rule_instead_of_running_it_unconditiona
         std::fs::write(dir.join("docs/adr/ADR-2-y.md"), target).unwrap();
         commit_all(&dir);
         let output = run_urzua(&dir, &["audit"]);
-        std::fs::remove_dir_all(&dir).ok();
         (
             output.status.code(),
             String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -521,8 +497,6 @@ fn audit_reports_an_identity_collision_check_would_also_report_observed_failing(
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(output.status.code(), Some(1), "stdout: {stdout}");
     assert!(stdout.contains("identity.collision"), "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -569,8 +543,6 @@ fn init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form
     // Idempotence: a second init must refuse, not clobber.
     let second_init = run_urzua(&dir, &["init"]);
     assert_eq!(second_init.status.code(), Some(2));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 fn assert_valid_json_object(stdout: &str) -> serde_json::Value {
@@ -594,8 +566,6 @@ fn fix_could_not_run_emits_json() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = assert_valid_json_object(&stdout);
     assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Regression for a real exit-code change CodeRabbit's own adversarial pass
@@ -622,8 +592,6 @@ fn fix_apply_on_an_empty_corpus_still_exits_0() {
         Some(0),
         "fix --apply on an empty corpus must still exit 0, matching pre-refactor behavior: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -637,8 +605,6 @@ fn explain_could_not_run_emits_json() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = assert_valid_json_object(&stdout);
     assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -652,8 +618,6 @@ fn graph_could_not_run_emits_json() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = assert_valid_json_object(&stdout);
     assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-13`: a reference to a record drafted beside the citing one but not yet
@@ -731,8 +695,6 @@ fn a_reference_to_an_untracked_file_is_told_apart_from_a_missing_one_observed_fa
     assert!(after
         .iter()
         .any(|f| f["message"].as_str().unwrap().contains("ADR-8")));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-169`: `graph` and `explain` answered `ok` whatever the records
@@ -782,8 +744,6 @@ fn graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_
             "{args:?}: {stdout}"
         );
     }
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -807,8 +767,6 @@ fn graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice(
         assert_eq!(parsed["population"]["examined"], 0, "{args:?}: {stdout}");
         assert!(parsed.get("notices").is_none(), "{args:?}: {stdout}");
     }
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A found-in-review gap: `graph` used to build its index with the lossy
@@ -842,8 +800,6 @@ fn graph_discloses_an_identity_collision_as_a_notice_observed_failing() {
             && n["message"].as_str().unwrap().contains("DOC-1")),
         "stdout: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-131`'s primary scope: `check` and `audit` build the collision-aware
@@ -878,8 +834,6 @@ fn check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
             && n["message"].as_str().unwrap().contains("DOC-1")),
         "identity.collision is not-enabled here, but the collision is still real: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -909,8 +863,6 @@ fn audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_o
             && n["message"].as_str().unwrap().contains("DOC-1")),
         "identity.collision is not-enabled here, but the collision is still real: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `doctor`'s missing-config path builds its own richer `DoctorReport`
@@ -927,8 +879,6 @@ fn doctor_missing_config_emits_parseable_json_with_checks() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = assert_valid_json_object(&stdout);
     assert!(parsed["checks"].is_array(), "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `--help` is the one stated plain-text exception (ADR-0046, matching
@@ -946,8 +896,6 @@ fn help_exits_0_with_plain_text_not_json() {
         serde_json::from_str::<serde_json::Value>(&stdout).is_err(),
         "--help must not be JSON-wrapped: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A genuine bad-flag parse error goes through `try_parse()` -> `emit()`
@@ -964,8 +912,6 @@ fn a_bad_flag_emits_json_not_a_panic() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = assert_valid_json_object(&stdout);
     assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `urzua init`'s real report shape (BUG-20): `proposed`/`written`/
@@ -1000,8 +946,6 @@ fn init_dry_run_reports_the_proposed_config_as_structured_json() {
         !dir.join(".urzua/config.yaml").exists(),
         "--dry-run must not write"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -1024,8 +968,6 @@ fn init_real_write_omits_config_yaml_from_the_report() {
         "a real write must not echo the content back, matching `new`'s convention: {stdout}"
     );
     assert!(dir.join(".urzua/config.yaml").exists());
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// BUG-132: `x/y` and `z/y` share a base name and disambiguate to `x-y` and
@@ -1070,8 +1012,6 @@ fn a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed
         !dir.join(".urzua/config.yaml").exists(),
         "must not write a config that would silently drop a proposed type"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `urzua migrate ids`'s real report shape (BUG-20): `missing`/`results`
@@ -1107,8 +1047,6 @@ fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
             .contains("no header-shaped region"),
         "stdout: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A real write failure exits 1, matching `fix --apply`'s own
@@ -1151,8 +1089,6 @@ fn migrate_ids_exits_1_on_a_real_write_failure() {
         parsed["results"][0]["outcome"], "failed",
         "stdout: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// ADR-7: "off" and "ran clean" must stay distinguishable. A rule a repository
@@ -1658,7 +1594,7 @@ fn a_staged_deletion_is_not_reported_as_owned_by_no_type() {
     );
 }
 
-fn one_adr_repo(name: &str, rules: &str, body: &str) -> std::path::PathBuf {
+fn one_adr_repo(name: &str, rules: &str, body: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -2532,8 +2468,6 @@ fn a_blocking_finding_is_never_reported_as_a_run_that_did_not_happen() {
         Some(1),
         "blocking is exit 1, not 2: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -2568,8 +2502,6 @@ fn records_read_never_exceeds_files_examined() {
         parsed["records_read_by_any_rule"], 1,
         "both numbers count the scope, or they are not comparable: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -2605,8 +2537,6 @@ fn a_type_declaring_only_required_fields_is_still_checked_for_whitespace() {
         .filter(|f| f["rule"] == "field.untrimmed-value")
         .count();
     assert_eq!(hits, 1, "no known_fields must not mean no check: {stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -2649,8 +2579,6 @@ fn an_absent_claim_paths_directory_is_reported_not_fatal() {
             .any(|n| n["message"].as_str().unwrap_or("").contains(".changeset")),
         "the absence must still be visible (BUG-56): {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[cfg(unix)]
@@ -2693,7 +2621,6 @@ fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
     let bypassed = locked.join("claims").try_exists().is_ok();
     if bypassed {
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::remove_dir_all(&dir).ok();
         eprintln!(
             "skipped: permission bits did not block access in this environment (running as root?)"
         );
@@ -2704,7 +2631,6 @@ fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
 
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
-    std::fs::remove_dir_all(&dir).ok();
 
     assert_eq!(
         out.status.code(),
@@ -2819,8 +2745,6 @@ fn two_records_citing_the_same_locator_are_both_detected_as_drifted() {
         2,
         "both citers of the shared locator must be independently detected as drifted: {parsed}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-24`: SPEC-2's Discovery contract says an explicit argv path
@@ -3053,8 +2977,6 @@ fn init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_fo
         config.contains("header_shape: yaml-frontmatter"),
         "{config}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// MILE-85: records in both removed forms are each counted in the notice.
@@ -3094,8 +3016,6 @@ fn init_on_a_mixed_removed_shape_type_counts_each_form() {
         }),
         "stdout: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// BUG-151: records that parse under no shape keep the destination shape,
@@ -3126,8 +3046,6 @@ fn init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so() 
             .unwrap_or(false),
         "stdout: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// BUG-151 review: valid frontmatter at the start of the document is the
@@ -3167,13 +3085,11 @@ fn init_prefers_leading_frontmatter_over_more_numerous_body_bullets() {
         !stdout.contains("missing required header field"),
         "stdout: {stdout}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const EDIT_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, header.field-set-consistency: warn, header.pointer-field-clean: warn, type.no-declared-spec: warn, config.pointer-declaration-missing: error, config.pointer-field-not-known: error, config.pointer-narrative-overlap: error, pointer.resolution: error, field.quality: error, field.pending: warn, filename.title-consistency: error, relation.supersession-reciprocity: error, revision-log.change-class-required: error, embodiment.consistency: warn, embodiment.locator-promotion-candidate: warn}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
 
-fn edit_fixture(name: &str, record: &str) -> std::path::PathBuf {
+fn edit_fixture(name: &str, record: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), EDIT_CONFIG).unwrap();
@@ -3207,8 +3123,6 @@ fn fix_apply_preserves_crlf_and_the_absent_trailing_newline() {
         .filter(|l| !before_lines.contains(l))
         .count();
     assert_eq!(changed, 2, "only the field line and the new row: {after:?}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A plain (non-blockquote) revision-log table: the appended row must be a
@@ -3227,8 +3141,6 @@ fn fix_apply_appends_inside_a_plain_revision_log_table() {
         last.starts_with("| ") && last.contains("Tool-authored"),
         "new row must be a plain table row: {after:?}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `migrate ids --apply` on a CRLF record with no trailing newline inserts
@@ -3248,8 +3160,6 @@ fn migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline() {
         .collect();
     assert_eq!(kept.join("\r\n"), original, "{after:?}");
     assert_eq!(after.matches("Stable-Id:").count(), 1, "{after:?}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// An `--ids` entry that selects nothing is a reported failure (exit 1)
@@ -3285,8 +3195,6 @@ fn fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector() {
     let parsed = assert_valid_json_object(&String::from_utf8_lossy(&output.stdout));
     assert_eq!(parsed["status"], "applied");
     assert_eq!(output.status.code(), Some(0));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `MILE-119`: every rule that builds a per-record or per-slot population must
@@ -3399,15 +3307,13 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
         "rules that do not classify a header_shape: none type as out of scope:\n{}",
         failures.join("\n")
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// BUG-172: `pointer.target-status` applied one `not_in` list to every declared
 /// pointer field, so a lineage field (`Derives-from`) pointing at a Superseded
 /// record warned the same as a dependency field (`Implements`). The `fields`
 /// option restricts which declared fields are judged.
-fn target_status_fields_fixture(name: &str, option: &str) -> std::path::PathBuf {
+fn target_status_fields_fixture(name: &str, option: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/mile")).unwrap();
@@ -3483,7 +3389,7 @@ fn target_status_fields_naming_an_undeclared_field_is_a_config_error_observed_fa
     assert!(text.contains("Implments"), "{text}");
 }
 
-fn filename_pattern_repo(name: &str, files: &[&str], rules: &str) -> std::path::PathBuf {
+fn filename_pattern_repo(name: &str, files: &[&str], rules: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -3532,7 +3438,6 @@ fn a_bare_number_corpus_is_reported_once_per_type_with_rename_guidance() {
         .find(|r| r["rule"] == "filename.identity-pattern")
         .unwrap();
     assert_eq!(exec["population"]["examined"], 2);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -3549,7 +3454,6 @@ fn the_filename_pattern_rule_is_opt_in() {
         .unwrap()
         .iter()
         .all(|f| f["rule"] != "filename.identity-pattern"));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -3569,7 +3473,6 @@ fn one_off_pattern_file_among_conforming_ones_is_reported_on_that_file() {
         .find(|f| f["rule"] == "filename.identity-pattern")
         .unwrap();
     assert_eq!(f["file"], "docs/adr/draft.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `MILE-132`: a declared status vocabulary is checked end to end through
@@ -3629,7 +3532,6 @@ fn declared_statuses_are_enforced_end_to_end() {
         .find(|r| r["rule"] == "status.undeclared-value")
         .unwrap();
     assert_eq!(exec["population"]["examined"], 4);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `MILE-122`: a declared relation pair is checked end to end through `check`,
@@ -3675,8 +3577,6 @@ fn check_reports_an_unechoed_claim_in_a_declared_cross_type_relation_pair() {
         "stdout: {}",
         String::from_utf8_lossy(&output.stdout)
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// MILE-137: the acceptance date is required on Accepted and forbidden on
@@ -3740,12 +3640,7 @@ fn the_acceptance_date_by_status_is_expressed_with_statuses_require_forbid_and_d
     assert_eq!(output.status.code(), Some(1));
 }
 
-fn excluded_files_repo(
-    name: &str,
-    exclude: &str,
-    files: &[&str],
-    rules: &str,
-) -> std::path::PathBuf {
+fn excluded_files_repo(name: &str, exclude: &str, files: &[&str], rules: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
@@ -3802,7 +3697,6 @@ fn a_declared_non_record_file_is_in_no_rule_population_or_census_observed_failin
             assert_eq!(exec["population"]["examined"], 1, "{exec}");
         }
     }
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -3819,7 +3713,6 @@ fn an_undeclared_readme_is_still_reported_and_counted() {
         !findings_for(&parsed, "docs/adr/README.md").is_empty(),
         "{parsed}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -3841,7 +3734,6 @@ fn an_undeclared_stray_file_is_reported_beside_a_declared_exclusion() {
         1,
         "{parsed}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `MILE-150`: an exclusion that matches no file is a stale declaration, so it
@@ -3867,7 +3759,6 @@ fn an_exclude_files_entry_matching_no_file_is_reported_observed_failing() {
     assert_eq!(hits[0]["file"], ".urzua/config.yaml", "{parsed}");
     let m = hits[0]["message"].as_str().unwrap();
     assert!(m.contains("_template.md") && !m.contains("README"), "{m}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A type whose only other file is the excluded one has no record to match, so
@@ -3887,7 +3778,6 @@ fn an_excluded_file_is_not_counted_in_the_all_off_pattern_total() {
     assert_eq!(all[0]["file"], "docs/adr", "{parsed}");
     let m = all[0]["message"].as_str().unwrap();
     assert!(m.contains("1 file(s)") && !m.contains("README"), "{m}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-185`: a config-level finding names the configuration as a
@@ -3909,12 +3799,11 @@ fn a_config_level_finding_names_a_repository_relative_config_path_observed_faili
         .collect::<Vec<_>>();
     assert_eq!(hits.len(), 1, "{parsed}");
     assert_eq!(hits[0]["file"], ".urzua/config.yaml", "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 // ---- MILE-179: doctor reports each local hook layer's wiring (ADR-71) ----
 
-fn hook_fixture(name: &str) -> std::path::PathBuf {
+fn hook_fixture(name: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(

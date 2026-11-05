@@ -3,7 +3,9 @@
 //! they run only on a `--base` run and say `not-applicable` on any other,
 //! never a quiet pass (SPEC-2, Rules).
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -32,9 +34,8 @@ const MIXED: &str = "  diff.source-and-records-mixed:\n    level: warn\n    appl
 
 /// A repository whose base commit (tagged `base`) holds one record and two
 /// source files; nothing has changed since.
-fn fixture(name: &str, rules: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-diff-gate-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-diff-gate-{name}"));
     for sub in ["docs/adr/archive", ".urzua", "src/tests"] {
         std::fs::create_dir_all(dir.join(sub)).unwrap();
     }
@@ -282,8 +283,7 @@ fn a_prefix_only_configuration_still_treats_a_test_file_as_source() {
 #[test]
 fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_source() {
     let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
-    let dir = std::env::temp_dir().join(format!("urzua-diff-gate-own-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new("urzua-diff-gate-own");
     for sub in [".urzua", "rust/crates/x/src", "rust/crates/x/tests"] {
         std::fs::create_dir_all(dir.join(sub)).unwrap();
     }
@@ -322,39 +322,6 @@ fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_sour
 // `diff.source-requires-record` from "some governed record changed" into "a
 // decision at a decided status, a record linking one, or a fix record changed".
 
-/// Removes the fixture directory on drop, panics included.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(label: &str) -> Scratch {
-        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("{label}-{}-{n}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).unwrap();
-        Scratch(path)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-impl std::ops::Deref for Scratch {
-    type Target = Path;
-    fn deref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl AsRef<Path> for Scratch {
-    fn as_ref(&self) -> &Path {
-        &self.0
-    }
-}
-
 const GATE_RULE: &str = "  diff.source-requires-record:\n    level: error\n    source_paths: [\"src\"]\n    decision_types:\n      adr: [Accepted]\n      spec: [Accepted, Shipped]\n    fix_types: [bug]\n    link_fields: [Implements]\n";
 
 const GATE_TYPES: &str = "\
@@ -371,8 +338,8 @@ fn gate_config(rule: &str) -> String {
 /// SPEC-1 Shipped, SPEC-2 Draft, MILE-1 implementing ADR-1, MILE-2
 /// implementing ADR-2, MILE-3 implementing nothing, BUG-1 Fixed, and a source
 /// file.
-fn gate_fixture(name: &str, rule: &str) -> Scratch {
-    let dir = Scratch::new(&format!("urzua-diff-gate-decision-{name}"));
+fn gate_fixture(name: &str, rule: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-diff-gate-decision-{name}"));
     for sub in [
         "docs/adr",
         "docs/specs",
@@ -626,7 +593,7 @@ fn the_gate_options_are_refused_on_a_rule_that_does_not_take_them() {
 #[test]
 fn this_repositorys_own_gate_holds_a_source_change_until_a_decision_fix_or_link_changes() {
     let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
-    let dir = Scratch::new("urzua-diff-gate-own-decision");
+    let dir = common::TempDir::new("urzua-diff-gate-own-decision");
     for sub in [
         ".urzua",
         "rust/crates/x/src",

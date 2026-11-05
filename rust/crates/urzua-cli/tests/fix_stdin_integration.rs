@@ -1,7 +1,9 @@
 //! MILE-159: `urzua fix --stdin-path` judges proposed content without writing.
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -49,9 +51,8 @@ fn record(embodiment: &str, realized_by: &str) -> String {
 
 /// `src/a.rs` changes in a commit after the committed record's
 /// `Realized-by` line: the shape ADR-32 calls drift.
-fn fixture(name: &str, on_disk: Option<&str>) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-fix-stdin-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, on_disk: Option<&str>) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fix-stdin-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -88,7 +89,6 @@ fn stdin_content_is_judged_and_nothing_is_written() {
     assert_eq!(repairs[0]["line"], 2, "{v}");
     assert_eq!(v["population"]["examined"], 1, "{v}");
     assert_eq!(std::fs::read_to_string(dir.join(PATH)).unwrap(), before);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -102,7 +102,6 @@ fn a_path_that_does_not_exist_on_disk_yet_is_judged() {
     let v = json(&out);
     assert_eq!(v["repairs"].as_array().unwrap().len(), 1, "{v}");
     assert!(!dir.join(PATH).exists());
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -115,7 +114,6 @@ fn a_realized_by_line_unchanged_since_a_locator_moved_is_drift() {
     );
     let v = json(&out);
     assert_eq!(v["repairs"][0]["computed_value"], "Drift detected", "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -128,7 +126,6 @@ fn a_realized_by_line_edited_in_the_proposal_is_not_drift() {
     );
     let v = json(&out);
     assert_eq!(v["status"], "ok", "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -144,7 +141,6 @@ fn a_path_no_record_type_governs_is_could_not_run() {
         String::from_utf8_lossy(&out.stdout).contains("governs"),
         "{out:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -156,5 +152,4 @@ fn stdin_path_refuses_apply_and_other_paths() {
         let out = run_stdin(&dir, &args, &record("Implemented", "code:src/a.rs"));
         assert_eq!(out.status.code(), Some(2), "{args:?} {out:?}");
     }
-    std::fs::remove_dir_all(&dir).ok();
 }

@@ -2,6 +2,8 @@
 //! a repository that names its own states is held to those names by `check`
 //! and repaired to them by `fix`, and a bad declaration is refused at load.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -28,9 +30,8 @@ const VOCABULARY: &str = "embodiment:\n  drift: Stale\n  tiers:\n    - {state: P
 /// on spec evidence (disagrees), ADR-3 states `Built` with no evidence at all
 /// (a claim with nothing behind it), ADR-4 states the built-in `Verified`,
 /// which this vocabulary does not declare.
-fn repo(name: &str, vocabulary: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-vocab-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, vocabulary: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-vocab-{name}"));
     for d in ["docs/adr", "docs/spec", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -105,7 +106,6 @@ fn a_declared_vocabulary_is_what_check_holds_records_to() {
         found[2].0.contains("ADR-4") && found[2].1.contains("'Described'"),
         "{found:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -119,7 +119,6 @@ fn without_a_declaration_the_built_in_vocabulary_applies() {
         found.iter().all(|(_, m)| m.contains("'Specified'")),
         "{found:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -131,8 +130,6 @@ fn stating_the_default_vocabulary_explicitly_changes_nothing() {
             .replace(dir.to_str().unwrap(), "<dir>")
     };
     assert_eq!(text(&a), text(&b));
-    std::fs::remove_dir_all(&a).ok();
-    std::fs::remove_dir_all(&b).ok();
 }
 
 #[test]
@@ -162,7 +159,6 @@ fn fix_repairs_to_the_declared_names() {
             .any(|(r, v)| r.contains("ADR-4") && v == "Described"),
         "{computed:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -179,7 +175,6 @@ fn a_built_claiming_declared_state_needs_an_accepted_status() {
             && f["file"].as_str().unwrap().contains("ADR-3")
     });
     assert!(hit, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -200,7 +195,6 @@ fn a_bad_declaration_is_refused_at_load() {
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains("embodiment") && text.contains(needle), "{name}: {text}");
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
@@ -224,7 +218,6 @@ fn a_sticky_state_naming_a_declared_state_is_refused() {
         text.contains("sticky_states") && text.contains("'Proven'"),
         "{text}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A repository of `adr` records `(number, stated state, Realized-by)` under
@@ -234,9 +227,8 @@ fn custom_repo(
     vocabulary: &str,
     rules: &str,
     records: &[(u32, &str, &str)],
-) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-vocab-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-vocab-{name}"));
     for d in ["docs/adr", "docs/spec", "src", "tests", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -309,7 +301,6 @@ fn delivery_agreement_reads_the_renamed_tiers_end_to_end() {
         repairs.iter().any(|r| r["computed_value"] == "Done"),
         "{fixed}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -337,7 +328,6 @@ fn a_delivery_tier_in_the_built_in_vocabulary_is_refused_under_a_renamed_one() {
         text.contains("Implemented") && text.contains("delivered_tiers"),
         "{text}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -357,7 +347,6 @@ fn the_declared_tier_order_decides_which_evidence_wins() {
         found[0].0.contains("ADR-2") && found[0].1.contains("'Built'"),
         "{found:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -377,6 +366,5 @@ fn a_declaration_missing_a_key_is_refused_not_defaulted() {
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains(needle), "{name}: {text}");
-        std::fs::remove_dir_all(&dir).ok();
     }
 }

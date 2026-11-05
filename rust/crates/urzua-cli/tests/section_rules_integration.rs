@@ -3,6 +3,8 @@
 //! opt-in and read the type's declared `sections`, so one test proves a type
 //! without the declaration is untouched and the rest prove what ran.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -24,14 +26,8 @@ const SECTIONS: &str = "    sections:
       exempt_statuses: [Withdrawn]
 ";
 
-fn fixture(
-    name: &str,
-    rules: &str,
-    sections: &str,
-    records: &[(&str, &str)],
-) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-section-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str, sections: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-section-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -184,7 +180,6 @@ fn an_exempted_record_does_not_trigger_scope_matches_nothing_observed_failing() 
         findings_of(&report, "config.scope-matches-nothing").is_empty(),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const NESTED: &str = "    sections:

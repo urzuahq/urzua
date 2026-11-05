@@ -3,6 +3,8 @@
 //! promise a `run-command` action makes -- that running it would produce the
 //! repair the finding stands for.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -80,10 +82,8 @@ record_types:
         - {when: [Open], fields: [Closed-on]}
 ";
 
-fn shape_repo(name: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-action-shape-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn shape_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-action-shape-{name}"));
     for d in ["docs/notes", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -345,9 +345,8 @@ fn milestone(status: &str, extra: &str, n: u32) -> String {
     )
 }
 
-fn command_repo(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-action-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn command_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-action-{name}"));
     for d in ["docs/milestones", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }

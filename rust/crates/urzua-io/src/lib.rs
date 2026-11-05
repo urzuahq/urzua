@@ -655,9 +655,43 @@ mod tests {
         run(&["config", "user.name", "test"]);
     }
 
+    /// A fresh directory under the temp dir, removed on drop so a failing
+    /// assertion cannot leave it behind (BUG-193).
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(label: &str) -> Scratch {
+            static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!("{label}-{}-{n}", std::process::id()));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).unwrap();
+            Scratch(path)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    impl std::ops::Deref for Scratch {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl AsRef<Path> for Scratch {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
+
     #[test]
     fn discovers_only_tracked_and_staged_files_never_a_raw_walk() {
-        let tmp = std::env::temp_dir().join(format!("urzua-io-test-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-test");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
 
@@ -689,8 +723,6 @@ mod tests {
             !names.contains(&"scratch.md".to_string()),
             "untracked scratch file must never be discovered: {names:?}"
         );
-
-        fs::remove_dir_all(&tmp).ok();
     }
 
     /// `BUG-147`'s own regression: merging the staged/deleted discovery into
@@ -700,7 +732,7 @@ mod tests {
     /// two-fields-per-record parser would misalign on exactly this input.
     #[test]
     fn a_staged_rename_is_discovered_under_its_new_name_only_observed_failing() {
-        let tmp = std::env::temp_dir().join(format!("urzua-io-rename-test-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-rename-test");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
         // Pin rename detection locally: a developer's global `diff.renames=false`
@@ -755,13 +787,11 @@ mod tests {
             "a rename is not a deletion -- git classifies it R, not D: {:?}",
             result.staged_deletions
         );
-
-        fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn a_missing_git_repo_is_a_reported_error_not_a_silent_empty_list() {
-        let tmp = std::env::temp_dir().join(format!("urzua-io-notgit-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-notgit");
         fs::create_dir_all(&tmp).unwrap();
 
         let result = discover_tracked_files(&tmp);
@@ -769,34 +799,24 @@ mod tests {
             result.is_err(),
             "a directory with no git repo must error, not return an empty list silently"
         );
-
-        fs::remove_dir_all(&tmp).ok();
     }
 
     /// A stub `gh` ahead of the real PATH, always exiting non-zero -- lets
     /// `resolve_identity`'s gh-unavailable fallback be tested deterministically
     /// without depending on whether this machine actually has `gh` authenticated.
-    fn prepend_failing_gh_to_path() -> (PathBuf, String) {
+    fn prepend_failing_gh_to_path() -> (Scratch, String) {
         prepend_stub_gh_to_path("exit 1\n")
     }
 
     /// A stub `gh` ahead of the real PATH that succeeds and reports `login`
     /// -- lets the gh-wins-even-over-explicit-`--by` tier be tested
     /// deterministically, the mirror of `prepend_failing_gh_to_path`.
-    fn prepend_successful_gh_to_path(login: &str) -> (PathBuf, String) {
+    fn prepend_successful_gh_to_path(login: &str) -> (Scratch, String) {
         prepend_stub_gh_to_path(&format!("echo '{login}'\nexit 0\n"))
     }
 
-    fn prepend_stub_gh_to_path(script_body: &str) -> (PathBuf, String) {
-        let stub_dir = std::env::temp_dir().join(format!(
-            "urzua-io-fake-gh-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&stub_dir).unwrap();
+    fn prepend_stub_gh_to_path(script_body: &str) -> (Scratch, String) {
+        let stub_dir = Scratch::new("urzua-io-fake-gh");
         let stub_gh = stub_dir.join("gh");
         fs::write(&stub_gh, format!("#!/bin/sh\n{script_body}")).unwrap();
         #[cfg(unix)]
@@ -812,17 +832,15 @@ mod tests {
     #[test]
     fn resolve_identity_falls_through_to_git_config_when_gh_is_unavailable() {
         let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (stub_dir, original_path) = prepend_failing_gh_to_path();
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
 
-        let tmp = std::env::temp_dir().join(format!("urzua-io-identity-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-identity");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp); // sets local user.name to "test"
 
         let result = resolve_identity(None, &tmp);
 
         std::env::set_var("PATH", original_path);
-        fs::remove_dir_all(&tmp).ok();
-        fs::remove_dir_all(&stub_dir).ok();
 
         let result = result.unwrap();
         assert_eq!(
@@ -838,9 +856,9 @@ mod tests {
     #[test]
     fn resolve_identity_never_lets_explicit_by_override_a_verified_gh_login() {
         let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (stub_dir, original_path) = prepend_failing_gh_to_path();
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
 
-        let tmp = std::env::temp_dir().join(format!("urzua-io-identity-by-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-identity-by");
         fs::create_dir_all(&tmp).unwrap();
         Command::new("git")
             .args(["init", "-q"])
@@ -856,8 +874,6 @@ mod tests {
         std::env::remove_var("GIT_CONFIG_GLOBAL");
         std::env::remove_var("GIT_CONFIG_SYSTEM");
         std::env::set_var("PATH", original_path);
-        fs::remove_dir_all(&tmp).ok();
-        fs::remove_dir_all(&stub_dir).ok();
 
         let result = result.unwrap();
         assert_eq!(result.name, "explicit-name");
@@ -867,18 +883,15 @@ mod tests {
     #[test]
     fn resolve_identity_prefers_explicit_by_over_git_config() {
         let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (stub_dir, original_path) = prepend_failing_gh_to_path();
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
 
-        let tmp =
-            std::env::temp_dir().join(format!("urzua-io-identity-by2-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-identity-by2");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp); // sets local user.name to "test"
 
         let result = resolve_identity(Some("explicit-name"), &tmp);
 
         std::env::set_var("PATH", original_path);
-        fs::remove_dir_all(&tmp).ok();
-        fs::remove_dir_all(&stub_dir).ok();
 
         let result = result.unwrap();
         assert_eq!(result.name, "explicit-name");
@@ -888,17 +901,15 @@ mod tests {
     #[test]
     fn resolve_identity_lets_gh_win_over_a_differing_explicit_by() {
         let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let (stub_dir, original_path) = prepend_successful_gh_to_path("gh-login");
+        let (_stub_dir, original_path) = prepend_successful_gh_to_path("gh-login");
 
-        let tmp = std::env::temp_dir().join(format!("urzua-io-identity-gh-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-identity-gh");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
 
         let result = resolve_identity(Some("explicit-name"), &tmp);
 
         std::env::set_var("PATH", original_path);
-        fs::remove_dir_all(&tmp).ok();
-        fs::remove_dir_all(&stub_dir).ok();
 
         let result = result.unwrap();
         assert_eq!(result.name, "gh-login");
@@ -931,7 +942,7 @@ mod tests {
 
     #[test]
     fn commit_strictly_before_is_true_only_in_the_real_commit_order() {
-        let tmp = std::env::temp_dir().join(format!("urzua-io-order-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-order");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
 
@@ -960,13 +971,11 @@ mod tests {
             "an unknown commit must surface as an error"
         );
         assert!(!is_shallow_repository(&tmp).unwrap());
-
-        fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn last_commit_for_path_tracks_the_most_recent_touch() {
-        let tmp = std::env::temp_dir().join(format!("urzua-io-lastcommit-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-lastcommit");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
 
@@ -984,13 +993,11 @@ mod tests {
             last_commit_for_path(&tmp, &tmp.join("b.txt")).unwrap(),
             Some(first)
         );
-
-        fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn commit_for_line_is_scoped_to_the_line_not_the_whole_file() {
-        let tmp = std::env::temp_dir().join(format!("urzua-io-blame-{}", std::process::id()));
+        let tmp = Scratch::new("urzua-io-blame");
         fs::create_dir_all(&tmp).unwrap();
         init_repo(&tmp);
 
@@ -1009,7 +1016,5 @@ mod tests {
             Some(second),
             "line 2 was changed by the second commit"
         );
-
-        fs::remove_dir_all(&tmp).ok();
     }
 }

@@ -1,7 +1,9 @@
 //! MILE-188: the committed override log and `override.unreviewed`.
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -16,10 +18,8 @@ fn git(dir: &Path, args: &[&str]) {
 const HEADER: &str = "# Override log\n\n| Date | Name | Record | Field | Rule | Reason | Reviewed-by |\n|---|---|---|---|---|---|---|\n";
 const CONFIG: &str = "schema_version: 2\noverride_log: .urzua/override-log.md\nrules: {override.unreviewed: warn}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n";
 
-fn fixture(name: &str, config: &str, log: Option<&str>) -> PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-override-log-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, config: &str, log: Option<&str>) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-override-log-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);

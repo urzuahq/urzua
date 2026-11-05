@@ -4,6 +4,8 @@
 //! `success`. A blocked record that states a `progress` status is an error; a
 //! type may also opt in to a written blocked status, checked the other way.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -50,9 +52,8 @@ fn derived_only() -> String {
         .replace("      blocked: [Blocked]\n", "")
 }
 
-fn repo(name: &str, config: &str, records: &[(&str, &str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-agree-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, config: &str, records: &[(&str, &str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-agree-{name}"));
     std::fs::create_dir_all(dir.join("docs/milestones")).unwrap();
     std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
