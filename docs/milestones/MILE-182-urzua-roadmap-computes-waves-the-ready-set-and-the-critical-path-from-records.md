@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K53B7R9MSAHEPCE46XJ91G
-Status: Blocked
+Status: Planned
 Phase: '0'
 Track: roadmap-tracking
 Implements: RFC-48
@@ -38,4 +38,4 @@ In this repository, `urzua roadmap` run against `.urzua/config.yaml` and the com
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** Maintainer decision, 2026-11-04: the computed roadmap (`RFC-48`, Accepted) is part of the Phase 0 tooling, so urzua generates its own roadmap from its records. | **substantive** |
 > | 2026-11-04 | `Depends-on: MILE-27, MILE-144` added; `MILE-27` removed from `Blocked-on`. **Why:** `MILE-27` is built, so the sequencing relation exists and this record is the first to carry it; `Blocked-on` keeps the note on `MILE-144`, which is still open. `Status` unchanged. | **structural** |
-> | 2026-11-05 | `Depends-on: ADR-82` added, `Blocked-on` set to it, `Status` Planned -> Blocked. **Why:** `RFC-48` leaves the roadmap's waves, ready set, critical path and output shape open and no accepted record decides them; building part of an RFC needs its own ADR. `ADR-82` is drafted as Proposed and the maintainer decides it; nothing of `urzua roadmap` is built until it is Accepted. | **substantive** |
+> | 2026-11-05 | `Depends-on: ADR-82` added and `Blocked-on` set to it; `Status` stays `Planned`. **Why:** `RFC-48` leaves the roadmap's waves, ready set, critical path and output shape open and no accepted record decides them; building part of an RFC needs its own ADR. `ADR-82` is drafted as Proposed and the maintainer decides it; nothing of `urzua roadmap` is built until it is Accepted. `blocked` is derived from `Depends-on` and is not written, so no status change is needed. | **substantive** |

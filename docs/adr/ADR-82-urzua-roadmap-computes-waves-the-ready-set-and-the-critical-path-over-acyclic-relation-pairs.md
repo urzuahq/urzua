@@ -39,22 +39,23 @@ fact. The command is correct and not yet informative; the migration is separate 
 | One graph or one per pair | Per pair vs. one graph over the declared pairs | `ADR-76` left a loop that crosses pairs to the roadmap, and per-pair output would pass it through undetected. **One graph over all declared pairs**, edges drawn as `sequence.cycle` draws them. A loop that crosses declared pairs is reported as a cycle. `blocks`, waves and the critical path are over that one graph |
 | What is open | Terminal status excluded vs. only records with a vocabulary | Open means the record's status is in neither `success` nor `failure` of its own type. A record of a type that declares no status vocabulary, or with no `Status` in a type that has one, **is open** and gets a `no-status-vocabulary` note. Open is the larger set, so it is the safe one to start with (shrinking it later removes records from output); #313's derived value already treats such a dependency as blocking |
 | Ready | Wave 0 vs. open and not derived-blocked | Ready means open **and not derived-blocked**, the derived `blocked` value being computed over the same declared pairs. It is wave 0 by construction, since a record with no open dependency has none that block it; both are emitted and neither is to be "fixed" to the other. Written `Status` is ignored: `Blocked` is derived only (`RFC-48`) |
+| Edge direction | Dependent to blocker vs. blocker to dependent | Edges run **blocker to dependent**: `A Depends-on B` is the edge `B -> A`. "Blocker first", `blocks`, and every walk in the critical-path tie-break follow that direction |
 | Wave | Longest-path layer vs. earliest-start | Wave of an included open record = 0 with no open dependency, else 1 + the largest wave among its open dependencies; a dependency in `success` is ignored. Unique, so no tie |
 | A dependency in a failure terminal | Treat as done vs. open vs. exclude | It does not unblock (`RFC-48`). The dependent and everything that transitively depends on it is excluded from waves, `ready` and the critical path, and listed with a `needs_replan` reason. The way out is to re-point the `Depends-on` (a `Superseded` target is re-pointed at its successor, the common case); the record then re-enters a wave |
 | Critical path | Longest by count vs. weight; greedy vs. global; whole vs. included | No estimates (`RFC` non-goal), so count. Over included records only: the longest chain; among all longest chains, **the lexicographically smallest sequence of ids, blocker first** (not a greedy walk, which can take a shorter branch). Emitted once, for the one graph. A chain hidden behind an excluded record is visible in `needs_replan`, not in the path |
-| Ordering | Unspecified vs. one rule | **Natural id order** everywhere: prefix compared as text, then the number compared as a number, then the whole id as text for an id with no number. Every list of ids, every map key set, `waves` inner arrays, `ready`, `blocks`, `blocked_by`, group members, `needs_replan` and `cycles` entries are ascending in it. `notes` are ordered by `kind` (the closed set's order below), then `record`, then `pair` |
+| Ordering | Unspecified vs. one rule | **Natural id order** everywhere: prefix compared as text, then the number compared as a number, then the whole id as text for an id with no number. Every list of ids, every map key set, `waves` inner arrays, `ready`, `blocks`, `blocked_by`, group members, `needs_replan` and `cycles` entries are ascending in it. `notes` are ordered by `kind` (the closed set's order below), then `record`, then `pair`, a null `pair` sorting first |
 | Cycles | Abort vs. report and exclude | Each strongly connected component of size above one, or a record with an edge to itself, is listed once as an array of its members in ascending order, which starts at the smallest member. Members, and records that depend on them, are excluded and appear in `needs_replan` with reason `cycle` / `depends-on-cycle` |
 | Relation matching nothing | Empty result vs. report | A declared pair no record carries a value for, an unresolved claim, and a claim on an unreadable record are `notes`. An empty result never stands for "nothing declared matched" |
 | No declared pair | `null` vs. object | Always an object. No `roadmap.pairs` gives `records: {}`, empty lists and a `no-sequencing-pair` note |
 | Grouping | Flat map vs. nested array | Declared `roadmap.group_by`, an ordered list of field names; the engine names none. Nested in `group_by` order as arrays; a record with no value for a field goes in a bucket with `value: null`, emitted last. A name no type declares is a config load error (`ADR-64` clause 5); a field no open record carries is a note |
-| Shape | Ids only vs. a per-record map | A `records` map keyed by id carries the per-record data, so a page needs no join for the common fields |
+| Shape | Ids only vs. a per-record map | A `records` map keyed by id carries the per-record data, so a page needs no join for the common fields. `records` holds every open record, `needs_replan` ones included (with `wave: null`); `groups` holds the same set, so an excluded record is still found under its group |
 
 ## Decision
 
 *In the context of `RFC-48`'s accepted but unspecified `urzua roadmap`, facing a public output and
 readings that change what a consumer sees, we decided that the roadmap is one graph over the
 sequencing pairs named by `roadmap.pairs`, using the edges `sequence.cycle` checks (so a loop that
-crosses declared pairs is found); that wave, ready, critical path, ordering and cycle listing are as
+crosses declared pairs is found, by the roadmap; `check` still sees cycles per pair until a follow-up milestone adds a mode over `roadmap.pairs`); that wave, ready, critical path, ordering and cycle listing are as
 the table states; that a type with no status vocabulary is open and noted; that a failed or cyclic
 dependency keeps a record and its dependents out of the waves under a closed `needs_replan` reason; that
 ready means open and not derived-blocked; that output is JSON only, always an object, versioned by
@@ -69,12 +70,14 @@ Output (all keys snake_case; `schema` is an integer, 1 in the first release):
   "roadmap": {
     "schema": 1,
     "pairs": ["sequencing"],
-    "waves": [["MILE-5"], ["MILE-7", "MILE-8"]],
+    "waves": [["MILE-5"], ["MILE-7", "MILE-8"], ["MILE-12"]],
     "ready": ["MILE-5"],
-    "critical_path": ["MILE-5", "MILE-7"],
+    "critical_path": ["MILE-5", "MILE-7", "MILE-12"],
     "records": {
       "MILE-5": {"type": "milestone", "status": "Planned", "wave": 0, "ready": true,
-                 "blocked": false, "blocked_by": [], "blocks": ["MILE-7", "MILE-8"]},
+                 "blocked": false, "blocked_by": [], "blocks": ["MILE-7", "MILE-8", "MILE-12"]},
+      "MILE-7": {"type": "milestone", "status": "Planned", "wave": 1, "ready": false,
+                 "blocked": true, "blocked_by": ["MILE-5"], "blocks": ["MILE-12"]},
       "MILE-9": {"type": "milestone", "status": "Planned", "wave": null, "ready": false,
                  "blocked": true, "blocked_by": ["MILE-3"], "blocks": []}
     },
@@ -92,7 +95,7 @@ Output (all keys snake_case; `schema` is an integer, 1 in the first release):
 }
 ```
 
-- `blocks` and `blocked_by` are transitive and direct respectively: `blocked_by` the direct open or
+- `blocks` and `blocked_by` are transitive and direct respectively (in the example `MILE-12` depends on `MILE-7`, which depends on `MILE-5`, so `MILE-5`'s `blocks` lists `MILE-12` although `MILE-12`'s `blocked_by` is `MILE-7` only): `blocked_by` the direct open or
   failed dependencies, `blocks` every open record that transitively depends on this one. `blocked` is the
   derived value. `wave` is `null` for a record excluded by `needs_replan`. `status` is the written value.
 - `needs_replan.reason` is a closed set: `failed-dependency` (a direct dependency is in a failure
@@ -125,9 +128,7 @@ note kind, a `reason` or a key is additive.
 
 ## Consequences
 
-- `MILE-182` is blocked on this ADR's acceptance; nothing of the roadmap is built until then. When this
-  ADR is accepted, the acceptance change must also move `MILE-182`'s `Status`, or the derived-blocked
-  agreement rule reports its written `Blocked`. That is the cost of keeping a hand-written `Blocked`.
+- `MILE-182` depends on this ADR and is blocked until it is Accepted. `blocked` is derived only, so the roadmap and the derived value show that with no written status, and accepting this ADR needs no edit to `MILE-182`'s `Status`. This ADR should be accepted together with, or after, the decision record that makes `blocked` derived only.
 - A `Rejected`, `Superseded` or `Retired` dependency (this ADR included) sends its dependent to
   `needs_replan`, which is the intended reading of "the design we waited on was refused".
 - `urzua roadmap` reuses `sequence_graphs`, so it reads the graph `check` accepts, with `ADR-76`'s
@@ -150,3 +151,4 @@ note kind, a `reason` or a key is additive.
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** `MILE-182` builds `RFC-48`'s `urzua roadmap`, no accepted record decides its waves, ready set, critical path or output shape, and an agent may not accept it; the maintainer decides. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after design review: one graph over the pairs `roadmap.pairs` declares (a cross-pair loop is detected); ready means open and not derived-blocked; natural id ordering, the critical-path tie-break and the cycle listing fixed; `needs_replan` reasons and `via` defined; output always an object with `schema`, a per-record map and structured notes from a closed set including `unstructured-wait`; groups nest as arrays with `value: null` last; a type with no status vocabulary is open and noted; the departures from `RFC-48`'s sketch are named; `export` carries the roadmap only when opted in. **Why:** maintainer decision, 2026-11-05, on the review of this record. | **substantive** |
+> | 2026-11-05 | Re-check amendments: edge direction fixed (blocker to dependent); `records` and `groups` include `needs_replan` records; a null `pair` sorts first in `notes`; a transitive `blocks` example; Consequences no longer says acceptance moves `MILE-182`'s status, since `blocked` is derived only; a follow-up milestone adds a `sequence.cycle` mode over `roadmap.pairs`. **Why:** design re-check of 2026-11-05. | **substantive** |
