@@ -1,5 +1,5 @@
 ---
-Version: '0.72'
+Version: '0.73'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -686,6 +686,45 @@ rules:
 A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
 `back_pointer_paths` stay prefixes: a `*` in them is a literal character.
 
+## The decision gate
+
+`diff.source-requires-record` is opt-in, and by default asks only that some governed record changed
+beside the source. Three further options (`MILE-133`) make it the decision gate: a change to
+declared source paths must also change a decision at a decided status, a record linking one, or a
+fix record. The gate is off unless `decision_types` is declared.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    decision_types:            # type -> the statuses at which one counts as decided
+      adr: ["Accepted"]
+      spec: ["Accepted", "Shipped"]
+    fix_types: ["bug"]         # a record of one of these types exempts the change
+    link_fields: ["Implements"]  # a changed record whose field names a decided decision
+```
+
+- `decision_types` maps a declared record type to a non-empty list of its statuses. The diff is
+  released by a changed record of that type at one of them, judged by the record's own `Status`
+  (the type's `Status` role field) in the working tree.
+- `link_fields` names pointer or narrative fields. A changed record, of any type, whose field names a
+  record of a `decision_types` type at a decided status releases the diff, so a milestone that
+  `Implements` an Accepted ADR does. A reference that resolves to no record, or to a decision still at
+  an undecided status, releases nothing.
+- `fix_types` names record types whose changed records release the diff, so a mechanical fix lands
+  with only a bug record (`AGENTS.md`).
+- A changed decision still at an undecided status does not release the diff and is named in the
+  finding. A deleted record, which has no status to read, satisfies nothing.
+- With the gate declared, a changed record that is none of the three no longer releases the rule.
+  The population and `exclude_paths` behave as without it.
+
+A declaration that could never apply is refused at load (exit 2) rather than leaving the gate quietly
+open: `fix_types` or `link_fields` without `decision_types`; a type that is not declared; a status
+a type's `statuses.values` does not list; an empty list; a type named in both `decision_types` and
+`fix_types`; a `link_fields` entry that is not a pointer or narrative field of any type; and any of
+the three on a rule that does not take them.
+
 ## Relation pairs
 
 A top-level `relation_pairs` list declares pairs of inverse relation fields (`RFC-47`, `MILE-122`).
@@ -1313,3 +1352,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. Documented the decision gate options of `diff.source-requires-record` (`decision_types`, `fix_types`, `link_fields`) and their load-time validation. **Why:** `MILE-133`, maintainer decision 2026-11-05. | **substantive** |

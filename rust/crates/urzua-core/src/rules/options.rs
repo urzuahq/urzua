@@ -122,6 +122,10 @@ impl RuleOpts for NarrativeStaleOpts {
 pub struct SourceRequiresRecordOpts {
     pub source_paths: Vec<String>,
     pub exclude_paths: Vec<String>,
+    /// The decision gate (`MILE-133`); empty means the gate is not declared.
+    pub decision_types: std::collections::BTreeMap<String, Vec<String>>,
+    pub fix_types: Vec<String>,
+    pub link_fields: Vec<String>,
 }
 
 impl RuleOpts for SourceRequiresRecordOpts {
@@ -129,6 +133,9 @@ impl RuleOpts for SourceRequiresRecordOpts {
         SourceRequiresRecordOpts {
             source_paths: s.source_paths.clone().unwrap_or_default(),
             exclude_paths: s.exclude_paths.clone().unwrap_or_default(),
+            decision_types: s.decision_types.clone().unwrap_or_default(),
+            fix_types: s.fix_types.clone().unwrap_or_default(),
+            link_fields: s.link_fields.clone().unwrap_or_default(),
         }
     }
 }

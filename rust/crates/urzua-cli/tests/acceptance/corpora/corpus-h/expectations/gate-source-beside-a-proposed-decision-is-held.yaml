@@ -1,0 +1,13 @@
+id: gate-source-beside-a-proposed-decision-is-held
+corpus: corpus-h
+# MILE-133: a record changed, but it is a decision still Proposed. The gate
+# asks for a decision at a decided status, so the source change is held, and
+# the message names the near miss.
+commits:
+  - write:
+      src/lib.rs: "fn a() { 3; }\n"
+      records/adr/ADR-0004-proposed.md: "---\nStatus: Proposed\n---\n# ADR-0004 — Proposed\n"
+invocation: [--config, .urzua/gate.yaml, check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: diff.source-requires-record, file: src/lib.rs, severity: error, message_contains: "ADR-0004 (Proposed)", suggested_action: {kind: add-record, target: {type: adr}}}

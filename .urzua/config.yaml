@@ -500,10 +500,19 @@ rules:
   # Inert on a whole-repo run, where it reports not-applicable.
   # Integration tests sit in each crate's tests/ directory, so a change to
   # them alone is not a change to behaviour needing a record (MILE-158).
+  # The decision gate (MILE-133): the diff must also change an adr at Accepted,
+  # a spec at Accepted or Shipped, a record whose Implements names one (a
+  # milestone), or a bug (a mechanical fix needs no decision, AGENTS.md). A
+  # Proposed ADR or a Draft spec does not release it.
   diff.source-requires-record:
     level: error
     source_paths: ["rust/crates"]
     exclude_paths: ["rust/crates/*/tests"]
+    decision_types:
+      adr: ["Accepted"]
+      spec: ["Accepted", "Shipped"]
+    fix_types: ["bug"]
+    link_fields: ["Implements"]
   # Prose citations of decision ids resolve (MILE-136). RFC-822 and RFC-4122
   # are public standards that share the RFC prefix, not records (MILE-156).
   citation.resolution:

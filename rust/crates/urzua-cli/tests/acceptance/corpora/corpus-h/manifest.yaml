@@ -2,6 +2,7 @@
 fixtures:
   - {path: .urzua/config.yaml, irregularity: "the default config: a required Context section; not a record."}
   - {path: .urzua/diff.yaml, irregularity: "a config declaring the two diff-gate rules; not a record."}
+  - {path: .urzua/gate.yaml, irregularity: "a config declaring the decision gate on diff.source-requires-record: adr at Accepted, bug as the fix type, Implements as the link field; not a record."}
   - {path: .urzua/boundary.yaml, irregularity: "a config declaring one published path; not a record."}
   - {path: .urzua/refs.yaml, irregularity: "a config checking cited issue numbers against a snapshot; not a record."}
   - {path: .urzua/delivery.yaml, irregularity: "a milestone type whose Status is held to its delivery evidence; not a record."}
