@@ -1,5 +1,5 @@
 ---
-Version: '0.82'
+Version: '0.83'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -738,8 +738,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.79`. `waiver.matches-nothing` gains the finding variant `waiver-ineffective` (`edit-field` `set` on the first missing field), reported on a waiver that lacks a field its type's `effective_requires` names; the waiver suppresses nothing. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.80`. `revision-log.change-class-required` reports a record of a type that declares `revision_log: {required: true}` and has no revision-log section, with the new variant `revision-log-missing` offering `edit-section` `add`; a type that does not declare it leaves such a record unexamined. The rule-table and action-table rows are regenerated. **Why:** `BUG-50` -- absence of the log was indistinguishable from compliance, and SPEC-1 lost 18 revision rows without a finding. | **substantive** |
 > | 2026-11-05 | Bumped to `0.81`. `filename.title-consistency` reads an H1's id as a filename's is read: the declared `identity` prefix and a number, or with no pattern a leading `PREFIX-N` or bare `N`; a title that matches neither is reported as carrying no record id, and an overflowing number as too large to compare. The rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-32`, maintainer decision 2026-11-05; `# 2026-09-16 Notes` no longer reads as 20260916. | **substantive** |
-<<<<<<< HEAD
-> | 2026-11-05 | Bumped to `0.82`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule that can judge one record, without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the record. **Why:** `MILE-187`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
-=======
 > | 2026-11-05 | Bumped to `0.82`. Removed the no-git directory-walk fallback from Discovery: outside a git repository every command that reads one exits 2 with a "needs a git repository" error, as the binary already did. **Why:** `BUG-170`, maintainer decision 2026-11-05; the spec promised behavior that never existed. | **substantive** |
->>>>>>> origin/main
+> | 2026-11-05 | Bumped to `0.83`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule that can judge one record, without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the record. **Why:** `MILE-187`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
