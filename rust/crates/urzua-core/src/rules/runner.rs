@@ -136,12 +136,26 @@ pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding
 }
 
 /// Every rule of `phase`, in table order.
+///
+/// A rule with a companion population (`MILE-186`) contributes its second
+/// execution straight after its first, so `rules_executed` keeps table order.
 pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
-    RULE_TABLE
-        .iter()
-        .filter(|d| d.phase == phase)
-        .map(|d| run_rule(d, ctx))
-        .collect()
+    let mut out = Vec::new();
+    for def in RULE_TABLE.iter().filter(|d| d.phase == phase) {
+        out.push(run_rule(def, ctx));
+        if let Some(companion) = def.companion {
+            // Never called for a rule the repository has not enabled.
+            let enabled = ctx
+                .config
+                .rules
+                .get(def.id)
+                .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
+            if let Some(extra) = enabled.then(|| companion(ctx)).flatten() {
+                out.push(gate_and_run(ctx.config, def.id, || extra));
+            }
+        }
+    }
+    out
 }
 
 /// How a run narrows what it reports on.
