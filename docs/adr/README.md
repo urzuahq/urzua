@@ -82,4 +82,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A record declares the ids it names without citing as a reference, and citation.resolution does not resolve them](ADR-75-a-record-declares-the-ids-it-names-without-citing-as-a-reference-and-citation-resolution-does-not-resolve-them.md)
 - [An acyclic relation pair is a sequencing relation, checked by two sequence rules](ADR-76-an-acyclic-relation-pair-is-a-sequencing-relation-checked-by-two-sequence-rules.md)
 - [Config schema versions have a declared support window and a migration path](ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)
+- [RFC-7's remaining enforcement-harness decisions](ADR-78-rfc-7-s-remaining-enforcement-harness-decisions.md)
 <!-- urzua:index:end -->
