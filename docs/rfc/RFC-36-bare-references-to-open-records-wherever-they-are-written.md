@@ -110,6 +110,22 @@ of `ADR-53`; shipping at a level the evidence does not support is not.
   `ADR-34` together, and `BUG-0002`/`ADR-0036` in another -- the pre-`ADR-36` identifier shape, which
   no longer resolves against the corpus. Nothing reports those.
 
+## Amendment (2026-11-05): decided in ADR-81
+
+The maintainer decided on 2026-11-05 to take this proposal as written. `ADR-81` (Proposed) records
+it. Choices that resolve the open questions above:
+
+- Keep the closing verb and add a separate rule, `reference.bare` (provisional name). It is its own
+  rule rather than a second finding of `claim.status-agreement`, since the two want different levels.
+- This repository declares its changeset files as the scanned text. A commit message and a PR body are
+  not covered; they may want a different input mechanism.
+- `reference_paths` stays a separate option from `claim_paths`.
+- The rule ships at `warn`. Whether the open-record discriminator flags ordinary citations is still
+  unmeasured, and the pass over the 44 references gates promotion to `error`.
+- Whether a bare reference must resolve at all is not decided.
+
+This RFC should become Accepted together with `ADR-81`.
+
 ## Non-goals
 Changing what `claim.status-agreement` does when it *does* parse a claim -- that behaviour is correct
 and `BUG-36` is the evidence for it.
@@ -131,3 +147,4 @@ Repairing the 44 historical references. They are consumed at release and are not
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-05 | Amendment: the maintainer's decision to accept this RFC is recorded in `ADR-81`, resolving the open questions on paths, option naming and rule shape and leaving the discriminator and resolution questions open. **Why:** accepting an RFC is recorded in an ADR; `Status` unchanged. | **substantive** |

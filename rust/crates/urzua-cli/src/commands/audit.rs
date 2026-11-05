@@ -20,6 +20,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
 
 fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
     let Session {
+        repo_root,
         config,
         discovered,
         records,
@@ -27,15 +28,16 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
     } = Session::open(config_path)?;
 
     let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
+    let untracked = crate::discovery::untracked_records(&repo_root, &config, &discovered.paths);
     let notices = rules::identity_collision_notices(&identity_collisions);
 
     let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-        rules::pointer_resolution(&records, &config, &record_index)
+        rules::pointer_resolution(&records, &config, &record_index, &untracked)
     });
     let (exec2, findings2) = crate::gate::gated(
         &config,
         rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-        || rules::supersession_reciprocity(&records, &config, &record_index),
+        || rules::supersession_reciprocity(&records, &config, &record_index, &untracked),
     );
     let (exec3, findings3) = crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
         rules::identity_collision(&records, &identity_collisions)

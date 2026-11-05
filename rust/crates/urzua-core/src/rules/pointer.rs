@@ -104,6 +104,7 @@ pub fn pointer_resolution(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
     let pointer_fields_by_type = pointer_fields_by_type(config);
     let pointer_fields_by_type = &pointer_fields_by_type;
@@ -133,6 +134,13 @@ pub fn pointer_resolution(
                 if index.contains_key(&crate::values::RecordId::new(&reference)) {
                     continue;
                 }
+                let (variant, message) = unresolved_reference(
+                    field_name,
+                    &reference,
+                    untracked,
+                    ("pointer-unresolved", "pointer-untracked"),
+                    "",
+                );
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -141,11 +149,8 @@ pub fn pointer_resolution(
                     waived: None,
                     declared_severity: None,
                     suggested_action: None,
-                    action_source: ActionSource::new("pointer-unresolved")
-                        .field(field_name.as_str()),
-                    message: format!(
-                        "{field_name}: {reference} does not resolve to any discovered record"
-                    ),
+                    action_source: ActionSource::new(variant).field(field_name.as_str()),
+                    message,
                 });
             }
             Outcome::Examined
@@ -327,6 +332,51 @@ mod tests {
     }
 
     #[test]
+    fn a_reference_to_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        // `BUG-13`: a record drafted beside the one citing it, not yet `git add`ed,
+        // read exactly like a typo. The CLI supplies the on-disk fact; core stays pure.
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-9, RFC-8\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
+        let records = [source];
+        let index = build_normalized_index(&records);
+        let untracked: UntrackedRecords = [(
+            crate::values::RecordId::new("RFC-9"),
+            PathBuf::from("docs/rfc/RFC-9-draft.md"),
+        )]
+        .into();
+        let (_, findings) = pointer_resolution(&records, &config, &index, &untracked);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        let untracked_finding = findings
+            .iter()
+            .find(|f| f.message.contains("RFC-9"))
+            .unwrap();
+        assert_eq!(untracked_finding.action_source.variant, "pointer-untracked");
+        assert!(
+            untracked_finding
+                .message
+                .contains("docs/rfc/RFC-9-draft.md")
+                && untracked_finding.message.contains("not tracked by git"),
+            "{}",
+            untracked_finding.message
+        );
+        let missing = findings
+            .iter()
+            .find(|f| f.message.contains("RFC-8"))
+            .unwrap();
+        assert_eq!(missing.action_source.variant, "pointer-unresolved");
+        assert!(missing
+            .message
+            .ends_with("does not resolve to any discovered record"));
+    }
+
+    #[test]
     fn a_non_resolving_pointer_is_an_error() {
         let source = record(
             "docs/specs/SPEC-1-x.md",
@@ -339,7 +389,7 @@ mod tests {
         )]);
         let records = [source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -365,7 +415,7 @@ mod tests {
         )]);
         let records = [parent, child];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -382,7 +432,7 @@ mod tests {
         )]);
         let records = [child];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));

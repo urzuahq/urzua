@@ -6,12 +6,60 @@
 
 use crate::config::{Config, RelationRole};
 use crate::record::Record;
+use crate::report::{Notice, NoticeSeverity, Population, PopulationUnit};
 use crate::rules::{
     build_index_reporting_collisions, extract_references, record_id, relation_field_name,
     IdentifierCollision, RelationKind, NARRATIVE, POINTER,
 };
 use crate::values::RecordId;
 use std::collections::HashMap;
+
+/// What `graph` and `explain` read, as the population block `check` reports for
+/// a rule (`BUG-169`): every record is eligible, a record whose header could be
+/// read is examined, and one whose header could not is `unreadable`, so a
+/// success status never hides records that contributed nothing. A record of a
+/// `header_shape: none` type has nowhere for a header and is `out_of_scope`.
+/// The notice lists the unreadable records by path; it is `None` when every
+/// record was read. `subject` names the command.
+pub fn read_population(
+    records: &[Record],
+    config: &Config,
+    subject: &str,
+) -> (Population, Option<Notice>) {
+    let (mut examined, mut out_of_scope) = (0, 0);
+    let mut unreadable: Vec<String> = Vec::new();
+    for record in records {
+        if config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.has_no_header())
+        {
+            out_of_scope += 1;
+        } else if record.header.is_unreadable() {
+            unreadable.push(record.path.display().to_string());
+        } else {
+            examined += 1;
+        }
+    }
+    unreadable.sort();
+    let population = Population::detailed(
+        PopulationUnit::Record,
+        records.len(),
+        examined,
+        out_of_scope,
+        unreadable.len(),
+    );
+    let notice = (!unreadable.is_empty()).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: subject.to_string(),
+        message: format!(
+            "{} record(s) left out because their header could not be read, so their relationships are not in this output: {}",
+            unreadable.len(),
+            unreadable.join(", ")
+        ),
+    });
+    (population, notice)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct GoverningRecord {
@@ -463,5 +511,52 @@ mod tests {
         );
         assert_eq!(edges.len(), 1, "unexpected edges: {edges:?}");
         assert_eq!(edges[0].kind, RelationKind::Pointer);
+    }
+
+    #[test]
+    fn the_read_population_counts_an_unreadable_header_and_names_it_observed_failing() {
+        let good = record(
+            "docs/adr/ADR-1-a.md",
+            "adr",
+            "---\nStatus: Accepted\n---\n# ADR-1\n",
+        );
+        let bad = record(
+            "docs/adr/ADR-2-b.md",
+            "adr",
+            "---\nDerives-from: ADR-1: bad: yaml\n---\n# ADR-2\n",
+        );
+        let records = [good, bad];
+        let (population, notice) =
+            read_population(&records, &no_relation_field_overrides(), "graph");
+        assert_eq!(population.unit(), crate::report::PopulationUnit::Record);
+        assert_eq!(
+            (
+                population.eligible(),
+                population.examined(),
+                population.unreadable()
+            ),
+            (2, 1, 1)
+        );
+        let notice = notice.expect("a left-out record is disclosed");
+        assert_eq!(notice.severity, crate::report::NoticeSeverity::Warning);
+        assert_eq!(notice.subject, "graph");
+        assert!(
+            notice.message.contains("docs/adr/ADR-2-b.md"),
+            "{}",
+            notice.message
+        );
+        assert!(!notice.message.contains("ADR-1-a.md"), "{}", notice.message);
+    }
+
+    #[test]
+    fn a_clean_or_empty_corpus_has_no_left_out_notice_and_an_empty_one_has_no_population() {
+        let ok = record("docs/adr/ADR-1-a.md", "adr", "---\nStatus: Accepted\n---\n");
+        let (population, notice) =
+            read_population(&[ok], &no_relation_field_overrides(), "explain");
+        assert_eq!((population.eligible(), population.examined()), (1, 1));
+        assert!(notice.is_none());
+        let (population, notice) = read_population(&[], &no_relation_field_overrides(), "explain");
+        assert_eq!((population.eligible(), population.examined()), (0, 0));
+        assert!(notice.is_none());
     }
 }
