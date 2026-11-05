@@ -33,7 +33,8 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Str
         ));
     }
     let governing_records = urzua_core::graph::explain(&records, &parsed.path, &config);
-    let mut notices = Vec::new();
+    let (population, notice) = urzua_core::graph::read_population(&records, &config, "explain");
+    let mut notices: Vec<Notice> = notice.into_iter().collect();
     let (scope, coverage) = match &parsed.scope {
         None => (
             None,
@@ -51,6 +52,7 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Str
         governing_records,
         scope,
         coverage,
+        population,
         notices,
     }))
 }

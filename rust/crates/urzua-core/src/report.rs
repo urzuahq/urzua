@@ -723,6 +723,10 @@ pub struct ExplainReport {
     /// (`BUG-176`), when the config accepts that kind of locator.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coverage: Option<CoverageExplanation>,
+    /// The records read to answer, as `check` reports a rule's population
+    /// (`BUG-169`): an empty answer from an unread corpus is not the same as
+    /// an empty answer from a read one.
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
@@ -773,6 +777,8 @@ impl Report for ExplainReport {
 pub struct GraphReport {
     pub status: ReportStatus,
     pub edges: Vec<crate::graph::GraphEdge>,
+    /// See [`ExplainReport::population`].
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
