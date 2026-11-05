@@ -527,7 +527,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries. Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,

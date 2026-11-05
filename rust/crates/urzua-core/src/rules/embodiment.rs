@@ -66,29 +66,56 @@ fn split_pin(locator: &str) -> (&str, Option<&str>) {
 /// Every locator with its optional pinned digest (`MILE-129`), in the order
 /// written. The path is normalised exactly as [`parse_realized_by`] does.
 pub fn realized_by_pinned_locators(value: &str) -> Vec<(String, Option<String>)> {
-    let mut out = Vec::new();
-    for segment in value.split(',') {
-        let Some((prefix, locator)) = segment.trim().split_once(':') else {
-            continue;
-        };
-        if !matches!(prefix.trim(), "spec" | "code" | "test") {
-            continue;
+    realized_by_entries(value)
+        .into_iter()
+        .map(|(_, locator)| {
+            let (path, pin) = split_pin(locator);
+            (normalize_locator(path), pin.map(str::to_string))
+        })
+        .collect()
+}
+
+/// The categories a `Realized-by` entry can carry: the declared evidence
+/// categories (`Evidence`).
+const CATEGORIES: [&str; 3] = ["spec", "code", "test"];
+
+/// True when `rest` begins an entry: a category, then `:`.
+fn starts_entry(rest: &str) -> bool {
+    rest.trim_start()
+        .split_once(':')
+        .is_some_and(|(prefix, _)| CATEGORIES.contains(&prefix.trim()))
+}
+
+/// Splits a `Realized-by` value into `(category, locator)` entries. A comma
+/// separates entries only when a `category:` prefix follows it; any other
+/// comma belongs to the path (`BUG-129`). Text before the first category
+/// prefix belongs to no entry. A path that itself contains `,<category>:` is
+/// the one ambiguous shape; it reads as two entries.
+fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
+    let mut starts = Vec::new();
+    if starts_entry(value) {
+        starts.push(0);
+    }
+    for (i, _) in value.match_indices(',') {
+        if starts_entry(&value[i + 1..]) {
+            starts.push(i + 1);
         }
-        let (path, pin) = split_pin(locator);
-        out.push((normalize_locator(path), pin.map(str::to_string)));
+    }
+    let mut out = Vec::new();
+    for (n, &start) in starts.iter().enumerate() {
+        let end = starts.get(n + 1).map_or(value.len(), |next| next - 1);
+        if let Some((prefix, locator)) = value[start..end].split_once(':') {
+            out.push((prefix.trim(), locator));
+        }
     }
     out
 }
 
 pub(crate) fn parse_realized_by(value: &str) -> RealizedBy {
     let mut result = RealizedBy::default();
-    for segment in value.split(',') {
-        let segment = segment.trim();
-        let Some((prefix, locator)) = segment.split_once(':') else {
-            continue;
-        };
+    for (prefix, locator) in realized_by_entries(value) {
         let locator = normalize_locator(split_pin(locator).0);
-        match prefix.trim() {
+        match prefix {
             "spec" => result.spec.push(locator),
             "code" => result.code.push(locator),
             "test" => result.test.push(locator),
@@ -664,6 +691,36 @@ mod tests {
         // Every other reader sees the bare path.
         assert_eq!(parse_realized_by(&value).code, vec!["src/a.rs".to_string()]);
         assert!(realized_by_locator_paths(&value).contains(&"src/a.rs".to_string()));
+    }
+
+    #[test]
+    fn a_comma_inside_a_locator_path_is_part_of_the_path_observed_failing() {
+        let r = parse_realized_by("code:src/weird,name.rs, test:tests/a, b.rs");
+        assert_eq!(r.code, vec!["src/weird,name.rs".to_string()]);
+        assert_eq!(r.test, vec!["tests/a, b.rs".to_string()]);
+        assert_eq!(
+            realized_by_pinned_locators("spec:docs/x,y.md,code:src/a.rs"),
+            vec![
+                ("docs/x,y.md".to_string(), None),
+                ("src/a.rs".to_string(), None)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_comma_followed_by_a_category_prefix_separates_entries() {
+        let r = parse_realized_by("code:a.rs,test:b.rs ,  spec:c.md");
+        assert_eq!(r.code, vec!["a.rs".to_string()]);
+        assert_eq!(r.test, vec!["b.rs".to_string()]);
+        assert_eq!(r.spec, vec!["c.md".to_string()]);
+    }
+
+    #[test]
+    fn a_comma_followed_by_an_unknown_prefix_stays_in_the_path() {
+        // The unknown prefix is no category, so the text is not an entry of its
+        // own; the path names nothing and `embodiment.locator-exists` reports it.
+        let r = parse_realized_by("code:a.rs, docs:b.md");
+        assert_eq!(r.code, vec!["a.rs, docs:b.md".to_string()]);
     }
 
     #[test]
