@@ -79,7 +79,7 @@ template and leaves `Status`, `Deciders` and `Embodiment` to the author is uncha
 
 ## Amendment (2026-11-05): numbering spans every directory the type declares
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-05 at the maintainer's request). The Decision text above is unchanged.*
+*Status of this amendment: accepted 2026-11-05 by the maintainer (drafted 2026-11-05 at the maintainer's request). The Decision text above is unchanged.*
 
 The 2026-11-04 amendment's Numbering bullet, and the Decision before it, say `new` numbers from "the
 type's directory". Since `MILE-130` (#259), a record type may declare `extra_dirs` beside `dir`, and
@@ -109,3 +109,4 @@ The decision is unchanged: `urzua new` fills in the template and leaves `Status`
 > | 2026-11-04 | Amendment added: the blockquote and bold-list refusal no longer applies (`MILE-85`), `Author` resolves `gh api user` first (`ADR-31`), and numbering skips numbers claimed on other refs and follows the declared identity pattern (`MILE-89`, `MILE-151`, `BUG-188`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Amendment added: numbering spans every directory the type declares (`extra_dirs`, `MILE-130`); proposed, pending maintainer acceptance. **Why:** the drift check found `new.rs` numbering across `all_dirs()` while the text said "the type's directory" (#306). | **substantive** |
+> | 2026-11-05 | Amendment of 2026-11-05 accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
