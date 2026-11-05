@@ -1,7 +1,7 @@
 # NNNN — Title
 
 > Status: Planned | InProgress | Blocked | Done | WontDo
-> Phase: 0
+> Phase: the phase number this milestone belongs to
 > Track: track-name
 > Implements: RFC-NNNN, ADR-NNNN (optional -- a milestone can exist before a decision does)
 > Blocked-on: what has to be true before this can move, citing a record ID if there is one. `—` if nothing.

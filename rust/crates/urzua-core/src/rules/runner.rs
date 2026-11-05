@@ -45,6 +45,10 @@ pub struct RuleCtx<'a> {
     pub config_path: &'a Path,
     pub records: &'a [Record],
     pub full_text: &'a HashMap<PathBuf, String>,
+    /// Each type's template header (`field -> value`), read by the caller from
+    /// `.urzua/templates/<type>.md`; empty unless `field.quality` declares
+    /// `template_placeholders`.
+    pub templates: &'a crate::new_record::TemplateValues,
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
@@ -60,6 +64,9 @@ pub struct RuleCtx<'a> {
     pub drifted: &'a HashSet<PathBuf>,
     pub fresh: &'a HashSet<PathBuf>,
     pub claim_ages: &'a HashMap<PathBuf, u64>,
+    /// The merge base's text of each changed record (`--base`), read by the
+    /// caller; a record new in the diff has no entry. Empty without `--base`.
+    pub base_text: &'a HashMap<PathBuf, String>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
     /// Each changed record's `Status` at the merge base, for the types that
