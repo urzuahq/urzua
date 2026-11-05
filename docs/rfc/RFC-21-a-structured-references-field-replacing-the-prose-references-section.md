@@ -120,3 +120,9 @@ field" scope rather than this RFC's "build a new field" one.
   toward this field, not decided here.
 - MILE-86 — names the same underlying gap; this RFC's structural approach is rejected in favor of
   MILE-86's original detection-based one (see "Why rejected" above).
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

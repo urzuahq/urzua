@@ -160,3 +160,9 @@ has already decided to build.
   is a record and explicitly required "no special-casing in the tool".
 - `MILE-55`, the second capability, already on the plan.
 - `ADR-55`, on a declaration the engine silently ignores being a check that never fires.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

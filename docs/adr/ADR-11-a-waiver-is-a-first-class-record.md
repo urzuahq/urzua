@@ -52,3 +52,9 @@ corpus; the design cost was in deciding the shape, not in the migration.
 - RFC-15 — the proposal this decides.
 - RFC-11 §5, RFC-13 — the ignore-list anti-pattern this ADR avoids.
 - SPEC-3 — "reported as skipped, never omitted," extended here to waived findings.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

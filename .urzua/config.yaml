@@ -148,6 +148,9 @@ record_types:
         # A rejected proposal can be reopened as a draft (RFC-30).
         Rejected: ["Draft"]
     spec: "SPEC-17"
+    # An RFC carries a revision log (BUG-50): a record without one is a finding
+    # of revision-log.change-class-required, which is opt-in per type.
+    revision_log: {marker: "**Revision log**", required: true}
     pointer_fields:
       - "Implements"
       - "Amends"
@@ -209,6 +212,8 @@ record_types:
     narrative_fields: []
   milestone:
     dir: "docs/milestones"
+    # A record of this type carries a revision log (BUG-50); opt-in per type.
+    revision_log: {marker: "**Revision log**", required: true}
     prefix: "MILE"
     required_fields:
       - "Status"
@@ -268,6 +273,8 @@ record_types:
       - "Blocked-on"
   bug:
     dir: "docs/bugs"
+    # A record of this type carries a revision log (BUG-50); opt-in per type.
+    revision_log: {marker: "**Revision log**", required: true}
     required_fields:
       - "Status"
       - "Found-in"
@@ -317,6 +324,8 @@ record_types:
       - "Blocked-on"
   waiver:
     dir: "docs/waiver"
+    # A record of this type carries a revision log (BUG-50); opt-in per type.
+    revision_log: {marker: "**Revision log**", required: true}
     # The suppression type (BUG-74): the engine reads this declaration, not the
     # type name, so the records here suppress findings whatever the type is called.
     role: suppression

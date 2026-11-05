@@ -75,3 +75,9 @@ Two things this table makes visible that no single spec states on its own:
 - RFC-18 — proposes widening `doctor`; this RFC's table is the frame that proposal should be read
   against.
 - RFC-19 — proposes a hypothetical future `fix` tier; same relationship to this RFC as RFC-18's.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

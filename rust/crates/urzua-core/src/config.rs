@@ -718,6 +718,16 @@ impl RecordTypeConfig {
             .and_then(|d| d.version_bump.as_ref())
     }
 
+    /// Whether this type declares `revision_log: {required: true}`
+    /// (`BUG-50`): the opt-in under which a record with no log is a finding.
+    /// A type that does not declare it, or declares `false`, reports none.
+    pub fn revision_log_declared_required(&self) -> bool {
+        self.revision_log
+            .as_ref()
+            .and_then(|d| d.required)
+            .unwrap_or(false)
+    }
+
     /// Whether `urzua fix --apply` needs this type's revision-log section
     /// (`MILE-159`): `true` unless declared `required: false`.
     pub fn revision_log_required(&self) -> bool {
@@ -736,6 +746,14 @@ impl Config {
             .get(record_type)
             .map(RecordTypeConfig::revision_log_id)
             .unwrap_or_default()
+    }
+
+    /// Whether a record of `record_type` with no revision log is a finding
+    /// (`BUG-50`): only a type declaring `revision_log: {required: true}`.
+    pub fn revision_log_declared_required(&self, record_type: &str) -> bool {
+        self.record_types
+            .get(record_type)
+            .is_some_and(RecordTypeConfig::revision_log_declared_required)
     }
 
     /// Whether `fix --apply` needs a revision-log section for a record of

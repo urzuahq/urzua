@@ -125,3 +125,9 @@ Repairing the 44 historical references. They are consumed at release and are not
 - `BUG-59` and `BUG-65` on declared vocabulary, both blocked on `MILE-98`. This RFC is the same
   principle applied to which files a rule reads rather than which words it knows.
 - `ADR-53`, every rule is a declared policy, opt-in.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
