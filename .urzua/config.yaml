@@ -379,10 +379,16 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
+# The committed log of editor-hook overrides (ADR-78, MILE-188): the hook appends a row
+# whenever a named override lets a blocked edit through, and override.unreviewed
+# reports a row no person has reviewed, so it surfaces in the pull request.
+override_log: .urzua/override-log.md
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
 rules:
+  override.unreviewed: warn
   embodiment.requires-accepted-status:
     level: warn
   # A milestone's Status agrees with its delivery evidence (MILE-183): the PR

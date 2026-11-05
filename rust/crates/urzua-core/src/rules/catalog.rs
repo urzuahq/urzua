@@ -65,3 +65,5 @@ pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
 pub const RULE_WAIVER_MATCHES_NOTHING: &str = "waiver.matches-nothing";
+
+pub const RULE_OVERRIDE_UNREVIEWED: &str = "override.unreviewed";

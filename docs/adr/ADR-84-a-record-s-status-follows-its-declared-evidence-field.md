@@ -48,8 +48,9 @@ assumed here.
 |---|---|---|
 | A. Leave it to review and periodic triage | No engine change | The lag recurs (6 of 167) and was found by one manual pass |
 | B. Read prose: a changeset or PR body that names the record (`ADR-81`) | No new field | Rejected on measurement: 0 real hits among 19 flagged |
-| C. Let `statuses.delivery` read the evidence field a type already maps to the `embodiment_locator` role (`relation_fields`), verified to exist (chosen) | One mechanism, already built; no new field kind and no change to the fixed `RelationRole` set (`SPEC-3`); opt-in per type | Needs a verifiable, category-prefixed locator in that field, so the corpus is migrated; recall is partial |
-| D. A new "test-locator" field kind beside the role remap | Lets a type keep its `Realized-by` and a separate test field | A second way to name evidence that `judge_delivery` and `embodiment.locator-exists` would both have to learn; the role set is fixed by design |
+| C. Let `statuses.delivery` read the evidence field every type already uses, `Realized-by`, verified to exist (chosen) | One mechanism, already built; one evidence field across every type and no type-specific mapping; no new field kind and no change to the fixed `RelationRole` set (`SPEC-3`); opt-in per type | A type's separate test field is migrated into `Realized-by` as category-prefixed locators and then retired; recall is partial |
+| D. A new "test-locator" field kind beside `Realized-by` | Lets a type keep a separate test field | A second way to name evidence that `judge_delivery` and `embodiment.locator-exists` would both have to learn; the role set is fixed by design |
+| G. Remap the `embodiment_locator` role (`relation_fields`) of a type to its own test field | Needs no value move into `Realized-by`; the existing machinery reads the remapped field | Not chosen: it keeps two evidence fields (a type's own and `Realized-by`), needs a type-specific mapping, and a role maps to one field per type, so that type's existing `Realized-by` values would stop being read |
 | E. Add a "partially fixed" status | Expresses `BUG-99` | A status the engine would have to know; the waiver mechanism already expresses a deliberate exception |
 | F. Auto-downgrade a done record with no evidence | Symmetric | Wrong where a done record legitimately has none (a documentation or performance change) |
 
@@ -60,31 +61,28 @@ In the context of records whose status lags the change that delivers them, facin
 to it, as `statuses.delivery` already does for milestones**, to achieve a delivered record being reported
 before the lag is found by hand, accepting that the signal is partial and has a known false positive.
 
-- **The evidence is the field the type maps to the `embodiment_locator` role.** `relation_fields.embodiment_locator`
-  (`config.rs`, `RelationRoles`; `SPEC-3`) already lets a type name which of its fields plays that role, and
-  `judge_delivery` (`rules/status.rs`) already reads that field through `relation_field_name`. This repository
-  maps its defect type's `Regression-test` to the role. That reuses the existing machinery: the field's value
-  is read in the `Realized-by` grammar (`category:locator`, `locator.rs` `realized_by_entries`), each locator
-  is `path` or `path#Symbol` resolved by `locator_resolvers` (`ADR-74`), and `embodiment.locator-exists`
-  verifies it whatever the record's status. No new field kind is added and the fixed `RelationRole` set
-  (`SPEC-3`) is unchanged.
-- **Limits of the reuse, stated.** A role maps to one field per type, so the defect type's present `Realized-by`
-  (it is already in that type's `known_fields`, and 17 bug records use it) stops being the role field when
-  `Regression-test` is mapped. The implementing change moves those 17 values into the mapped field (the
-  grammar carries `code:` and `test:` entries alike) and drops `Realized-by` from that type's `known_fields`,
-  or the repository keeps `Realized-by` as the role field and migrates `Regression-test` values into it; the
-  implementing change picks one and records which. The splitter requires a category prefix, so a value that
-  is bare text or `path::test_name` yields no entry: it is not evidence, and it is counted and disclosed,
-  never guessed at and never reported as a defect.
+- **The evidence is the type's `Realized-by` field, the same field every other type uses.** (Maintainer
+  decision of 2026-11-05.) `judge_delivery` (`rules/status.rs`) already reads the `embodiment_locator` role
+  field, which defaults to `Realized-by`, and `relation_fields.embodiment_locator` needs no remap. The
+  field's value is read in the `Realized-by` grammar (`category:locator`, `locator.rs` `realized_by_entries`),
+  each locator is `path` or `path#Symbol` resolved by `locator_resolvers` (`ADR-74`), and
+  `embodiment.locator-exists` verifies it whatever the record's status. No new field kind is added and the
+  fixed `RelationRole` set (`SPEC-3`) is unchanged.
+- **A type's separate test field migrates into `Realized-by` and is retired.** The values of such a field
+  (this repository's example: the defect type's `Regression-test`) move into `Realized-by` as `test:path#name`
+  entries, alongside the values `Realized-by` already holds (17 here, which stay). Several tests are allowed,
+  comma-separated before each category prefix: `test:a.rs#one, test:b.rs#two` (the splitter breaks at a comma
+  only when a `category:` follows, `BUG-129`, merged in #291). The implementing change then retires the
+  separate field: it is removed from the type's `known_fields` and from the template. The splitter requires a
+  category prefix, so a value that is bare text or `path::test_name` yields no entry: it is not evidence, and
+  it is counted and disclosed, never guessed at and never reported as a defect.
 - **The tier is the existing tier computation.** `judge_delivery` gets its tier from `compute_embodiment`
   (`rules/embodiment.rs`), which ranks the highest category with a non-empty entry list: `test:` entries compute
   to the test tier, `code:` to the code tier, `spec:` to the spec tier, in the order the repository declares
-  under `embodiment.tiers`. A declared test locator therefore computes to the test tier, and a type's
+  under `embodiment.tiers`. A `test:` entry in `Realized-by` therefore computes to the test tier, and a type's
   `statuses.delivery.delivered_tiers` lists the tiers that count (this repository: the test tier, and the code
   tier if it chooses). `delivered_tiers` consumes that tier exactly as it does for milestones; nothing new is
-  read. A value naming several tests is a comma-separated list in which each entry carries its category
-  prefix: `test:a.rs#one, test:b.rs`. The splitter breaks at a comma only when a `category:` follows (`BUG-129`),
-  so a comma inside a path stays in the path. Several locators are resolved and verified one by one.
+  read. Several locators in one value are resolved and verified one by one; a comma inside a path stays in the path.
 - **The delivering PR sets the status.** The change that delivers a record sets its declared success status
   and fills its evidence field in the same change (the fixed-in-PR convention, `BUG-180`, `BUG-186`;
   `MILE-183` for milestones).
@@ -109,15 +107,15 @@ before the lag is found by hand, accepting that the signal is partial and has a 
   honest: when the record is closed or the expiry passes, the waiver is reported.
 - **It is opt-in config with no type knowledge in the engine.** The mapping is `statuses.delivery`, on any
   type that declares it. The engine hardcodes no type, status or field name. A type that declares none is
-  not examined, and no config that exists today changes behaviour. Enabling the rule on a type whose
-  `embodiment_locator` role is not mapped to a declared field is a config load error, not an inert rule
+  not examined, and no config that exists today changes behaviour. Enabling the rule on a type that does not
+  declare its evidence field (`Realized-by`) in `known_fields` is a config load error, not an inert rule
   (`BUG-44`).
 
 ## Reversibility
 
 Moderate. The rule is additive and opt-in; a repository that declares it on no type is unchanged, and
-`MILE-183`'s keys keep their meaning. What is harder to take back is the test-locator field kind once
-records are migrated to it, because rewriting a field's values across a corpus is a mass edit. The
+`MILE-183`'s keys keep their meaning. What is harder to take back is the migration of a separate test field into
+`Realized-by` and the retirement of that field, because rewriting a field's values across a corpus is a mass edit. The
 `fix --apply` write is reversible by a normal revert.
 
 ## Consequences
@@ -125,11 +123,13 @@ records are migrated to it, because rewriting a field's values across a corpus i
 - `SPEC-3` documents that `statuses.delivery` reads whichever field the type maps to `embodiment_locator`,
   gains the per-type back-pointer option, and says `statuses.delivery` applies to any type; `SPEC-2` gains the
   finding wording. Each gets a revision row.
-- This repository maps its defect type's `Regression-test` to the `embodiment_locator` role, declares
-  `statuses.delivery` on it, and migrates the values that name a real test to `test:path#Symbol` locators
-  (`path::test_name` becomes `test:path#test_name`; the Rust resolver covers a free function). The rest stay as
-  disclosed non-evidence. The implementing change counts the records and shapes first (178 values today, see
-  above); part of the migration is judgement and should be reviewed, not scripted.
+- This repository declares `statuses.delivery` on its defect type, which reads `Realized-by` with no
+  `relation_fields` remap, migrates the `Regression-test` values that name a real test into `Realized-by` as
+  `test:path#Symbol` entries (`path::test_name` becomes `test:path#test_name`; the Rust resolver covers a
+  free function), and retires `Regression-test` from `known_fields` and the template in the implementing
+  change. The rest stay as disclosed non-evidence. Migration sizing: 178 `Regression-test` values, of which 1
+  uses `path#Symbol`, 90 contain `::` and 113 contain a comma; plus the 17 existing `Realized-by` values,
+  which stay. Part of the migration is judgement and should be reviewed, not scripted.
 - A value such as `none -- performance-only` is neither evidence nor reported unless the repository
   declares it evidence-free; the engine does not know the words.
 - After migration the rule would have caught 3 of the 6 known lagging records. The other 3 had no test when
@@ -143,6 +143,9 @@ records are migrated to it, because rewriting a field's values across a corpus i
    category-prefixed locators (`test:rules.rs#name`); the field accepts several, split before each
    `category:` by the existing splitter.
 2. The back-pointer option is per type, beside `statuses.delivery`, not per repository.
+3. Which field is the evidence (decided by the maintainer, 2026-11-05): `Realized-by`, as for every other
+   type. The separate test field's values migrate into it and the field is retired; no `embodiment_locator`
+   remap is needed (option G, not chosen).
 
 ## References
 
@@ -158,3 +161,4 @@ records are migrated to it, because rewriting a field's values across a corpus i
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05, after the review of `ADR-81` found that the recurring failure is a delivered record left in a not-done status (6 of 167) and not a bare reference in a changeset; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-05 | Amended while Proposed: retitled and rephrased over declared types and fields, since a record type like `bug` is only what this repository declares; the evidence is a declared test-locator field (no `Realized-by` is added); a back-pointer alone counting is a config option, default off; a deliberately open record with evidence is a scoped, expiring waiver, not a status. **Why:** maintainer answers of 2026-11-05 to the open questions. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after review: the measured recall is restated as post-migration figures (at HEAD 1 of 178 `Regression-test` values is a `path#Symbol` locator); the evidence reuses the existing `relation_fields.embodiment_locator` role remap instead of a new field kind (which is kept as a considered option), with its limits stated; the tier is stated (`compute_embodiment`, a `test:` entry computes to the test tier, several locators split before each `category:`); the claim that no `Realized-by` is added is corrected (the defect type already declares it and 17 records use it); the back-pointer option defaults to today's behaviour; the fix and waiver wording follow `ADR-73` and `SPEC-10`; open questions resolved. **Why:** review blockers on the Proposed text. | **substantive** |
+> | 2026-11-05 | Amended while Proposed: the evidence field is `Realized-by` for every type; a separate test field migrates into it as `test:path#name` entries (several comma-separated) and is retired in the implementing change; the `embodiment_locator` remap moves to the considered options (G) as not chosen; migration sizing restated (178 values: 1 `path#Symbol`, 90 `::`, 113 comma; 17 existing `Realized-by` stay). **Why:** maintainer decision of 2026-11-05 on the question left to the implementing change. | **substantive** |
