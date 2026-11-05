@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-08-20
 Status: Draft
 Author: beauwilliams
@@ -308,4 +308,5 @@ through the record's blame history; the `-S`/`-G` case through the value-only ed
 > | 2026-11-04 | Bumped to `0.5`. **Why:** `MILE-170` built the rest of the harness: mutation proof of every case, the coverage report of rules with no case, the "Nth record type" case, the generative property, corpora `corpus-d` to `corpus-f` and one corpus-zero case per rule family. Recorded under "Added by MILE-170"; the success criteria are unchanged and criterion 2 now holds for every case by construction. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. **Why:** `MILE-170` finished the harness: cases can make commits, pass `--base` and run shallow; `corpus-g` and `corpus-h` add the git-history, drift, derived-value, diff-gate, boundary, issue-snapshot, delivery and permanent-ceiling cases; every shipped rule now has a proven case. Recorded under "Added by the rest of MILE-170". | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. `corpus-i` (one type over two directories) added: pointer resolution, collision, identity filename and missing-directory cases, and `urzua new` numbering across both. **Why:** `MILE-130` -- urzua's own repository has no type spanning directories, so the corpus is where the feature is exercised. | **substantive** |
-> | 2026-11-05 | Bumped to `0.8`. `corpus-h` gains the decision-gate cases of `diff.source-requires-record`: a source change beside a Proposed decision is held, and one beside an Accepted decision, a milestone implementing one or a bug record is released. **Why:** `MILE-133`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. `corpus-h` gains the declared-boundary cases: a published boundary whose declared severity beats the rule's level, a back-pointer inside a generated boundary (and a plain id there that is not reported), a vendored boundary that prohibits nothing, an ignore marker that suppresses nothing, and an exclude and a boundary path that match nothing. **Why:** `MILE-125`; each case names `boundary.published-path-reference` and its mutation proof holds. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. `corpus-h` gains the decision-gate cases of `diff.source-requires-record`: a source change beside a Proposed decision is held, and one beside an Accepted decision, a milestone implementing one or a bug record is released. **Why:** `MILE-133`. | **substantive** |

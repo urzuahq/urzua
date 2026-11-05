@@ -462,6 +462,54 @@ pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<Stri
     Ok(if sha.is_empty() { None } else { Some(sha) })
 }
 
+/// The newest commit that last touched any of `paths` -- a directory or glob
+/// locator's drift anchor (`BUG-176`). Paths are literal (never read as
+/// pathspec magic) and are passed in batches, so a locator matching many files
+/// does not exceed the argument limit; the newest of the batches' answers is
+/// chosen by commit date.
+pub fn last_commit_for_paths(
+    repo_root: &Path,
+    paths: &[PathBuf],
+) -> Result<Option<String>, String> {
+    let mut shas: Vec<String> = Vec::new();
+    for batch in paths.chunks(400) {
+        let output = Command::new("git")
+            .args(["--literal-pathspecs", "log", "-1", "--format=%H", "--"])
+            .args(batch)
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| format!("could not run git log: {e}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if is_no_history_stderr(&stderr) {
+                return Ok(None);
+            }
+            return Err(format!("git log failed: {}", stderr.trim()));
+        }
+        let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !sha.is_empty() && !shas.contains(&sha) {
+            shas.push(sha);
+        }
+    }
+    if shas.len() <= 1 {
+        return Ok(shas.pop());
+    }
+    let output = Command::new("git")
+        .args(["log", "--no-walk=sorted", "-n", "1", "--format=%H"])
+        .args(&shas)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git log: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git log failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(if sha.is_empty() { None } else { Some(sha) })
+}
+
 /// True if `ancestor` came strictly before `descendant` in history.
 /// `Ok(false)` when git says it is not an ancestor (exit 1) or the commits
 /// are the same. Any other git outcome (a commit the repository does not

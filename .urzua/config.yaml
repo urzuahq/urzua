@@ -228,21 +228,24 @@ record_types:
       - "Blocks"
       - "Realized-by"
     statuses:
-      values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
+      values: ["Planned", "InProgress", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
+      # Blocked is derived only (RFC-48, ADR-83): a milestone is blocked when a
+      # Depends-on target is not Done, and no milestone writes it as a status.
+      # A blocked milestone may be Planned; InProgress and Done claim progress
+      # a blocked milestone cannot have (sequence.status-agreement).
+      progress: ["InProgress", "Done"]
       # Done is implementable: code that implements a delivered milestone keeps
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.
       implementable: ["Planned", "InProgress", "Done"]
-      # A milestone starts Planned, or Blocked when filed already waiting, or Done
-      # when the PR that files it delivers it. Done can be reopened; WontDo is
-      # terminal (SPEC-6).
-      initial: ["Planned", "Blocked", "Done"]
+      # A milestone starts Planned, or Done when the PR that files it delivers
+      # it. Done can be reopened; WontDo is terminal (SPEC-6).
+      initial: ["Planned", "Done"]
       transitions:
-        Planned: ["InProgress", "Blocked", "Done", "WontDo"]
-        InProgress: ["Planned", "Blocked", "Done", "WontDo"]
-        Blocked: ["Planned", "InProgress", "Done", "WontDo"]
+        Planned: ["InProgress", "Done", "WontDo"]
+        InProgress: ["Planned", "Done", "WontDo"]
         Done: ["Planned", "InProgress"]
       # Status is held to the evidence (MILE-183): the PR that delivers a
       # milestone sets Realized-by and Done together. Implemented or Verified
@@ -253,7 +256,7 @@ record_types:
       delivery:
         delivered_tiers: ["Implemented", "Verified"]
         unevidenced_tiers: ["Not started"]
-        not_done: ["Planned", "InProgress", "Blocked"]
+        not_done: ["Planned", "InProgress"]
         set_status: "Done"
     # Every milestone, open or closed, states its Done means (maintainer
     # decision of 2026-11-04): a Done milestone is judged against it and not
@@ -379,10 +382,24 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
+# The committed log of editor-hook overrides (ADR-78, MILE-188): the hook appends a row
+# whenever a named override lets a blocked edit through, and override.unreviewed
+# reports a row no person has reviewed, so it surfaces in the pull request.
+override_log: .urzua/override-log.md
+
+# The pairs that are dependencies, and how `urzua roadmap` groups its records
+# (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic
+# pair, and a containment pair declared acyclic would not order work or block
+# its children, so only the sequencing pair is named. The engine names no grouping field.
+roadmap:
+  pairs: ["sequencing"]
+  group_by: ["Phase", "Track"]
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
 rules:
+  override.unreviewed: warn
   embodiment.requires-accepted-status:
     level: warn
   # A milestone's Status agrees with its delivery evidence (MILE-183): the PR
@@ -403,6 +420,8 @@ rules:
   config.known-fields-declaration-missing: error
   config.header-none-has-no-required-fields: error
   config.scope-matches-nothing: warn
+  # Reports this file when it is read through a schema upgrade (ADR-77, MILE-34).
+  config.schema-version-outdated: warn
   section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error
@@ -441,6 +460,8 @@ rules:
   # names nothing.
   sequence.cycle: error
   sequence.unresolved-blocker: error
+  # A blocked milestone does not state a status that claims progress (MILE-144).
+  sequence.status-agreement: error
   revision-log.change-class-required: error
   # Judged on a `--base` run against the merge base's copy of the record
   # (BUG-51); `not-applicable` on a whole-repo run.
@@ -495,6 +516,27 @@ rules:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with
+  # why, and what each kind forbids. A boundary's severity is the level of its
+  # findings; the rule's level only turns the rule on.
+  boundary.published-path-reference:
+    level: error
+    boundaries:
+      # The composite action adopters reference by `uses:`. A record id in it
+      # points at a document no adopter's checkout holds. The fixtures are test
+      # inputs shaped like real findings, so they are excused here, in the
+      # declaration, and nowhere else.
+      - paths: [".github/actions/urzua-gate"]
+        kind: published
+        reason: "The gate action ships to adopting repositories, whose readers cannot resolve this repository's record ids."
+        severity: error
+        exclude: [".github/actions/urzua-gate/fixtures"]
+      # Written by `urzua index --apply` from the records (MILE-152); a
+      # human-authored back-pointer there is overwritten on the next run.
+      - paths: ["docs/adr/README.md", "docs/specs/README.md"]
+        kind: generated
+        reason: "The two directory indexes are generated from the records and rewritten wholesale."
+        severity: error
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.

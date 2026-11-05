@@ -421,11 +421,16 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
         stdout.contains("relation.supersession-reciprocity"),
         "stdout: {stdout}"
     );
-    // audit's rule set is narrower than check's -- the cross-record rules,
-    // never the per-record ones (ADR-0030).
-    assert!(
-        !stdout.contains("header.required-fields"),
-        "stdout: {stdout}"
+    // `audit` owns no rule set (ADR-79): it reports what `check` reports.
+    let check_out = run_urzua(&dir, &["check"]);
+    let findings = |bytes: &[u8]| {
+        let v: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        v["findings"].clone()
+    };
+    assert_eq!(
+        findings(&output.stdout),
+        findings(&check_out.stdout),
+        "audit and check report the same findings"
     );
 
     std::fs::remove_dir_all(&dir).ok();
@@ -1691,14 +1696,14 @@ fn a_run_in_which_no_rule_examined_anything_is_not_ok() {
 }
 
 /// `BUG-99`: `init` on a prefixless corpus proposes no identity-dependent
-/// rules, which happens to be `audit`'s entire rule set -- so the adopter's
-/// documented first two commands (`init` then `audit`) exit 2 immediately.
-/// Not a bug in `audit`'s exit-code policy (`BUG-77`, unchanged and still
-/// enforced below): `init` now discloses it up front instead of letting the
-/// adopter discover it from `audit`'s own exit code.
+/// rules, which used to be `audit`'s entire rule set, so the adopter's
+/// documented first two commands (`init` then `audit`) exited 2. `audit` owns
+/// no rule set now (ADR-79), so `init` has nothing to warn about: the
+/// regression test for the equivalence is `audit_fold_integration.rs`
+/// (`audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check`).
 #[test]
-fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
-    let dir = fixture_repo("init-prefixless-warns-about-audit");
+fn init_does_not_warn_about_audit_and_audit_runs_what_the_config_declares() {
+    let dir = fixture_repo("init-prefixless-no-audit-warning");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
         "---\nStatus: Accepted\n---\n",
@@ -1713,22 +1718,12 @@ fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
         "init itself must still succeed: {stdout}"
     );
     assert!(
-        stdout.contains("rule-applicability"),
-        "a prefixless corpus must warn that audit's rule set is entirely undeclared: {stdout}"
-    );
-    assert!(
-        stdout.contains("audit"),
-        "the notice must name the affected command: {stdout}"
+        !stdout.contains("audit's rule set"),
+        "audit has no rule set to leave undeclared: {stdout}"
     );
 
-    // `identity.collision` doesn't need a declared prefix to run
-    // meaningfully (unlike `pointer.resolution`/`relation.supersession-
-    // reciprocity`, which `identity_dependent` correctly drops here) --
-    // `audit` now has one rule that legitimately runs on this corpus, so
-    // `BUG-99`'s "exits non-zero for no real reason" symptom is gone: a
-    // thin-config corpus with nothing actually wrong is `ok`, per `ADR-53`.
-    // `MILE-120`: a bare-number filename is something wrong, and `audit` now
-    // says so with the expected name (a warning, so the exit stays 0).
+    // `MILE-120`: a bare-number filename is something wrong, and `audit`, being
+    // `check`, says so with the expected name (a warning, so the exit stays 0).
     let audit_out = run_urzua(&dir, &["audit"]);
     let audit_stdout = String::from_utf8_lossy(&audit_out.stdout).to_string();
     assert!(
@@ -1795,10 +1790,12 @@ fn init_does_not_propose_rules_that_would_examine_nothing_on_the_corpus_it_adopt
 }
 
 #[test]
-fn audit_with_neither_of_its_rules_declared_is_not_ok() {
+fn audit_with_no_rule_declared_is_not_ok() {
+    // `audit` is `check` over the declared rules (ADR-79): with none declared
+    // nothing ran, and that is not a clean pass, exactly as for `check`.
     let dir = one_adr_repo(
         "audit-no-rules",
-        "{header.required-fields: error}",
+        "{}",
         "---\nStatus: Accepted\n---\n# 1 — X\n",
     );
     let out = run_urzua(&dir, &["audit"]);
@@ -3331,10 +3328,12 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
                 format!("{id}: {{level: error, application_paths: [\"src\"]}}")
             }
             "embodiment.back-pointer-resolution"
-            | "embodiment.back-pointer-decision-accepted" => {
+            | "embodiment.back-pointer-decision-accepted"
+            | "embodiment.locator-on-back-pointer-path" => {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
+            "override.unreviewed" => format!("{id}: error"),
             "date.field-order" => {
                 format!("{id}: {{level: error, date_order: [{{earlier: Date, later: Accepted-on}}]}}")
             }
@@ -3352,7 +3351,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false, acyclic: true}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    revision_log: {{version_bump: {{field: Version, classes: [substantive]}}}}\n    statuses: {{values: [Open, Done], success: [Done], initial: [Open], transitions: {{Open: [Done]}}, delivery: {{delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}}, require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
+            "schema_version: 2\noverride_log: .urzua/override-log.md\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false, acyclic: true}}\n\nroadmap:\n  pairs: [follow]\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    revision_log: {{version_bump: {{field: Version, classes: [substantive]}}}}\n    statuses: {{values: [Open, Done], success: [Done], progress: [Done], initial: [Open], transitions: {{Open: [Done]}}, delivery: {{delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}}, require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
             rules.join(", ")
         ),
     )
@@ -4176,4 +4175,24 @@ fn ci_wired_recognises_the_gate_action_as_an_invocation() {
         .find(|c| c["check"] == "ci-wired")
         .unwrap();
     assert_eq!(ci["status"], "ok", "{ci}");
+}
+
+#[test]
+fn audit_help_describes_a_deprecated_alias_of_check_not_the_old_rule_pair() {
+    let dir = std::env::temp_dir();
+    for args in [&["--help"][..], &["audit", "--help"][..]] {
+        let output = run_urzua(&dir, args);
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        assert!(
+            text.contains("Deprecated alias of `check`"),
+            "{args:?}: {text}"
+        );
+        assert!(!text.contains("dangling"), "{args:?}: {text}");
+        assert!(
+            !text.contains("Cross-record reconciliation"),
+            "{args:?}: {text}"
+        );
+    }
+    let text = String::from_utf8_lossy(&run_urzua(&dir, &["audit", "--help"]).stdout).to_string();
+    assert!(text.contains("check --rules"), "{text}");
 }

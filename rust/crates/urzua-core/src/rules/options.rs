@@ -8,7 +8,11 @@
 //! different from an empty list stays an `Option` (`fields`: absent checks every
 //! declared field).
 
-use crate::config::{IndexSpec, RuleOpts, RuleSetting};
+use super::{BoundaryOrigin, ResolvedBoundary};
+use crate::config::{
+    BoundaryKind, BoundarySeverity, IndexSpec, LocatorKind, RuleLevel, RuleOpts, RuleSetting,
+};
+use crate::report::FindingSeverity;
 
 /// `claim.status-agreement`: the paths scanned and the statuses that count as
 /// closed.
@@ -41,16 +45,51 @@ impl RuleOpts for FieldQualityOpts {
     }
 }
 
-/// `boundary.published-path-reference`.
+/// `boundary.published-path-reference`: every boundary the repository declares,
+/// the entries of `boundaries` first and `published_paths` (one published
+/// boundary, severity the rule's level, no reason required) after them, and the
+/// declared inline ignore marker.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PublishedPathOpts {
-    pub published_paths: Vec<String>,
+    pub boundaries: Vec<ResolvedBoundary>,
+    pub ignore_marker: Option<String>,
 }
 
 impl RuleOpts for PublishedPathOpts {
     fn from_setting(s: &RuleSetting) -> Self {
+        let mut boundaries: Vec<ResolvedBoundary> = s
+            .boundaries
+            .iter()
+            .flatten()
+            .enumerate()
+            .map(|(idx, b)| ResolvedBoundary {
+                origin: BoundaryOrigin::Declared(idx),
+                kind: b.kind,
+                reason: Some(b.reason.clone()),
+                severity: match b.severity {
+                    BoundarySeverity::Error => FindingSeverity::Error,
+                    BoundarySeverity::Warn => FindingSeverity::Warning,
+                },
+                paths: b.paths.clone(),
+                exclude: b.exclude.clone().unwrap_or_default(),
+            })
+            .collect();
+        if let Some(paths) = s.published_paths.as_ref().filter(|p| !p.is_empty()) {
+            boundaries.push(ResolvedBoundary {
+                origin: BoundaryOrigin::PublishedPaths,
+                kind: BoundaryKind::Published,
+                reason: None,
+                severity: match s.level {
+                    RuleLevel::Warn => FindingSeverity::Warning,
+                    _ => FindingSeverity::Error,
+                },
+                paths: paths.clone(),
+                exclude: Vec::new(),
+            });
+        }
         PublishedPathOpts {
-            published_paths: s.published_paths.clone().unwrap_or_default(),
+            boundaries,
+            ignore_marker: s.ignore_marker.clone(),
         }
     }
 }
@@ -98,6 +137,34 @@ impl RuleOpts for DecisionAcceptedOpts {
     fn from_setting(s: &RuleSetting) -> Self {
         DecisionAcceptedOpts {
             accepted_statuses: s.accepted_statuses.clone().unwrap_or_default(),
+        }
+    }
+}
+
+/// `embodiment.locator-exists`: the locator kinds accepted and the kinds that
+/// may carry a pin (`BUG-176`). Both default to `[file]`, so a repository that
+/// declares neither accepts exactly what it always did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatorExistsOpts {
+    pub locator_kinds: Vec<LocatorKind>,
+    pub pinnable: Vec<LocatorKind>,
+}
+
+impl Default for LocatorExistsOpts {
+    fn default() -> Self {
+        LocatorExistsOpts {
+            locator_kinds: vec![LocatorKind::File],
+            pinnable: vec![LocatorKind::File],
+        }
+    }
+}
+
+impl RuleOpts for LocatorExistsOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        let default = LocatorExistsOpts::default();
+        LocatorExistsOpts {
+            locator_kinds: s.locator_kinds.clone().unwrap_or(default.locator_kinds),
+            pinnable: s.pinnable.clone().unwrap_or(default.pinnable),
         }
     }
 }
@@ -188,6 +255,34 @@ mod tests {
     }
 
     #[test]
+    fn locator_kinds_and_pinnable_default_to_file_and_are_checked_at_load() {
+        use crate::config::LocatorKind::{Directory, File, Glob};
+        let rules = |body: &str| {
+            crate::config::parse(&format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.locator-exists:\n    level: error\n{body}"
+            ))
+        };
+        let o: LocatorExistsOpts = rules("").unwrap().rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
+        assert_eq!((o.locator_kinds, o.pinnable), (vec![File], vec![File]));
+        let o: LocatorExistsOpts =
+            rules("    locator_kinds: [file, directory, glob]\n    pinnable: [glob]\n")
+                .unwrap()
+                .rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
+        assert_eq!(o.locator_kinds, [File, Directory, Glob]);
+        assert_eq!(o.pinnable, [Glob]);
+        // A kind that can be pinned but not named is a rule that always reports.
+        let err = rules("    pinnable: [directory]\n")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("pinnable") && err.contains("locator_kinds"),
+            "{err}"
+        );
+        assert!(rules("    locator_kinds: []\n").is_err());
+        assert!(rules("    locator_kinds: [tree]\n").is_err());
+    }
+
+    #[test]
     fn an_absent_optional_option_is_not_an_empty_one() {
         let setting = |y: &str| -> crate::config::RuleSetting { yaml_serde::from_str(y).unwrap() };
         let o = PointerTargetOpts::from_setting(&setting("level: error\nnot_in: [Superseded]\n"));
@@ -196,5 +291,22 @@ mod tests {
             "level: error\nnot_in: [Superseded]\nfields: [Implements]\n",
         ));
         assert_eq!(o.fields, Some(vec!["Implements".to_string()]));
+    }
+}
+
+/// `embodiment.locator-on-back-pointer-path`: the scanned paths and, optionally,
+/// the test-class subset (`MILE-189`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LocatorMechanismOpts {
+    pub back_pointer_paths: Vec<String>,
+    pub test_paths: Vec<String>,
+}
+
+impl RuleOpts for LocatorMechanismOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        LocatorMechanismOpts {
+            back_pointer_paths: s.back_pointer_paths.clone().unwrap_or_default(),
+            test_paths: s.test_paths.clone().unwrap_or_default(),
+        }
     }
 }

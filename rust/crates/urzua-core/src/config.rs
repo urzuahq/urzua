@@ -7,8 +7,10 @@ use crate::header::HeaderShape;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The only schema version defined so far (ADR-0012). A config declaring any
-/// other value is a parse-time error, not a silent best-effort read.
+/// The schema version this build writes (ADR-0012). It reads this version and
+/// the one before it (`ADR-77`, `crate::schema_version`); a config declaring
+/// any other value is a structured parse-time error, not a silent best-effort
+/// read.
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -30,6 +32,11 @@ pub struct Config {
     /// `RelationPair`. Absent means none declared.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_pairs: Vec<RelationPair>,
+    /// The roadmap's declaration (`ADR-82`, `ADR-83`): the sequencing pairs the
+    /// roadmap command and the derived `blocked` value both read, and how the
+    /// roadmap groups its records.
+    #[serde(default, skip_serializing_if = "RoadmapDecl::is_empty")]
+    pub roadmap: RoadmapDecl,
     /// The lowest finding severity that makes `urzua check` exit 1. Absent
     /// means `error`, so a repository that does not declare it is unchanged.
     #[serde(default, skip_serializing_if = "FailOn::is_default")]
@@ -44,6 +51,42 @@ pub struct Config {
     /// `SPEC-3`); absent means none, so only line ranges are available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
+    /// Set when the file was at the previous schema version and was upgraded
+    /// in memory (`ADR-77`). Not part of the declared configuration: it is
+    /// never read from or written to a file, so an upgraded config and the
+    /// same config written at the current version are equal.
+    #[serde(skip)]
+    pub upgraded_from: Option<crate::schema_version::UpgradeInfo>,
+    /// The committed log of editor-hook overrides (`ADR-78`, `MILE-188`): a
+    /// repository-relative path. The hook appends to it and
+    /// `override.unreviewed` reads it. Absent means no log is declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_log: Option<String>,
+}
+
+/// `roadmap` (`SPEC-3`, `ADR-82`): which `relation_pairs` are dependencies, and
+/// how `urzua roadmap` groups its records. A pair can be `acyclic` without
+/// being a dependency: a containment pair (parent and children) is checked for
+/// cycles but a child does not wait on its parent finishing. Absent means no
+/// roadmap, which the command states instead of printing an empty one.
+/// The derived `blocked` value reads exactly these pairs, so `check` and the
+/// roadmap cannot disagree about what is blocked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoadmapDecl {
+    /// Names of `relation_pairs` entries that declare `acyclic: true`.
+    #[serde(default)]
+    pub pairs: Vec<String>,
+    /// Header field names the roadmap groups by, outermost first. The engine
+    /// names none; each must be declared by some record type.
+    #[serde(default)]
+    pub group_by: Vec<String>,
+}
+
+impl RoadmapDecl {
+    fn is_empty(&self) -> bool {
+        self.pairs.is_empty() && self.group_by.is_empty()
+    }
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -59,6 +102,31 @@ pub enum FailOn {
 impl FailOn {
     fn is_default(&self) -> bool {
         *self == FailOn::Error
+    }
+}
+
+/// What a `Realized-by` locator may name (`BUG-176`): one tracked file, a
+/// directory (every tracked file below it) or a glob (every tracked file it
+/// matches). Which kinds a repository accepts, and which of those may carry a
+/// `@sha256:` pin, are the `locator_kinds` and `pinnable` options of
+/// `embodiment.locator-exists`; both default to `[file]`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatorKind {
+    File,
+    Directory,
+    Glob,
+}
+
+impl std::fmt::Display for LocatorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            LocatorKind::File => "file",
+            LocatorKind::Directory => "directory",
+            LocatorKind::Glob => "glob",
+        })
     }
 }
 
@@ -153,6 +221,17 @@ pub struct RuleSetting {
     /// `level` is the boundary's severity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub published_paths: Option<Vec<String>>,
+    /// Declared boundaries (`ADR-80`, `MILE-125`): path globs with a kind, a
+    /// required reason and a severity. Only meaningful to
+    /// `boundary.published-path-reference`, where a boundary's severity is the
+    /// level of its findings and the rule's `level` only enables the rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boundaries: Option<Vec<Boundary>>,
+    /// The text that, on a line inside a boundary, excuses that line alone
+    /// (`ADR-80`). Declared, never compiled in. Only meaningful to
+    /// `boundary.published-path-reference`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ignore_marker: Option<String>,
     /// The generated index artifacts `index.freshness` compares against the
     /// records (`MILE-139`). Only meaningful to that rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -246,6 +325,16 @@ pub struct RuleSetting {
     /// omitted means every stated value must match the computed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sticky_states: Option<Vec<String>>,
+    /// The kinds of locator a `Realized-by` may name: `file`, `directory`,
+    /// `glob` (`BUG-176`). Only meaningful to `embodiment.locator-exists`;
+    /// omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator_kinds: Option<Vec<LocatorKind>>,
+    /// The kinds of locator that may carry a `@sha256:` pin (`BUG-176`); each
+    /// must also be in `locator_kinds`. Only meaningful to
+    /// `embodiment.locator-exists`; omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinnable: Option<Vec<LocatorKind>>,
     /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -357,6 +446,56 @@ pub struct IndexSpec {
     pub begin: Option<String>,
     #[serde(default)]
     pub end: Option<String>,
+}
+
+/// What a declared boundary is for (`ADR-80`, `RFC-11` section 1). The prohibitions
+/// follow from the kind and from nothing else: a record identifier inside a
+/// `published` boundary, a back-pointer inside a `generated` one, none for
+/// `vendored`. Any other value is refused at load.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BoundaryKind {
+    Published,
+    Vendored,
+    Generated,
+}
+
+impl BoundaryKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BoundaryKind::Published => "published",
+            BoundaryKind::Vendored => "vendored",
+            BoundaryKind::Generated => "generated",
+        }
+    }
+}
+
+/// The level of every finding one boundary produces (`ADR-80`): `error` or
+/// `warn`, never `off` (a boundary that reports nothing is not declared).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BoundarySeverity {
+    Error,
+    Warn,
+}
+
+/// One declared boundary (`ADR-80`, `MILE-125`): path globs with a kind, a
+/// required reason and a severity. Structured config, never a string
+/// mini-language (`ADR-64`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Boundary {
+    /// Path prefixes or globs (`MILE-158`) the boundary covers.
+    pub paths: Vec<String>,
+    pub kind: BoundaryKind,
+    /// Why the paths are declared. Specification, not decoration
+    /// (`RFC-11` section 4): required and non-blank.
+    pub reason: String,
+    pub severity: BoundarySeverity,
+    /// Paths removed from this boundary for the violation check only, the way
+    /// a fixture directory is excused. Evidence ignores it (`ADR-80`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -989,8 +1128,10 @@ impl Serialize for HeaderShape {
 pub enum ConfigError {
     #[error("could not parse config: {0}")]
     Parse(#[from] yaml_serde::Error),
-    #[error("unrecognized schema_version {found} -- this build of urzua understands version {CURRENT_SCHEMA_VERSION}")]
-    UnrecognizedSchemaVersion { found: u32 },
+    #[error("{0}")]
+    SchemaVersionOutOfWindow(crate::schema_version::SchemaVersionError),
+    #[error("could not upgrade the schema_version {from} config: {reason}")]
+    UpgradeFailed { from: u32, reason: String },
     #[error("unknown rule '{found}' under `rules:` -- this build ships: {}", known.join(", "))]
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
@@ -1011,6 +1152,12 @@ pub enum ConfigError {
     TestPathOutsideBackPointerPaths { rule: String, entry: String },
     #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
     StickyStateIsComputed { rule: String, state: String },
+    #[error("rule '{rule}' option 'pinnable' names '{kind}', which 'locator_kinds' does not declare; a locator of a kind the rule rejects can never be pinned (declared kinds: {declared})")]
+    PinnableKindNotDeclared {
+        rule: String,
+        kind: String,
+        declared: String,
+    },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
@@ -1021,6 +1168,8 @@ pub enum ConfigError {
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
+    #[error("roadmap: {reason}")]
+    InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
     InvalidPrefix {
         record_type: String,
@@ -1070,6 +1219,12 @@ pub enum ConfigError {
         option: &'static str,
         entry: String,
         reason: &'static str,
+    },
+    #[error("rule '{rule}' option '{option}' {reason}")]
+    InvalidBoundary {
+        rule: String,
+        option: &'static str,
+        reason: String,
     },
     #[error("rule '{rule}' option 'indexes' entry '{path}' {reason}")]
     InvalidIndex {
@@ -1186,10 +1341,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
     },
+    // Optional on its own: a rule declares `boundaries`, `published_paths` or
+    // both, and a rule declaring neither is refused by the boundary check below.
     RuleOption {
         name: "published_paths",
         consequence_if_missing: "declares no boundary and can never report",
-        optional: false,
+        optional: true,
     },
     RuleOption {
         name: "source_paths",
@@ -1219,6 +1376,16 @@ const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "sticky_states",
         consequence_if_missing: "holds every stated Embodiment to the computed value",
+        optional: true,
+    },
+    RuleOption {
+        name: "locator_kinds",
+        consequence_if_missing: "accepts only a file locator",
+        optional: true,
+    },
+    RuleOption {
+        name: "pinnable",
+        consequence_if_missing: "lets only a file locator carry a pin",
         optional: true,
     },
     RuleOption {
@@ -1495,6 +1662,45 @@ fn published_path_problem(entry: &str) -> Option<&'static str> {
     None
 }
 
+/// The `schema_version` a config declares, read on its own: the probe skips
+/// every other key without building a value for it, so a config that reads
+/// today (an unquoted integer beyond `u64` read as a string, say) is read
+/// exactly as it was, and only a config that needs the upgrade is parsed whole.
+fn declared_version(content: &str) -> Result<Option<u64>, ConfigError> {
+    #[derive(Deserialize)]
+    struct VersionProbe {
+        #[serde(default)]
+        schema_version: Option<yaml_serde::Value>,
+    }
+    let probe: VersionProbe = yaml_serde::from_str(content)?;
+    Ok(probe.schema_version.and_then(|v| v.as_u64()))
+}
+
+/// Reads the typed config, upgrading it first when it is at the previous
+/// schema version and rejecting it when it is outside the window (`ADR-77`).
+/// A config that declares no integer `schema_version` falls through to the
+/// typed parse, whose error names the field.
+fn read_in_window(content: &str) -> Result<Config, ConfigError> {
+    let Some(found) = declared_version(content)? else {
+        return Ok(yaml_serde::from_str(content)?);
+    };
+    if found == u64::from(CURRENT_SCHEMA_VERSION) {
+        return Ok(yaml_serde::from_str(content)?);
+    }
+    if found != u64::from(crate::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION) {
+        return Err(ConfigError::SchemaVersionOutOfWindow(
+            crate::schema_version::SchemaVersionError::new(found),
+        ));
+    }
+    let from = crate::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION;
+    let doc: yaml_serde::Value = yaml_serde::from_str(content)?;
+    let (upgraded, changes) = crate::schema_version::upgrade(doc)
+        .map_err(|reason| ConfigError::UpgradeFailed { from, reason })?;
+    let mut config: Config = yaml_serde::from_value(upgraded)?;
+    config.upgraded_from = Some(crate::schema_version::UpgradeInfo { from, changes });
+    Ok(config)
+}
+
 /// The one spelling of a repository-relative directory: surrounding
 /// whitespace, `.` and empty components, and a trailing `/` removed.
 fn canonical_dir(dir: &str) -> String {
@@ -1518,12 +1724,7 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
 pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
-    let mut config: Config = yaml_serde::from_str(content)?;
-    if config.schema_version != CURRENT_SCHEMA_VERSION {
-        return Err(ConfigError::UnrecognizedSchemaVersion {
-            found: config.schema_version,
-        });
-    }
+    let mut config = read_in_window(content)?;
     let models = crate::document_model::validate_declarations(&config.record_types)?;
     config
         .embodiment
@@ -1533,6 +1734,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
+    validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
@@ -1915,6 +2117,28 @@ pub fn parse_with_document_models(
             }
         }
 
+        // A pin on a kind the rule rejects is a locator that is always
+        // reported, so `pinnable` may only narrow `locator_kinds` (`BUG-176`).
+        if setting.level != RuleLevel::Off {
+            let declared = setting
+                .locator_kinds
+                .clone()
+                .unwrap_or_else(|| vec![LocatorKind::File]);
+            for kind in setting.pinnable.iter().flatten() {
+                if !declared.contains(kind) {
+                    return Err(ConfigError::PinnableKindNotDeclared {
+                        rule: name.clone(),
+                        kind: kind.to_string(),
+                        declared: declared
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    });
+                }
+            }
+        }
+
         // A sticky state equal to a computed one would hide real drift: that
         // state is exactly what the evidence can reproduce.
         if setting.level != RuleLevel::Off {
@@ -2032,7 +2256,11 @@ pub fn parse_with_document_models(
                     // cannot compile would match nothing, which reads as clean.
                     let diff_option = matches!(
                         option,
-                        "source_paths" | "application_paths" | "exclude_paths" | "test_paths"
+                        "source_paths"
+                            | "application_paths"
+                            | "exclude_paths"
+                            | "test_paths"
+                            | "published_paths"
                     );
                     if diff_option
                         && crate::rules::is_path_glob(&normalised)
@@ -2055,6 +2283,98 @@ pub fn parse_with_document_models(
                     }
                 }
                 *entry = normalised;
+            }
+        }
+    }
+    // Declared boundaries (`ADR-80`): structure, then the one spelling of each
+    // path. A boundary that cannot be matched would be a rule that never
+    // reports, so every reason is a load error.
+    for (name, setting) in config.rules.iter_mut() {
+        let owner = crate::rules::rule_accepts_option(name, "boundaries");
+        for (option, present) in [
+            ("boundaries", setting.boundaries.is_some()),
+            ("ignore_marker", setting.ignore_marker.is_some()),
+        ] {
+            if present && !owner {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
+        if !owner || setting.level == RuleLevel::Off {
+            continue;
+        }
+        let none_declared = setting.boundaries.as_ref().is_none_or(Vec::is_empty)
+            && setting.published_paths.as_ref().is_none_or(Vec::is_empty);
+        if none_declared {
+            return Err(ConfigError::OptionRequired {
+                rule: name.clone(),
+                option: "boundaries".to_string(),
+                consequence: "declares no boundary (give `boundaries` or `published_paths`) and can never report",
+            });
+        }
+        let bad = |option: &'static str, reason: String| ConfigError::InvalidBoundary {
+            rule: name.clone(),
+            option,
+            reason,
+        };
+        if let Some(marker) = &setting.ignore_marker {
+            if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
+                return Err(bad(
+                    "ignore_marker",
+                    "must be non-blank text on one line with no surrounding whitespace".to_string(),
+                ));
+            }
+        }
+        for (idx, boundary) in setting.boundaries.iter_mut().flatten().enumerate() {
+            let at = format!("entry {idx}");
+            if boundary.reason.trim().is_empty() {
+                return Err(bad(
+                    "boundaries",
+                    format!("{at} has a blank reason; say why these paths are declared"),
+                ));
+            }
+            if boundary.paths.is_empty() {
+                return Err(bad("boundaries", format!("{at} declares no paths")));
+            }
+            if boundary.exclude.as_ref().is_some_and(Vec::is_empty) {
+                return Err(bad(
+                    "boundaries",
+                    format!("{at} declares an empty exclude; give entries or remove the key"),
+                ));
+            }
+            let lists = [
+                ("paths", Some(&mut boundary.paths)),
+                ("exclude", boundary.exclude.as_mut()),
+            ];
+            for (list, entries) in lists {
+                for entry in entries.into_iter().flatten() {
+                    let normalised = normalize_published_path(entry);
+                    if normalised.is_empty() {
+                        return Err(bad(
+                            "boundaries",
+                            format!(
+                                "{at} {list} entry '{entry}' is blank or names the repository root"
+                            ),
+                        ));
+                    }
+                    if crate::rules::is_path_glob(&normalised)
+                        && crate::rules::path_glob_regex(&normalised).is_err()
+                    {
+                        return Err(bad(
+                            "boundaries",
+                            format!("{at} {list} entry '{entry}' is not a valid glob (an unclosed or empty `[` class)"),
+                        ));
+                    }
+                    if let Some(reason) = published_path_problem(&normalised) {
+                        return Err(bad(
+                            "boundaries",
+                            format!("{at} {list} entry '{entry}' {reason}"),
+                        ));
+                    }
+                    *entry = normalised;
+                }
             }
         }
     }
@@ -2286,6 +2606,53 @@ fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Load-time checks for `roadmap` (`ADR-82`): `pairs` names declared, acyclic
+/// pairs, each once, and `group_by` names fields some record type declares,
+/// each once. A declaration that can never apply reads as a clean roadmap, so
+/// it is refused (`ADR-7`, `ADR-64` clause 5).
+fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
+    let bad = |reason: String| Err(ConfigError::InvalidRoadmap { reason });
+    let mut named = std::collections::BTreeSet::new();
+    for name in &config.roadmap.pairs {
+        if !named.insert(name.as_str()) {
+            return bad(format!("pairs lists '{name}' twice"));
+        }
+        match config.relation_pairs.iter().find(|p| p.name == *name) {
+            None => {
+                return bad(format!(
+                    "pairs names '{name}', which is not a relation_pairs entry"
+                ))
+            }
+            Some(p) if !p.acyclic => {
+                return bad(format!(
+                    "pairs names '{name}', which does not declare `acyclic: true`; a dependency relation must be checked for cycles"
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    let mut grouped = std::collections::BTreeSet::new();
+    for field in &config.roadmap.group_by {
+        if field.trim().is_empty() || *field != field.trim() {
+            return bad(format!(
+                "group_by field '{field}' is blank or has surrounding whitespace"
+            ));
+        }
+        if !grouped.insert(field.as_str()) {
+            return bad(format!("group_by lists '{field}' twice"));
+        }
+        if !config.record_types.values().any(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::new(field))
+        }) {
+            return bad(format!(
+                "group_by names '{field}', which is not in the required_fields or known_fields of any record type, so no record could carry it"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
 /// because a pair that cannot run reads as a clean corpus.
 fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
@@ -2462,6 +2829,51 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    // A status-agreement rule with no pair to read, or no type declaring
+    // `statuses.blocked` or `statuses.progress`, examines nothing (`MILE-144`,
+    // ADR-7).
+    if config
+        .rules
+        .get(crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+    {
+        if config.roadmap.pairs.is_empty() {
+            return bad(format!(
+                "rule '{}' is enabled but roadmap.pairs declares no pair, so there is no dependency to derive blocked from",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+        if !config.record_types.values().any(|t| {
+            t.status_decl()
+                .is_some_and(|d| !d.blocked.is_empty() || !d.progress.is_empty())
+        }) {
+            return bad(format!(
+                "rule '{}' is enabled but no record type declares statuses.blocked or statuses.progress, so it would examine nothing",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+    }
+    // The override log is declared, never defaulted: a path that names nothing or
+    // leaves the repository could be neither written nor read (`MILE-188`).
+    if let Some(path) = &config.override_log {
+        if dir_names_nothing(path) || dir_escapes_repo(path) || path.trim().ends_with('/') {
+            return bad(format!(
+                "override_log '{path}' is not a repository-relative file path"
+            ));
+        }
+    }
+    for rule in crate::rules::rule_ids_where(|d| d.requires_override_log) {
+        if config.override_log.is_none()
+            && config
+                .rules
+                .get(rule)
+                .is_some_and(|s| s.level != RuleLevel::Off)
+        {
+            return bad(format!(
+                "rule '{rule}' is enabled but no `override_log` is declared, so it would read no log"
+            ));
+        }
+    }
     // A version-bump rule with no type declaring a bump is a check that ran on
     // nothing (`BUG-51`).
     if config
@@ -2596,7 +3008,7 @@ mod tests {
         let yaml = "schema_version: 99\nrecord_types:\n  adr:\n    dir: docs/adr\n    sections: {from: headings, depth: 9}\n";
         let e = parse(yaml).unwrap_err();
         assert!(
-            matches!(e, ConfigError::UnrecognizedSchemaVersion { found: 99 }),
+            matches!(&e, ConfigError::SchemaVersionOutOfWindow(v) if v.found == 99),
             "{e}"
         );
     }
@@ -3348,8 +3760,8 @@ record_types:
 "#;
         let err = parse(yaml).unwrap_err();
         assert!(matches!(
-            err,
-            ConfigError::UnrecognizedSchemaVersion { found: 99 }
+            &err,
+            ConfigError::SchemaVersionOutOfWindow(v) if v.found == 99
         ));
     }
 
@@ -3819,6 +4231,180 @@ record_types:
         }
     }
 
+    fn boundary_config(rule_body: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  boundary.published-path-reference:\n    level: error\n{rule_body}"
+        )
+    }
+
+    const GOOD_BOUNDARY: &str = "    boundaries:\n      - paths: [\"./pkg/*/src/\"]\n        kind: published\n        reason: \"ships to users\"\n        severity: warn\n        exclude: [\"pkg/a/src/fixtures/\"]\n";
+
+    #[test]
+    fn a_boundary_is_paths_kind_reason_severity_and_an_optional_exclude() {
+        let c = parse(&boundary_config(&format!(
+            "{GOOD_BOUNDARY}    ignore_marker: \"urzua:allow\"\n"
+        )))
+        .unwrap();
+        let s = &c.rules["boundary.published-path-reference"];
+        let b = &s.boundaries.as_ref().unwrap()[0];
+        assert_eq!(b.kind, BoundaryKind::Published);
+        assert_eq!(b.severity, BoundarySeverity::Warn);
+        assert_eq!(b.reason, "ships to users");
+        // Normalised like every path option.
+        assert_eq!(b.paths, ["pkg/*/src"]);
+        assert_eq!(
+            b.exclude.as_deref(),
+            Some(["pkg/a/src/fixtures".to_string()].as_slice())
+        );
+        assert_eq!(s.ignore_marker.as_deref(), Some("urzua:allow"));
+    }
+
+    #[test]
+    fn all_three_kinds_load_and_any_other_is_a_config_error() {
+        for kind in ["published", "vendored", "generated"] {
+            let body = GOOD_BOUNDARY.replace("published", kind);
+            assert!(parse(&boundary_config(&body)).is_ok(), "{kind}");
+        }
+        let err = parse(&boundary_config(
+            &GOOD_BOUNDARY.replace("published", "mirrored"),
+        ))
+        .unwrap_err();
+        assert!(err.to_string().contains("mirrored"), "{err}");
+    }
+
+    #[test]
+    fn a_boundary_without_a_reason_severity_or_kind_does_not_load() {
+        for missing in ["reason", "severity", "kind", "paths"] {
+            let body: String = GOOD_BOUNDARY
+                .lines()
+                .filter(|l| {
+                    !l.trim_start()
+                        .trim_start_matches("- ")
+                        .starts_with(&format!("{missing}:"))
+                })
+                .map(|l| format!("{l}\n"))
+                .collect();
+            // `paths` opens the list item; keep the item valid for the others.
+            let body = if missing == "paths" {
+                body.replacen("        kind", "      - kind", 1)
+            } else {
+                body
+            };
+            let err = parse(&boundary_config(&body)).unwrap_err();
+            assert!(err.to_string().contains(missing), "{missing}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_blank_reason_and_an_unsupported_severity_do_not_load() {
+        let err = parse(&boundary_config(
+            &GOOD_BOUNDARY.replace("ships to users", "   "),
+        ))
+        .unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidBoundary { .. }), "{err}");
+        assert!(err.to_string().contains("reason"), "{err}");
+        for sev in ["off", "info"] {
+            assert!(
+                parse(&boundary_config(&GOOD_BOUNDARY.replace("warn", sev))).is_err(),
+                "{sev}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_boundary_path_that_cannot_match_is_refused() {
+        for bad in ["/etc", "../x", "src/[ab", ""] {
+            let body = GOOD_BOUNDARY.replace("./pkg/*/src/", bad);
+            assert!(parse(&boundary_config(&body)).is_err(), "{bad}");
+        }
+        let body = GOOD_BOUNDARY.replace("pkg/a/src/fixtures/", "pkg/../x");
+        assert!(parse(&boundary_config(&body)).is_err());
+        let body = GOOD_BOUNDARY.replace("exclude: [\"pkg/a/src/fixtures/\"]", "exclude: []");
+        assert!(parse(&boundary_config(&body)).is_err());
+    }
+
+    #[test]
+    fn published_paths_alone_still_loads_and_stands_for_a_published_boundary() {
+        let c = parse(&boundary_config("    published_paths: [pkg]\n")).unwrap();
+        let opts: crate::rules::PublishedPathOpts = c
+            .enabled_rule_opts(crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+            .unwrap();
+        assert_eq!(opts.boundaries.len(), 1);
+        let b = &opts.boundaries[0];
+        assert_eq!(b.kind, BoundaryKind::Published);
+        assert_eq!(
+            b.reason, None,
+            "no reason is required for the compatible key"
+        );
+        assert_eq!(b.severity, crate::report::FindingSeverity::Error);
+        // At level warn the compatible boundary's severity is the rule's level.
+        let c = parse(
+            &boundary_config("    published_paths: [pkg]\n").replace("level: error", "level: warn"),
+        )
+        .unwrap();
+        let opts: crate::rules::PublishedPathOpts = c
+            .enabled_rule_opts(crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+            .unwrap();
+        assert_eq!(
+            opts.boundaries[0].severity,
+            crate::report::FindingSeverity::Warning
+        );
+    }
+
+    #[test]
+    fn both_forms_declared_both_apply_and_a_declared_severity_ignores_the_rule_level() {
+        let c = parse(
+            &boundary_config(&format!("{GOOD_BOUNDARY}    published_paths: [other]\n"))
+                .replace("level: error", "level: warn"),
+        )
+        .unwrap();
+        let opts: crate::rules::PublishedPathOpts = c
+            .enabled_rule_opts(crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+            .unwrap();
+        assert_eq!(opts.boundaries.len(), 2);
+        // The declared boundary says `warn`; the compatible one takes the rule's level.
+        assert_eq!(
+            opts.boundaries[0].severity,
+            crate::report::FindingSeverity::Warning
+        );
+        let c = parse(&boundary_config(&GOOD_BOUNDARY.replace("warn", "error"))).unwrap();
+        let c_warn = parse(
+            &boundary_config(&GOOD_BOUNDARY.replace("warn", "error"))
+                .replace("level: error", "level: warn"),
+        )
+        .unwrap();
+        for c in [c, c_warn] {
+            let opts: crate::rules::PublishedPathOpts = c
+                .enabled_rule_opts(crate::rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+                .unwrap();
+            assert_eq!(
+                opts.boundaries[0].severity,
+                crate::report::FindingSeverity::Error
+            );
+        }
+    }
+
+    #[test]
+    fn the_boundary_rule_with_no_boundary_at_all_does_not_load() {
+        let err = parse(&boundary_config("    ignore_marker: \"x\"\n")).unwrap_err();
+        assert!(matches!(err, ConfigError::OptionRequired { .. }), "{err}");
+        // Off, the rule needs nothing.
+        assert!(parse(&boundary_config("").replace("level: error", "level: off")).is_ok());
+    }
+
+    #[test]
+    fn a_blank_or_multiline_ignore_marker_is_refused_and_the_options_belong_to_one_rule() {
+        for marker in ["\"  \"", "\" x\"", "\"a\\nb\""] {
+            let body = format!("{GOOD_BOUNDARY}    ignore_marker: {marker}\n");
+            assert!(parse(&boundary_config(&body)).is_err(), "{marker}");
+        }
+        let cfg = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  filename.title-consistency:\n    level: error\n    ignore_marker: x\n";
+        assert!(matches!(
+            parse(cfg).unwrap_err(),
+            ConfigError::OptionNotApplicable { .. }
+        ));
+    }
+
     fn index_config(indexes: &str) -> String {
         format!(
             "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n  index.freshness:\n    level: error\n    indexes: {indexes}\n"
@@ -4039,6 +4625,8 @@ mod option_table_tests {
         "drift_grace_days",
         "drift_audit_field",
         "claim_max_age_days",
+        "boundaries",
+        "ignore_marker",
     ];
 
     /// The option names `RuleSetting` accepts, read from the derived

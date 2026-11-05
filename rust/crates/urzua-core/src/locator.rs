@@ -226,22 +226,122 @@ pub struct LocatorEntry {
 /// Every locator of a `Realized-by` value, in the order written. An
 /// unrecognised category is dropped, as everywhere else.
 pub fn realized_by_locators(value: &str) -> Vec<LocatorEntry> {
-    let mut out = Vec::new();
-    for segment in value.split(',') {
-        let Some((prefix, locator)) = segment.trim().split_once(':') else {
-            continue;
-        };
-        let category = prefix.trim();
-        if !matches!(category, "spec" | "code" | "test") {
-            continue;
-        }
-        out.push(LocatorEntry {
+    realized_by_entries(value)
+        .into_iter()
+        .map(|(category, locator)| LocatorEntry {
             category: category.to_string(),
             raw: locator.trim().to_string(),
             parsed: parse_locator(locator),
-        });
+        })
+        .collect()
+}
+
+/// The categories a `Realized-by` entry can carry: the declared evidence
+/// categories.
+const CATEGORIES: [&str; 3] = ["spec", "code", "test"];
+
+/// True when `rest` begins an entry: a category, then `:`.
+fn starts_entry(rest: &str) -> bool {
+    rest.trim_start()
+        .split_once(':')
+        .is_some_and(|(prefix, _)| CATEGORIES.contains(&prefix.trim()))
+}
+
+/// Splits a `Realized-by` value into `(category, locator text)` entries, the
+/// one splitter every reader of the field shares. A comma separates entries
+/// only when a `category:` prefix follows it; any other comma belongs to the
+/// path (`BUG-129`). Text before the first category prefix belongs to no
+/// entry. A path that itself contains `,<category>:` is the one ambiguous
+/// shape; it reads as two entries.
+pub fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
+    let mut starts = Vec::new();
+    if starts_entry(value) {
+        starts.push(0);
+    }
+    for (i, _) in value.match_indices(',') {
+        if starts_entry(&value[i + 1..]) {
+            starts.push(i + 1);
+        }
+    }
+    let mut out = Vec::new();
+    for (n, &start) in starts.iter().enumerate() {
+        let end = starts.get(n + 1).map_or(value.len(), |next| next - 1);
+        if let Some((prefix, locator)) = value[start..end].split_once(':') {
+            out.push((prefix.trim(), locator));
+        }
     }
     out
+}
+
+/// What a locator path names among the tracked files (`BUG-176`): its kind and
+/// the files it covers, sorted. `kind` is `None` when the path names nothing
+/// (no tracked file, no tracked file below it, and not a glob).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatorFiles {
+    pub kind: Option<crate::config::LocatorKind>,
+    pub files: Vec<String>,
+}
+
+// BUG-176: a directory or glob locator is the tracked files it matches
+/// Classifies `path` and lists the tracked files it covers. A path that is
+/// itself a file (`exists` holds for it) is a file, whatever characters it holds; otherwise a
+/// path with a glob character is a glob (matched with the `MILE-158` matcher),
+/// and any other is a directory when a tracked file sits below it. Only files
+/// for which `exists` holds count, so a staged deletion matches nothing (`exists`
+/// must itself require the path be tracked). An
+/// `Err` is a glob that cannot compile. Pure.
+pub fn match_locator_files(
+    path: &str,
+    tracked: &[std::path::PathBuf],
+    exists: &dyn Fn(&str) -> bool,
+) -> Result<LocatorFiles, String> {
+    use crate::config::LocatorKind;
+    let live = |p: &std::path::PathBuf| p.to_str().filter(|s| exists(s)).map(str::to_string);
+    if exists(path) {
+        return Ok(LocatorFiles {
+            kind: Some(LocatorKind::File),
+            files: vec![path.to_string()],
+        });
+    }
+    let (kind, mut files): (LocatorKind, Vec<String>) = if crate::rules::is_path_glob(path) {
+        let re = crate::rules::path_glob_regex(path)?;
+        (
+            LocatorKind::Glob,
+            tracked
+                .iter()
+                .filter(|p| re.is_match(&p.to_string_lossy()))
+                .filter_map(live)
+                .collect(),
+        )
+    } else {
+        (
+            LocatorKind::Directory,
+            tracked
+                .iter()
+                .filter(|p| crate::rules::path_is_published(p, path))
+                .filter_map(live)
+                .collect(),
+        )
+    };
+    files.sort();
+    files.dedup();
+    // A directory with nothing below it is not a directory; a glob is a glob
+    // whether or not it matches.
+    let kind = (kind == LocatorKind::Glob || !files.is_empty()).then_some(kind);
+    Ok(LocatorFiles { kind, files })
+}
+
+/// The text a directory or glob pin hashes (`BUG-176`): one line per covered
+/// file, `<path>\t<sha256 of the file>`, sorted by path. `pairs` is the files
+/// with their content hashes. The pin is the hash of this text, so it moves
+/// when a file's content changes, a file is added or removed, or a file moves.
+pub fn files_pin_text(pairs: &[(String, String)]) -> String {
+    let mut sorted: Vec<&(String, String)> = pairs.iter().collect();
+    sorted.sort();
+    sorted
+        .iter()
+        .map(|(path, hash)| format!("{path}\t{hash}\n"))
+        .collect()
 }
 
 /// 1-based inclusive lines of a file.
