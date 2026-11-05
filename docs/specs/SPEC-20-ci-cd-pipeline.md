@@ -1,8 +1,10 @@
 ---
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Accepted
+Embodiment: Verified
+Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh
 Date: 2026-09-10
-Version: '0.5'
+Version: '0.6'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -167,3 +169,5 @@ unrepresentable — including on a re-run, which replays the original payload.
 > | 2026-09-16 | Rewrote the release section: `publish-release.yml` now owns the whole publish (tag, release, binaries, upload) and `release.yml` is deleted. Documented the previously-undocumented manual approval the release PR's own `ci` run requires. **Why:** `BUG-28` -- the tag is bot-pushed, GitHub never triggers a workflow from a `GITHUB_TOKEN` event, so the separate tag-triggered build workflow silently never ran and `v0.2.0` published with zero binaries. This spec described a coupling that did not exist. | **substantive** |
 > | 2026-11-02 | Bumped to `0.4`. `Implements` no longer lists `ADR-29`. **Why:** `ADR-29` is Superseded by `ADR-45`, which was already listed and carries forward `knope`, the fragment format and the versioned-files config unchanged; `pointer.target-status` flagged the stale target. The body still cites `ADR-29` in prose for the fragment format and the changeset gate, which is lineage, not a claim to implement it. | **structural** |
 > | 2026-11-04 | Bumped to `0.5`. The `rust` job also runs `cargo machete` (unused dependencies) and `cargo deny check` (advisories, bans, licenses, sources; `rust/deny.toml`), both pinned prebuilt binaries verified by checksum; `make deny` and `make ci` run them locally. **Why:** `MILE-176` -- `yaml_serde` is a young single-supplier crate, and nothing failed on an unused dependency. | **substantive** |
+> | 2026-11-05 | Bumped to `0.6`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |

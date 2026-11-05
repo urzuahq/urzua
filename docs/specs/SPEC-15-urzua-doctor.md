@@ -1,7 +1,9 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
 Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
 Subject: '`urzua doctor` -- diagnosing whether checks are actually wired to CI/hooks, not just present.'
 Implements: —
@@ -97,3 +99,5 @@ than compounded:
 > | 2026-11-02 | Bumped to `0.5`. Added the `rules-enabled` check and corrected the "which rules are off" paragraph, which still said there is no per-rule config (stale since `ADR-53`). **Why:** `doctor` exited 0 for a config where `check` exits 2 not-run (`BUG-174`). Also noted that config load now rejects an invalid record-type `prefix` or `dir` (`BUG-173`), surfaced through `config-parses`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. `ci-wired` also accepts a workflow that uses urzua's reusable `urzua-gate` action. **Why:** a workflow wired in through the action never spells `urzua check`, so doctor would have reported a wired repository as unwired (`MILE-180`). | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. Added the `hook-wired` check and its `layer` and `state` fields. **Why:** `ADR-71` makes wiring verifiable and `MILE-179` builds it; `doctor` examined the config and workflows but not hooks, so a repository could not verify its own hook. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |

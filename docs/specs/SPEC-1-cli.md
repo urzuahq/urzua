@@ -1,5 +1,5 @@
 ---
-Version: '0.12'
+Version: '0.13'
 Date: 2026-07-29
 Status: Accepted
 Embodiment: Verified
@@ -310,3 +310,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a, `rust/crates/urzua-cli/tests/export_integration.rs` 510343733f3f -> e1ad4b495f5b. Reason: Re-verified: spec revision log is current through v0.10; main.rs and test changes add index, refs, fix flags, --fail-on and panic exit 2, all specified. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Bumped to `0.11`. Added rows for `urzua rules` and `urzua index` to the child-spec table; both commands are specified in `SPEC-2` (the rule table, `index.freshness`) and `SPEC-3` (`indexes`). No behaviour changes. **Why:** drift review of 2026-11-04: the table named neither command, so a reader could not tell where they are specified. | **structural** |
 > | 2026-11-04 | Bumped to `0.12`. The export contract gains `sections` and `preamble` (`MILE-115`). **Why:** the ADR, bug and milestone types now declare `sections`, so the condition the contract named for adding them holds. A type with no declaration gets an explicit `null`, not an absent key: absence reads as "not exported", while `null` states "no declaration" and `[]` states "declared, none present", so no consumer takes a silent default. Aliases resolve to the declared name as in `MILE-165`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.13`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |

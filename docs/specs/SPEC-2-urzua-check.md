@@ -1,9 +1,9 @@
 ---
-Version: '0.71'
+Version: '0.72'
 Date: 2026-08-20
 Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
+Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
 Implements: RFC-1, RFC-3, RFC-10, RFC-11
@@ -681,3 +681,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.69`. `citation.resolution` takes an optional `non_reference_field` option: a declared id in the named header field is not resolved or reported in that record, a declared id never cited and a malformed entry are findings, and `check` prints one aggregated Info notice for declared ids that now match a real record. The rule table is regenerated. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.70`. A finding may carry `suggested_action` (`ADR-73`, `MILE-44`): a `kind` from a vocabulary closed per release, an `op` where the kind has several, a flat `target` and a `value` only where one is derivable, each omitted rather than `null` when not computed. The output contract reproduces `ADR-73`'s per-kind table and compatibility rule; each rule's table entry declares an action or a reasoned exemption for every finding variant it emits, `urzua rules` lists them as `actions`, and the generated action table below the contract is read from the same entries. **Why:** `MILE-44` -- a finding said what was wrong and never what to do; additive to `check` JSON. | **substantive** |
 > | 2026-11-04 | Bumped to `0.71`. `field.quality` gains the optional `template_placeholders` option, off unless declared `true`; the rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-22`; `SPEC-3` states the option. | **substantive** |
+> | 2026-11-05 | Bumped to `0.72`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |

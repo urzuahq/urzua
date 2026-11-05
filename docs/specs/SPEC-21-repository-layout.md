@@ -1,9 +1,9 @@
 ---
-Version: '0.2'
+Version: '0.3'
 Date: 2026-09-19
 Status: Accepted
-Embodiment: Drift detected
 Realized-by: code:Makefile, test:.github/workflows/checks.yml
+Embodiment: Drift detected
 Author: beauwilliams
 Stable-Id: 01M2VNAMK7V28A67T84JZ5NZPP
 Subject: 'What each top-level directory holds, and the rules the root obeys -- the living counterpart to ADR-4''s decision to organize by language.'
@@ -82,3 +82,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:Makefile, test:.github/workflows/checks.yml` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.2`. The reference to the not-yet-created corpora directory now says it does not exist yet, instead of naming a path that `citation.path-exists` correctly reports as missing. **Why:** `MILE-143` -- the rule is now enabled in this repository. | **structural** |
+> | 2026-11-05 | Bumped to `0.3`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |

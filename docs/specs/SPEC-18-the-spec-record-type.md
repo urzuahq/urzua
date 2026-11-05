@@ -1,7 +1,9 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-08
 Status: Accepted
+Embodiment: Verified
+Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -84,3 +86,5 @@ than `SPEC-1`-specific, `Implements`/`Parent` declared since every spec already 
 > | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`'s row stated the resolution mechanism but not the written form, and cited MILE-78 as precedent -- MILE-78 being the record that established the `'@handle'` form BUG-18 has now retired, so the citation pointed at the superseded convention. Both corrected. Also fixed "required as of this version", which was written when this spec was at `0.2` and silently re-pointed at every later version. | **substantive** |
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `Shipped` to the `Status` values after `Accepted`, with `Embodiment` and `Realized-by` required of a `Shipped` spec. **Why:** `MILE-7`, maintainer decision of 2026-11-04: a spec whose status says the work shipped has to carry its evidence, and `required_fields` could only demand it of every spec or none. Declared in `.urzua/config.yaml` (`statuses` and `statuses.require`); no engine change. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
