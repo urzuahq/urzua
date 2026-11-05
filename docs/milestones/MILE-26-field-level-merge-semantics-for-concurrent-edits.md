@@ -4,6 +4,7 @@ Stable-Id: 01M1Y5JT01RV9FEM7BWSX2VX2G
 Phase: '3'
 Track: review-workflow
 Implements: —
+Depends-on: MILE-79
 Blocked-on: —
 ---
 # 26 — Field-level merge semantics for concurrent edits
@@ -26,3 +27,4 @@ Two writers editing different fields of one record do not clobber each other: a 
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: MILE-79` added. **Why:** Done means says the field-level merge guard is used by `urzua fix --apply` and the guarded edit command, which `MILE-79` builds. Proposed for maintainer review; `Status` unchanged. | **structural** |

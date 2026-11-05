@@ -4,6 +4,7 @@ Stable-Id: 01M1Y5JVK0Z71FE3H8BG58VM39
 Phase: '2'
 Track: escalation
 Implements: —
+Depends-on: MILE-47
 Blocked-on: —
 ---
 # 29 — A read-only MCP server
@@ -26,3 +27,4 @@ An MCP server exposes rejected and superseded decisions read-only to agents, ser
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: MILE-47` added. **Why:** `MILE-47` states the MCP position must be decided before the read-only server is built, and `MILE-29`'s Done means requires an ADR to decide the server's shape first. Proposed for maintainer review; `Status` unchanged. | **structural** |

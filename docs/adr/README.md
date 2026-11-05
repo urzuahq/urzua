@@ -87,4 +87,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Boundaries are declared paths with a kind, a reason and a severity](ADR-80-boundaries-are-declared-paths-with-a-kind-a-reason-and-a-severity.md)
 - [A bare reference to an open record is checked in declared text](ADR-81-a-bare-reference-to-an-open-record-is-checked-in-declared-text.md)
 - [urzua roadmap computes waves, the ready set and the critical path over acyclic relation pairs](ADR-82-urzua-roadmap-computes-waves-the-ready-set-and-the-critical-path-over-acyclic-relation-pairs.md)
+- [Blocked is derived only: a repository following RFC-48 does not write it as a status](ADR-83-blocked-is-derived-only-a-repository-following-rfc-48-does-not-write-it-as-a-status.md)
 <!-- urzua:index:end -->

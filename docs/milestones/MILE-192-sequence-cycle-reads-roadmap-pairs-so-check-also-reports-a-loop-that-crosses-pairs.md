@@ -7,7 +7,7 @@ Implements: RFC-48
 Depends-on: ADR-82
 Blocked-on: —
 ---
-# 191 — sequence.cycle reads roadmap.pairs so check also reports a loop that crosses pairs
+# 192 — sequence.cycle reads roadmap.pairs so check also reports a loop that crosses pairs
 
 ## What
 
