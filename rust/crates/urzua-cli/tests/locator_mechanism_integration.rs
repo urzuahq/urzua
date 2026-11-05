@@ -104,23 +104,30 @@ fn a_code_and_a_test_locator_under_the_scanned_paths_are_each_nudged() {
 }
 
 #[test]
-fn the_action_is_an_edit_field_that_drops_the_locator_and_keeps_the_rest() {
-    let dir = fixture("action", CONFIG, "code:src/a.rs, code:docs/guide/g.md");
-    let (_, v) = check(&dir);
-    let f = nudges(&v)[0].clone();
-    let action = &f["suggested_action"];
-    assert_eq!(action["kind"], "edit-field", "{f}");
-    assert_eq!(action["op"], "set", "{f}");
-    assert_eq!(action["target"]["field"], "Realized-by", "{f}");
-    assert_eq!(action["value"], "code:docs/guide/g.md", "{f}");
-}
-
-#[test]
-fn a_sole_locator_is_removed_with_the_field() {
-    let dir = fixture("sole", CONFIG, "code:src/a.rs");
-    let (_, v) = check(&dir);
-    let f = nudges(&v)[0].clone();
-    assert_eq!(f["suggested_action"]["op"], "remove", "{f}");
+fn no_edit_is_offered_because_the_comment_must_exist_before_the_locator_goes() {
+    // Dropping the locator first would delete the evidence and leave Embodiment
+    // disagreeing with what is computed; the other half of the repair is a
+    // comment in a source file, which no action kind addresses (ADR-73).
+    for (name, value) in [
+        ("action", "code:src/a.rs, code:docs/guide/g.md"),
+        ("sole", "code:src/a.rs"),
+    ] {
+        let dir = fixture(name, CONFIG, value);
+        let (_, v) = check(&dir);
+        let found = nudges(&v);
+        assert_eq!(found.len(), 1, "{v}");
+        assert!(
+            found[0]
+                .as_object()
+                .unwrap()
+                .get("suggested_action")
+                .is_none(),
+            "{name}: {}",
+            found[0]
+        );
+        let msg = found[0]["message"].as_str().unwrap();
+        assert!(msg.contains("add the comment first"), "{name}: {msg}");
+    }
 }
 
 #[test]

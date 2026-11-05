@@ -18,9 +18,11 @@ use crate::locator::realized_by_locators;
 ///   carrying a scope or a pin have no comment of the same tier or strength, so
 ///   `Realized-by` stays the only option and they are examined and not flagged.
 ///
-/// The population counts the declared `Realized-by` slots. The suggested action
-/// edits the field: set to the remaining locators, or remove it when this was
-/// the only one.
+/// The population counts the declared `Realized-by` slots. It offers no edit
+/// action: the locator must stay until the comment exists, or the evidence is
+/// gone before its replacement is, and writing the comment is an edit to a
+/// source file, which no action kind addresses (`ADR-73`, exempt with a
+/// reason). The message says to add the comment first.
 pub fn embodiment_locator_on_back_pointer_path(
     records: &[Record],
     config: &Config,
@@ -71,19 +73,12 @@ pub fn embodiment_locator_on_back_pointer_path(
                     }
                     _ => continue,
                 };
-                let written = format!("{}:{}", entry.category, entry.raw);
-                let remaining: Vec<String> = value
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|s| {
-                        !s.is_empty() && normalize_segment(s) != normalize_segment(&written)
-                    })
-                    .map(str::to_string)
-                    .collect();
-                let source = if remaining.is_empty() {
+                // Told apart through the shared `Realized-by` reader, never by
+                // splitting the value: a path may itself contain a comma.
+                let source = if entries.len() == 1 {
                     ActionSource::new("locator-on-back-pointer-path-sole")
                 } else {
-                    ActionSource::new("locator-on-back-pointer-path").text(remaining.join(", "))
+                    ActionSource::new("locator-on-back-pointer-path")
                 };
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -95,7 +90,7 @@ pub fn embodiment_locator_on_back_pointer_path(
                     suggested_action: None,
                     action_source: source.field(field),
                     message: format!(
-                        "{field} names '{}' ({}:), a file under back_pointer_paths: a `{marker}: {id}` comment in that file is read automatically and counts as the same tier, so it cannot go stale away from the code; keep the locator only where a comment cannot be written",
+                        "{field} names '{}' ({}:), a file under back_pointer_paths: a `{marker}: {id}` comment in that file is read automatically and counts as the same tier, so it cannot go stale away from the code; add the comment first, then drop this locator from {field}; keep the locator only where a comment cannot be written",
                         locator.path, entry.category
                     ),
                 });
@@ -112,30 +107,4 @@ pub fn embodiment_locator_on_back_pointer_path(
         },
         findings,
     )
-}
-
-/// A `Realized-by` segment with the whitespace around its category separator
-/// removed, so `code: a.rs` and `code:a.rs` compare equal.
-fn normalize_segment(segment: &str) -> String {
-    match segment.split_once(':') {
-        Some((category, locator)) => format!("{}:{}", category.trim(), locator.trim()),
-        None => segment.trim().to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn segments_compare_without_the_space_after_the_category() {
-        assert_eq!(
-            normalize_segment("code: a.rs"),
-            normalize_segment("code:a.rs")
-        );
-        assert_ne!(
-            normalize_segment("code:a.rs"),
-            normalize_segment("test:a.rs")
-        );
-    }
 }

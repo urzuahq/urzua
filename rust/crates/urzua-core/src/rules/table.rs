@@ -1415,7 +1415,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH,
-        description: "A `Realized-by` locator names a file under `back_pointer_paths`, where an `Implements:` or `Verifies:` comment would say the same thing and is read automatically (`ADR-78` item 4, `MILE-189`, `RFC-7` section 5: prefer the lighter mechanism). A warning nudging the evidence into that comment, never an error, because the two mechanisms are not interchangeable: only a `code:` locator on a file under `back_pointer_paths`, or a `test:` locator on a file under the optional `test_paths` (the only files whose `Verifies:` comment counts), has a comment of the same tier. A `spec:` locator, a `test:` locator outside `test_paths` and any locator with a `#scope` or an `@sha256` pin stay `Realized-by` and are not flagged. The suggested action edits `Realized-by` to the remaining locators, or removes the field when the flagged one is the only one. Opt-in, and needs `back_pointer_paths`; `test_paths` is optional and, as for the back-pointer rules, each entry must lie inside a `back_pointer_paths` entry. The population counts the declared `Realized-by` slots.",
+        description: "A `Realized-by` locator names a file under `back_pointer_paths`, where an `Implements:` or `Verifies:` comment would say the same thing and is read automatically (`ADR-78` item 4, `MILE-189`, `RFC-7` section 5: prefer the lighter mechanism). A warning nudging the evidence into that comment, never an error, because the two mechanisms are not interchangeable: only a `code:` locator on a file under `back_pointer_paths`, or a `test:` locator on a file under the optional `test_paths` (the only files whose `Verifies:` comment counts), has a comment of the same tier. A `spec:` locator, a `test:` locator outside `test_paths` and any locator with a `#scope` or an `@sha256` pin stay `Realized-by` and are not flagged. It offers no edit action, because the comment must exist before the locator goes (an exemption with a reason, as for the back-pointer rules). Opt-in, and needs `back_pointer_paths`; `test_paths` is optional and, as for the back-pointer rules, each entry must lie inside a `back_pointer_paths` entry. The population counts the declared `Realized-by` slots.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1426,8 +1426,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
         header_none: HeaderNone::OutOfScope,
         options: &["back_pointer_paths", "test_paths"],
         actions: &[
-            VariantAction::new("locator-on-back-pointer-path", ActionDecl::FIELD_SET),
-            VariantAction::new("locator-on-back-pointer-path-sole", ActionDecl::FIELD_REMOVE),
+            VariantAction::new("locator-on-back-pointer-path", ActionDecl::Exempt("the repair is a comment in a source file, and no action kind addresses a non-record file yet; dropping the locator first would delete the evidence before the comment exists")),
+            VariantAction::new("locator-on-back-pointer-path-sole", ActionDecl::Exempt("the repair is a comment in a source file, and no action kind addresses a non-record file yet; dropping the only locator first would leave the record with no evidence")),
         ],
         phase: Phase::Main,
         run: |c| {

@@ -1217,8 +1217,11 @@ rules:
 - It does not flag what a comment cannot say: a `spec:` locator, a `test:` locator outside `test_paths`,
   a locator with a `#scope`, or a locator with an `@sha256` pin. `Realized-by` is the only option for
   those, and for any path the comment scan cannot reach, which is why this is a nudge and not an error.
-- The suggested action (`SPEC-2`) is `edit-field` on `Realized-by`: `set` to the remaining locators, or
-  `remove` when the flagged one is the only one. The comment itself is written by the author.
+- It offers no edit action. Removing the locator before the comment exists would delete the evidence
+  and leave `Embodiment` disagreeing with what is computed, and the other half of the repair is a comment in a
+  source file, which no action kind addresses (`ADR-73`: an exemption with a reason, as for
+  `embodiment.back-pointer-*`). The author adds the `Implements:` or `Verifies:` comment first, then
+  removes the locator from `Realized-by`.
 - `back_pointer_paths` is required (a load error without it); `test_paths` is optional.
 
 ### Sticky Embodiment states (`MILE-148`)
@@ -1425,4 +1428,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
-> | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and its `edit-field` action. **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
+> | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
