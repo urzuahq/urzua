@@ -8,7 +8,7 @@ fixtures:
 - path: records/ADR-0001-proposed.md
   irregularity: 'Proposed: a case accepts it, an allowed edge.'
 - path: records/ADR-0002-accepted.md
-  irregularity: 'Accepted: a case sends it back to Proposed, an edge the graph does not list.'
+  irregularity: 'Accepted, with a Stable-Id: a case sends it back to Proposed, an edge the graph does not list; others rename it (BUG-191) and judge it against this status.'
 - path: records/ADR-0003-superseded.md
   irregularity: 'Superseded, a terminal status: a case sets it back to Accepted.'
 - path: records/ADR-0004-untouched.md
