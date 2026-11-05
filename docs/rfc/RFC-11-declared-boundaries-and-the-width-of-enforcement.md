@@ -4,6 +4,7 @@ Date: 2026-08-11
 Accepted-on: 2026-09-05
 Author: beauwilliams
 Supersedes / Superseded-by: —
+Non-reference-ids: SPEC-7
 ---
 # 11 — Declared boundaries: a policy is enforced at the width it declares, by every tool that touches it
 
@@ -397,3 +398,4 @@ a structured document and the easiest one to write.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the proposal is unchanged. | **structural** |

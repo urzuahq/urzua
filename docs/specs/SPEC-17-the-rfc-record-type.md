@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
@@ -27,11 +27,40 @@ record_types:
     dir: "docs/rfc"
     required_fields: ["Status", "Date", "Author"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Supersedes / Superseded-by", "Amends", "Implements", "Non-reference-ids"]
+    known_fields: ["Stable-Id", "Accepted-on", "Supersedes / Superseded-by", "Amends", "Amended-by", "Amended-by-pending", "Implements", "Non-reference-ids"]
+    statuses:
+      values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
+      success: ["Accepted"]
+      failure: ["Rejected", "Superseded"]
+      implementable: ["Accepted"]
+      initial: ["Draft"]
+      transitions:
+        Draft: ["Discussion", "Accepted", "Rejected"]
+        Discussion: ["Draft", "Accepted", "Rejected"]
+        Accepted: ["Superseded"]
+        Rejected: ["Draft"]
+      require:
+        - {when: ["Accepted", "Superseded"], fields: ["Accepted-on"]}
+      forbid:
+        - {when: ["Draft", "Discussion", "Rejected"], fields: ["Accepted-on"]}
+    sections:
+      from: headings
+      required:
+        - {name: Summary}
+        - {name: Motivation}
+        - {name: Proposal}
     spec: "SPEC-17"
     pointer_fields: ["Implements", "Amends"]
     narrative_fields: []
 ```
+
+`Status` is mechanically validated against `statuses`: `status.undeclared-value` reports a value outside the
+five, and `status.transition-allowed` reports a move the graph does not allow (on a `--base` run, against
+the merge base's copy). A proposal is filed `Draft` (`initial`), moves between `Draft` and `Discussion`,
+and is `Accepted` or `Rejected` from either; an `Accepted` one can be `Superseded`. A `Rejected` proposal
+can be reopened as a `Draft` (`RFC-30`), the only move out of a terminal value. `sections` requires
+`Summary`, `Motivation` and `Proposal` on every RFC, the template's headings; none is exempt, since a
+rejected proposal still made its case.
 
 | Field | Values | Notes |
 |---|---|---|
@@ -40,6 +69,9 @@ record_types:
 | `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new`, same as `adr` -- including the form: no decorative `@` prefix, which nothing reads and which forces avoidable YAML quoting (BUG-18, SPEC-16). |
 | `Stable-Id` | a ULID, optional | Assigned unconditionally by `urzua new rfc` (ADR-21: every type gets one); backfilled by `migrate ids` for records predating it. |
 | `Supersedes / Superseded-by` | comma-separated or `—`, optional | Same reciprocity model as `adr`. |
+| `Accepted-on` | `YYYY-MM-DD`, optional | The day the proposal was accepted, not the day it was written; never earlier than `Date` and well-formed (`date.field-order`, `date.field-valid`). Required at `Accepted` and `Superseded`, forbidden at `Draft`, `Discussion` and `Rejected`, through `statuses.require` and `statuses.forbid` (`SPEC-3`). |
+| `Amended-by` | comma-separated, optional | The reciprocal end of `Amends`, in the repository's `amendment` relation pair (`relation_pairs`, `SPEC-3`): an RFC that names another in `Amends` must be named back here, and a claim from an RFC that is not yet accepted is a warning, an error once it is accepted without the echo. Only RFCs carry the pair. |
+| `Amended-by-pending` | comma-separated, optional | Lets the amended RFC acknowledge a pending amendment without asserting it before the amending RFC is accepted (`acknowledged_by`). |
 | `Amends` | comma-separated, optional | An RFC narrowing or correcting an earlier one without fully superseding it — distinct from `Supersedes`, which replaces outright. Declared as one of this type's `pointer_fields` entries (MILE-90/ADR-44) — previously never resolved by anything. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever bug or decision this RFC's proposal addresses (e.g. `RFC-23`'s own `Implements: BUG-8`). Added to `known_fields` and declared as this type's other `pointer_fields` entry in the same pass (MILE-90/ADR-44) — previously in real use but never declared, silently tripping `header.field-set-consistency`. |
 | `Non-reference-ids` | comma-separated exact ids, optional | Ids this RFC names without citing as a reference (an example, a retracted number): `citation.resolution` does not resolve or report a citation of them in this record only, and reports a listed id the RFC never cites. Named by the rule's `non_reference_field` option (SPEC-3). Not a pointer field. |
@@ -50,7 +82,6 @@ ADR's own `Deciders` field records.
 ## What's deliberately not built
 
 - **A discovery-gate stage before Draft** — explored as an open question (MILE-35), not built.
-- **Mechanical `Status` enum validation** — same gap as every other type (MILE-46/76).
 
 ## References
 
@@ -79,3 +110,4 @@ ADR's own `Deciders` field records.
 > | 2026-11-05 | Bumped to `0.10`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `an_rfc_follows_its_declared_lifecycle_and_vocabulary`, `an_rfc_amending_another_must_be_echoed_by_the_amended_rfc`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.11`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.12`. The schema excerpt now shows the type as configured: `Accepted-on`, `Amended-by` and `Amended-by-pending` among the known fields, the `statuses` declaration (`initial`, `transitions` including the `Rejected` to `Draft` reopen of `RFC-30`, and `require`/`forbid` for `Accepted-on`) and the required `Summary`, `Motivation` and `Proposal` sections. Rows are added for the three fields, and "Mechanical `Status` enum validation: not built" is removed, since `status.undeclared-value` and `status.transition-allowed` run. **Why:** the spec described an engine and a config that had since moved on, so a reader could not tell that the reopen is allowed or that the acceptance date is checked by status. | **substantive** |

@@ -1,5 +1,5 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
@@ -27,18 +27,56 @@ record_types:
     dir: "docs/adr"
     required_fields: ["Status", "Date", "Author", "Deciders"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by", "Non-reference-ids"]
+    known_fields: ["Embodiment", "Realized-by", "Stable-Id", "Accepted-on", "Derives-from", "Supersedes / Superseded-by", "Non-reference-ids"]
+    statuses:
+      values: ["Proposed", "Accepted", "Rejected", "Superseded", "Retired"]
+      success: ["Accepted"]
+      failure: ["Rejected", "Superseded", "Retired"]
+      implementable: ["Accepted"]
+      claim_retained: ["Superseded", "Retired"]
+      initial: ["Proposed"]
+      transitions:
+        Proposed: ["Accepted", "Rejected"]
+        Accepted: ["Superseded", "Retired"]
+      pending:
+        - "pending"
+        - "unknown"
+        - "none recorded"
+        - {pattern: '(?i)^(tbd|to be (decided|determined))\b'}
+      require:
+        - {when: ["Accepted"], fields: ["Deciders"]}
+        - {when: ["Accepted", "Superseded", "Retired"], fields: ["Accepted-on"]}
+      forbid:
+        - {when: ["Proposed", "Rejected"], fields: ["Accepted-on"]}
+    sections:
+      from: headings
+      required:
+        - {name: Context}
+        - {name: Decision}
+        - {name: Consequences}
+      exempt_statuses: ["Rejected"]
     spec: "SPEC-16"
     pointer_fields: ["Derives-from"]
     narrative_fields: []
 ```
+
+`Status` is mechanically validated against `statuses`: `status.undeclared-value` reports a value outside the
+five, and `status.transition-allowed` reports a move the graph does not allow (on a `--base` run, against
+the merge base's copy). A decision is filed `Proposed` (`initial`), is then `Accepted` or `Rejected`, and
+an `Accepted` one is later `Superseded` or `Retired`; no move leaves `Rejected`, `Superseded` or `Retired`.
+`require` makes an `Accepted` decision name its `Deciders` (a placeholder in `pending` counts as missing)
+and makes a decision that has been accepted, whatever became of it after, carry `Accepted-on`; `forbid`
+keeps `Accepted-on` off a decision that was never accepted. `sections` requires `Context`, `Decision` and
+`Consequences` on every decision except a `Rejected` one, which made no decision and is set aside on
+purpose (`exempt_statuses`).
 
 | Field | Values | Notes |
 |---|---|---|
 | `Status` | `Proposed` \| `Accepted` \| `Rejected` \| `Superseded` \| `Retired` | `Retired`: an accepted decision whose mechanism was removed with no successor (declared a `failure` and `claim_retained` status, like `Superseded`, so its `Realized-by` evidence stays as history). Terminal once `Accepted`/`Rejected`/`Superseded`/`Retired` — the decision text itself is then frozen; further evolution is a dated `## Amendment` section, never a silent edit (ADR-14). |
 | `Date` | `YYYY-MM-DD` | When decided, not when last touched. |
 | `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new` (`resolve_identity()`), same tiering `fix --apply` uses (RFC-2 §2). Written without a decorative `@` prefix: nothing in any crate reads, strips, or validates one, and `@` is a reserved YAML indicator, so a prefixed value is invalid as a plain scalar and has to be quoted to parse at all (BUG-18). The value itself is whatever tier resolved — a `gh` login, a `git config user.name`, or an explicit `--by` — and is free text, so a value needing quoting for its own reasons (a colon, a comma) is still quoted; `render_synthetic_yaml` handles that. |
-| `Deciders` | one or more real identities, no `@` prefix | Free text today — not yet tool-resolved (MILE-18, rescoped to note `Author` already is). Same no-`@` form as `Author`, for the same reason (BUG-18). |
+| `Deciders` | one or more real identities, no `@` prefix | Free text today — not yet tool-resolved (MILE-18, rescoped to note `Author` already is). Same no-`@` form as `Author`, for the same reason (BUG-18). Required, and not a `pending` placeholder, once `Accepted` (`status.required-field-missing`). |
+| `Accepted-on` | `YYYY-MM-DD`, optional | The day the decision was accepted, not the day it was written; never earlier than `Date` (`date.field-order`) and well-formed (`date.field-valid`). Required at `Accepted`, `Superseded` and `Retired`, forbidden at `Proposed` and `Rejected`, through `statuses.require` and `statuses.forbid` (`SPEC-3`). |
 | `Embodiment` | `Not started` \| `Specified` \| `Implemented` \| `Verified` \| `Drift detected` \| `Inactive` | Optional; computed-vs-stated consistency checked by `embodiment.consistency` (ADR-18) when `Realized-by` is also present. |
 | `Realized-by` | categorized locators (`spec:`/`code:`/`test:`), optional | The evidence `Embodiment` is computed from. |
 | `Stable-Id` | a ULID, optional | Backfilled by `migrate ids` (ADR-3/21) for records predating it. |
@@ -57,8 +95,6 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 
 ## What's deliberately not built
 
-- **Mechanical `Status` enum validation** — nothing validates `Status` against this closed set today
-  for any record type (MILE-46/76 territory), `adr` included.
 - **Role rules on `Deciders`** (self-acknowledgement, real identity resolution) — named in SPEC-1's
   original design, not yet built (MILE-18, MILE-55).
 
@@ -93,3 +129,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-11-05 | Bumped to `0.10`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `an_accepted_adr_must_name_its_deciders_and_enters_proposed`, `adr_supersession_must_be_reciprocated_and_a_retired_decision_is_a_declared_status`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.11`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.12`. The schema excerpt now shows the type as configured: `Accepted-on` among the known fields, the `statuses` declaration (`initial`, the `Proposed` to `Accepted`/`Rejected` and `Accepted` to `Superseded`/`Retired` `transitions`, `pending`, and `require`/`forbid` for `Deciders` and `Accepted-on`) and the required `Context`, `Decision` and `Consequences` sections. An `Accepted-on` row is added, and "Mechanical `Status` enum validation: not built" is removed, since `status.undeclared-value` and `status.transition-allowed` run. The `0.8` row's note that no type declares `transitions` is history and stands. **Why:** the spec described an engine and a config that had since moved on, and `Accepted-on` is newly required and forbidden by status in this repository's configuration. | **substantive** |

@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -40,12 +40,29 @@ record_types:
       values: ["Open", "Fixed", "WontFix", "Not a bug", "Rejected"]
       success: ["Fixed"]
       failure: ["WontFix", "Not a bug", "Rejected"]
+      implementable: ["Open"]
+      initial: ["Open", "Fixed"]
+      transitions:
+        Open: ["Fixed", "WontFix", "Not a bug", "Rejected"]
+        Fixed: ["Open"]
+        WontFix: ["Open"]
+        "Not a bug": ["Open"]
+        Rejected: ["Open"]
+      pending:
+        - "pending"
+        - "not yet written"
+        - {pattern: '(?i)^(not yet written|planned:)'}
       delivery:
         delivered_tiers: ["Verified", "Implemented"]
         unevidenced_tiers: ["Not started"]
         not_done: ["Open"]
         set_status: "Fixed"
         back_pointer_evidence: false
+    revision_log: {marker: "**Revision log**", required: true}
+    sections:
+      from: headings
+      required:
+        - {name: "What was wrong", aliases: ["What is wrong", "What was suspected", "What"]}
     spec: "SPEC-9"
     pointer_fields: ["Implements"]
     narrative_fields: []
@@ -53,7 +70,7 @@ record_types:
 
 | Field | Values | Notes |
 |---|---|---|
-| `Status` | `Open` \| `Fixed` \| `WontFix` | The bug's own lifecycle, independent of any milestone or ADR. |
+| `Status` | `Open` \| `Fixed` \| `WontFix` \| `Not a bug` \| `Rejected` | The bug's own lifecycle, independent of any milestone or ADR. `Fixed` is the one success; `WontFix`, `Not a bug` (the report described correct behaviour) and `Rejected` (the report was declined) are the failures. A bug is filed `Open`, or `Fixed` when the PR that files it fixes it (`initial`). `Open` moves to any of the four others; each of them can be reopened to `Open` and no other move is allowed (`status.transition-allowed`). |
 | `Found-in` | free text | How/where it was actually discovered — a narrative, not a resolvable reference (e.g. `"check docs/adr/ vs check docs/ compared by hand"`). |
 | `Realized-by` | optional, `known_fields` | The evidence field, the same one every other type uses (`ADR-84`). The test proving the fix is a `test:path#name@sha256:<pin>` entry (`urzua explain <path>#<name>` prints the pin); several are comma-separated before each `test:` prefix. A `test:` entry computes to the test tier, a `code:` entry to the code tier. The bug's `Status` follows it, see below. |
 | `Stable-Id` | optional, `known_fields` | Assigned by `urzua new bug` or backfilled by `migrate ids` (SPEC-14), same as any other type. |
@@ -76,6 +93,8 @@ The retired `Regression-test` field is no longer known to the type; its values w
 `Realized-by` as locators. A value that named no test (prose, `none`, a test that no longer exists)
 is not evidence: the original text of such a record is kept under a `## Regression test` heading in
 its body, and its `Realized-by` stays empty.
+
+The first section is `What was wrong`; `What is wrong`, `What was suspected` and `What` are accepted aliases for older records, and `check` discloses which records use one. Placeholder `Realized-by` and similar values (`pending`, `not yet written`, `planned: ...`) are the type's `pending` vocabulary, not evidence.
 
 No `Phase`/`Track` — a bug isn't planned or grouped the way a milestone is; it either exists because
 something broke, or it doesn't exist yet.
@@ -107,3 +126,4 @@ something broke, or it doesn't exist yet.
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.7`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.8`. The `Regression-test` field is retired: its values moved into `Realized-by` as `test:` locators, `required_fields` is `Status` and `Found-in`, and the type declares `statuses.delivery` (`ADR-84`), so a bug's `Status` follows its `Realized-by`. A deliberately open bug with evidence, and a `Fixed` bug with no evidence, are each a waiver. **Why:** `ADR-84` makes `Realized-by` the one evidence field for every type, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. The schema excerpt and the `Status` row now show all five statuses (`Not a bug` and `Rejected` beside `Open`, `Fixed`, `WontFix`), the `initial` set, the reopen `transitions`, the `pending` vocabulary, the `sections` requirement and the revision-log declaration, as configured. The `0.6` row above names a test that has since been renamed to `a_bug_needs_found_in_and_a_what_was_wrong_section` (`record_types_own_config_integration.rs`); that row is history and stands. **Why:** the spec listed three of the five statuses and none of the lifecycle the engine enforces, so a reader could not tell that `Not a bug` and `Rejected` exist or that a fixed bug can be reopened. | **substantive** |

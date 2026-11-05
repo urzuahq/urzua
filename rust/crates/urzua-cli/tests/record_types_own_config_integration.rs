@@ -249,7 +249,7 @@ fn adr_supersession_must_be_reciprocated_and_a_retired_decision_is_a_declared_st
 
 fn rfc(status: &str, extra: &str) -> String {
     format!(
-        "---\nStatus: {status}\nDate: 2026-01-01\nAuthor: a\n{extra}---\n# 1 — A proposal\n\n## Summary\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
+        "---\nStatus: {status}\nDate: 2026-01-01\nAuthor: a\n{extra}---\n# 1 — A proposal\n\n## Summary\n\nx\n\n## Motivation\n\nx\n\n## Proposal\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 
@@ -418,4 +418,119 @@ fn doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_war
             .contains("no pre-commit hook"),
         "{hook}"
     );
+}
+
+// ---- The acceptance date, Met-by, header case and required sections this repository declares
+
+fn findings_for(dir: &Path, file: &str, rule: &str) -> usize {
+    rules_for(dir, &["check"], file)
+        .iter()
+        .filter(|r| r.as_str() == rule)
+        .count()
+}
+
+#[test]
+fn the_acceptance_date_is_required_once_accepted_and_forbidden_before_it() {
+    let adr_path = "docs/adr/ADR-1-a-decision.md";
+    let accepted = |extra: &str| adr("Accepted", &format!("Deciders: a\n{extra}"));
+    let missing = repo("accepted-on-missing", &[(adr_path, &accepted(""))]);
+    assert_eq!(
+        findings_for(&missing, "ADR-1-", "status.required-field-missing"),
+        1
+    );
+    let present = repo(
+        "accepted-on-present",
+        &[(adr_path, &accepted("Accepted-on: 2026-01-02\n"))],
+    );
+    assert_eq!(
+        findings_for(&present, "ADR-1-", "status.required-field-missing"),
+        0
+    );
+    let early = repo(
+        "accepted-on-early",
+        &[(
+            adr_path,
+            &adr("Proposed", "Deciders: a\nAccepted-on: 2026-01-02\n"),
+        )],
+    );
+    assert_eq!(
+        findings_for(&early, "ADR-1-", "status.forbidden-field-present"),
+        1
+    );
+
+    let rfc_path = "docs/rfc/RFC-1-a-proposal.md";
+    let early_rfc = repo(
+        "rfc-accepted-on-early",
+        &[(rfc_path, &rfc("Draft", "Accepted-on: 2026-01-02\n"))],
+    );
+    assert_eq!(
+        findings_for(&early_rfc, "RFC-1-", "status.forbidden-field-present"),
+        1
+    );
+    let rfc_missing = repo(
+        "rfc-accepted-on-missing",
+        &[(rfc_path, &rfc("Accepted", ""))],
+    );
+    assert_eq!(
+        findings_for(&rfc_missing, "RFC-1-", "status.required-field-missing"),
+        1
+    );
+}
+
+#[test]
+fn a_condition_names_met_by_only_once_met() {
+    let condition = |status: &str, extra: &str| {
+        format!(
+            "---\nStatus: {status}\n{extra}---\n# COND-0001 — A signal\n\n## Signal\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
+        )
+    };
+    let path = "docs/conditions/COND-0001-a-signal.md";
+    let target_adr = adr("Proposed", "Deciders: a\n");
+    let target = ("docs/adr/ADR-1-a-decision.md", target_adr.as_str());
+    let open = repo(
+        "cond-open",
+        &[
+            (path, condition("Open", "Met-by: ADR-1\n").as_str()),
+            target,
+        ],
+    );
+    assert_eq!(
+        findings_for(&open, "COND-0001", "status.forbidden-field-present"),
+        1
+    );
+    let met = repo(
+        "cond-met",
+        &[(path, condition("Met", "Met-by: ADR-1\n").as_str()), target],
+    );
+    assert_eq!(
+        findings_for(&met, "COND-0001", "status.forbidden-field-present"),
+        0
+    );
+    let met_without = repo("cond-met-without", &[(path, &condition("Met", ""))]);
+    assert_eq!(
+        findings_for(&met_without, "COND-0001", "status.required-field-missing"),
+        1
+    );
+}
+
+#[test]
+fn the_required_sections_and_the_case_variant_key_are_enforced() {
+    let rfc_path = "docs/rfc/RFC-1-a-proposal.md";
+    let no_proposal = rfc("Draft", "").replace("## Proposal", "## Design");
+    let dir = repo("rfc-sections", &[(rfc_path, &no_proposal)]);
+    assert_eq!(findings_for(&dir, "RFC-1-", "section.required"), 1);
+
+    let adr_path = "docs/adr/ADR-1-a-decision.md";
+    let dir = repo(
+        "adr-sections",
+        &[(adr_path, &adr("Proposed", "Deciders: a\n"))],
+    );
+    // The fixture states a Context only: Decision and Consequences are missing.
+    assert_eq!(findings_for(&dir, "ADR-1-", "section.required"), 2);
+
+    let dir = repo(
+        "case-variant",
+        &[(adr_path, &adr("Proposed", "Deciders: a\nauthor: b\n"))],
+    );
+    assert_eq!(findings_for(&dir, "ADR-1-", "header.case-variant-key"), 1);
 }

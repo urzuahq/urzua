@@ -8,6 +8,7 @@ Deciders: beauwilliams
 Embodiment: null
 Supersedes / Superseded-by: null
 Derives-from: ADR-64, ADR-11
+Non-reference-ids: WAIVER-0022
 ---
 # 75 — A record declares the ids it names without citing as a reference, and citation.resolution does not resolve them
 
@@ -146,3 +147,4 @@ then be rewritten.
 > | 2026-11-04 | Drafted as Proposed, then amended after independent review: only the one real citation is declared, the value grammar is exact ids, and the option covers history as well as illustration. | **substantive** |
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04, after an independent review and re-review found no remaining blockers. | **substantive** |
 > | 2026-11-04 | Recorded that the separate field-entry population of clause 3 is deferred to `MILE-186`: the `BUG-190` build reports the uncited-declaration and malformed-entry findings under `citation.resolution`'s citation population, because a second population changes the output contract. The Decision is unchanged. **Why:** a new `PopulationUnit` is a maintainer decision. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `WAIVER-0022`. **Why:** the text names this waiver as it was when the decision was made; the waiver has since been removed (its ids are declared on the records that name them), and the field states that the id is history and not a citation. The field carries no decision; the Decision is unchanged. | **structural** |

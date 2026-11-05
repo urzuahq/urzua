@@ -1,7 +1,6 @@
 # NNNN — Title
 
 > Status: Open | Met | Dropped
-> Met-by: the record that shows the signal happened (required once Met; leave the line out while Open)
 
 ## Signal
 

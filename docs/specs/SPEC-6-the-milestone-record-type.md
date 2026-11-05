@@ -1,5 +1,5 @@
 ---
-Version: '0.14'
+Version: '0.15'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -28,11 +28,40 @@ record_types:
     prefix: "MILE"
     required_fields: ["Status", "Phase", "Track"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Implements", "Blocked-on", "Realized-by"]
+    known_fields: ["Stable-Id", "Implements", "Blocked-on", "Depends-on", "Blocks", "Realized-by", "Non-reference-ids"]
+    revision_log: {marker: "**Revision log**", required: true}
+    statuses:
+      values: ["Planned", "InProgress", "Done", "WontDo"]
+      success: ["Done"]
+      failure: ["WontDo"]
+      progress: ["InProgress", "Done"]
+      implementable: ["Planned", "InProgress", "Done"]
+      initial: ["Planned", "Done"]
+      transitions:
+        Planned: ["InProgress", "Done", "WontDo"]
+        InProgress: ["Planned", "Done", "WontDo"]
+        Done: ["Planned", "InProgress"]
+      delivery:
+        delivered_tiers: ["Implemented", "Verified"]
+        unevidenced_tiers: ["Not started"]
+        not_done: ["Planned", "InProgress"]
+        set_status: "Done"
+    sections:
+      from: headings
+      required:
+        - {name: "Done means"}
+      exempt_statuses: ["WontDo"]
     spec: "SPEC-6"
-    pointer_fields: ["Implements"]
+    pointer_fields: ["Implements", "Depends-on", "Blocks"]
     narrative_fields: ["Blocked-on"]
 ```
+
+The `statuses` block is what makes `Status` a closed, checked vocabulary: `success` and `failure` say which
+values finish a milestone, `progress` which claim work has started, `implementable` at which values code
+may cite the milestone, `initial` the values a milestone may be filed with, and `transitions` the moves
+between values. `delivery` holds `Status` to the evidence (`MILE-183`, below). `Depends-on` and `Blocks`
+are the two ends of the repository's `sequencing` relation pair (`relation_pairs` and `roadmap` in the
+same file, `SPEC-2`); `Non-reference-ids` lists ids the text names without citing a record (`ADR-75`).
 
 `prefix` (2026-09-07 addition) decouples the type's own name — used for the `urzua new milestone
 ...` argument and required-fields lookup — from its filename/ID prefix, the same way `dir` already
@@ -43,18 +72,21 @@ Per-record-type, not global — any type can shorten its own prefix without affe
 | Field | Values | Notes |
 |---|---|---|
 | `Status` | `Planned` \| `InProgress` \| `Done` \| `WontDo` | The realization axis for a milestone — orthogonal to whatever `Embodiment` on the RFC/ADR it implements is doing. `WontDo` is terminal, for work deliberately deferred or decided against — distinct from a milestone that is waiting (a specific, nameable blocker exists and the work is still intended), which is not a status: `Blocked` is derived from `Depends-on` and never written (`RFC-48`, `ADR-83`), so a waiting milestone stays `Planned` (or `InProgress` while it has started, which `sequence.status-agreement` reports if it is also blocked) and from leaving a milestone `Planned` (which misrepresents a reversed decision as still-pending work). Precedent: `bug`'s `WontFix`, `adr`'s `Rejected`/`Superseded` — every other record type in this corpus already has a terminal "decided against" state; milestone didn't until this version. |
-| `Phase` | a plain tag (`0`, `1`, ...) | Sequential grouping. Not a resolved pointer — no cross-referencing, just a bucket. |
-| `Track` | a plain tag (`header-format`, `section-checks`, ...) | Parallel workstream. Also a plain tag, not a pointer. |
+| `Phase` | a plain tag (`0`, `1`, ...) | Sequential grouping. Not a resolved pointer — no cross-referencing, just a bucket. `urzua roadmap` groups by it (`roadmap.group_by`). |
+| `Track` | a plain tag (`header-format`, `section-checks`, ...) | Parallel workstream. Also a plain tag, not a pointer; the roadmap groups by it within a phase. |
+| `Depends-on` | comma-separated, optional | Records that must finish before this milestone can: milestones, or conditions (`SPEC-23`). A pointer field, so each value must resolve (`sequence.unresolved-blocker`) and the relation must not loop (`sequence.cycle`). A milestone with an unfinished `Depends-on` target is blocked; `Blocked` is derived and never written as a `Status`, and `sequence.status-agreement` reports a blocked milestone whose `Status` claims progress. `urzua roadmap` orders the backlog by it. |
+| `Blocks` | comma-separated, optional | The inverse of `Depends-on`, declared so a record that writes it still takes part; it is otherwise computed from the records and never written. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). Declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
 | `Realized-by` | `spec:`, `code:`, `test:` locators; set by the delivering PR | Delivery evidence (`MILE-183`). The PR that fully delivers a milestone sets it and `Status: Done` together; `status.delivery-agreement` fails when the evidence computes to `Implemented` or `Verified` under `Planned` or `InProgress`, and when `Done` has no evidence. A decision milestone's evidence is the record of the decision (a `spec:` locator), which is neither. Leave it off a milestone that is only partly delivered. |
 | `Blocked-on` | free text, optionally citing a record ID; optional | What has to be true before this milestone can move. Free text with no reference token stays legal ("a decision not yet made"); a real ID (`BUG-3`) is checked by `pointer.resolution` for resolution and by `narrative-field.stale` (ADR-42, generalized by MILE-90/ADR-44) for whether the target has since reached a terminal status. Declared as this type's one `narrative_fields` entry (MILE-90/ADR-44) — prose-tolerant, unlike `Implements`. Was a body section (`## Blocked on`) before this version — moved into the header (ADR-42) since it's the one field-shaped exception in the schema that hadn't been. |
 
-`Status` is documented here but not mechanically validated: nothing in `urzua-core` checks a
-record's `Status` value against an enum for any record type today (RFC-9's field-presence rules
-check that a required field is non-empty, not that its value is one of a closed set). Moving to
-`WontDo` today is a config/template/documentation change only — declaring it here, and in
-`.urzua/templates/milestone.md`, is what makes it the documented contract until a future milestone
-adds real enum enforcement.
+`Status` is mechanically validated against the declared `statuses`: `status.undeclared-value` reports a
+value outside the four, `status.transition-allowed` reports a move the `transitions` graph does not
+allow (on a `--base` run, against the merge base's copy), `status.unreachable-state` reports a declared
+value nothing reaches, and the `initial` set is the values a new milestone may carry. A milestone is
+filed `Planned`, or `Done` when the PR that files it delivers it; `Done` can be reopened to `Planned` or
+`InProgress`; `WontDo` is terminal. Which values are `success` and `failure` is this declaration's, not
+the engine's.
 
 History is the existing revision-log model (RFC-6), reused unmodified: a milestone's `Status`
 transitions are recorded as dated, classified revision-log entries on the milestone record itself,
@@ -98,15 +130,14 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 
 ## What's deliberately not built
 
-- **`Depends-on`/`Blocked-by`** — a real, bidirectional sequencing relationship (this milestone
-  can't start until that one finishes) with reciprocity checking and eventual cycle detection. Not
-  built until a real case demands it (ADR-34) — `Phase`/`Track` tags are sufficient for the backlog
-  as it exists today. Distinct from `Blocked-on` (above): that field is one-way, optional, and only
-  checked for resolution/staleness, never for reciprocity or cycles.
-- **A generated roadmap view** — an aggregate report over all milestones, grouped by `Phase` then
-  `Track`. Deliberately not a hand-maintained second document (the same drift risk RFC-17 already
-  solved for template/config agreement) — build once there are enough milestones that
-  `urzua check docs/milestones/` stops being a sufficient way to read the backlog.
+- **A `Blocked-by` field, and reciprocity on `Depends-on`.** The sequencing relation is built as
+  `Depends-on` with the computed inverse `Blocks` (`reciprocity: none`, `acyclic: true`), so only one end
+  is ever written and the relation is checked for loops and unresolved targets. A second hand-written
+  end would only add a way for the two to disagree. Distinct from `Blocked-on` (above): that field is
+  one-way prose, checked for resolution and staleness, never for cycles.
+- **A hand-maintained roadmap document.** The roadmap is generated: `urzua roadmap` computes the
+  waves, the ready set and the critical path from the records, grouped by `Phase` then `Track`
+  (`ADR-82`), so it cannot drift from them.
 - **Cross-type cycle prevention and per-profile "allowed parent types"** — named as open questions
   on RFC-4 itself (this milestone type is what surfaced the gap), not scoped to milestone
   specifically since they'd apply to every record type's `Implements`/`Derives-from` use.
@@ -141,3 +172,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/status_model.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.13`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.14`. `Blocked` is removed from the `Status` value set: it is derived from `Depends-on` and surfaced by `check` and the roadmap, never written. A waiting milestone is `Planned`, with the wait in `Depends-on` (a record) and `Blocked-on` (the explanation). **Why:** `RFC-48` ("accepting this RFC includes amending `SPEC-6`'s `Status` value set to remove `Blocked`"), decided for this repository in `ADR-83`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.15`. The schema excerpt now shows the type as configured: `Depends-on`, `Blocks`, `Non-reference-ids`, `statuses` (with `initial`, `transitions` and `delivery`), `sections` and the three pointer fields. The Status paragraph no longer says `Status` is not validated, and "What's deliberately not built" no longer lists `Depends-on` and a generated roadmap, both built. **Why:** the spec described a config and an engine that had since moved on (`status.undeclared-value`, `status.transition-allowed`, the sequencing pair, `urzua roadmap`); a reader following it would have rebuilt what exists. `Phase` and `Track` are still plain tags. | **substantive** |

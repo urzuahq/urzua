@@ -99,8 +99,13 @@ record_types:
         - "unknown"
         - "none recorded"
         - {pattern: '(?i)^(tbd|to be (decided|determined))\b'}
+      # The acceptance date (SPEC-3, MILE-132): present once a decision has been
+      # accepted, whatever became of it after, and absent before or without it.
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
+        - {when: ["Accepted", "Superseded", "Retired"], fields: ["Accepted-on"]}
+      forbid:
+        - {when: ["Proposed", "Rejected"], fields: ["Accepted-on"]}
     spec: "SPEC-16"
     # How this type's revision log is found (MILE-167): the line itself, not
     # any line that mentions the text. This is the default, declared here so
@@ -122,6 +127,8 @@ record_types:
       from: headings
       required:
         - {name: Context}
+        - {name: Decision}
+        - {name: Consequences}
       exempt_statuses: ["Rejected"]
   rfc:
     dir: "docs/rfc"
@@ -151,6 +158,12 @@ record_types:
         Accepted: ["Superseded"]
         # A rejected proposal can be reopened as a draft (RFC-30).
         Rejected: ["Draft"]
+      # The acceptance date, as for an ADR: present once accepted (and after it
+      # is superseded), absent while a proposal is open or after it is rejected.
+      require:
+        - {when: ["Accepted", "Superseded"], fields: ["Accepted-on"]}
+      forbid:
+        - {when: ["Draft", "Discussion", "Rejected"], fields: ["Accepted-on"]}
     spec: "SPEC-17"
     # An RFC carries a revision log (BUG-50): a record without one is a finding
     # of revision-log.change-class-required, which is opt-in per type.
@@ -159,6 +172,14 @@ record_types:
       - "Implements"
       - "Amends"
     narrative_fields: []
+    # Every proposal states what it is, why, and the design (the template's
+    # headings). A Rejected proposal still made its case, so none is exempt.
+    sections:
+      from: headings
+      required:
+        - {name: Summary}
+        - {name: Motivation}
+        - {name: Proposal}
   spec:
     dir: "docs/specs"
     # The directory index is not a spec (MILE-152).
@@ -214,6 +235,10 @@ record_types:
       - "Implements"
       - "Parent"
     narrative_fields: []
+    sections:
+      from: headings
+      required:
+        - {name: Purpose}
   milestone:
     dir: "docs/milestones"
     # A record of this type carries a revision log (BUG-50); opt-in per type.
@@ -231,6 +256,7 @@ record_types:
       - "Depends-on"
       - "Blocks"
       - "Realized-by"
+      - "Non-reference-ids"
     statuses:
       values: ["Planned", "InProgress", "Done", "WontDo"]
       success: ["Done"]
@@ -408,6 +434,10 @@ record_types:
         Open: ["Met", "Dropped"]
       require:
         - {when: ["Met"], fields: ["Met-by"]}
+      # Unset while Open: naming a record before the signal happened asserts
+      # evidence that does not exist (SPEC-23).
+      forbid:
+        - {when: ["Open"], fields: ["Met-by"]}
     sections:
       from: headings
       required:
@@ -513,6 +543,7 @@ rules:
   status.transition-allowed: error
   status.unreachable-state: warn
   status.required-field-missing: error
+  status.forbidden-field-present: error
   date.field-valid:
     level: error
     date_fields: ["Date", "Accepted-on"]
@@ -525,6 +556,7 @@ rules:
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
+  header.case-variant-key: warn
   filename.title-consistency: error
   filename.identity-pattern: warn
   relation.supersession-reciprocity: error
@@ -540,9 +572,7 @@ rules:
   # Judged on a `--base` run against the merge base's copy of the record
   # (BUG-51); `not-applicable` on a whole-repo run.
   revision-log.version-bump-required: error
-  narrative-field.stale:
-    level: warn
-    terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Retired", "Done", "WontDo"]
+  narrative-field.stale: warn
   # Maintainer decision 2026-11-04: a 14-day grace window, so a code change can
   # land before its record catches up without breaking a zero-warning build (MILE-129).
   embodiment.consistency:
@@ -564,12 +594,11 @@ rules:
   # whether that is acceptable here would be adopting a policy by accident.
   # Catches a changeset announcing it closed a record the record itself says
   # is still open -- exactly what shipped and had to be corrected on
-  # 2026-09-17. Statuses are declared: a built-in list would stop applying the
-  # moment a type used one it did not know.
+  # 2026-09-17. Which statuses close a record is each type's own `success` and
+  # `failure` declaration (BUG-178), so no `closed_statuses` list is kept here.
   claim.status-agreement:
     level: error
     claim_paths: [".changeset"]
-    closed_statuses: ["Fixed", "Done", "Accepted", "Rejected", "Superseded", "Retired", "Withdrawn"]
     # A changeset says which records it closes as data (ADR-85, BUG-66), and the
     # rule checks that instead of a sentence. `strict`: every fragment carries the
     # key, `closes: []` when it closes nothing. A record the change only mentions
