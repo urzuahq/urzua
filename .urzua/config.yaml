@@ -571,6 +571,9 @@ rules:
     # is not listed.
     closes: closes
     strict: true
+    # Prose is not read for a claim (ADR-88, MILE-197): `strict` is on and every
+    # fragment carries `closes:`, so the field is the only claim.
+    verb_claims: false
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]
