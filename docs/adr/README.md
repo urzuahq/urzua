@@ -84,4 +84,7 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Config schema versions have a declared support window and a migration path](ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)
 - [RFC-7's remaining enforcement-harness decisions](ADR-78-rfc-7-s-remaining-enforcement-harness-decisions.md)
 - [audit folds into check and the command surface keeps one read-only validator](ADR-79-audit-folds-into-check-and-the-command-surface-keeps-one-read-only-validator.md)
+- [Boundaries are declared paths with a kind, a reason and a severity](ADR-80-boundaries-are-declared-paths-with-a-kind-a-reason-and-a-severity.md)
+- [A bare reference to an open record is checked in declared text](ADR-81-a-bare-reference-to-an-open-record-is-checked-in-declared-text.md)
+- [Blocked is derived only: a repository following RFC-48 does not write it as a status](ADR-83-blocked-is-derived-only-a-repository-following-rfc-48-does-not-write-it-as-a-status.md)
 <!-- urzua:index:end -->

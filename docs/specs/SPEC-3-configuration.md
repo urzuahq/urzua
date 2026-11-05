@@ -193,7 +193,7 @@ Two details carry weight:
   population, so `ADR-7` in `docs/adr-archive` resolves from a pointer in `docs/adr` and collides with an
   `ADR-7` in `docs/adr`. `urzua new` writes to `dir` and numbers past the highest id in any of the
   directories, and past a number claimed in any of them on another local or remote-tracking ref. An
-  entry is validated like `dir` (it names a directory below the repository root); a directory listed
+  entry is validated like `dir` (it names a directory below the repository root, written in canonical form: no `./` or empty component and no trailing `/`, so `./docs/adr`, `docs/adr/` and `docs//adr` are load errors that name `docs/adr`); a directory listed
   twice, and a directory owned by two types, are load errors; an `extra_dirs` entry that does not
   exist is reported by `type.dir-matches-nothing`, and `urzua new` numbers without it and says so on
   stderr. `exclude_files` names files in any of the directories. Two types sharing a prefix remain
@@ -369,24 +369,7 @@ Two details carry weight:
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
   committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
-  derived `blocked` value is the next declaration.
-
-  `blocked` (optional, `MILE-144`, `RFC-48`, `ADR-64`) names the non-terminal statuses a person writes
-  to say a record is waiting on a dependency, for example `Blocked`; it must be a subset of `values`
-  and disjoint from `success` and `failure`. With a sequencing relation declared (`relation_pairs`
-  with `acyclic: true`), `blocked` is also a derived value: a record is blocked when any record it
-  depends on, over every acyclic pair and in either field (a written `Blocks` counts), is not in a
-  status its own type declares `success`. `success` is the one list of done statuses; there is no
-  second list. A dependency in a `failure` status, a status the type does not declare as `success`,
-  a type that declares no `success`, or no `Status` at all, therefore blocks. The opt-in rule
-  `sequence.status-agreement` holds the written `Status` to the derived value, and reports two
-  disagreements as errors: a status listed in `blocked` while nothing blocks the record, and a blocked
-  record that states an `implementable` status (`Done` included when the type lists it). Only a type
-  that declares `blocked` is examined, so a repository that wants a computed `Blocked` and no
-  hand-written one simply omits the list. The rule's finding offers `edit-field` `set` on `Status`,
-  carrying the declared blocked status as the value when the type declares exactly one. A record with
-  a claim on a record whose header cannot be read is counted unreadable. Enabling the rule with no
-  acyclic pair, or with no type declaring `blocked`, is a load error.
+  derived `blocked` value is not part of this declaration (`MILE-27`).
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -813,13 +796,12 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   enabled, and a prose entry when `header.pointer-field-clean` is enabled. In a repository that follows
   `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
   guard for the roadmap: the graph is only computed when no claim was dropped.
-- **The derived `blocked` value** is read from these same edges by `sequence.status-agreement` (see
-  `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type and `urzua roadmap` are
-  `RFC-48`'s other parts and belong to other milestones (`MILE-182`).
+  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
+  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
+  `MILE-182`).
 
-Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
+Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
@@ -1330,4 +1312,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.69`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
-> | 2026-11-05 | Bumped to `0.72`. A type's `statuses` declaration gains `blocked`, and the opt-in rule `sequence.status-agreement` holds the written `Status` to the derived `blocked` value (a record is blocked when any record it depends on is not in its own type's `success`). **Why:** `MILE-144`, per `ADR-64` clause 4 (a derived value is computed and a hand-written value it contradicts is an error). | **substantive** |
+> | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |

@@ -159,6 +159,7 @@ pub fn sequence_unresolved_blocker(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_SEQUENCE_UNRESOLVED_BLOCKER;
     let mut findings = Vec::new();
@@ -212,13 +213,14 @@ pub fn sequence_unresolved_blocker(
                     if !resolution_reported
                         && !index.contains_key(&crate::values::RecordId::new(entry))
                     {
-                        push(
-                            "blocker-unresolved",
-                            format!(
-                            "{field}: {entry} does not resolve to any discovered record (pair '{}')",
-                            slot.pair.name
-                        ),
+                        let (variant, message) = unresolved_reference(
+                            field,
+                            entry,
+                            untracked,
+                            ("blocker-unresolved", "blocker-untracked"),
+                            &format!(" (pair '{}')", slot.pair.name),
                         );
+                        push(variant, message);
                     }
                 } else if !prose_reported {
                     push(
@@ -541,7 +543,7 @@ mod tests {
 
     fn unresolved(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
         let index = build_normalized_index(records);
-        sequence_unresolved_blocker(records, config, &index)
+        sequence_unresolved_blocker(records, config, &index, &Default::default())
     }
 
     #[test]
@@ -640,6 +642,31 @@ mod tests {
         assert_eq!(findings[0].rule, RULE_SEQUENCE_UNRESOLVED_BLOCKER);
         assert!(findings[0].message.contains("MILE-99"), "{findings:?}");
         assert_eq!(examined(&exec), 1);
+    }
+
+    #[test]
+    fn a_blocker_on_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Depends-on: MILE-2, MILE-99")];
+        let index = build_normalized_index(&records);
+        let untracked: UntrackedRecords = [(
+            crate::values::RecordId::new("MILE-2"),
+            PathBuf::from("docs/milestones/MILE-2-x.md"),
+        )]
+        .into();
+        let (_, findings) = sequence_unresolved_blocker(&records, &config, &index, &untracked);
+        let variant = |id: &str| {
+            findings
+                .iter()
+                .find(|f| f.message.contains(id))
+                .map(|f| f.action_source.variant)
+        };
+        assert_eq!(variant("MILE-2"), Some("blocker-untracked"), "{findings:?}");
+        assert_eq!(
+            variant("MILE-99"),
+            Some("blocker-unresolved"),
+            "{findings:?}"
+        );
     }
 
     #[test]
