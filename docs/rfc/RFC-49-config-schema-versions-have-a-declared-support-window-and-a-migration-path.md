@@ -97,3 +97,9 @@ amend `ADR-54`'s default ("a break ships no migration aid"), because the reason 
 - `MILE-85`: the most recent break that turned existing configs into load errors.
 - `MILE-102`: the Phase 1 switchover that gives the next break a real migration population.
 - `SPEC-3`: where the supported-versions table and the bump rule would live.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

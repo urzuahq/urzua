@@ -140,3 +140,9 @@ support stays, and full removal remains separately decided.
   empties that ADR's own declared axis.
 - MILE-85 — the deferred full-removal decision this amendment names explicitly rather than leaving
   as unstructured prose.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

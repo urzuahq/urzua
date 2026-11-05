@@ -109,6 +109,9 @@ record_types:
         # A rejected proposal can be reopened as a draft (RFC-30).
         Rejected: ["Draft"]
     spec: "SPEC-17"
+    # An RFC carries a revision log (BUG-50): a record without one is a finding
+    # of revision-log.change-class-required.
+    revision_log: {marker: "**Revision log**", required: true}
     pointer_fields:
       - "Implements"
       - "Amends"

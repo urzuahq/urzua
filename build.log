@@ -1,0 +1,62 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling version_check v0.9.5
+   Compiling cfg-if v1.0.4
+   Compiling thiserror v2.0.19
+   Compiling generic-array v0.14.7
+   Compiling serde_core v1.0.229
+   Compiling typenum v1.20.1
+   Compiling libc v0.2.189
+   Compiling autocfg v1.5.1
+   Compiling syn v3.0.3
+   Compiling memchr v2.8.3
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.4.3
+   Compiling num-traits v0.2.19
+   Compiling utf8parse v0.2.2
+   Compiling serde v1.0.229
+   Compiling cpufeatures v0.3.1
+   Compiling chacha20 v0.10.2
+   Compiling anstyle-parse v1.0.0
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling aho-corasick v1.1.5
+   Compiling anstyle-query v1.1.5
+   Compiling hashbrown v0.17.1
+   Compiling zmij v1.0.23
+   Compiling equivalent v1.0.2
+   Compiling anstyle v1.0.14
+   Compiling regex-syntax v0.8.11
+   Compiling colorchoice v1.0.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling itoa v1.0.18
+   Compiling anstream v1.0.0
+   Compiling thiserror-impl v2.0.19
+   Compiling serde_derive v1.0.229
+   Compiling regex-automata v0.4.18
+   Compiling indexmap v2.14.0
+   Compiling digest v0.10.7
+   Compiling rand v0.10.2
+   Compiling libyaml-rs v0.3.0
+   Compiling cpufeatures v0.2.17
+   Compiling clap_lex v1.1.0
+   Compiling serde_json v1.0.151
+   Compiling heck v0.5.0
+   Compiling ryu v1.0.23
+   Compiling strsim v0.11.1
+   Compiling iana-time-zone v0.1.65
+   Compiling clap_derive v4.6.4
+   Compiling chrono v0.4.45
+   Compiling clap_builder v4.6.2
+   Compiling yaml_serde v0.10.7
+   Compiling regex v1.13.1
+   Compiling sha2 v0.10.9
+   Compiling ulid v3.0.0
+   Compiling urzua-id v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w-50/rust/crates/urzua-id)
+   Compiling urzua-core v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w-50/rust/crates/urzua-core)
+   Compiling urzua-io v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w-50/rust/crates/urzua-io)
+   Compiling clap v4.6.4
+   Compiling urzua-agdr v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w-50/rust/crates/urzua-agdr)
+   Compiling urzua-cli v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w-50/rust/crates/urzua-cli)
+    Finished `release` profile [optimized] target(s) in 57.93s

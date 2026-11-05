@@ -75,3 +75,9 @@ who does the reading.
   (a record's locator naming a real file).
 - `ADR-53` — "declared, not voted" governs the open question on comment-syntax/file-extension scope.
 - The round-15 branch's own `BUG-104`→`BUG-108` renumbering — the concrete incident that raised this.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

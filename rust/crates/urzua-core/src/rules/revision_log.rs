@@ -6,9 +6,11 @@ use super::*;
 /// "no class recorded," undetectable by any per-field presence check because
 /// the field itself is present, just not a real value.
 ///
-/// This rule does not require a revision log to exist at all -- that is
-/// SPEC-0002's separate "required sections per profile" rule. It only checks
-/// entries in a section that is already there.
+/// A record of a type whose `revision_log.required` is true (the default,
+/// `MILE-159`) that has no revision-log section is itself a finding
+/// (`BUG-50`): absence is not compliance. A type declaring
+/// `required: false` carries no log by declaration, and its records without
+/// one are eligible and unexamined, as before.
 pub fn revision_log_change_class(
     records: &[Record],
     config: &Config,
@@ -33,10 +35,26 @@ pub fn revision_log_change_class(
             let Some(content) = full_text.get(&record.path) else {
                 return Outcome::Absent;
             };
-            let Some(entries) =
-                find_revision_log_entries(content, &config.revision_log_id(&record.record_type))
-            else {
-                return Outcome::Absent;
+            let id = config.revision_log_id(&record.record_type);
+            let Some(entries) = find_revision_log_entries(content, &id) else {
+                if !config.revision_log_required(&record.record_type) {
+                    return Outcome::Absent;
+                }
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("revision-log-missing").section(id.name()),
+                    message: format!(
+                        "record has no revision log; its type requires one ({})",
+                        id.describe()
+                    ),
+                });
+                return Outcome::Examined;
             };
 
             for entry in entries {
@@ -317,7 +335,8 @@ mod tests {
     }
 
     #[test]
-    fn a_record_with_no_revision_log_section_is_not_examined() {
+    fn a_record_of_a_requiring_type_with_no_revision_log_section_is_a_finding() {
+        // BUG-50: absence of the section is a finding, with the add-section action.
         let content = "---\nStatus: Draft\n---\n# 0001 — X\n";
         let r = record("docs/adr/0001-x.md", "adr", content);
         let mut full_text = HashMap::new();
@@ -325,8 +344,33 @@ mod tests {
 
         let (exec, findings) =
             revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "revision-log-missing");
+        assert_eq!(
+            findings[0].action_source.target.section.as_deref(),
+            Some("**Revision log**")
+        );
+        assert!(findings[0].message.contains("no revision log"));
+    }
+
+    #[test]
+    fn a_record_of_a_type_declaring_required_false_with_no_log_is_absent_and_silent() {
+        let mut t = type_config(None);
+        t.revision_log = Some(crate::config::RevisionLogDecl {
+            marker: None,
+            heading: None,
+            required: Some(false),
+            version_bump: None,
+        });
+        let config = config_with_types(vec![("waiver", t)]);
+        let content = "# 1\n\nNo log.\n";
+        let r = record("docs/waivers/1.md", "waiver", content);
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
+        let (exec, findings) = revision_log_change_class(&[r], &config, &full_text);
         assert_eq!(examined(&exec), 0);
-        assert!(findings.is_empty());
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     fn check(config: &Config, content: &str) -> (RuleExecution, Vec<Finding>) {
@@ -354,8 +398,9 @@ mod tests {
     fn a_marker_inside_a_fenced_block_is_not_the_log() {
         let content = format!("# 1\n\n```\n**Revision log**\n{LOG}```\n");
         let (exec, findings) = check(&config_with_types(vec![]), &content);
-        assert_eq!(examined(&exec), 0);
-        assert!(findings.is_empty());
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "revision-log-missing");
     }
 
     #[test]
@@ -374,7 +419,12 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         // The default marker is no longer this type's log.
         let old = format!("# 1\n\n**Revision log**\n\n{LOG}");
-        let (exec, _) = check(&config, &old);
-        assert_eq!(examined(&exec), 0);
+        let (_, findings) = check(&config, &old);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "revision-log-missing");
+        assert_eq!(
+            findings[0].action_source.target.section.as_deref(),
+            Some("History")
+        );
     }
 }

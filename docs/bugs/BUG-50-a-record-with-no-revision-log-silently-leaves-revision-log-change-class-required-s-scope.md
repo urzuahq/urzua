@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2W0Q9N0GT6WTZPX9YDJKS5W
-Status: Open
+Status: Fixed
 Found-in: 'A code review of PR #74 -- narrowing SPEC-1 deleted its revision log along with a section, and no rule reported it'
-Regression-test: 'not yet written -- a record of a type that carries revision logs, with the block absent, must be a finding; and a record of a type that does not carry them must not be'
+Regression-test: 'rust/crates/urzua-core/src/rules/revision_log.rs::a_record_of_a_requiring_type_with_no_revision_log_section_is_a_finding, rust/crates/urzua-core/src/rules/revision_log.rs::a_record_of_a_type_declaring_required_false_with_no_log_is_absent_and_silent, rust/crates/urzua-cli/tests/check_integration.rs::a_record_with_no_revision_log_is_a_finding_when_its_type_requires_one, rust/crates/urzua-cli/tests/check_integration.rs::a_record_with_no_revision_log_stays_unexamined_when_its_type_declares_required_false'
 Blocked-on: —
 ---
 # 50 — A record with no revision log silently leaves `revision-log.change-class-required`'s scope
@@ -51,6 +51,14 @@ cannot currently tell a type that does not carry revision logs from a record tha
 
 ## Fix
 
+Fixed 2026-11-05 (the maintainer decided it that day: report it, and backfill). A type's
+`revision_log.required` (`MILE-159`, default `true`) now decides whether a record without the section
+is a finding of `revision-log.change-class-required`, with the `edit-section` `add` action (`ADR-73`);
+`required: false` keeps the old unexamined behaviour by declaration. The 39 ADR and RFC records that
+lacked a log (15 ADRs, 24 RFCs; no spec lacked one) each gained an empty log with one structural row,
+and `rfc` declares `revision_log` explicitly beside `adr` and `spec`. The original statement of the
+fix follows.
+
 Per-type, declared, like everything else (`ADR-53`): a type states whether its records carry a
 revision log, and a record of such a type without one is a finding. Types that do not are silent, by
 declaration rather than by accident.
@@ -68,3 +76,4 @@ is how a spec changes, and a spec can drop one without the tool objecting.
 > | 2026-09-19 | Counts reconciled and stated as a subtraction. **Why:** the record quoted 68 of 259 against `records_examined: 189` from different moments, which reads as an inconsistency. Re-measured together: 264 records, 68 without a block, 196 examined -- the arithmetic holds exactly, and the defect is that nothing in the report performs it. | **substantive** |
 > | 2026-11-04 | `Blocked-on` cleared; `Status` stays `Open`. **Why:** `MILE-4` is `Done` (`section.required` reads a type's declared required sections), so the fix this bug waited on can be written; `narrative-field.stale` flagged the stale reference. | **substantive** |
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. With the `**Revision log**` block removed from `ADR-1`, `urzua check` reports nothing new; the absence is visible only as a lower `examined` count (`check_integration.rs::a_record_with_no_revision_log_is_absent_not_outside_the_population`), and `revision_log: {required: true}` gates only `urzua fix --apply`. Today 16 of 73 ADRs, 25 of 49 RFCs and 1 of 22 specs carry no block. **Why:** making a missing block a finding means choosing the default and either backfilling or waiving those records, a corpus decision. | **substantive** |
+> | 2026-11-05 | Fixed. **Why:** the maintainer decided to report a missing log and backfill. `revision-log.change-class-required` now reports a record of a type that requires a log and has none; the 39 records without one (15 ADRs, 24 RFCs) were backfilled with a single structural row, and `SPEC-2` and `SPEC-3` document the behaviour. | **substantive** |
