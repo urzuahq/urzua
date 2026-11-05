@@ -1,7 +1,7 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
@@ -72,3 +72,4 @@ function today, since both take `&[Record]` and neither cares where its caller r
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-11-05 | Bumped to `0.4`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.5`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |

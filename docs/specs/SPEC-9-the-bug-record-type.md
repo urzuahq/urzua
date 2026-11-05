@@ -1,7 +1,7 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs
 Author: beauwilliams
@@ -78,3 +78,4 @@ something broke, or it doesn't exist yet.
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
 > | 2026-11-05 | Bumped to `0.6`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `a_bug_needs_found_in_and_regression_test_and_a_what_was_wrong_section`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.7`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
