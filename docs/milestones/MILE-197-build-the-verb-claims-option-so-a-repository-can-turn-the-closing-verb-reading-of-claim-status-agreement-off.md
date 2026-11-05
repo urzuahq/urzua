@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M6NW0AXBH6FNEBXF1DQT25T2
 Status: Planned
-Phase: '1'
+Phase: '0'
 Track: governance-process
 Implements: ADR-88
 Blocked-on: null
@@ -44,6 +44,7 @@ for prose, which is what the Phase 1 adopters do, so it sits with them.
 - `SPEC-3` documents the option, default and load error, and `SPEC-2` the rule description and notice,
   each with a revision row; `make rule-table-check` passes. A CLI changeset is not needed if no
   user-facing CLI behaviour outside the config changes; otherwise a minor changeset with `closes: []`.
+- With `verb_claims: false` and `strict` off, the run carries a notice that fragments without the key carry no claim, with a test.
 - Removing the reading from the engine is not part of this milestone; it stays a separate later decision.
 
 > **Revision log**
@@ -51,3 +52,4 @@ for prose, which is what the Phase 1 adopters do, so it sits with them.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-88` (Proposed) decides the option on a maintainer decision of 2026-11-05 and no milestone builds it; blocked on the maintainer accepting it. | **substantive** |
+> | 2026-11-05 | `Phase` 1 -> 0, and Done means gains the notice when `verb_claims: false` is set without `strict`. **Why:** maintainer decision, 2026-11-05, on accepting `ADR-88`: it sets this repository's own config, which Phase 0 covers. | **substantive** |
