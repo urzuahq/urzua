@@ -382,12 +382,6 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
-# The pairs that are dependencies (ADR-83): the derived blocked value reads
-# these and no other acyclic pair, so a containment pair declared acyclic would
-# not block its children.
-roadmap:
-  pairs: ["sequencing"]
-
 # The committed log of editor-hook overrides (ADR-78, MILE-188): the hook appends a row
 # whenever a named override lets a blocked edit through, and override.unreviewed
 # reports a row no person has reviewed, so it surfaces in the pull request.
