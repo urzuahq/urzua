@@ -1,9 +1,7 @@
 ---
-Version: '0.6'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
-Embodiment: Verified
-Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/own_config_integration.rs
 Author: beauwilliams
 Subject: 'The `bug` record type -- real, already-found defects and required regression-test accountability.'
 Implements: ADR-35
@@ -76,5 +74,3 @@ something broke, or it doesn't exist yet.
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`; also corrected `Parent` from `SPEC-1` to `—` (`BUG-10`): this spec's real lineage is already stated via its own `Implements`/`Derives-from`, not a narrowing of `SPEC-1`'s v0-CLI scope. | **structural** |
 > | 2026-09-09 | Added `Implements` to `known_fields`, declared `pointer_fields = ["Implements"]`/`narrative_fields = []` in config (MILE-90/ADR-44), realizing this spec's own field-table text above (a bug can point at the decision its fix realizes) as a checked config declaration, not just documented prose. **Why:** MILE-90 closes `BUG-8`'s claim that relationship fields are config-declared generically -- `bug` was one of the types that hadn't actually declared this axis yet. | **substantive** |
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
-> | 2026-11-05 | Bumped to `0.6`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
-> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
