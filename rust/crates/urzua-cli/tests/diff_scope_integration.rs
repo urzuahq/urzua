@@ -291,7 +291,15 @@ fn an_unknown_ref_could_not_run_rather_than_examining_nothing() {
     let dir = fixture("bad-ref");
     let (code, report) = check(&dir, &["--base", "no-such-ref"]);
     assert_eq!(code, Some(2), "{report}");
-    assert!(report.to_string().contains("no-such-ref"), "{report}");
+    assert_eq!(report["status"], "not-run", "{report}");
+    assert!(
+        report["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("no-such-ref")),
+        "the error names the ref: {report}"
+    );
+    // Nothing was examined, and nothing reads as a clean pass.
+    assert!(report.get("findings").is_none(), "{report}");
 }
 
 #[test]
@@ -445,6 +453,41 @@ fn an_evidence_only_change_reports_drift_on_the_unchanged_record() {
 }
 
 #[test]
+fn a_glob_locator_covering_a_changed_file_makes_the_record_a_dependent() {
+    let dir = empty_repo("evidence-glob", RICH_CONFIG);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    adr(
+        &dir,
+        "ADR-1-realized.md",
+        "Accepted",
+        &[
+            ("Embodiment", "Implemented"),
+            ("Realized-by", "code:src/**/*.rs"),
+        ],
+    );
+    adr(&dir, "ADR-2-other.md", "Accepted", &[]);
+    tag_base(&dir);
+    std::fs::write(dir.join("src/a.rs"), "fn a() { println!(\"x\"); }\n").unwrap();
+    commit(&dir, "touch the globbed evidence only");
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    let dependents: Vec<&str> = report["scope"]["dependents"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no dependents list: {report}"))
+        .iter()
+        .map(|d| d.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        dependents.len(),
+        1,
+        "only the glob-citing record is a dependent: {report}"
+    );
+    assert!(dependents[0].ends_with("ADR-1-realized.md"), "{report}");
+    assert_eq!(report["files_examined"], 1, "{report}");
+}
+
+#[test]
 fn deleted_evidence_reports_the_unchanged_record() {
     let dir = evidence_fixture("evidence-deleted");
     git(&dir, &["rm", "-q", "src/lib.rs"]);
@@ -536,6 +579,39 @@ fn unrelated_histories_say_there_is_no_merge_base() {
     let (code, report) = check(&dir, &["--base", "base"]);
     assert_eq!(code, Some(2), "{report}");
     assert!(report.to_string().contains("no merge base"), "{report}");
+}
+
+#[test]
+fn a_shallow_clone_says_to_fetch_history_not_that_histories_are_unrelated() {
+    let origin = fixture("shallow-origin");
+    git(&origin, &["branch", "-M", "main"]);
+    write_adr(&origin, "0004-later", "Accepted", None);
+    commit(&origin, "later");
+    let parent = common::TempDir::new("urzua-diff-scope-shallow-clone");
+    let clone = parent.join("clone");
+    let out = Command::new("git")
+        .args(["clone", "-q", "--depth", "1"])
+        .arg(format!("file://{}", origin.display()))
+        .arg(&clone)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    git(&clone, &["config", "user.email", "test@example.com"]);
+    git(&clone, &["config", "user.name", "test"]);
+    // The base commit is not in the one-commit history: fetch it as a lone
+    // commit so the ref resolves but nothing joins it to HEAD.
+    git(&clone, &["fetch", "-q", "--depth", "1", "origin", "base"]);
+    git(&clone, &["tag", "base", "FETCH_HEAD"]);
+
+    let (code, report) = check(&clone, &["--base", "base"]);
+    assert_eq!(code, Some(2), "{report}");
+    let text = report.to_string();
+    assert!(text.contains("shallow clone"), "{report}");
+    assert!(
+        text.contains("fetch full history") || text.contains("unshallow"),
+        "{report}"
+    );
+    assert!(!text.contains("unrelated"), "{report}");
 }
 
 #[test]
@@ -778,4 +854,69 @@ fn an_unstaged_deletion_cannot_be_loaded_so_the_run_could_not_run() {
     let (code, report) = check(&dir, &["--base", "base"]);
     assert_eq!(full_code, Some(2));
     assert_eq!(code, Some(2), "{report}");
+}
+
+const TRANSITIONS_CONFIG: &str = "schema_version: 2
+rules:
+  status.transition-allowed: error
+record_types:
+  adr:
+    dir: \"docs/adr\"
+    required_fields: [\"Status\"]
+    known_fields: [\"Status\"]
+    statuses: {values: [Draft, Accepted], initial: [Draft], transitions: {Draft: [Accepted], Accepted: []}}
+";
+
+fn transition_execution(report: &serde_json::Value) -> &serde_json::Value {
+    report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "status.transition-allowed")
+        .unwrap_or_else(|| panic!("rule not executed: {report}"))
+}
+
+#[test]
+fn a_base_copy_that_cannot_be_read_is_unreadable_not_new() {
+    let dir = empty_repo("base-unreadable", TRANSITIONS_CONFIG);
+    // The base copy is Accepted but holds a byte that is not UTF-8; the
+    // working copy is valid and moves it back to Draft, a disallowed edge.
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        b"---\nStatus: 'Accepted'\n---\n# x \xff\n",
+    )
+    .unwrap();
+    tag_base(&dir);
+    adr(&dir, "ADR-1-x.md", "Draft", &[]);
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    let execution = transition_execution(&report);
+    assert_eq!(
+        execution["population"]["unreadable"], 1,
+        "a base copy that cannot be read is unreadable, not a new record: {report}"
+    );
+    let notices = report["notices"].as_array().unwrap();
+    assert!(
+        notices
+            .iter()
+            .any(|n| n["subject"] == "status.transition-allowed"
+                && n["message"].as_str().unwrap().contains("merge base")
+                && n["message"].as_str().unwrap().contains("UTF-8")),
+        "the read error is reported: {report}"
+    );
+}
+
+#[test]
+fn a_path_the_base_lacks_is_still_a_new_record() {
+    let dir = empty_repo("base-absent", TRANSITIONS_CONFIG);
+    adr(&dir, "ADR-1-x.md", "Draft", &[]);
+    tag_base(&dir);
+    adr(&dir, "ADR-2-new.md", "Draft", &[]);
+    git(&dir, &["add", "-A"]);
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    let execution = transition_execution(&report);
+    assert_eq!(execution["population"]["unreadable"], 0, "{report}");
+    assert_eq!(execution["population"]["examined"], 1, "{report}");
+    assert!(finding_files(&report).is_empty(), "{report}");
 }

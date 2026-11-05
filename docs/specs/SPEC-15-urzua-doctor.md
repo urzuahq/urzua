@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -69,9 +69,9 @@ empty, same as every other command's report.
 SPEC-3's original doctor language named more than what exists today; the gap is named here rather
 than compounded:
 
-- **Which config resolved and from where** — today's `doctor` only checks the default
-  `.urzua/config.yaml` path; it doesn't report whether a `--config` override was in play or surface
-  the resolution path explicitly.
+- **Which config resolved and from where** — `doctor` reads the global `--config` when given (and
+  names that file in `config-exists`), else the default `.urzua/config.yaml`; it doesn't yet report
+  the resolution path as a field of its own.
 - **Which rules are off** — per-rule levels exist (`ADR-53`, every rule opt-in) and `doctor` errors
   when none is enabled (`rules-enabled`), but it does not list which individual rules are off or what
   level each has.
@@ -102,3 +102,4 @@ than compounded:
 > | 2026-11-05 | Bumped to `0.8`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_warning`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.9`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.10`. `doctor` reads the global `--config`, as every other command does, instead of always reporting on the default file. **Why:** review of the CLI found `urzua doctor --config x.yaml` reported on the default config, a silent no-op. | **substantive** |

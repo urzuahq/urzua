@@ -81,7 +81,7 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
                         continue;
                     }
                 }
-                match std::fs::write(&full, &wanted) {
+                match urzua_io::write_atomic(&full, &wanted) {
                     Ok(()) if current.is_some() => IndexOutcome::Written,
                     Ok(()) => IndexOutcome::Created,
                     Err(e) => {
