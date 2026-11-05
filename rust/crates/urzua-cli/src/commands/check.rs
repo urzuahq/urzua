@@ -71,6 +71,7 @@ struct Context<'a> {
     refs_snapshot: Result<RefsSnapshot, String>,
     record_index: rules::RecordIndex<'a>,
     collisions: Vec<rules::IdentifierCollision<'a>>,
+    untracked_records: rules::UntrackedRecords,
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
@@ -197,6 +198,7 @@ impl<'a> Context<'a> {
             templates: &self.templates,
             index: &self.record_index,
             collisions: &self.collisions,
+            untracked_records: &self.untracked_records,
             claims: &self.claims,
             published_files: &self.published_files,
             published_paths: &self.published_paths,
@@ -541,6 +543,11 @@ fn load_context<'a>(
             refs_snapshot,
             record_index,
             collisions,
+            untracked_records: crate::discovery::untracked_records(
+                repo_root,
+                config,
+                &discovered.paths,
+            ),
             live_paths: discovered
                 .paths
                 .iter()
