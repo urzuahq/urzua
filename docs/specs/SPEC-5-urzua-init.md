@@ -1,9 +1,9 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-08-20
 Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/init_integration.rs
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -46,7 +46,7 @@ the root, the corpus, and a cache directory is how each ends up governed by a di
 ```
 
 (`.gitignore` gaining `.urzua/cache/` is not yet built either -- `init` does not touch `.gitignore`
-today.)
+today, and criterion 2 below holds it to that.)
 
 `init` writes only `.urzua/config.yaml` today. `templates/` and `cache/` are part of `.urzua/`'s
 settled shape -- `new` already reads a template from `templates/<type>.md` when a repository hand-
@@ -85,11 +85,14 @@ Each `proposed` entry reports the chosen `header_shape`.
 `init` proposes each shipped rule at `warn`, except a rule that cannot examine anything on the corpus it
 just adopted: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
 a rule that resolves identity on a corpus where no type has a prefix, and a rule that reads a per-type
-declaration `init` does not write. `init` writes `required_fields: []` and infers no `known_fields` or
-`pointer_fields` (`ADR-33`), so `field.quality`, `field.pending`, `header.field-set-consistency` and
-`header.pointer-field-clean` are not proposed. A `rule-applicability` notice (severity `info`) lists them
-with the declaration each reads, so the adopter knows what to declare on a record type before enabling
-the rule. Each rule's declaration is the `reads_declaration` of its entry in the rule table.
+declaration `init` does not write. The last group is not a fixed list: it is every rule whose entry in the
+rule table carries a `reads_declaration` (`required_fields`, `known_fields`, `pointer_fields` or
+`revision_log.version_bump`), so a rule added later with a `reads_declaration` is withheld without
+touching `init`. Today that is `field.quality`, `field.pending`, `header.field-set-consistency`,
+`header.pointer-field-clean` and `revision-log.version-bump-required`. `init` writes `required_fields: []`
+and infers no `known_fields`, `pointer_fields` or version-bump declaration (`ADR-33`). A
+`rule-applicability` notice (severity `info`) lists the withheld rules, grouped by declaration, so the
+adopter knows what to declare on a record type before enabling the rule.
 
 ## Safety
 
@@ -134,9 +137,9 @@ classifies every record-shaped file it finds by directory; nothing is reported a
 ## Success criteria
 
 1. `--dry-run` output matches what a real run then does, byte for byte.
-2. Adopt moves no files, and a `git status` after it shows only `.urzua/` and `.gitignore`.
+2. Adopt moves no files, and a `git status` after it shows only `.urzua/`; `init` does not touch `.gitignore`.
 
-Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
+Both criteria are enforced by `init_integration.rs` (`a_dry_run_matches_the_real_run_byte_for_byte`, `init_changes_only_the_urzua_directory_and_leaves_gitignore_alone`); the withheld-rule mechanism is enforced there by `init_withholds_every_rule_that_reads_a_declaration`. Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
 migration without a reverse-reference scan is the documented data-loss shape.
 
 A `urzua init --types adr,rfc,spec` run producing a checkable config with unclassified files reported
@@ -175,3 +178,5 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.7`. `init` proposes only `yaml-frontmatter` and reports, in a `header-shape` notice, the existing records written in a removed `blockquote` or `bold-list` form; it no longer infers a shape from the corpus and no longer declares `header.deprecated-shape`. **Why:** `MILE-85` removed those shapes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `## Proposed rules`: `init` does not propose a rule that reads a per-type declaration it leaves empty (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and names each in a `rule-applicability` notice with the declaration to write. **Why:** `BUG-73`; the four rules ran over zero records on every adopted corpus. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. **Why:** a re-read against the code found three divergences. `## Proposed rules` listed four withheld rules but `init` withholds five (it also withholds `revision-log.version-bump-required`, `BUG-51`), so it now states the mechanism (`reads_declaration` in the rule table) and the current members rather than a fixed list. Success criterion 2 claimed a `git status` shows `.gitignore`; `init` never touches it, so the claim is corrected. `Realized-by` cited `check_integration.rs` at file level; it now cites the focused `init_integration.rs`, which enforces the dry-run equivalence, the files-touched claim and the withheld-rule mechanism. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/init_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
