@@ -148,6 +148,12 @@ RFC-24 per this project's "add a field once a pattern recurs" discipline.
   implements this RFC, not decided here.
 - **Does not perform the broader backward-compatibility-shim audit** named above -- separate work.
 
+## Note (2026-11-05): the "no real external adopters" premise
+
+The "no backward-compatibility default" decision above rests on there being no real external adopters to preserve behavior for.
+As decided for `MILE-118`, the premise holds through Phase 0 and expires at the Phase 1 switchover (`MILE-102`), when a real adopter's corpus exists and
+`RFC-49`'s compatibility contract (proposed in `ADR-77`) takes over. The decision above is unchanged.
+
 ## References
 
 - BUG-8 -- the concrete defect this RFC's `Implements` pointer closes: the README's overstated
@@ -171,3 +177,4 @@ RFC-24 per this project's "add a field once a pattern recurs" discipline.
 > | 2026-09-08 | Design settled through discussion: per-type only, no global list; renamed `blocking_fields` to `narrative_fields` (names the mechanism, not today's one use case); no backward-compatibility default -- an undeclared type gets zero fields of either kind checked, matching `header_layout`/`known_fields`'s own undeclared-means-skip precedent; `urzua graph` gains a `kind` field per edge. Config key names, per-type-vs-global, and backward compatibility were all previously open questions -- now decided; README correction scope and this RFC's own undeclared `Implements` field remain open. | **substantive** |
 > | 2026-09-09 | Amendment: resolved four gaps found on review -- added three new validation checks (`config.pointer-declaration-missing`, `config.pointer-field-not-known`, `config.pointer-narrative-overlap`) and clarified that `narrative_fields` are inherently staleness-checked, no mechanism change needed. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit c922db8ee. | **structural** |
+> | 2026-11-05 | Dated note added: the no-external-adopters premise holds through Phase 0 and expires at the Phase 1 switchover. **Why:** Maintainer decision, 2026-11-05 (`MILE-118`); the proposal text is unchanged. | **substantive** |

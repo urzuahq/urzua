@@ -1,7 +1,9 @@
 ---
-Version: '0.16'
+Version: '0.19'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -224,6 +226,21 @@ the same `PATHS` scoping.
   the line, which also resets the baseline of the record's unpinned locators once committed).
   `--rebaseline` does not repair `Embodiment`: run a plain `urzua fix` afterwards for a stated
   `Drift detected` that is no longer drifted.
+- **Scoped pins** (`ADR-74`, `SPEC-3`). A pin on `path#scope` is listed and re-pinned like any
+  other, from the hash of the span its scope resolves to now, and the edit keeps the scope in the
+  spelling as written. Each listed pin of a scoped locator carries `span` (`start`, `end` and the
+  pinned `text`), so the reviewer diffs exactly those lines and sees that the resolver found the
+  item the decision is about; the revision row names the lines. A scoped pin that does not resolve
+  (renamed, deleted, ambiguous, no resolver, range past the end of the file, file missing or unreadable) is never re-pinned,
+  because re-hashing whatever is there now would turn a deleted symbol into a silent pass. It is
+  listed under `failed_pins` (`record`, `locator`, `reason`), per pin and not per record, status is
+  `partial-failure`, and the record's other stale pins still move. A rename is repaired by editing
+  the scope on the `Realized-by` line.
+- **Authoring route.** A first hash for a new scoped pin comes from `urzua explain <path>#<scope>`
+  (`SPEC-13`), which prints the span and the locator ready to paste. A bogus placeholder hash
+  re-baselined later would record a re-verification of something never verified, and is not a
+  supported route. To reproduce a hash by hand from a span of lines `a` to `b` of a file with no BOM
+  and no bare `\r`: `sed -n 'a,bp' file | tr -d '\r' | sed -z 's/\n$//' | sha256sum`.
 - It cannot be combined with `--stdin-path`, and `--reason` without `--rebaseline` is `not-run`.
 
 ## Purity boundary
@@ -272,3 +289,7 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.14`. `fix --rebaseline` lists stale `@sha256:` pins and, on `--apply --ids`/`--force --by --reason`, re-pins the chosen records with an attributed revision row. **Why:** `MILE-181` -- a pin was a block with no sanctioned way to say "re-verified, still holds"; `RFC-2` proposed exactly this review-before-apply refresh. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documents how `check` findings point at the `Embodiment` and `Status` repairs: a `run-command` `suggested_action` naming `urzua fix --apply --ids <record>`, offered only where `fix` lists that repair. No change to `fix` itself. **Why:** `MILE-44`, `ADR-73`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.16`. Apply replaces a field's value by position after `Field:`, never by substring, and fills an empty, `~` or `null` stated value in place; the revision row says "stated no value" for it. **Why:** `BUG-192` -- an empty stated value matched everywhere and the computed value was written at column 0 (`ImplementedEmbodiment: null`). | **substantive** |
+> | 2026-11-05 | Bumped to `0.17`. `--rebaseline` re-pins a scoped pin from the hash of its resolved span, keeps the scope in its spelling, shows the span beside the hashes and lists a scoped pin that does not resolve under `failed_pins` instead of re-pinning it; `explain <path>#<scope>` is named as the authoring route. **Why:** `MILE-185` / `ADR-74` -- re-hashing whatever is at a range now would turn a deleted symbol into a silent pass. | **substantive** |
+> | 2026-11-05 | Bumped to `0.18`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.19`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

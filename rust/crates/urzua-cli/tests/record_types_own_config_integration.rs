@@ -337,12 +337,12 @@ fn audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one() 
 // ---- SPEC-13: explain and graph
 
 #[test]
-fn explain_names_the_records_whose_realized_by_cites_a_path_and_graph_lists_the_edges() {
+fn explain_names_the_governing_record_and_graph_reports_kind_and_dangling_per_edge() {
     let cited = adr(
         "Accepted",
         "Deciders: a\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n",
     );
-    let derived = adr("Accepted", "Deciders: a\nDerives-from: ADR-1\n");
+    let derived = adr("Accepted", "Deciders: a\nDerives-from: ADR-1, ADR-9\n");
     let dir = repo(
         "explain-graph",
         &[
@@ -353,37 +353,57 @@ fn explain_names_the_records_whose_realized_by_cites_a_path_and_graph_lists_the_
     );
     let out = urzua(&dir, &["explain", "src/lib.rs"]);
     assert_eq!(out.status.code(), Some(0));
-    let text = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(text.contains("ADR-1") && text.contains("code"), "{text}");
-    let none = urzua(&dir, &["explain", "src/unrelated.rs"]);
-    assert_eq!(none.status.code(), Some(0));
-    assert!(!String::from_utf8_lossy(&none.stdout).contains("ADR-1-cited"));
+    let governing = json(&out)["governing_records"].clone();
+    assert_eq!(governing.as_array().unwrap().len(), 1, "{governing}");
+    assert_eq!(governing[0]["record"], "docs/adr/ADR-1-a-decision.md");
+    assert_eq!(governing[0]["via"], "code");
     let graph = urzua(&dir, &["graph"]);
     assert_eq!(graph.status.code(), Some(0));
-    let text = String::from_utf8_lossy(&graph.stdout).to_string();
-    assert!(
-        text.contains("Derives-from") && text.contains("ADR-2"),
-        "{text}"
-    );
+    let edges = json(&graph)["edges"].as_array().unwrap().clone();
+    let edge = |to: &str| {
+        edges
+            .iter()
+            .find(|e| e["from"] == "ADR-2" && e["to"] == to)
+            .unwrap_or_else(|| panic!("no ADR-2 -> {to} edge in {edges:?}"))
+            .clone()
+    };
+    for to in ["ADR-1", "ADR-9"] {
+        assert_eq!(edge(to)["relation"], "Derives-from");
+        assert_eq!(edge(to)["kind"], "pointer");
+    }
+    assert_eq!(edge("ADR-1")["dangling"], false);
+    assert_eq!(edge("ADR-9")["dangling"], true);
 }
 
 // ---- SPEC-15: doctor
 
 #[test]
-fn doctor_passes_on_the_repositorys_own_config_and_reports_the_hook_state() {
+fn doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_warning() {
     let dir = repo(
         "doctor",
-        &[("docs/adr/ADR-1-a.md", &adr("Proposed", "Deciders: a\n"))],
+        &[(
+            "docs/adr/ADR-1-a-decision.md",
+            &adr("Proposed", "Deciders: a\n"),
+        )],
     );
-    let out = urzua(&dir, &["doctor"]);
-    let report = json(&out);
+    let report = json(&urzua(&dir, &["doctor"]));
     let checks = report["checks"].as_array().expect("checks array");
-    assert!(!checks.is_empty());
-    assert!(
-        checks
-            .iter()
-            .any(|c| c.to_string().to_lowercase().contains("hook")),
-        "{report}"
+    let find = |name: &str| checks.iter().find(|c| c["check"] == name);
+    assert_eq!(
+        find("config-exists").expect("config-exists")["status"],
+        "ok"
     );
-    assert_ne!(out.status.code(), Some(2), "{report}");
+    assert_eq!(
+        find("config-parses").expect("config-parses")["status"],
+        "ok"
+    );
+    let hook = find("hook-wired").expect("hook-wired check");
+    assert_eq!(hook["status"], "warn", "{hook}");
+    assert!(
+        hook["message"]
+            .as_str()
+            .unwrap()
+            .contains("no pre-commit hook"),
+        "{hook}"
+    );
 }
