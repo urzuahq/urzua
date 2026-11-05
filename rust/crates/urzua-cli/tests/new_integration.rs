@@ -89,6 +89,28 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
 
 const BUG_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  bug:\n    dir: \"docs/bug\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n";
 
+/// The first record of a type: its directory does not exist yet, and `new`
+/// creates it instead of failing.
+#[test]
+fn new_creates_the_type_directory_for_its_first_record() {
+    let dir = fixture_repo("first-record");
+    std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
+    commit_all(&dir);
+    assert!(!dir.join("docs/bug").exists());
+
+    let output = run_urzua(&dir, &["new", "bug", "First one"]);
+    assert!(
+        output.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let rel = report["path"].as_str().unwrap();
+    assert!(rel.starts_with("docs/bug/"), "{rel}");
+    assert!(dir.join(rel).is_file());
+}
+
 /// MILE-89: a number already used on another local branch must be skipped,
 /// with the claiming branch named on stderr.
 #[test]

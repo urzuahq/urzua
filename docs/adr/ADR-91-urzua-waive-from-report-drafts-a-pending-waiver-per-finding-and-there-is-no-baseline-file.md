@@ -46,9 +46,10 @@ What exists today:
   `fail_on: warning` (`:4`).
 - **There is no pending vocabulary for a waiver today, and none can be declared.** The `statuses.pending`
   list is the declared source of what "pending" means for a type (`status_model.rs:70`, read by
-  `is_pending_value`, `:208`). A declaration without `values` is a load error (`:368`), and a waiver has no
-  `Status`, so its type declares no `statuses` (`config.yaml:340-382`; adding only `pending` gives "missing
-  field `values`", observed). With none declared, `classify_with` falls back to the compiled-in match: any
+  `is_pending_value`, `:208`). A declaration without `values` fails twice: first in serde, because
+  `StatusDecl.values` has no default (`status_model.rs:35`, the "missing field `values`" observed here), and
+  then, were that relaxed, in the empty-list check (`check_list("values", ...)`, `:368`). A waiver has no
+  `Status`, so its type declares no `statuses` (`config.yaml:340-382`). With none declared, `classify_with` falls back to the compiled-in match: any
   value containing `pending`, or `todo` (`field_state.rs:56-58`), plus the placeholder tokens such as `tbd`
   (`:17-26`). Observed on this repository: a waiver whose `Reason` is `Pending`, `TBD` or `null` is
   reported `waiver-ineffective` for lacking `Reason`.
@@ -103,8 +104,15 @@ nothing until a person fills it in.*
    reads: `Rule`, `Scope`, `Reason`, `Expires`. The body states facts only: the finding messages, verbatim.
 6. **It never invents a reason.** `Reason` is the type's pending placeholder. Where the suppression type
    declares `statuses.pending`, the draft takes its first whole-value entry. Because a waiver has no `Status`,
-   the build lets a suppression type declare `pending` without `values` (today a load error,
-   `status_model.rs:368`); that is the only configuration change this decision needs. Where none is declared
+   the build lets a suppression type declare `pending` without `values`. Both gates are relaxed: the
+   serde default on `StatusDecl.values` (`status_model.rs:35`) and the empty-list check (`:368`); relaxing
+   one alone still fails to load. The build also checks every reader that assumes a non-empty `values`.
+   `decision_types` (`config.rs:1597`) keeps working: a values-less type simply lists no status, so a
+   `decision_types` entry naming one still gets its clear "does not list" error. The readers it must
+   re-examine and cover with tests are `StatusDecl::declares` (`status_model.rs:194`), the iteration at
+   `:263` and the per-status loop at `:437`, the initial-status lookup `values.first()` (`commands/new.rs:180`,
+   which becomes `None`), the pair check (`config.rs:2937`) and the `status.value-not-declared` message
+   (`rules/status.rs:308`). This is the only configuration change this decision needs. Where none is declared
    the draft takes `Pending`, the value the engine already reads as pending for an undeclared vocabulary
    (`field_state.rs:58`), and the report says which source was used (`pending_source`). `Expires`, `Category`
    and `Justified-by` are written `null`, as `new` writes them.
@@ -123,12 +131,20 @@ nothing until a person fills it in.*
    draft without `Expires` is refused for every rule (`RuleNotListed`) or lacks its category
    (`CategoryMissing`), so filling in only `Reason` still yields an ineffective waiver until the author
    chooses a date or a listed category. A repository that declares no `permanent` has no such second
-   barrier (a waiver without `Expires` is then ungoverned, `SPEC-10`), which is why point 7 is the guard
-   that does not depend on it.
+   barrier: a waiver without `Expires` is then ungoverned and effective (`waiver.rs:168-170`), so someone
+   who fills in only `Reason` creates a permanent waiver by accident, the gap `ADR-86` leaves. Point 7 guards
+   only the pending value, so the command also refuses (exit 2, nothing written) when the suppression type
+   neither declares `permanent` nor lists `Expires` in `effective_requires`. The message names the fix:
+   declare `permanent` (`ADR-86`), or add `Expires` to `effective_requires`. Refusing was chosen over a
+   warning because a warned-about draft is still written, and the accidental permanent waiver is the
+   outcome to rule out; the repository changes its configuration once and every later draft is safe.
 10. **Filters.** `--rule <ID>[,<ID>]` limits to named rules, and an id this build does not ship is an
     error (exit 2), as for `check --rules` (`commands/check.rs:304`). `--path <PATH>` (repeatable) limits to
     findings whose file is that path or lies under that directory; it is a path, not a glob, per `ADR-64`.
     A filter that matches no finding is listed in `unmatched_filters`, never a silent no-op.
+    Info findings are skipped: they are below `fail_on`, do not gate, and are not listed in `skipped`, to
+    avoid noise; a `--min-severity` field is added only if asked. Decided 2026-11-05: the fallback is the
+    compiled-in `Pending` (point 6), `--path` takes plain paths, and one waiver is drafted per rule and file.
 11. **Dry-run by default, `--apply` writes.** Without `--apply` nothing is written and the report shows the
     waivers it would write, each path being the number it would take now. With `--apply` it writes, taking a
     number again if another file claimed it first; on any write error it stops and the report lists what was
@@ -163,6 +179,12 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
   TODO(owner)` as its marker says so in config. `Pending` is the fallback only.
 - A repository whose waiver type does not require `Reason` cannot use the command until it does (point 7).
   The refusal says so; it does not edit the configuration.
+- One waiver per rule and file means one `Reason` covers every future finding of that rule in that file,
+  while the body lists only today's messages. `covers` cannot tell findings in a file apart, and finer grain
+  needs a change to `Scope` that `ADR-86` rejects (no list or glob scope). `ADR-86`'s per-record rule governs
+  permanence causes, and for record-scoped rules a file is a record.
+- A repository with no `permanent` declaration and no `Expires` in `effective_requires` cannot use the command
+  until it declares one (point 9). The refusal names both fixes.
 - Demoting a rule to `info` (option C) remains available and is not rejected as a policy: it is rejected as the
   answer to a one-time backlog.
 - `SPEC-10` (the draft shape and the pending vocabulary), `SPEC-3` (`pending` on a suppression type), a new
@@ -172,6 +194,8 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 
 - `ADR-11` -- a waiver is a first-class record, not an ignore list.
 - `ADR-86` -- permanent waivers; the draft writes no `Expires`, `Category` or `Justified-by`.
+- `ADR-73` -- compatible: it defers a `waive` action kind and adds nothing here. `waive` is not a suggested-action
+  kind; the existing `FIELD_SET` action on `waiver-ineffective` (`rust/crates/urzua-core/src/rules/table.rs:1608`) already points at `Reason`.
 - `ADR-64` -- structured config in, structured output out; no string mini-language.
 - `ADR-70` -- scaffolding goes through one path and carries no schema knowledge of its own.
 - `BUG-177` -- a waiver without a real `Reason` suppresses nothing; the property this relies on.
@@ -185,3 +209,4 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | The milestone that builds this is `MILE-205`, renumbered from `MILE-204` after a numbering collision. | **structural** |
+> | 2026-11-05 | Records-only amendment after review (PR #364). Relaxing `statuses` needs both `status_model.rs:35` and `:368`, and the readers of `values` (`config.rs:1597` and others) are named. The command refuses when a repository declares no `permanent` and does not require `Expires` (point 9). Recorded as decided: fall back to `Pending`, plain `--path`, info findings skipped, one waiver per rule and file. `ADR-73` cited as compatible. **Why:** independent review found the serde failure and an accidental-permanent-waiver gap. Status stays Proposed. | **substantive** |

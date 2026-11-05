@@ -1,5 +1,5 @@
 ---
-Version: '0.92'
+Version: '0.93'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -475,7 +475,8 @@ Two details carry weight:
     no single correct value and is repaired by adding evidence.
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
     case-insensitive) equals one of the whole-value entries or matches one of the pattern entries. It **replaces** the compiled-in match, which treats
-    any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
+    a value containing `pending` as a whole word as pending (`BUG-65`); `spending` and a path such as
+    `docs/pending-settlement/x.md` (a token with a `/`) are real values, and a value that merely mentions the word is a
     real value. A type that omits `pending` keeps the compiled-in match. The rule's optional
     boolean `pending_until_required` (`MILE-169`, `false` by default) defers a pending value in a
     field some `statuses.require` entry names, until the record's status is one that requires it:
@@ -1859,4 +1860,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.89`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.90`. `urzua index --apply` replaces an artifact through a temporary file and a rename. **Why:** review of the CLI found the write truncated the file first. | **substantive** |
 > | 2026-11-05 | Bumped to `0.91`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |
-> | 2026-11-05 | Bumped to `0.92`. Documents the `verb_claims` option of `claim.status-agreement` (`MILE-197`): `false` turns the closing-verb reading off so only `closes` is a claim; default `true`; a load error without `closes` (either value) or on any other rule; a notice when set without `strict`. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
+> | 2026-11-05 | Bumped to `0.92`. The compiled-in `field.pending` match reads `pending` as a whole word and ignores a path-shaped token, so `spending` and `docs/pending-settlement/x.md` are no longer pending; a type declaring `statuses.pending` is unchanged. **Why:** Phase 0 hardening from an adopter switchover -- a waiver `Scope` path containing `spending` was reported as unfinished work. | **substantive** |
+> | 2026-11-05 | Bumped to `0.93`. Documents the `verb_claims` option of `claim.status-agreement` (`MILE-197`): `false` turns the closing-verb reading off so only `closes` is a claim; default `true`; a load error without `closes` (either value) or on any other rule; a notice when set without `strict`. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |

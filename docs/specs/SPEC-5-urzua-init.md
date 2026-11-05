@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -68,6 +68,8 @@ live, and no rule needs to know it exists.
 `init` takes only `--dry-run` and the global `--config`; adopt infers types from what's already on
 disk rather than taking a `--types` selection. Type selection, built-in profiles, and non-interactive
 setup for a repository with no records yet are `MILE-114`'s scope, not this spec's current subject.
+
+`init` also proposes a directory whose files are not numbered records when at least two of its markdown files carry a header and they are at least half of the directory's markdown files (a flat spec directory named by slug), with no `prefix`, and says so in an `init-scan` notice. A proposed directory none of whose files has a header is named in an `init-scan` warning notice, since it may hold pages rather than records; it stays proposed, because a Nygard-style corpus has records with no header.
 
 ## Proposed header shape
 
@@ -179,3 +181,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-04 | Bumped to `0.7`. `init` proposes only `yaml-frontmatter` and reports, in a `header-shape` notice, the existing records written in a removed `blockquote` or `bold-list` form; it no longer infers a shape from the corpus and no longer declares `header.deprecated-shape`. **Why:** `MILE-85` removed those shapes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `## Proposed rules`: `init` does not propose a rule that reads a per-type declaration it leaves empty (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and names each in a `rule-applicability` notice with the declaration to write. **Why:** `BUG-73`; the four rules ran over zero records on every adopted corpus. | **substantive** |
 > | 2026-11-05 | Bumped to `0.9`. `init` writes the config through a temporary file and a rename. **Why:** review of the CLI found every record and config write truncated the file before writing it. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. `init` proposes a header-bearing directory of unnumbered files and flags a proposed directory with no header in any file, in `init-scan` notices. **Why:** Phase 0 hardening from an adopter switchover -- the spec directory was missed and two directories of pages were proposed without comment. | **substantive** |

@@ -139,7 +139,7 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
                         HookState::NotInstalled => (
                             DoctorStatus::Warn,
                             format!(
-                                "no {layer} hook at {} -- run `make hooks-install`; CI remains the guarantee (ADR-71)",
+                                "no {layer} hook at {} -- add one that runs `urzua check`; CI remains the guarantee (ADR-71)",
                                 path.display()
                             ),
                         ),
@@ -400,7 +400,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
             layer: None,
             state: None,
             status: DoctorStatus::Ok,
-            message: "a workflow invokes `urzua check`, `make records` or the urzua-gate action".to_string(),
+            message: "a workflow invokes `urzua check` or the urzua-gate action".to_string(),
         }),
         Ok(false) => checks.push(DoctorCheck {
             check: "ci-wired".to_string(),
@@ -408,7 +408,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
             state: None,
             status: DoctorStatus::Warn,
             message: format!(
-                "no workflow in {} invokes `urzua check` or `make records` -- a check that exists but is never run reports nothing to anyone",
+                "no workflow in {} invokes `urzua check` or the urzua-gate action -- a check that exists but is never run reports nothing to anyone",
                 workflows_dir.display()
             ),
         }),
