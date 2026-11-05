@@ -235,6 +235,8 @@ mod tests {
                         relation_fields: None,
                         companion_fields: None,
                         revision_log: None,
+                        role: None,
+                        effective_requires: None,
                     },
                 )]
                 .into_iter()
@@ -375,7 +377,16 @@ mod tests {
                     spec: None,
                     relation_fields: None,
                     companion_fields: None,
-                    revision_log: None,
+                    // A type that does not require a log leaves a record without
+                    // one eligible and unexamined (BUG-50); one that does judges it.
+                    revision_log: Some(crate::config::RevisionLogDecl {
+                        marker: None,
+                        heading: None,
+                        required: Some(false),
+                        version_bump: None,
+                    }),
+                    role: None,
+                    effective_requires: None,
                 },
             )]
             .into_iter()
@@ -586,6 +597,8 @@ mod tests {
                         relation_fields: None,
                         companion_fields: None,
                         revision_log: None,
+                        role: None,
+                        effective_requires: None,
                     },
                 )]
                 .into_iter()

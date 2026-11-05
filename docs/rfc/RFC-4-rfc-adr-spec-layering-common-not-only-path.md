@@ -88,3 +88,9 @@ types point at each other over time.
   (`derives_from`/`implements` are core-schema fields per RFC-1 §1).
 - RFC-5 — Embodiment/`realized_by`, referenced above via the `Embodiment: Inactive` negative-
   decision example.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

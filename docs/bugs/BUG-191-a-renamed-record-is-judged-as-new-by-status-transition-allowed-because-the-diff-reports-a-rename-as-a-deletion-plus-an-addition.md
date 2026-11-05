@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6ME4QBH5GKHM9RP6E3E12KT
-Status: Open
+Status: Fixed
 Found-in: 'review of the declared transitions (MILE-144, ADR-72), 2026-11-04'
-Regression-test: "not yet written -- Status: Open, no fix decided yet"
+Regression-test: 'rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-keeps-its-committed-status.yaml, rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-may-take-an-allowed-edge.yaml, rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-reset-to-an-initial-status-is-reported.yaml'
 ---
 # 191 — A renamed record is judged as new by status.transition-allowed because the diff reports a rename as a deletion plus an addition
 
@@ -24,6 +24,10 @@ Phase 0 defect: the rule is wrong for a normal editing action, not only an unusu
 The acceptance cases write a record in place or add a new file; none renames a tracked record. The
 rule's description names the limitation, which documents it without testing it.
 
+## Fix
+
+Fixed 2026-11-05. `committed_statuses` reads the merge base's copy at the record's own path; when there is none, it matches the record by `Stable-Id` against the records the diff deleted (same type) and takes that copy's status. No `Stable-Id`, or no match, still reads as new; several matches count the record unreadable. The base text read added for `BUG-51` (`#279`) is what makes the lookup possible.
+
 ## References
 
 - `MILE-144`, `ADR-72`; `status.transition-allowed` in `rust/crates/urzua-core/src/rules/status.rs`;
@@ -34,3 +38,4 @@ rule's description names the limitation, which documents it without testing it.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Filed, `Open`. **Why:** found while building the declared transitions; the fix (match a renamed record by `Stable-Id`) is deliberately not part of that change. | **substantive** |
+> | 2026-11-05 | Fixed. **Why:** `committed_statuses` now matches a record the diff reports as added to a deleted record by `Stable-Id`; three acceptance cases in `corpus-j` (rename with the status unchanged, rename with an allowed edge, rename with a reset to an initial status) failed before and pass after. `SPEC-2` and `SPEC-3` document it. | **substantive** |

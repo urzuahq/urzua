@@ -227,6 +227,39 @@ fn migrate_config_leaves_a_file_it_cannot_make_valid_exactly_as_it_was() {
 }
 
 #[test]
+fn a_version_one_config_that_omits_header_shape_is_refused_and_left_as_it_was() {
+    // A version-1 build read an omitted `header_shape` as `blockquote`, which
+    // no release reads now. The upgrade must say so rather than let the type
+    // quietly become `yaml-frontmatter`.
+    let dir = repo("migrate-omitted-shape");
+    let text = "schema_version: 1\nrecord_types:\n  adr:\n    dir: records\n    required_fields: [Status]\n";
+    std::fs::write(dir.join(".urzua/config-omitted.yaml"), text).unwrap();
+    let (code, report) = urzua(
+        &dir,
+        &[
+            "--config",
+            ".urzua/config-omitted.yaml",
+            "migrate",
+            "config",
+        ],
+    );
+    assert_eq!(code, 2, "{report}");
+    let error = report["error"].as_str().unwrap();
+    assert!(error.contains("record_types.adr"), "{report}");
+    assert!(error.contains("header_shape"), "{report}");
+    assert!(error.contains("blockquote"), "{report}");
+    assert_eq!(
+        text,
+        std::fs::read_to_string(dir.join(".urzua/config-omitted.yaml")).unwrap()
+    );
+    // `check` refuses it the same way instead of reading the type as YAML.
+    let (code, report) = urzua(&dir, &["--config", ".urzua/config-omitted.yaml", "check"]);
+    assert_eq!(code, 2, "{report}");
+    assert!(report.to_string().contains("header_shape"), "{report}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_supported_versions_table_in_spec_3_matches_the_releases_in_code() {
     let spec = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../docs/specs/SPEC-3-configuration.md"),

@@ -391,3 +391,9 @@ a structured document and the easiest one to write.
 - ADR-3 — stable identity separated from display number, which is what makes §6's "location is
   free" affordable rather than aspirational.
 - RFC-5 — the back-pointer mechanism that a package-scoped identifier would make ambiguous.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

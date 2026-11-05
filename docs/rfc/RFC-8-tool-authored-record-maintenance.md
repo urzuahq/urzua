@@ -202,3 +202,9 @@ overwrite a field whose derivation is tested against being wrong, not merely aga
 - RFC-6 — the append-only revision log that makes clause 4 (reversibility) true.
 - `docs/specs/SPEC-1-cli.md` — the deferred `--fix` and the reciprocity-checker data-loss incident
   behind that deferral; this RFC is the argument for narrowing that deferral rather than lifting it.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn an_upgraded_config_is_one_warning_on_the_config_file_with_the_command() {
         let config = crate::config::parse(
-            "schema_version: 1\nrecord_types:\n  adr:\n    dir: docs/adr\n    header_layout: one-per-line\n",
+            "schema_version: 1\nrecord_types:\n  adr:\n    dir: docs/adr\n    header_shape: yaml-frontmatter\n    header_layout: one-per-line\n",
         )
         .unwrap();
         let (_, mut findings) =

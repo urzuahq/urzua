@@ -1,7 +1,9 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-07
 Status: Accepted
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
 Subject: '`urzua migrate ids`/`urzua migrate schema`/`urzua migrate config` -- backfilling stable IDs, previewing schema changes and rewriting a config to the current schema version.'
 Implements: ADR-21, ADR-22, ADR-77
@@ -123,4 +125,6 @@ path of a rename or a move; `value` is what an added or changed key now holds; `
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-11 | Added `migrate ids`'s output contract (`missing`/`results`, BUG-20, ADR-46) -- previously undocumented, since the command printed plain-text prose rather than JSON. `--apply` now also exits 1 on a real write failure, matching `fix --apply`'s own signal for the same shape of outcome. | **substantive** |
-> | 2026-11-05 | Bumped to `0.5`. Added `urzua migrate config` and its output contract. **Why:** `ADR-77` / `MILE-34` -- a config on the previous schema version needs a command that rewrites it. | **substantive** |
+> | 2026-11-05 | Bumped to `0.5`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: the `migrate` unit tests in `urzua-core/src/migrate.rs` and the `migrate_ids_*` tests in `check_integration.rs`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.6`. Added `urzua migrate config` and its output contract. **Why:** `ADR-77` / `MILE-34` -- a config on the previous schema version needs a command that rewrites it. | **substantive** |

@@ -231,6 +231,28 @@ pub fn upgrade(mut doc: Value) -> Result<(Value, Vec<Change>), String> {
                 .to_string(),
         );
     }
+    // A version-1 build read an omitted `header_shape` as `blockquote`; the
+    // default is `yaml-frontmatter` now and `blockquote` is no longer read
+    // (`MILE-85`, `ADR-54`: a break is a break). Upgrading such a type would
+    // change what it means without saying so, so the upgrade refuses.
+    if let Some(types) = root
+        .get(Value::String("record_types".into()))
+        .and_then(Value::as_mapping)
+    {
+        let shape = Value::String("header_shape".into());
+        let omitted: Vec<String> = types
+            .iter()
+            .filter(|(_, ty)| ty.as_mapping().is_some_and(|m| !m.contains_key(&shape)))
+            .map(|(name, _)| format!("record_types.{}", name.as_str().unwrap_or("?")))
+            .collect();
+        if !omitted.is_empty() {
+            return Err(format!(
+                "{} omit{} `header_shape`, which a version-1 build read as `blockquote`; that shape was removed in MILE-85 and the default is now `yaml-frontmatter`, so the upgrade would change what the config means. Rewrite the type's records as YAML frontmatter and declare `header_shape: yaml-frontmatter` (or `none` for a type with no header), then run again",
+                omitted.join(", "),
+                if omitted.len() == 1 { "s" } else { "" },
+            ));
+        }
+    }
     let mut changes = Vec::new();
 
     root.insert(
@@ -406,7 +428,7 @@ fn is_header_layout_line(line: &str) -> bool {
 mod tests {
     use super::*;
 
-    const V1: &str = "# my config\nschema_version: 1   # the version\nrecord_types:\n  adr:\n    dir: docs/adr\n    # layout\n    header_layout: one-per-line\n    required_fields: [Status]\n";
+    const V1: &str = "# my config\nschema_version: 1   # the version\nrecord_types:\n  adr:\n    dir: docs/adr\n    # layout\n    header_shape: yaml-frontmatter\n    header_layout: one-per-line\n    required_fields: [Status]\n";
 
     #[test]
     fn the_window_is_the_current_version_and_the_one_before() {
@@ -478,6 +500,34 @@ mod tests {
             .unwrap()
             .get("header_layout")
             .is_none());
+    }
+
+    #[test]
+    fn a_version_one_type_that_omits_header_shape_is_refused_not_silently_changed() {
+        // A version-1 build read an omitted `header_shape` as `blockquote`;
+        // today's default is `yaml-frontmatter`, so upgrading it would change
+        // the meaning of the config without saying so.
+        let doc: Value = yaml_serde::from_str(
+            "schema_version: 1\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n  rfc:\n    dir: docs/rfc\n    header_shape: yaml-frontmatter\n",
+        )
+        .unwrap();
+        let err = upgrade(doc).unwrap_err();
+        assert!(err.contains("record_types.adr"), "{err}");
+        assert!(err.contains("header_shape"), "{err}");
+        assert!(err.contains("blockquote"), "{err}");
+        assert!(err.contains("MILE-85"), "{err}");
+        assert!(!err.contains("record_types.rfc"), "{err}");
+    }
+
+    #[test]
+    fn a_version_one_type_that_declares_header_shape_upgrades() {
+        for shape in ["yaml-frontmatter", "none"] {
+            let doc: Value = yaml_serde::from_str(&format!(
+                "schema_version: 1\nrecord_types:\n  adr:\n    dir: docs/adr\n    header_shape: {shape}\n"
+            ))
+            .unwrap();
+            assert!(upgrade(doc).is_ok(), "{shape}");
+        }
     }
 
     #[test]
@@ -566,7 +616,7 @@ mod tests {
 
     #[test]
     fn a_multi_line_header_layout_is_refused_not_half_removed() {
-        let text = "schema_version: 1\nrecord_types:\n  adr:\n    dir: docs/adr\n    header_layout:\n      - a\n";
+        let text = "schema_version: 1\nrecord_types:\n  adr:\n    dir: docs/adr\n    header_shape: yaml-frontmatter\n    header_layout:\n      - a\n";
         let e = migrate_text(text).unwrap_err();
         assert!(e.contains("by hand"), "{e}");
     }

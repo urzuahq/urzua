@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:5b3a0904b521d5d999da9550c622aa65141bf12399fd45256afbdcd1433ce36c, code:rust/crates/urzua-io/src/lib.rs@sha256:06c483542fda0dfce76bfdcda4385f5cf0be714e003bd479054c28bf58101eb9, test:rust/crates/urzua-core/src/fix.rs@sha256:5b3a0904b521d5d999da9550c622aa65141bf12399fd45256afbdcd1433ce36c
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:c706b63f9582154da5763e119b1cabaccf43ed92374a1885bb556642a36d55cb, code:rust/crates/urzua-io/src/lib.rs@sha256:06c483542fda0dfce76bfdcda4385f5cf0be714e003bd479054c28bf58101eb9, test:rust/crates/urzua-core/src/fix.rs@sha256:c706b63f9582154da5763e119b1cabaccf43ed92374a1885bb556642a36d55cb
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -102,3 +102,4 @@ re-read before writing, the corpus lock and the single-line edit are unchanged.
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/fix.rs` bc5037c801aa -> 772cef0da7b4. Reason: Re-verified: the only change to the pinned file is an Implements: ADR-67 comment; behaviour is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/fix.rs` 772cef0da7b4 -> 5b3a0904b521, `rust/crates/urzua-io/src/lib.rs` 671f9e9b0ff5 -> 06c483542fda. Reason: Re-verified against the Decision and its accepted amendment of 2026-11-04. Since the pin, fix.rs reads the Embodiment vocabulary from config (the stated drift state is config.embodiment.is_drift, MILE-144), edits a field value by position on the field's own line and never by substring (BUG-192, a stricter form of the single-line edit gate), and gained PinRead and FailedPin for re-pinning scoped pins (ADR-74); urzua-io/src/lib.rs only gained an added set on GitChanges and sha256_hex_of_str. The hard gates (--ids or --force, re-read before writing, corpus lock, one-line edit) and the identity order recorded in the amendment are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/fix.rs` 5b3a0904b521 -> c706b63f9582. Reason: BUG-74 renamed Waiver to Suppression (and load_waivers to load_suppressions) in this file's internals; the behaviour this record cites is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
