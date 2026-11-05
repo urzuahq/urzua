@@ -72,6 +72,8 @@ pub fn narrative_field_stale(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("narrative-field-stale").field(field_name.as_str()),
                         message: format!(
                             "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's {source_status_field}/{field_name} should update"
                         ),

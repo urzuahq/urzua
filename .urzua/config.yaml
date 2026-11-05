@@ -32,6 +32,7 @@ record_types:
       - "Accepted-on"
       - "Derives-from"
       - "Supersedes / Superseded-by"
+      - "Non-reference-ids"
     statuses:
       values: ["Proposed", "Accepted", "Rejected", "Superseded", "Retired"]
       success: ["Accepted"]
@@ -94,6 +95,7 @@ record_types:
       - "Amended-by"
       - "Amended-by-pending"
       - "Implements"
+      - "Non-reference-ids"
     statuses:
       values: ["Draft", "Discussion", "Accepted", "Rejected", "Superseded"]
       success: ["Accepted"]
@@ -430,6 +432,10 @@ rules:
   citation.resolution:
     level: warn
     external_ids: ["RFC-822", "RFC-4122"]
+    # A record lists here the ids it names without citing as a reference, so
+    # a record later created with that number does not capture the citation
+    # (BUG-190, ADR-75).
+    non_reference_field: "Non-reference-ids"
     # Revision-log rows are append-only history (RFC-6): an id they cite
     # as it was when the row was written is not read (MILE-156).
     skip_revision_log: true

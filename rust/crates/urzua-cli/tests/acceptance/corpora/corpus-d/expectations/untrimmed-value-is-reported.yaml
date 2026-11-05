@@ -7,3 +7,4 @@ expect_findings:
     file: records/ADR-0010-untrimmed.md
     severity: error
     message_contains: "'Author'"
+    suggested_action: {kind: edit-field, op: set, target: {field: Author}}

@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-08
 Status: Accepted
 Author: beauwilliams
@@ -25,7 +25,7 @@ record_types:
     dir: "docs/adr"
     required_fields: ["Status", "Date", "Author", "Deciders"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by"]
+    known_fields: ["Embodiment", "Realized-by", "Stable-Id", "Derives-from", "Supersedes / Superseded-by", "Non-reference-ids"]
     spec: "SPEC-16"
     pointer_fields: ["Derives-from"]
     narrative_fields: []
@@ -42,6 +42,7 @@ record_types:
 | `Stable-Id` | a ULID, optional | Backfilled by `migrate ids` (ADR-3/21) for records predating it. |
 | `Derives-from` | comma-separated, optional | Points at the RFC(s) this ADR decides. Declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
 | `Supersedes / Superseded-by` | comma-separated or `—`, optional | Reciprocity checked by `relation.supersession-reciprocity`, status-aware (only binds once the claiming record is itself terminal-accepted). Stays outside the `pointer_fields`/`narrative_fields` axis (own mechanism, own reciprocity check) even though `urzua graph` reports its edges `kind: pointer` (MILE-90/ADR-44) — its values are always clean references, never prose. |
+| `Non-reference-ids` | comma-separated exact ids, optional | Ids this record names without citing as a reference (an example, a retracted number): `citation.resolution` does not resolve or report a citation of them in this record only, and reports a listed id the record never cites. Named by the rule's `non_reference_field` option (SPEC-3). Not a pointer field. |
 
 ## Why amendments, not revisions
 
@@ -86,3 +87,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-11 | Bumped to `0.7`. **Why:** `Author`/`Deciders` now state the no-`@` form explicitly (BUG-18). The `@` prefix nearly every hand-typed value in this corpus carried was decorative -- nothing in any crate read, stripped, or validated it -- while being a reserved YAML indicator, so it forced the quoting its own presence necessitated, and disagreed with what `resolve_identity()` emits at every tier. 132 of the corpus's 134 `Author`/`Deciders` values were backfilled to match in the same change; the other two (ADR-37's) were already unprefixed. | **substantive** |
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
 > | 2026-11-04 | Bumped to `0.8`. Added `Retired` to the `Status` vocabulary, declared in `statuses.values`, `failure` and `claim_retained`, and to the `adr` template. **Why:** maintainer decision of 2026-11-04 for `ADR-38`, whose mechanism was deleted with no successor; `Superseded` needs a successor record and does not fit. `Retired` is `claim_retained` because a retired decision's `Realized-by` evidence stays true history. Setting `Retired` on a record is the maintainer's act. The allowed move `Accepted` to `Retired` is not yet declared: no type declares `transitions` in this repository's config. | **substantive** |
+> | 2026-11-04 | Bumped to `0.9`. Added the optional `Non-reference-ids` field to `known_fields`: the exact ids a record names without citing as a reference (`BUG-190`, `ADR-75`). **Why:** `ADR-18` writes an example id from another corpus that a real record could otherwise capture. | **substantive** |

@@ -3,6 +3,6 @@ corpus: corpus-h
 invocation: [--config, .urzua/refs.yaml, check]
 expect_exit: 1
 expect_findings:
-  - {rule: citation.issue-exists, file: records/adr/ADR-0002-refs.md, message_contains: "#99"}
+  - {rule: citation.issue-exists, file: records/adr/ADR-0002-refs.md, message_contains: "#99", suggested_action: {kind: edit-section, op: set}}
 expect_no_findings:
   - {rule: citation.issue-exists, message_contains: "#7"}

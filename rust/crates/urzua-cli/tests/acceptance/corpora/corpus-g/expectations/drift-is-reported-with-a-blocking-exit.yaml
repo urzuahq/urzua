@@ -10,4 +10,4 @@ expect_exit: 1
 expect_json:
   - {at: /status, equals: findings-present}
 expect_findings:
-  - {rule: embodiment.consistency, file: records/ADR-0001-queue.md, severity: warning}
+  - {rule: embodiment.consistency, file: records/ADR-0001-queue.md, severity: warning, suggested_action: {kind: run-command, target: {argv: [urzua, fix, --apply, --ids, records/ADR-0001-queue.md]}}}

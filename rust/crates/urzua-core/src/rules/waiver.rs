@@ -42,7 +42,8 @@ pub fn waiver_matches_nothing(
         |w| PathBuf::from(&w.id),
         |w| {
             let path = PathBuf::from(&w.id);
-            let mut report = |message: String| {
+            // The waiver's own header fields are reserved names (`SPEC-10`).
+            let mut report = |variant: &'static str, field: &str, message: String| {
                 out.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
@@ -50,6 +51,8 @@ pub fn waiver_matches_nothing(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new(variant).field(field),
                     message,
                 });
                 Outcome::Examined
@@ -61,19 +64,27 @@ pub fn waiver_matches_nothing(
                     return Outcome::Absent;
                 }
                 let expires = w.expires.as_deref().unwrap_or_default();
-                return report(format!(
+                return report(
+                    "waiver-expired",
+                    "Expires",
+                    format!(
                     "waiver ({claimed}) is expired: Expires '{expires}' has passed or is not a \
                      YYYY-MM-DD date, so it covers nothing; remove it or set a new date"
-                ));
+                ),
+                );
             }
             if !ALL_RULES.contains(&w.rule.as_str()) {
                 if !reached(&path) {
                     return Outcome::Absent;
                 }
-                return report(format!(
-                    "waiver ({claimed}) names a rule this build does not have, so it can \
+                return report(
+                    "waiver-unknown-rule",
+                    "Rule",
+                    format!(
+                        "waiver ({claimed}) names a rule this build does not have, so it can \
                      never match a finding"
-                ));
+                    ),
+                );
             }
             let target_ran = executed
                 .iter()
@@ -84,11 +95,15 @@ pub fn waiver_matches_nothing(
             if findings.iter().any(|f| w.covers(f)) {
                 return Outcome::Examined;
             }
-            report(format!(
-                "waiver ({claimed}) matches no finding: '{}' ran over the whole corpus and \
+            report(
+                "waiver-matches-no-finding",
+                "Scope",
+                format!(
+                    "waiver ({claimed}) matches no finding: '{}' ran over the whole corpus and \
                  reported nothing in that scope; remove the waiver",
-                w.rule
-            ))
+                    w.rule
+                ),
+            )
         },
     );
 
@@ -126,6 +141,8 @@ mod tests {
             message: "x".into(),
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::default(),
         }
     }
 

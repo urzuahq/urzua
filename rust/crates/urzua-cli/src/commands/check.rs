@@ -400,6 +400,16 @@ fn load_context<'a>(
         ));
     }
 
+    // A declared non-reference id that now matches a real record is disclosed
+    // (`ADR-75`), only when `citation.resolution` is on.
+    if enabled_setting(config, rules::RULE_CITATION_RESOLUTION).is_some() {
+        notices.extend(rules::non_reference_notices(
+            &session.records,
+            config,
+            &record_index,
+        ));
+    }
+
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
@@ -549,10 +559,21 @@ fn scope_findings(session: &Session, scope: &ReportScope, findings: &mut Vec<Fin
     // The config rules were handed the loaded (absolute) path, so the same
     // finding differed by checkout (BUG-185). Relativized after the filters
     // above compare against the loaded path, and before waivers match on it.
+    // A suggested edit to the configuration names the same file, so it is
+    // relativized with the finding (`ADR-73`: `file` is repository-relative).
     for f in findings.iter_mut() {
         if f.file == session.config_path.as_path() {
             if let Ok(rel) = f.file.strip_prefix(&session.repo_root) {
                 f.file = rel.to_path_buf();
+            }
+        }
+        if let Some(action) = f.suggested_action.as_mut() {
+            if let Some(file) = action.target.file.as_mut() {
+                if file == session.config_path.as_path() {
+                    if let Ok(rel) = file.strip_prefix(&session.repo_root) {
+                        *file = rel.to_path_buf();
+                    }
+                }
             }
         }
     }

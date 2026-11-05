@@ -89,6 +89,8 @@ pub fn sequence_cycle(
                             line: None,
                             waived: None,
                             declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("sequence-cycle"),
                             message: format!(
                                 "{id} is on a cycle in acyclic pair '{}' ({} -> {}): {path}",
                                 slot.pair.name, slot.pair.forward, slot.pair.inverse
@@ -156,7 +158,7 @@ pub fn sequence_unresolved_blocker(
             };
             let resolution_reported = is_pointer && enabled(RULE_POINTER_RESOLUTION);
             let prose_reported = is_pointer && enabled(RULE_HEADER_POINTER_FIELD_CLEAN);
-            let mut push = |message: String| {
+            let mut push = |variant: &'static str, message: String| {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Error,
@@ -164,6 +166,8 @@ pub fn sequence_unresolved_blocker(
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new(variant).field(field),
                     message,
                 });
             };
@@ -176,16 +180,22 @@ pub fn sequence_unresolved_blocker(
                     if !resolution_reported
                         && !index.contains_key(&crate::values::RecordId::new(entry))
                     {
-                        push(format!(
+                        push(
+                            "blocker-unresolved",
+                            format!(
                             "{field}: {entry} does not resolve to any discovered record (pair '{}')",
                             slot.pair.name
-                        ));
+                        ),
+                        );
                     }
                 } else if !prose_reported {
-                    push(format!(
+                    push(
+                        "blocker-not-a-reference",
+                        format!(
                         "{field}: '{entry}' is not a record reference, so it orders nothing (pair '{}')",
                         slot.pair.name
-                    ));
+                        ),
+                    );
                 }
             }
             Outcome::Examined
