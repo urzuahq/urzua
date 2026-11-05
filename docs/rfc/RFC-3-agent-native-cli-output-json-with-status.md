@@ -163,3 +163,9 @@ history that a job appends afterwards is not.
 - The motivating scenario: an agent working inside a repo repeatedly invoking a lint/audit CLI
   directly and needing to re-parse formatted `WARN`/`ERROR` text lines to determine what happened,
   when the tool already computes the structured version of that same information internally.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

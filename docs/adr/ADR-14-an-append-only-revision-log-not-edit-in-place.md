@@ -98,3 +98,9 @@ Does not require rewriting past terse entries — applies going forward.
 - RFC-8 — depends on this revision log for its own reversibility requirement.
 - MILE-73 — "decide when a spec needs a new spec instead of an in-place revision," resolved by the
   amendment above.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

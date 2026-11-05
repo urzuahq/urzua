@@ -113,3 +113,9 @@ unchanged.
   an ordering mechanism.
 - RFC-4 — the layering model whose generic relationship mechanism this exercises.
 - RFC-6 — the revision-log model reused for milestone history.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
