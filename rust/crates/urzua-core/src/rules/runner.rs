@@ -58,7 +58,8 @@ pub struct RuleCtx<'a> {
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
-    pub published_paths: &'a [String],
+    pub boundaries: &'a [ResolvedBoundary],
+    pub ignore_marker: Option<&'a str>,
     pub index_artifacts: &'a [IndexArtifact],
     /// `None` when the rule is absent or off.
     pub back_pointer_sources: Option<&'a BackPointerSources>,
