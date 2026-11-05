@@ -904,6 +904,12 @@ line. A shipped kind never changes; a fix ships under a new name.
 | `blank_line` | the line before the next blank (whitespace-only) line, or the last line | |
 | `semicolon` | the first line, counting braces from the item's first line, at which the brace count is zero and the line ends in `;` (after trailing whitespace) | |
 
+A resolver has one end kind for its plain `start`, so it should list only keywords whose items end
+the same way. An item that ends at a `;` rather than a brace (`const`, `static`, `type`, `mod x;`
+in Rust) is kept out of a `brace_balanced` start: under it the span would run on into the next
+item, so it is left unaddressable by symbol (a not-found failure) and is pinned by line range, or
+as a `semicolon`-ended `member` of its container (vector 18).
+
 **Resolution.** A plain `Name` is the lines whose text matches `start`, anywhere in the file:
 none is not found, more than one is ambiguous and reported with the line of each candidate, exactly
 one is the item (extended upward over `leading`). `Type::member` finds the container spans of
