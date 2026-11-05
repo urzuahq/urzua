@@ -289,9 +289,9 @@ scoped locator at file level, the state the corpus is in today.
 
 ## Amendment (2026-11-05): a resolver's `member` may be a list, and a container may be a struct
 
-*Status of this amendment: proposed 2026-11-05, pending maintainer acceptance (drafted at the maintainer's request, before `#319` merges). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted at the maintainer's request, before `#319` merges). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
-Point 5 describes a resolver's `member` as one start pattern and one end kind, and its example
+Point 5 (read together with this amendment) describes a resolver's `member` as one start pattern and one end kind, and its example
 container matches an inherent `impl`. Point 10 makes the resolver grammar part of the contract.
 Pinning one field of a struct (`config.rs#RecordTypeConfig::spec`) needs two things the text does not
 state, so this amendment records them before they are built (`#319`, `MILE-185`). Both are additive.
@@ -333,7 +333,7 @@ above it (doc comments, attributes). The span ends at the last non-blank line in
 field's first line. The known limit of `indent`, stated in point 5 as blindness to odd layouts, applies
 and is named here because fields hit it: a field whose type spans several lines ends **before** its
 closing line when that line is level with the field. For `b: Vec<` / `u8,` / `>,` the pinned span is
-the first two lines, and an edit to the closing `>,` alone is not drift. A reviewer who needs the whole field pins a line range, or the type.
+the first two lines, and an edit to the closing `>,` alone is not drift. A reviewer who needs the whole field pins a line range, or the type. A struct declared on one line (`struct A { a: u8 }`) has no field on its own line, so its fields are not addressable as members; pin the struct.
 Because point 7 shows the resolved span at authoring and re-baselining, the reviewer sees where the
 span ends.
 
@@ -347,8 +347,9 @@ re-baseline. Adding an entry can also turn an existing `Type::name` ambiguous (a
 name of a method), which is loud and reported, never silent. The behaviour is generic: the patterns, the
 end kinds and the counting rule serve any language whose items nest, and none of them names Rust.
 
-**6. What is not decided.** One container level only: `A::b::c` stays unsupported. `A::<Trait>::b` and
-`trait_container` are unchanged. Exact key names and test vectors are `SPEC-3`'s.
+**6. What is not decided.** One container level only: `A::b::c` stays unsupported. The `A::<Trait>::b` syntax and the
+`trait_container` pattern are unchanged, but the member entries of point 1 also apply inside the span a
+`trait_container` finds, so `A::<Trait>::b` may resolve to a field or a method by the same counting rule. Exact key names and test vectors are `SPEC-3`'s.
 
 ## References
 
@@ -369,3 +370,4 @@ end kinds and the counting rule serve any language whose items nest, and none of
 > | 2026-11-04 | Status changed from Proposed to Accepted, with methods in the first build. **Why:** Maintainer decision, 2026-11-04, conditional on review; the final re-check left one blocker (member span and depth), now resolved. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by source back-pointers` -- stated `` disagreed with the computed value `Implemented`. | **structural** |
 > | 2026-11-05 | Amendment added: a resolver's `member` may be a list of entries, each with its own `start` and `end`; matches are counted across entries as well as spans, and a line two entries match is ambiguous; a container may match a struct or type declaration, so a field is addressable (`indent` end kind, known limit stated). **Why:** `#319` (`MILE-185`) extends point 5's grammar and the independent review asked for a recorded decision; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment accepted. Folded in the review's wording points: `trait_container` spans also take the member entries, a one-line struct's fields are not addressable, and point 5 is read with the amendment. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
