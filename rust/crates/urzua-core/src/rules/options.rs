@@ -27,6 +27,20 @@ impl RuleOpts for ClaimOpts {
     }
 }
 
+/// `field.quality`: `template_placeholders` is off unless declared (`BUG-22`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FieldQualityOpts {
+    pub template_placeholders: bool,
+}
+
+impl RuleOpts for FieldQualityOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        FieldQualityOpts {
+            template_placeholders: s.template_placeholders.unwrap_or(false),
+        }
+    }
+}
+
 /// `boundary.published-path-reference`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PublishedPathOpts {

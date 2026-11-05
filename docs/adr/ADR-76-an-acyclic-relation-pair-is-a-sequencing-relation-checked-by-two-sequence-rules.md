@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6MC453YYMEB171A1F1G5MC1
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
@@ -79,3 +80,4 @@ it is settled before waivers exist.
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed. **Why:** `MILE-27` builds part of `RFC-48`, and building part of an RFC needs its own decision record; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-04 | Amended while Proposed: the departure from `RFC-48` on a written `Blocks` is stated; the unresolved-blocker rule yields to the pointer rules; a prose entry is defined as an entry that is not, as a whole, one record reference; the cross-pair and unreadable-record blind spots are stated; `RFC-47` added to `Derives-from`. **Why:** design review of this ADR and of the first implementation, which read only the first token of an entry. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision: accept once the independent review's issues were resolved; the prose-entry blocker and every requested amendment are in. | **substantive** |

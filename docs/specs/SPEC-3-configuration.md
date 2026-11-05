@@ -1,5 +1,5 @@
 ---
-Version: '0.58'
+Version: '0.59'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -384,6 +384,15 @@ Two details carry weight:
     field some `statuses.require` entry names, until the record's status is one that requires it:
     the slot stays eligible and is counted unexamined. A field no `require` entry names is judged
     as before, and the option is refused on any other rule at load.
+  - `field.quality`: the optional boolean `template_placeholders` (`BUG-22`, `false` by default). Declared
+    `true`, a required field whose value is identical after trimming to the type's template text for that
+    field is a Placeholder, where the template is `.urzua/templates/<type>.md` and its header is read for
+    `field: value` pairs. The compiled-in placeholder tokens and the `nnnn` reference heuristic no longer
+    apply to the rule, and a value is Pending only when the type's declared `pending` vocabulary says so. A
+    type with no template is judged by that vocabulary alone. Declaring the option when no record type has a
+    template is reported as a warning notice rather than a rule that reads nothing, and it is refused on any other
+    rule at load. A template must therefore not carry a real default (a `Phase: 0` would flag every record
+    that legitimately holds it); write the placeholder text a person is meant to replace.
   - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
     `statuses`, `success` and `failure` together are the finished statuses, in place of the rule's
     `terminal_statuses` / `closed_statuses` list, which stays the vocabulary for every target whose
@@ -1099,4 +1108,5 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.56`. Documented the per-type `companion_fields` declaration: a list of pairs of relation role keys (`status`, `embodiment_state`, `embodiment_locator`, `supersession`) whose fields the type declares together, resolved through `relation_fields`; an entry that is not two distinct role keys is refused at load, and `config.companion-declaration-missing` reports a pair the type declares one half of or neither. **Why:** `BUG-41` -- the one companion pair checked was hardcoded. | **substantive** |
 > | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.58`. Documented the optional `non_reference_field` option of `citation.resolution`: a header field listing the exact ids a record names without citing as a reference, set aside in that record only, with a finding for a declared id never cited and for a malformed entry, a load error for a field that is unknown or a pointer, narrative or relation-role field, and an aggregated Info notice for ids that now match a real record. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
-> | 2026-11-04 | Bumped to `0.59`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the readings `ADR-76` (Proposed) decides for each question `RFC-48` leaves open, including that a written `Blocks` is an edge and that `sequence.unresolved-blocker` yields to enabled pointer rules. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |
+> | 2026-11-04 | Bumped to `0.59`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |
+> | 2026-11-04 | Bumped to `0.60`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the readings `ADR-76` decides for each question `RFC-48` leaves open, including that a written `Blocks` is an edge and that `sequence.unresolved-blocker` yields to enabled pointer rules. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |

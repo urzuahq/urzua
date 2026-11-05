@@ -168,6 +168,14 @@ pub struct RuleSetting {
     /// A field no `statuses.require` entry names is unaffected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_until_required: Option<bool>,
+    /// Read a required field whose value is identical (after trimming) to the
+    /// type's template text for that field as a Placeholder (`BUG-22`). Only
+    /// meaningful to `field.quality`, where omitted means `false`: the
+    /// compiled-in placeholder tokens apply as before. Declared `true`, the
+    /// template (`.urzua/templates/<type>.md`) is the placeholder vocabulary
+    /// and the compiled-in tokens no longer apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_placeholders: Option<bool>,
     /// Path prefixes of the source files scanned for `Implements:` comment
     /// back-pointers (`MILE-128`). Only meaningful to
     /// `embodiment.back-pointer-resolution`.
@@ -1525,6 +1533,15 @@ pub fn parse_with_document_models(
             return Err(ConfigError::OptionNotApplicable {
                 rule: name.clone(),
                 option: "pending_until_required".to_string(),
+            });
+        }
+
+        if setting.template_placeholders.is_some()
+            && !crate::rules::rule_accepts_option(name, "template_placeholders")
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "template_placeholders".to_string(),
             });
         }
 
@@ -3601,6 +3618,7 @@ mod option_table_tests {
         "issue_refs",
         "allow_extension_prefix",
         "pending_until_required",
+        "template_placeholders",
         "skip_revision_log",
         "non_reference_field",
         "field_levels",
