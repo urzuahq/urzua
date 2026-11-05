@@ -66,6 +66,7 @@ pub struct Suppression {
     pub permanence: Permanence,
 }
 
+// Implements: ADR-86 (a waiver without Expires is governed by the declared `permanent` vocabulary)
 /// How a suppression stands under the type's `permanent` declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Permanence {

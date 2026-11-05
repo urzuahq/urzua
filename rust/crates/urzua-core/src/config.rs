@@ -770,6 +770,7 @@ pub struct RecordTypeConfig {
     pub permanent: Option<Vec<PermanentDecl>>,
 }
 
+// Implements: ADR-86 (the declared vocabulary of permanent suppressions)
 /// One rule a suppression may be permanent for (`RecordTypeConfig::permanent`).
 /// The engine names no category, rule or field: the vocabulary is the
 /// repository's.
@@ -3006,6 +3007,7 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+// Implements: ADR-86 (load-time validation of `permanent`)
 /// Why a type's `permanent` declaration is refused at load (`ADR-86`), or
 /// `None` when it is well formed. A declaration that names a rule this build
 /// lacks, a field the type does not declare or a vocabulary that cannot match

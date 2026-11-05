@@ -77,6 +77,7 @@ pub fn waiver_matches_nothing(
                 if !reached(&path) {
                     return Outcome::Absent;
                 }
+                // Implements: ADR-86 (the message names the unmet requirement)
                 // Whichever requirement is unmet is named: a field the type
                 // requires, or what `permanent` asks of a waiver without an
                 // expiry.

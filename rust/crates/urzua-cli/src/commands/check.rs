@@ -400,6 +400,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     })
 }
 
+// Implements: ADR-86 (the report counts permanent waivers by category)
 /// The permanent waivers in effect, counted by category (`ADR-86`), when the
 /// suppression type declares `permanent`. Said on every run, including with
 /// none: a repository that governs permanence is shown how much of it there

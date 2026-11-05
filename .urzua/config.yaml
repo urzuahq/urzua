@@ -352,9 +352,26 @@ record_types:
     known_fields:
       - "Stable-Id"
       - "Expires"
+      - "Category"
+      - "Justified-by"
     spec: "SPEC-10"
-    pointer_fields: []
+    # The record that justifies a permanent waiver (ADR-86).
+    pointer_fields: ["Justified-by"]
     narrative_fields: []
+    # Where a waiver without Expires may take effect (ADR-86, MILE-193). Declaring
+    # this closes permanence for every other rule. Each category is a cause that
+    # will not change; "covered by an existing suite" is not one, a covering suite
+    # is cited in Realized-by.
+    permanent:
+      - rule: status.delivery-agreement
+        reason_field: Category
+        categories:
+          - {name: docs-or-workflow-only}
+          - {name: performance-only}
+          - {name: test-removed-by-decision, cite: required}
+          - {name: behaviour-preserving-refactor}
+          - {name: unreachable-failure}
+        cite_field: Justified-by
 
 # An RFC that amends another is echoed by the amended RFC's Amended-by. A claim
 # from an RFC that is not yet accepted is provisional (MILE-154, MILE-127): it
@@ -512,7 +529,7 @@ rules:
     # Every declared pointer/narrative field except Derives-from: lineage to a
     # Superseded record is permanently true history, not a stale dependency
     # (BUG-172).
-    fields: ["Implements", "Amends", "Parent", "Blocked-on", "Depends-on"]
+    fields: ["Implements", "Amends", "Parent", "Blocked-on", "Depends-on", "Justified-by"]
   # Code that cites a record (`Implements: ADR-12`) must cite one at a status
   # its type declares `implementable` (MILE-133). Zero findings when enabled.
   embodiment.back-pointer-decision-accepted:
