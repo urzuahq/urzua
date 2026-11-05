@@ -127,8 +127,8 @@ it. Choices that resolve the open questions above:
 
 Superseded in part (2026-11-05): the maintainer rejected `ADR-81` after measuring the discriminator
 (0 real claims among 19 flagged references; 6 false findings at HEAD). The direction that replaces it is
-`ADR-85` (a declared field names the records a changeset closes) and `ADR-84` (a bug's status follows its
-evidence), both Proposed. This RFC's `Status` is the maintainer's to change.
+`ADR-85` (a declared field names the records a changeset closes) and `ADR-84` (a record's status follows its
+declared evidence field), both Proposed. This RFC's `Status` is the maintainer's to change.
 
 ## Non-goals
 Changing what `claim.status-agreement` does when it *does* parse a claim -- that behaviour is correct
