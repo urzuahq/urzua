@@ -26,7 +26,7 @@ without a decision record. Its review blocked it for two reasons that matter her
 
 On 2026-11-05 the maintainer decided that `Blocked` is **derived only**, per `RFC-48`. A repository that
 follows `RFC-48` stops writing `Blocked` as a status. The wait is computed from `Depends-on` and surfaced
-by `urzua check` and the roadmap (`ADR-82`).
+by `urzua check` and the roadmap.
 
 Evidence of the cost of a written value: four milestones in this repository (`MILE-13`, `MILE-21`, `MILE-23`, `MILE-30`) wrote `Blocked` for a wait
 that is a fact or a decision, not a record, so the written value had no `Depends-on` to agree with. A
@@ -125,7 +125,7 @@ once adopters of the milestone shape have migrated, and the `progress` key's nam
 - `ADR-76` -- the sequencing relation; `ADR-72` -- statuses and transitions; `ADR-73` -- suggested actions.
 - `ADR-64` -- clause 4, a derived value is computed; `ADR-53` -- every rule is declared and opt-in.
 - `MILE-144` -- the milestone this decision unblocks; `MILE-133` -- what `implementable` means;
-  `MILE-182` and `ADR-82` -- the roadmap that surfaces the derived value.
+  `MILE-182` -- the roadmap that surfaces the derived value.
 - `SPEC-6` -- amended; `SPEC-2`, `SPEC-3` -- document the rule and the keys.
 
 > **Revision log**
