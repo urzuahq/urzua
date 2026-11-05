@@ -122,3 +122,9 @@ because it is a hole in that RFC's central abstraction.
 - RFC-7 — the harness that may surface the pending state but may not refuse the write.
 - RFC-8 §1 — the eligibility test §5 above finds a hole in.
 - RFC-1 §1a — declared profiles, so acceptance-bearing states are not hardcoded.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

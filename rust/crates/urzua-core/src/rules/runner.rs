@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Waiver;
+use crate::waiver::Suppression;
 use std::path::Path;
 
 /// Source files a back-pointer rule scans, with the `back_pointer_paths` that
@@ -17,7 +17,7 @@ pub struct RunState<'a> {
     pub executions: &'a [RuleExecution],
     /// The findings left after scoping, before waivers apply.
     pub findings: &'a [Finding],
-    pub waivers: &'a [Waiver],
+    pub waivers: &'a [Suppression],
     /// The run covers the whole corpus: no path scope, no `--base`.
     pub whole_corpus: bool,
     /// Whether a path is inside what the run reports on.

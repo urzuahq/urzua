@@ -89,3 +89,9 @@ about relationship-completion and locator-repointing, a different shape of gap):
 - BUG-5 — `field_state`'s placeholder-detection gap, fixed the same day MILE-78 landed.
 - SPEC-8 — `fix`'s current, complete build; where a new tier would eventually need to land.
 - RFC-20 — where `fix` sits relative to `check`/`doctor` in the overall command surface.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
