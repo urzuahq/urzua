@@ -4,6 +4,8 @@
 //!
 //! Verifies: ADR-66
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -26,9 +28,8 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
 
 /// One ADR stating `Embodiment: Implemented` with only a `spec:` locator, so
 /// it computes to `Specified` unless a source comment cites it.
-fn repo(name: &str, back_pointer_rule: bool, source: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-backptr-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, back_pointer_rule: bool, source: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-backptr-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("docs/spec")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -89,7 +90,6 @@ fn a_cited_record_computes_to_implemented_and_a_dangling_citation_is_reported() 
     assert_eq!(dangling[0]["file"], "src/lib.rs");
     assert_eq!(dangling[0]["line"], 1);
     assert!(dangling[0]["message"].as_str().unwrap().contains("ADR-9"));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -97,7 +97,6 @@ fn without_the_rule_the_comment_is_not_evidence() {
     let dir = repo("off", false, "// Implements: ADR-1\n");
     let out = run_urzua(&dir, &["check"]);
     assert_eq!(findings(&out, "embodiment.consistency").len(), 1);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -105,7 +104,6 @@ fn without_a_comment_the_stated_tier_disagrees() {
     let dir = repo("none", true, "fn a() {}\n");
     let out = run_urzua(&dir, &["check"]);
     assert_eq!(findings(&out, "embodiment.consistency").len(), 1);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -118,7 +116,6 @@ fn fix_detect_agrees_with_check_about_a_cited_record() {
         Some(0),
         "{parsed}"
     );
-    std::fs::remove_dir_all(&cited).ok();
 
     let uncited = repo("fix-uncited", true, "fn a() {}\n");
     let out = run_urzua(&uncited, &["fix"]);
@@ -128,15 +125,13 @@ fn fix_detect_agrees_with_check_about_a_cited_record() {
         Some(1),
         "{parsed}"
     );
-    std::fs::remove_dir_all(&uncited).ok();
 }
 
 /// `embodiment.back-pointer-decision-accepted` (`MILE-133`): a back-pointer to
 /// a record that is not yet Accepted is reported, with `--base` limiting the
 /// judgement to files the diff changed.
-fn gate_repo(name: &str, status: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-gate-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn gate_repo(name: &str, status: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-gate-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();

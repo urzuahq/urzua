@@ -142,6 +142,14 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
+    /// The order of work, computed from the records: waves, the ready set, the
+    /// critical path, what each record blocks and a grouping (ADR-82).
+    ///
+    /// One graph over the sequencing pairs `roadmap.pairs` declares. Read-only;
+    /// nothing is stored. A repository that declares none gets a note saying
+    /// there is no roadmap, not an empty one.
+    Roadmap,
+
     /// Deprecated alias of `check`: runs every rule the configuration
     /// declares and prints `check`'s report, plus a deprecation notice that
     /// never changes the exit code. Use `check` instead, or `check --rules
@@ -270,6 +278,12 @@ enum MigrateTarget {
         apply: bool,
     },
 
+    /// Rewrite the config from the previous schema version to the current one,
+    /// in place, keeping its comments. Reports every key it added, changed,
+    /// renamed, moved or dropped, and reports nothing to do when the config is
+    /// already current. A version outside what this build reads is refused.
+    Config,
+
     /// Field-rollout assistant for a newly-required field. Only --report
     /// exists so far: a read-only preview of which existing records would
     /// newly fail, before the field is ever added to config.
@@ -345,6 +359,7 @@ fn main() -> ExitCode {
         ),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
+        Command::Roadmap => commands::roadmap::run(cli.config),
         Command::New {
             record_type,
             title,
@@ -354,6 +369,9 @@ fn main() -> ExitCode {
         Command::Migrate {
             target: MigrateTarget::Ids { apply },
         } => commands::migrate::run_ids(cli.config, apply),
+        Command::Migrate {
+            target: MigrateTarget::Config,
+        } => commands::migrate::run_config(cli.config),
         Command::Migrate {
             target:
                 MigrateTarget::Schema {

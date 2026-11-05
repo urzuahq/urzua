@@ -3,7 +3,9 @@
 //!
 //! Verifies: SPEC-2, SPEC-3
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -23,9 +25,8 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
         .expect("urzua binary should run")
 }
 
-fn repo(name: &str, rule: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-fixgit-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, rule: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fixgit-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -55,10 +56,8 @@ fn repo(name: &str, rule: &str) -> PathBuf {
     dir
 }
 
-fn shallow_clone(src: &Path, name: &str) -> PathBuf {
-    let dst =
-        std::env::temp_dir().join(format!("urzua-fixgit-{name}-clone-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dst);
+fn shallow_clone(src: &Path, name: &str) -> common::TempDir {
+    let dst = common::TempDir::new(&format!("urzua-fixgit-{name}-clone"));
     let status = Command::new("git")
         .args(["clone", "-q", "--depth", "1"])
         .arg(format!("file://{}", src.display()))
@@ -100,8 +99,6 @@ fn check_and_fix_name_a_shallow_clone_instead_of_reporting_no_drift() {
         notice_messages(&full).is_empty(),
         "a full clone has no drift notice"
     );
-    std::fs::remove_dir_all(&src).ok();
-    std::fs::remove_dir_all(&clone).ok();
 }
 
 #[test]
@@ -116,5 +113,4 @@ fn fix_does_not_run_when_embodiment_consistency_is_off() {
     );
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("embodiment.consistency"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }

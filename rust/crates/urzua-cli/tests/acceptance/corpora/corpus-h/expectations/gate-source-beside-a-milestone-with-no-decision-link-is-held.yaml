@@ -1,0 +1,12 @@
+id: gate-source-beside-a-milestone-with-no-decision-link-is-held
+corpus: corpus-h
+# A milestone changed, but its Implements names no decision (MILE-0001 is a
+# milestone, not a decision type), so it does not release the gate.
+commits:
+  - write:
+      src/lib.rs: "fn a() { 3; }\n"
+      records/milestones/MILE-0004-unlinked.md: "---\nStatus: Planned\nImplements: MILE-0001\n---\n# MILE-0004 — Unlinked\n"
+invocation: [--config, .urzua/gate.yaml, check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: diff.source-requires-record, file: src/lib.rs, severity: error}

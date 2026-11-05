@@ -2,7 +2,9 @@
 //! binary; all output is JSON. A scope that stops resolving is reported by
 //! `embodiment.locator-exists`, never passed.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -63,9 +65,8 @@ fn record(realized_by: &str) -> String {
 
 const SOURCE: &str = "/// Alpha.\nfn alpha() {\n    1;\n}\n\nstruct Beta {\n    b: u8,\n}\n\nimpl Beta {\n    fn go(&self) {}\n}\n";
 
-fn repo(name: &str, resolvers: &str, realized_by: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-scoped-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, resolvers: &str, realized_by: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-scoped-{name}"));
     for d in ["docs/adr", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -227,13 +228,105 @@ fn drift_messages(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn pinned_repo(name: &str, consistency: &str, scope: &str) -> PathBuf {
+fn pinned_repo(name: &str, consistency: &str, scope: &str) -> common::TempDir {
     let dir = repo(name, "", "code:src/a.rs");
     std::fs::write(dir.join(".urzua/config.yaml"), config_with(consistency)).unwrap();
     let pin = explained_pin(&dir, &format!("src/a.rs{scope}"));
     std::fs::write(dir.join(RECORD_PATH), record(&format!("code:{pin}"))).unwrap();
     commit_all(&dir);
     dir
+}
+
+// ---- a struct field beside a method: more than one member pattern ---------------
+
+/// `RESOLVERS` whose container also matches a `struct` and whose `member` is a
+/// list: a method ends at its closing brace, a field at the next field.
+const FIELD_RESOLVERS: &str = r#"
+locator_resolvers:
+  - name: rust
+    glob: "**/*.rs"
+    start: '^\s*(pub\s+)?(fn|struct)\s+{symbol}\b'
+    end: brace_balanced
+    leading: '^\s*(#\[|///)'
+    container:
+      start: '^\s*(impl(<.*?>)?\s+|(pub\s+)?struct\s+){symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      end: brace_balanced
+      spans: all
+    member:
+      - start: '^\s*(pub\s+)?fn\s+{symbol}\b'
+        end: brace_balanced
+      - start: '^\s*(pub\s+)?{symbol}\s*:([^:]|$)'
+        end: indent
+"#;
+
+#[test]
+fn explain_resolves_a_struct_field_and_a_method_of_the_same_type() {
+    let dir = repo("field-explain", FIELD_RESOLVERS, "code:src/a.rs");
+    let parsed = json(&run_urzua(&dir, &["explain", "src/a.rs#Beta::b"]));
+    assert_eq!(parsed["scope"]["start"], 7, "{parsed}");
+    assert_eq!(parsed["scope"]["end"], 7, "{parsed}");
+    assert_eq!(parsed["scope"]["text"], "    b: u8,");
+    let parsed = json(&run_urzua(&dir, &["explain", "src/a.rs#Beta::go"]));
+    assert_eq!(parsed["scope"]["start"], 11, "{parsed}");
+}
+
+#[test]
+fn a_field_pin_survives_an_edit_above_it_and_goes_stale_when_the_field_changes() {
+    let dir = repo("field-drift", "", "code:src/a.rs");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config_with("error").replace(RESOLVERS, FIELD_RESOLVERS),
+    )
+    .unwrap();
+    let pin = explained_pin(&dir, "src/a.rs#Beta::b");
+    std::fs::write(dir.join(RECORD_PATH), record(&format!("code:{pin}"))).unwrap();
+    commit_all(&dir);
+    assert_eq!(drift_messages(&dir), Vec::<String>::new());
+    // A new field above and one below, a new method: the pinned field is unchanged.
+    let src = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
+    std::fs::write(
+        dir.join("src/a.rs"),
+        src.replace(
+            "struct Beta {\n    b: u8,",
+            "struct Beta {\n    a: u8,\n    b: u8,\n    c: u8,",
+        )
+        .replace("fn go(&self) {}", "fn go(&self) {}\n    fn more(&self) {}"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_eq!(drift_messages(&dir), Vec::<String>::new());
+    // The field itself changes.
+    let src = std::fs::read_to_string(dir.join("src/a.rs")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), src.replace("b: u8,", "b: u16,")).unwrap();
+    commit_all(&dir);
+    assert!(
+        drift_messages(&dir)
+            .iter()
+            .any(|m| m.contains("Drift detected")),
+        "{:?}",
+        drift_messages(&dir)
+    );
+}
+
+#[test]
+fn a_field_that_is_gone_or_named_by_a_method_too_is_reported() {
+    let dir = repo(
+        "field-reasons",
+        FIELD_RESOLVERS,
+        &format!("code:src/a.rs#Beta::nope@sha256:{ZEROS}"),
+    );
+    let m = exists_messages(&dir);
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert!(m[0].contains("member 'nope' not found"), "{m:?}");
+    // Without the field pattern a field is not addressable at all.
+    let dir = repo(
+        "field-unsupported",
+        RESOLVERS,
+        &format!("code:src/a.rs#Beta::b@sha256:{ZEROS}"),
+    );
+    let m = exists_messages(&dir);
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert!(m[0].contains("not found"), "{m:?}");
 }
 
 #[test]

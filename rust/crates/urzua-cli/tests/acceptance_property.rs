@@ -12,8 +12,9 @@
 //! property, against an input that really does change the verdict) and must then
 //! report violations.
 
+mod common;
+
 use serde_json::Value;
-use std::path::PathBuf;
 use std::process::Command;
 
 /// xorshift64*: deterministic, no dependency, good enough to vary inputs.
@@ -35,14 +36,12 @@ impl Rng {
 }
 
 struct Repo {
-    dir: PathBuf,
+    dir: common::TempDir,
 }
 
 impl Repo {
     fn new(name: &str, config: &str, files: &[(String, String)]) -> Repo {
-        let dir =
-            std::env::temp_dir().join(format!("urzua-property-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = common::TempDir::new(&format!("urzua-property-{name}"));
         std::fs::create_dir_all(dir.join(".urzua")).unwrap();
         std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
         for (path, text) in files {
@@ -80,12 +79,6 @@ impl Repo {
                 String::from_utf8_lossy(&out.stdout)
             )
         })
-    }
-}
-
-impl Drop for Repo {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

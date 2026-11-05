@@ -3,9 +3,11 @@
 //! offline; `refresh` is exercised against a loopback server that replays the
 //! recorded GitHub responses in `tests/fixtures/github`, never the network.
 
+mod common;
+
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -20,9 +22,8 @@ fn git(dir: &Path, args: &[&str]) {
 
 const RULE: &str = "{ citation.issue-exists: { level: warn, reference_sections: [\"References\"], skip_revision_log: true, issue_refs: { snapshot: \".urzua/known-refs.json\", repository: \"urzuahq/urzua\", forms: [number, url] } } }";
 
-fn fixture(name: &str, rules: &str, body: &str, snapshot: Option<&str>) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-refs-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str, body: &str, snapshot: Option<&str>) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-refs-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);

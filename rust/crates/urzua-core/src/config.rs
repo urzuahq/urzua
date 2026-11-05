@@ -7,8 +7,10 @@ use crate::header::HeaderShape;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The only schema version defined so far (ADR-0012). A config declaring any
-/// other value is a parse-time error, not a silent best-effort read.
+/// The schema version this build writes (ADR-0012). It reads this version and
+/// the one before it (`ADR-77`, `crate::schema_version`); a config declaring
+/// any other value is a structured parse-time error, not a silent best-effort
+/// read.
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -30,6 +32,11 @@ pub struct Config {
     /// `RelationPair`. Absent means none declared.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_pairs: Vec<RelationPair>,
+    /// The roadmap's declaration (`ADR-82`, `ADR-83`): the sequencing pairs the
+    /// roadmap command and the derived `blocked` value both read, and how the
+    /// roadmap groups its records.
+    #[serde(default, skip_serializing_if = "RoadmapDecl::is_empty")]
+    pub roadmap: RoadmapDecl,
     /// The lowest finding severity that makes `urzua check` exit 1. Absent
     /// means `error`, so a repository that does not declare it is unchanged.
     #[serde(default, skip_serializing_if = "FailOn::is_default")]
@@ -44,11 +51,42 @@ pub struct Config {
     /// `SPEC-3`); absent means none, so only line ranges are available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
+    /// Set when the file was at the previous schema version and was upgraded
+    /// in memory (`ADR-77`). Not part of the declared configuration: it is
+    /// never read from or written to a file, so an upgraded config and the
+    /// same config written at the current version are equal.
+    #[serde(skip)]
+    pub upgraded_from: Option<crate::schema_version::UpgradeInfo>,
     /// The committed log of editor-hook overrides (`ADR-78`, `MILE-188`): a
     /// repository-relative path. The hook appends to it and
     /// `override.unreviewed` reads it. Absent means no log is declared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub override_log: Option<String>,
+}
+
+/// `roadmap` (`SPEC-3`, `ADR-82`): which `relation_pairs` are dependencies, and
+/// how `urzua roadmap` groups its records. A pair can be `acyclic` without
+/// being a dependency: a containment pair (parent and children) is checked for
+/// cycles but a child does not wait on its parent finishing. Absent means no
+/// roadmap, which the command states instead of printing an empty one.
+/// The derived `blocked` value reads exactly these pairs, so `check` and the
+/// roadmap cannot disagree about what is blocked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoadmapDecl {
+    /// Names of `relation_pairs` entries that declare `acyclic: true`.
+    #[serde(default)]
+    pub pairs: Vec<String>,
+    /// Header field names the roadmap groups by, outermost first. The engine
+    /// names none; each must be declared by some record type.
+    #[serde(default)]
+    pub group_by: Vec<String>,
+}
+
+impl RoadmapDecl {
+    fn is_empty(&self) -> bool {
+        self.pairs.is_empty() && self.group_by.is_empty()
+    }
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -64,6 +102,31 @@ pub enum FailOn {
 impl FailOn {
     fn is_default(&self) -> bool {
         *self == FailOn::Error
+    }
+}
+
+/// What a `Realized-by` locator may name (`BUG-176`): one tracked file, a
+/// directory (every tracked file below it) or a glob (every tracked file it
+/// matches). Which kinds a repository accepts, and which of those may carry a
+/// `@sha256:` pin, are the `locator_kinds` and `pinnable` options of
+/// `embodiment.locator-exists`; both default to `[file]`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatorKind {
+    File,
+    Directory,
+    Glob,
+}
+
+impl std::fmt::Display for LocatorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            LocatorKind::File => "file",
+            LocatorKind::Directory => "directory",
+            LocatorKind::Glob => "glob",
+        })
     }
 }
 
@@ -198,6 +261,28 @@ pub struct RuleSetting {
     /// (`MILE-142`, `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_paths: Option<Vec<String>>,
+    /// The decision gate (`MILE-133`): each record type that holds decisions,
+    /// with the statuses at which one counts as decided. Declaring it turns
+    /// `diff.source-requires-record` from "some governed record changed" into
+    /// "a decision at a decided status changed, or a record linking one
+    /// (`link_fields`), or a fix record (`fix_types`)". Only meaningful to
+    /// `diff.source-requires-record`; omitted means the rule asks only for
+    /// any governed record, and `fix_types` and `link_fields` are then refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_types: Option<BTreeMap<String, Vec<String>>>,
+    /// Record types whose records exempt a change from the decision gate
+    /// (`MILE-133`), such as `bug`: a mechanical fix needs a bug record and no
+    /// decision. Only meaningful to `diff.source-requires-record`, and only
+    /// with `decision_types`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix_types: Option<Vec<String>>,
+    /// Pointer or narrative fields (such as a milestone's `Implements`) through
+    /// which a changed record links a decision for the decision gate
+    /// (`MILE-133`): a changed record whose field names a decision at a
+    /// decided status satisfies it. Only meaningful to
+    /// `diff.source-requires-record`, and only with `decision_types`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_fields: Option<Vec<String>>,
     /// Admit header keys beginning `x-` (case-insensitive) as extension keys
     /// (`MILE-141`). Only meaningful to `header.field-set-consistency`, where
     /// omitted means `false`: every undeclared key is a finding. A declared
@@ -251,6 +336,16 @@ pub struct RuleSetting {
     /// omitted means every stated value must match the computed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sticky_states: Option<Vec<String>>,
+    /// The kinds of locator a `Realized-by` may name: `file`, `directory`,
+    /// `glob` (`BUG-176`). Only meaningful to `embodiment.locator-exists`;
+    /// omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator_kinds: Option<Vec<LocatorKind>>,
+    /// The kinds of locator that may carry a `@sha256:` pin (`BUG-176`); each
+    /// must also be in `locator_kinds`. Only meaningful to
+    /// `embodiment.locator-exists`; omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinnable: Option<Vec<LocatorKind>>,
     /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1044,8 +1139,10 @@ impl Serialize for HeaderShape {
 pub enum ConfigError {
     #[error("could not parse config: {0}")]
     Parse(#[from] yaml_serde::Error),
-    #[error("unrecognized schema_version {found} -- this build of urzua understands version {CURRENT_SCHEMA_VERSION}")]
-    UnrecognizedSchemaVersion { found: u32 },
+    #[error("{0}")]
+    SchemaVersionOutOfWindow(crate::schema_version::SchemaVersionError),
+    #[error("could not upgrade the schema_version {from} config: {reason}")]
+    UpgradeFailed { from: u32, reason: String },
     #[error("unknown rule '{found}' under `rules:` -- this build ships: {}", known.join(", "))]
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
@@ -1054,6 +1151,8 @@ pub enum ConfigError {
     UndeclaredRuleField { rule: String, field: String },
     #[error("rule '{rule}' option 'field_levels' {reason}")]
     InvalidFieldLevels { rule: String, reason: String },
+    #[error("rule '{rule}' decision gate (`decision_types`, `fix_types`, `link_fields`) {reason}")]
+    InvalidDecisionGate { rule: String, reason: String },
     #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
     OptionRequired {
         rule: String,
@@ -1064,6 +1163,12 @@ pub enum ConfigError {
     TestPathOutsideBackPointerPaths { rule: String, entry: String },
     #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
     StickyStateIsComputed { rule: String, state: String },
+    #[error("rule '{rule}' option 'pinnable' names '{kind}', which 'locator_kinds' does not declare; a locator of a kind the rule rejects can never be pinned (declared kinds: {declared})")]
+    PinnableKindNotDeclared {
+        rule: String,
+        kind: String,
+        declared: String,
+    },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
@@ -1074,6 +1179,8 @@ pub enum ConfigError {
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
+    #[error("roadmap: {reason}")]
+    InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
     InvalidPrefix {
         record_type: String,
@@ -1289,6 +1396,16 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: true,
     },
     RuleOption {
+        name: "locator_kinds",
+        consequence_if_missing: "accepts only a file locator",
+        optional: true,
+    },
+    RuleOption {
+        name: "pinnable",
+        consequence_if_missing: "lets only a file locator carry a pin",
+        optional: true,
+    },
+    RuleOption {
         name: "date_fields",
         consequence_if_missing: "names no date field and can never report",
         optional: false,
@@ -1356,6 +1473,80 @@ pub fn rule_requires_options(rule: &str) -> bool {
             .iter()
             .any(|o| *o == "indexes" || RULE_OPTIONS.iter().any(|r| r.name == *o))
     })
+}
+
+/// Why a decision-gate declaration (`MILE-133`) cannot work, or `None` when it
+/// can. Each declaration names records or fields the configuration must have,
+/// because one that names nothing real would leave the gate silently open.
+fn decision_gate_problem(setting: &RuleSetting, config: &Config) -> Option<String> {
+    let Some(decisions) = &setting.decision_types else {
+        let orphan = if setting.fix_types.is_some() {
+            Some("fix_types")
+        } else if setting.link_fields.is_some() {
+            Some("link_fields")
+        } else {
+            None
+        };
+        return orphan.map(|o| {
+            format!("declares '{o}' without 'decision_types': there is no decision to exempt a change from or to link, so it would never apply")
+        });
+    };
+    if decisions.is_empty() {
+        return Some(
+            "declares an empty 'decision_types'; name a type or omit the option".to_string(),
+        );
+    }
+    for (type_name, statuses) in decisions {
+        let Some(record_type) = config.record_types.get(type_name) else {
+            return Some(format!(
+                "'decision_types' names '{type_name}', which is not a declared record type"
+            ));
+        };
+        if statuses.is_empty() || statuses.iter().any(|s| s.trim().is_empty()) {
+            return Some(format!(
+                "'decision_types' gives '{type_name}' an empty or blank status list; name the statuses at which one counts as decided"
+            ));
+        }
+        if let Some(decl) = record_type.status_decl() {
+            if let Some(unknown) = statuses.iter().find(|s| !decl.values.contains(s)) {
+                return Some(format!(
+                    "'decision_types' names status '{unknown}' for '{type_name}', which that type's `statuses.values` does not list, so it could never match"
+                ));
+            }
+        }
+    }
+    for type_name in setting.fix_types.iter().flatten() {
+        if !config.record_types.contains_key(type_name) {
+            return Some(format!(
+                "'fix_types' names '{type_name}', which is not a declared record type"
+            ));
+        }
+        if decisions.contains_key(type_name) {
+            return Some(format!(
+                "names '{type_name}' in both 'decision_types' and 'fix_types'; a record cannot be both a decision and a fix"
+            ));
+        }
+    }
+    if setting.fix_types.as_ref().is_some_and(Vec::is_empty) {
+        return Some("declares an empty 'fix_types'; name a type or omit the option".to_string());
+    }
+    if setting.link_fields.as_ref().is_some_and(Vec::is_empty) {
+        return Some(
+            "declares an empty 'link_fields'; name a field or omit the option".to_string(),
+        );
+    }
+    for field in setting.link_fields.iter().flatten() {
+        let relational = config.record_types.values().any(|t| {
+            t.pointer_fields.iter().flatten().any(|f| f == field)
+                || t.narrative_fields.iter().flatten().any(|f| f == field)
+        });
+        if !relational {
+            return Some(format!(
+                "'link_fields' names '{field}', which is not a declared pointer_fields or narrative_fields entry of any record type"
+            ));
+        }
+    }
+    None
 }
 
 /// Why an `issue_refs` declaration cannot work, or `None` when it can.
@@ -1488,6 +1679,45 @@ fn published_path_problem(entry: &str) -> Option<&'static str> {
     None
 }
 
+/// The `schema_version` a config declares, read on its own: the probe skips
+/// every other key without building a value for it, so a config that reads
+/// today (an unquoted integer beyond `u64` read as a string, say) is read
+/// exactly as it was, and only a config that needs the upgrade is parsed whole.
+fn declared_version(content: &str) -> Result<Option<u64>, ConfigError> {
+    #[derive(Deserialize)]
+    struct VersionProbe {
+        #[serde(default)]
+        schema_version: Option<yaml_serde::Value>,
+    }
+    let probe: VersionProbe = yaml_serde::from_str(content)?;
+    Ok(probe.schema_version.and_then(|v| v.as_u64()))
+}
+
+/// Reads the typed config, upgrading it first when it is at the previous
+/// schema version and rejecting it when it is outside the window (`ADR-77`).
+/// A config that declares no integer `schema_version` falls through to the
+/// typed parse, whose error names the field.
+fn read_in_window(content: &str) -> Result<Config, ConfigError> {
+    let Some(found) = declared_version(content)? else {
+        return Ok(yaml_serde::from_str(content)?);
+    };
+    if found == u64::from(CURRENT_SCHEMA_VERSION) {
+        return Ok(yaml_serde::from_str(content)?);
+    }
+    if found != u64::from(crate::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION) {
+        return Err(ConfigError::SchemaVersionOutOfWindow(
+            crate::schema_version::SchemaVersionError::new(found),
+        ));
+    }
+    let from = crate::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION;
+    let doc: yaml_serde::Value = yaml_serde::from_str(content)?;
+    let (upgraded, changes) = crate::schema_version::upgrade(doc)
+        .map_err(|reason| ConfigError::UpgradeFailed { from, reason })?;
+    let mut config: Config = yaml_serde::from_value(upgraded)?;
+    config.upgraded_from = Some(crate::schema_version::UpgradeInfo { from, changes });
+    Ok(config)
+}
+
 /// The one spelling of a repository-relative directory: surrounding
 /// whitespace, `.` and empty components, and a trailing `/` removed.
 fn canonical_dir(dir: &str) -> String {
@@ -1511,12 +1741,7 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
 pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
-    let mut config: Config = yaml_serde::from_str(content)?;
-    if config.schema_version != CURRENT_SCHEMA_VERSION {
-        return Err(ConfigError::UnrecognizedSchemaVersion {
-            found: config.schema_version,
-        });
-    }
+    let mut config = read_in_window(content)?;
     let models = crate::document_model::validate_declarations(&config.record_types)?;
     config
         .embodiment
@@ -1526,6 +1751,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
+    validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
@@ -1893,6 +2119,49 @@ pub fn parse_with_document_models(
                         reason: format!(
                             "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
                         ),
+                    });
+                }
+            }
+        }
+
+        for (option, present) in [
+            ("decision_types", setting.decision_types.is_some()),
+            ("fix_types", setting.fix_types.is_some()),
+            ("link_fields", setting.link_fields.is_some()),
+        ] {
+            if present && !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
+        if setting.level != RuleLevel::Off {
+            if let Some(reason) = decision_gate_problem(setting, &config) {
+                return Err(ConfigError::InvalidDecisionGate {
+                    rule: name.clone(),
+                    reason,
+                });
+            }
+        }
+
+        // A pin on a kind the rule rejects is a locator that is always
+        // reported, so `pinnable` may only narrow `locator_kinds` (`BUG-176`).
+        if setting.level != RuleLevel::Off {
+            let declared = setting
+                .locator_kinds
+                .clone()
+                .unwrap_or_else(|| vec![LocatorKind::File]);
+            for kind in setting.pinnable.iter().flatten() {
+                if !declared.contains(kind) {
+                    return Err(ConfigError::PinnableKindNotDeclared {
+                        rule: name.clone(),
+                        kind: kind.to_string(),
+                        declared: declared
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", "),
                     });
                 }
             }
@@ -2396,6 +2665,53 @@ fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Load-time checks for `roadmap` (`ADR-82`): `pairs` names declared, acyclic
+/// pairs, each once, and `group_by` names fields some record type declares,
+/// each once. A declaration that can never apply reads as a clean roadmap, so
+/// it is refused (`ADR-7`, `ADR-64` clause 5).
+fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
+    let bad = |reason: String| Err(ConfigError::InvalidRoadmap { reason });
+    let mut named = std::collections::BTreeSet::new();
+    for name in &config.roadmap.pairs {
+        if !named.insert(name.as_str()) {
+            return bad(format!("pairs lists '{name}' twice"));
+        }
+        match config.relation_pairs.iter().find(|p| p.name == *name) {
+            None => {
+                return bad(format!(
+                    "pairs names '{name}', which is not a relation_pairs entry"
+                ))
+            }
+            Some(p) if !p.acyclic => {
+                return bad(format!(
+                    "pairs names '{name}', which does not declare `acyclic: true`; a dependency relation must be checked for cycles"
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    let mut grouped = std::collections::BTreeSet::new();
+    for field in &config.roadmap.group_by {
+        if field.trim().is_empty() || *field != field.trim() {
+            return bad(format!(
+                "group_by field '{field}' is blank or has surrounding whitespace"
+            ));
+        }
+        if !grouped.insert(field.as_str()) {
+            return bad(format!("group_by lists '{field}' twice"));
+        }
+        if !config.record_types.values().any(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::new(field))
+        }) {
+            return bad(format!(
+                "group_by names '{field}', which is not in the required_fields or known_fields of any record type, so no record could carry it"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
 /// because a pair that cannot run reads as a clean corpus.
 fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
@@ -2572,6 +2888,30 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    // A status-agreement rule with no pair to read, or no type declaring
+    // `statuses.blocked` or `statuses.progress`, examines nothing (`MILE-144`,
+    // ADR-7).
+    if config
+        .rules
+        .get(crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+    {
+        if config.roadmap.pairs.is_empty() {
+            return bad(format!(
+                "rule '{}' is enabled but roadmap.pairs declares no pair, so there is no dependency to derive blocked from",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+        if !config.record_types.values().any(|t| {
+            t.status_decl()
+                .is_some_and(|d| !d.blocked.is_empty() || !d.progress.is_empty())
+        }) {
+            return bad(format!(
+                "rule '{}' is enabled but no record type declares statuses.blocked or statuses.progress, so it would examine nothing",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+    }
     // The override log is declared, never defaulted: a path that names nothing or
     // leaves the repository could be neither written nor read (`MILE-188`).
     if let Some(path) = &config.override_log {
@@ -2727,7 +3067,7 @@ mod tests {
         let yaml = "schema_version: 99\nrecord_types:\n  adr:\n    dir: docs/adr\n    sections: {from: headings, depth: 9}\n";
         let e = parse(yaml).unwrap_err();
         assert!(
-            matches!(e, ConfigError::UnrecognizedSchemaVersion { found: 99 }),
+            matches!(&e, ConfigError::SchemaVersionOutOfWindow(v) if v.found == 99),
             "{e}"
         );
     }
@@ -3518,8 +3858,8 @@ record_types:
 "#;
         let err = parse(yaml).unwrap_err();
         assert!(matches!(
-            err,
-            ConfigError::UnrecognizedSchemaVersion { found: 99 }
+            &err,
+            ConfigError::SchemaVersionOutOfWindow(v) if v.found == 99
         ));
     }
 
@@ -4365,9 +4705,13 @@ mod exclude_files_tests {
 mod option_table_tests {
     use super::*;
 
-    /// Options that are not list-valued, so `RULE_OPTIONS` (which carries the
+    /// Options that are not plain lists, or are validated together by their own
+    /// check (`decision_gate_problem`), so `RULE_OPTIONS` (which carries the
     /// "required list" consequence text) does not describe them.
     const OTHER_OPTIONS: &[&str] = &[
+        "decision_types",
+        "fix_types",
+        "link_fields",
         "indexes",
         "issue_refs",
         "allow_extension_prefix",

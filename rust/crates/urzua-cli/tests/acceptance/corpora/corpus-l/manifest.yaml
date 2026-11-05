@@ -1,0 +1,9 @@
+fixtures:
+- path: .urzua/config.yaml
+  irregularity: 'a milestone type with one acyclic sequencing pair named in roadmap.pairs and grouped by Phase; not a record. Every case writes its own milestones in a commit.'
+- path: .urzua/two-pairs.yaml
+  irregularity: 'two acyclic pairs, sequencing and gating, both named in roadmap.pairs, so a loop can cross them; not a record.'
+- path: .urzua/no-pair.yaml
+  irregularity: 'a sequencing pair that does not declare acyclic and no roadmap.pairs, so there is no roadmap; not a record.'
+- path: records/MILE-1-seed.md
+  irregularity: 'Done, with no dependency: the finished blocker most cases depend on, which the roadmap ignores.'

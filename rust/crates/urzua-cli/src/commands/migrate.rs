@@ -1,14 +1,16 @@
-//! `urzua migrate ids` / `urzua migrate schema --report` (SPEC-14): two
-//! genuinely different operations under one verb -- backfilling stable
-//! identifiers onto existing records, and previewing what a newly-required
-//! field would break before it's ever added to config.
+//! `urzua migrate ids` / `urzua migrate schema --report` / `urzua migrate
+//! config` (SPEC-14): three genuinely different operations under one verb --
+//! backfilling stable identifiers onto existing records, previewing what a
+//! newly-required field would break before it's ever added to config, and
+//! rewriting a config from the previous schema version to the current one.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::header::HeaderShape;
-use urzua_core::report::{MigrateSchemaReport, Notice, Report, ReportStatus};
+use urzua_core::report::{Failure, MigrateSchemaReport, Notice, Report, ReportStatus};
 
+use crate::discovery::{default_config_path, find_repo_root};
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
 
@@ -68,7 +70,7 @@ pub fn run_ids(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     emit_or_not_run(run_ids_inner(config_path, apply))
 }
 
-fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, String> {
+fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Failure> {
     let Session {
         repo_root,
         config,
@@ -177,12 +179,12 @@ pub fn run_schema_report(config_path: Option<PathBuf>, field: String) -> ExitCod
 fn run_schema_report_inner(
     config_path: Option<PathBuf>,
     field: String,
-) -> Result<ExitCode, String> {
+) -> Result<ExitCode, Failure> {
     let Session {
         config, records, ..
     } = Session::open(config_path)?;
     if records.is_empty() {
-        return Err("no records discovered -- nothing to check".to_string());
+        return Err("no records discovered -- nothing to check".into());
     }
 
     let (population, would_fail, notices) =
@@ -194,5 +196,109 @@ fn run_schema_report_inner(
         population,
         would_fail,
         notices,
+    }))
+}
+
+/// `urzua migrate config`'s report (SPEC-14).
+#[derive(serde::Serialize)]
+struct MigrateConfigReport {
+    status: ReportStatus,
+    /// The config file, repository-relative when it lies inside the repository.
+    file: PathBuf,
+    outcome: MigrateConfigOutcome,
+    /// The `schema_version` the file declared before this run.
+    from: u32,
+    /// The `schema_version` it declares now.
+    to: u32,
+    /// Every key the rewrite added, changed, renamed, moved or dropped, in
+    /// order. Empty when there was nothing to do.
+    changes: Vec<urzua_core::schema_version::Change>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    notices: Vec<Notice>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum MigrateConfigOutcome {
+    Migrated,
+    NothingToDo,
+}
+
+impl Report for MigrateConfigReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
+/// Rewrites a config at the previous schema version to the current one, in
+/// place, and reports every key it touched (`ADR-77`). A config already at the
+/// current version is left alone and reported as nothing to do. A version
+/// outside the window is never read further: it is the same structured error
+/// `check` gives. The rewrite is checked to load before anything is written, so
+/// a file that cannot be upgraded cleanly is left exactly as it was.
+pub fn run_config(config_path: Option<PathBuf>) -> ExitCode {
+    emit_or_not_run(run_config_inner(config_path))
+}
+
+fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
+    let repo_root = find_repo_root(&[])?;
+    let path = config_path.unwrap_or_else(|| default_config_path(&repo_root));
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
+    let doc: yaml_serde::Value =
+        yaml_serde::from_str(&content).map_err(|e| format!("could not parse config: {e}"))?;
+    let found = doc
+        .as_mapping()
+        .and_then(|m| m.get("schema_version"))
+        .and_then(yaml_serde::Value::as_u64)
+        .ok_or_else(|| "the config declares no integer `schema_version`".to_string())?;
+    let file = path
+        .strip_prefix(&repo_root)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| path.clone());
+
+    let current = urzua_core::config::CURRENT_SCHEMA_VERSION;
+    if found == u64::from(current) {
+        return Ok(emit(&MigrateConfigReport {
+            status: ReportStatus::Ok,
+            file,
+            outcome: MigrateConfigOutcome::NothingToDo,
+            from: current,
+            to: current,
+            changes: Vec::new(),
+            notices: Vec::new(),
+        }));
+    }
+    if found != u64::from(urzua_core::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION) {
+        let v = urzua_core::schema_version::SchemaVersionError::new(found);
+        return Err(Failure {
+            message: v.to_string(),
+            schema_version: Some(Box::new(v)),
+        });
+    }
+
+    let migrated = urzua_core::schema_version::migrate_text(&content)?;
+    // The file is only replaced by text that loads: the same typed parse
+    // `check` runs, so a config the upgrade cannot make valid is reported, not
+    // written.
+    urzua_core::config::parse(&migrated.text).map_err(|e| {
+        format!(
+            "the upgraded config would not load ({e}); {} is unchanged -- fix that and run `urzua migrate config` again",
+            path.display()
+        )
+    })?;
+    std::fs::write(&path, &migrated.text)
+        .map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    Ok(emit(&MigrateConfigReport {
+        status: ReportStatus::Ok,
+        file,
+        outcome: MigrateConfigOutcome::Migrated,
+        from: urzua_core::schema_version::OLDEST_SUPPORTED_SCHEMA_VERSION,
+        to: current,
+        changes: migrated.changes,
+        notices: Vec::new(),
     }))
 }

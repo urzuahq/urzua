@@ -1,6 +1,8 @@
 //! MILE-168: `waiver.matches-nothing` over a planted corpus, whole-corpus and
 //! partial runs.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -39,10 +41,8 @@ fn waiver(rule: &str, scope: &str, expires: Option<&str>) -> String {
 
 /// ADR-1 lacks Author (a live `header.required-fields` finding); ADR-2 is
 /// clean. Committed and tagged `base`.
-fn corpus(name: &str, waivers: &[(&str, String)]) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-waiver-stale-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn corpus(name: &str, waivers: &[(&str, String)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-waiver-stale-{name}"));
     for d in ["docs/adr", "docs/waiver", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }

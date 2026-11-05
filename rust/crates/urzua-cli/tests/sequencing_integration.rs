@@ -1,6 +1,8 @@
 //! MILE-27: the declared sequencing relation (`RFC-48`). A pair with
 //! `acyclic: true` is checked for loops and for values that name no record.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -19,9 +21,8 @@ record_types:
     pointer_fields: [Depends-on, Blocks]
 ";
 
-fn repo(name: &str, config: &str, milestones: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-seq-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, config: &str, milestones: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-seq-{name}"));
     std::fs::create_dir_all(dir.join("docs/milestones")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
@@ -90,7 +91,6 @@ fn a_planted_cycle_fails_check_and_names_its_path() {
         "{found:?}"
     );
     assert_ne!(code, 0, "a cycle is an error: {report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -114,7 +114,6 @@ fn a_dangling_depends_on_target_fails_check() {
         .any(|f| f["message"].as_str().unwrap().contains("MILE-91")));
     assert!(findings(&report, "sequence.cycle").is_empty());
     assert_ne!(code, 0, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -141,7 +140,6 @@ fn an_ordered_corpus_passes_and_the_rules_state_what_they_examined() {
         .expect("sequence.cycle executed");
     assert_eq!(ran["population"]["examined"], 1, "{ran}");
     assert_eq!(code, 0, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -164,5 +162,4 @@ fn a_sequence_rule_with_no_acyclic_pair_declared_fails_to_load() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(text.contains("acyclic"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }

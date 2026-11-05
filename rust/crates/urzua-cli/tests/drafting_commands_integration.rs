@@ -10,6 +10,8 @@
 //! stops calling `urzua new` or `urzua check` fails here. The fixture is a copy of this
 //! repository's own working tree, so the real `.urzua/config.yaml` is what runs.
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -33,13 +35,11 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 /// A throwaway git repo holding a copy of this repository's working tree (tracked and
 /// not-yet-tracked files, minus ignored ones), committed as the baseline.
-fn fixture(name: &str) -> PathBuf {
+fn fixture(name: &str) -> common::TempDir {
     let root = repo_root();
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("urzua-draft-{name}-{}-{n}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = common::TempDir::new(&format!("urzua-draft-{name}-{n}"));
     let listing = Command::new("git")
         .args([
             "ls-files",
@@ -164,7 +164,7 @@ fn status_line(path: &Path) -> String {
 }
 
 /// Run a command's scaffold step; returns (fixture, record path).
-fn scaffold(command: &str, title: &str) -> (PathBuf, String, Vec<String>) {
+fn scaffold(command: &str, title: &str) -> (common::TempDir, String, Vec<String>) {
     let dir = fixture(&command.trim_end_matches(".md").replace('/', "-"));
     let s = steps(command);
     assert_eq!(
@@ -221,7 +221,6 @@ fn each_command_drafts_a_record_that_check_examined_and_passes() {
             scaffolded_status,
             "{command}"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
@@ -246,7 +245,6 @@ fn a_decision_status_written_into_the_draft_is_refused_and_nothing_is_staged() {
             "",
             "{command}"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
@@ -283,7 +281,6 @@ fn a_sweep_examines_a_scaffold_only_once_it_is_staged() {
     let before = examined(&dir);
     git(&dir, &["add", "--", &record]);
     assert_eq!(examined(&dir), before + 1);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -319,7 +316,6 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
             }
             forbidden.push(line.split(':').next().unwrap().to_string());
         }
-        let _ = std::fs::remove_dir_all(&d);
     }
     assert!(scaffold_text.contains("Status:"));
     for file in ["rfc.md", "adr.md", "milestone.md"] {
@@ -369,5 +365,4 @@ fn a_milestone_draft_carries_the_required_section_and_check_refuses_one_without_
         "{}",
         String::from_utf8_lossy(&out.stdout)
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }

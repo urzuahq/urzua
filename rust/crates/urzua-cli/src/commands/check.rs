@@ -18,6 +18,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::Failure;
 use urzua_core::report::{
     CheckReport, CouldNotRun, DiffScope, Finding, FindingSeverity, Notice, NoticeSeverity,
     RuleExecution, ScopeInfo,
@@ -317,7 +318,7 @@ fn validate_selection(
     Ok(Some(out))
 }
 
-fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, String> {
+fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
     let CheckArgs {
         paths,
         base,
@@ -329,7 +330,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     if stdin_path.is_some() && (!paths.is_empty() || base.is_some()) {
         return Err(
             "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base"
-                .to_string(),
+                .into(),
         );
     }
     let opened = open_session(&paths, config_path, base.as_deref(), stdin_path.as_deref())?;
@@ -407,7 +408,7 @@ fn open_session(
     config_path: Option<PathBuf>,
     base: Option<&str>,
     stdin_path: Option<&Path>,
-) -> Result<Opened, String> {
+) -> Result<Opened, Failure> {
     let mut requested_scopes = Vec::new();
     let mut changed = None;
     let session = Session::open_with(paths, config_path, |repo_root, _config, discovered| {

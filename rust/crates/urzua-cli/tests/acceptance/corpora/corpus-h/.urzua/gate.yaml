@@ -1,0 +1,37 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records/adr
+    prefix: ADR
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]
+      failure: []
+      implementable: [Accepted]
+  milestone:
+    dir: records/milestones
+    prefix: MILE
+    required_fields: [Status]
+    known_fields: [Implements, Realized-by]
+    header_shape: yaml-frontmatter
+    pointer_fields: [Implements]
+    narrative_fields: []
+  bug:
+    dir: records/bugs
+    prefix: BUG
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+
+rules:
+  header.required-fields: error
+  diff.source-requires-record:
+    level: error
+    source_paths: [src]
+    exclude_paths: [src/tests]
+    decision_types:
+      adr: [Accepted]
+    fix_types: [bug]
+    link_fields: [Implements]

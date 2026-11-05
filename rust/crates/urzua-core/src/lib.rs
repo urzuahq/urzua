@@ -28,6 +28,7 @@ pub mod record;
 pub mod refs_snapshot;
 pub mod report;
 pub mod rules;
+pub mod schema_version;
 pub mod section;
 pub mod status_model;
 pub mod values;

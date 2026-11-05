@@ -2,9 +2,9 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh
+Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/scripts/test-no-leak.test.sh, test:.github/actions/urzua-gate/test.sh
 Date: 2026-09-10
-Version: '0.7'
+Version: '0.8'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -28,7 +28,7 @@ Deliberately unfiltered (no `branches:`/`paths:` restriction) — a filtered req
 to report on a PR that doesn't touch the filtered paths, deadlocking a merge that requires it.
 
 - **`rust` job**: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo machete`, `cargo deny check`, `cargo build --release
-  --locked`, `cargo test --locked`, then `urzua check docs/` against this repo's own corpus — the
+  --locked`, `cargo test --locked` (through `.github/scripts/test-no-leak.sh`: a fresh `TMPDIR` that must be empty of `urzua-*` entries afterwards), then `urzua check docs/` against this repo's own corpus — the
   literal self-hosting exit criterion (`SPEC-1`). Checkout uses `fetch-depth: 0`:
   `embodiment.consistency`'s drift check (`ADR-32`) reads git blame/log history on locators, and a
   shallow checkout makes it silently unable to detect anything, not an error.
@@ -172,3 +172,4 @@ unrepresentable — including on a re-run, which replays the original payload.
 > | 2026-11-05 | Bumped to `0.6`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.7`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. The `rust` job runs the tests through `.github/scripts/test-no-leak.sh`, under a fresh `TMPDIR`, and fails when a run leaves any `urzua-*` entry behind; `make ci` does the same (`make test-no-leak`). **Why:** `BUG-193` -- fixture directories accumulated on every run until the disk filled, and nothing measured it. | **substantive** |

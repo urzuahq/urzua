@@ -2,7 +2,9 @@
 //! against every enabled rule without writing. Real git-repo fixtures, real
 //! binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -40,9 +42,8 @@ const VALID: &str =
 const PATH: &str = "docs/adr/ADR-1-a.md";
 
 /// A clean repo: ADR-1 is valid; ADR-2 is already broken on disk (no Date).
-fn fixture(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-check-stdin-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-check-stdin-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -219,9 +220,8 @@ fn spec(status: &str, version: &str, rows: &[&str]) -> String {
 const ROW1: &str = "2026-11-01 | Initial. | **substantive**";
 const ROW2: &str = "2026-11-04 | Rewrote the intro. | **substantive**";
 
-fn head_fixture(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-stdin-head-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn head_fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-stdin-head-{name}"));
     std::fs::create_dir_all(dir.join("docs/specs")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);

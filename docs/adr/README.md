@@ -90,4 +90,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Blocked is derived only: a repository following RFC-48 does not write it as a status](ADR-83-blocked-is-derived-only-a-repository-following-rfc-48-does-not-write-it-as-a-status.md)
 - [A record's status follows its declared evidence field](ADR-84-a-record-s-status-follows-its-declared-evidence-field.md)
 - [A changeset declares the records it closes in a structured field](ADR-85-a-changeset-declares-the-records-it-closes-in-a-structured-field.md)
+- [A waiver may be permanent when the repository declares which reasons allow it](ADR-86-a-waiver-may-be-permanent-when-the-repository-declares-which-reasons-allow-it.md)
 <!-- urzua:index:end -->
