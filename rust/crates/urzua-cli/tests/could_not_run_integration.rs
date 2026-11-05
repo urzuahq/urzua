@@ -62,21 +62,42 @@ fn assert_not_run(out: &Output, error: &str, what: &str) {
     );
 }
 
+const NEEDS_A_GIT_REPOSITORY: &str =
+    "urzua needs a git repository: no .git directory found above the given path";
+
 #[test]
-fn every_corpus_command_reports_a_missing_repository() {
+fn every_command_that_reads_a_repository_exits_2_outside_one_observed_failing() {
+    // BUG-170: outside a git repository there is no fallback that walks the
+    // directory (SPEC-2). Every command that reads a repository says so and
+    // exits 2, even when a config and a corpus sit right there on disk.
     let dir = scratch("no-repo");
-    for args in CORPUS_COMMANDS
-        .iter()
-        .copied()
-        .chain([&["doctor"][..], &["new", "adr", "T"][..]])
-    {
-        let out = run(&dir, args);
-        assert_not_run(
-            &out,
-            "no .git directory found above the given path",
-            &args.join(" "),
-        );
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Accepted\n---\n# ADR-1 — x\n",
+    )
+    .unwrap();
+    for args in CORPUS_COMMANDS.iter().copied().chain([
+        &["doctor"][..],
+        &["init"][..],
+        &["new", "adr", "T"][..],
+        &["index"][..],
+        &["refs", "refresh"][..],
+        &["check", "docs/adr/ADR-1-x.md"][..],
+        &["check", "docs"][..],
+    ]) {
+        assert_not_run(&run(&dir, args), NEEDS_A_GIT_REPOSITORY, &args.join(" "));
     }
+}
+
+#[test]
+fn rules_reads_no_repository_and_runs_outside_one() {
+    let out = run(&scratch("rules-no-repo"), &["rules"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(json["rules"].as_array().is_some_and(|r| !r.is_empty()));
 }
 
 #[test]
