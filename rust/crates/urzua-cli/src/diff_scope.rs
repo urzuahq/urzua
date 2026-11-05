@@ -131,10 +131,79 @@ fn touched_waiver_scopes(
     Ok(waivers.into_iter().map(|w| w.scope).collect())
 }
 
+/// The `Stable-Id` of a record, trimmed; `None` when it has none or it is blank.
+fn stable_id(record: &Record) -> Option<&str> {
+    record
+        .header
+        .get_reserved("Stable-Id")
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+}
+
+/// The base copies of the records the diff deleted, by `Stable-Id`, for one
+/// record type (`BUG-191`). The diff reports a rename as a deletion plus an
+/// addition, and the `Stable-Id` is the identity that survives it: a record
+/// added at a new path whose `Stable-Id` a deleted record carried is that
+/// record renamed. The `Status` is `None` where the base copy has no readable
+/// one. A deleted path the base cannot be read at is skipped, as the record it
+/// names is then just new.
+fn deleted_by_stable_id(
+    repo_root: &Path,
+    config: &Config,
+    type_name: &str,
+    status_field: &str,
+    changes: &urzua_io::GitChanges,
+) -> HashMap<String, Vec<Option<String>>> {
+    let mut out: HashMap<String, Vec<Option<String>>> = HashMap::new();
+    let Some(type_config) = config.record_types.get(type_name) else {
+        return out;
+    };
+    let mut deleted: Vec<&PathBuf> = changes.deleted.iter().collect();
+    deleted.sort();
+    for path in deleted {
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !urzua_core::record::is_governed_record_filename(file_name)
+            || !type_config.owns_dir(path.parent())
+            || type_config.excludes(file_name)
+        {
+            continue;
+        }
+        let Ok(content) = urzua_io::read_at_commit(repo_root, &changes.merge_base, path) else {
+            continue;
+        };
+        let old = Record::parse_with_shape_and_prefix(
+            path.clone(),
+            type_name.to_string(),
+            &content,
+            type_config.header_shape,
+            type_config
+                .prefix
+                .clone()
+                .unwrap_or_else(|| type_name.to_ascii_uppercase()),
+        );
+        let Some(id) = stable_id(&old).map(str::to_string) else {
+            continue;
+        };
+        let status = old
+            .header
+            .get(status_field)
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string);
+        out.entry(id).or_default().push(status);
+    }
+    out
+}
+
 /// Each changed record's `Status` at the merge base, for the types that declare
-/// `transitions` (`ADR-72`). A path the base does not have reads as new; the
-/// diff reports a rename as a deletion plus an addition, so a renamed record
-/// reads as new too.
+/// `transitions` (`ADR-72`). A path the base does not have is looked up by
+/// `Stable-Id` among the records the diff deleted, because the diff reports a
+/// rename as a deletion plus an addition (`BUG-191`): a renamed record is
+/// judged against the status it had before. One with no match, or no
+/// `Stable-Id`, reads as new; one matching several deleted records is
+/// unreadable, since which of them it was cannot be told.
 pub(crate) fn committed_statuses(
     repo_root: &Path,
     config: &Config,
@@ -142,6 +211,9 @@ pub(crate) fn committed_statuses(
     changes: &urzua_io::GitChanges,
 ) -> HashMap<PathBuf, CommittedStatus> {
     let mut out = HashMap::new();
+    // The deleted records' Stable-Ids, read once per type and only when a
+    // changed record has no copy at its own path.
+    let mut renamed_from: HashMap<String, HashMap<String, Vec<Option<String>>>> = HashMap::new();
     for record in records {
         if !changes.changed.contains(&record.path) {
             continue;
@@ -157,7 +229,22 @@ pub(crate) fn committed_statuses(
         }
         let committed = match urzua_io::read_at_commit(repo_root, &changes.merge_base, &record.path)
         {
-            Err(_) => CommittedStatus::New,
+            Err(_) => {
+                let field =
+                    rules::relation_field_name(config, &record.record_type, RelationRole::Status);
+                let deleted = renamed_from
+                    .entry(record.record_type.clone())
+                    .or_insert_with(|| {
+                        deleted_by_stable_id(repo_root, config, &record.record_type, field, changes)
+                    });
+                match stable_id(record).and_then(|id| deleted.get(id)) {
+                    None => CommittedStatus::New,
+                    Some(matches) => match matches.as_slice() {
+                        [Some(status)] => CommittedStatus::Status(status.clone()),
+                        _ => CommittedStatus::Unreadable,
+                    },
+                }
+            }
             Ok(content) => {
                 let old = Record::parse_with_shape_and_prefix(
                     record.path.clone(),

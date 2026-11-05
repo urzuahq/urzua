@@ -1,0 +1,15 @@
+id: a-renamed-record-reset-to-an-initial-status-is-reported
+corpus: corpus-j
+# Renaming and resetting the status must not evade the rule: the base's record
+# with this Stable-Id was Accepted, and Accepted to Proposed is not an edge.
+commits:
+  - rename:
+      - {from: records/ADR-0002-accepted.md, to: records/ADR-0002-moved.md}
+  - write:
+      records/ADR-0002-moved.md: "---\nStable-Id: 01M6ME4QBH5GKHM9RP6E3E12KX\nStatus: Proposed\n---\n# ADR-0002 \u2014 Moves backward\n\nAccepted in the fixture; a case sends it back to Proposed, an edge the graph does not list.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: status.transition-allowed
+    file: records/ADR-0002-moved.md
+    message_contains: "does not allow"
