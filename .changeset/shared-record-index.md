@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `pointer.resolution`, `pointer.target-status`, `narrative-field.stale`, `claim.status-agreement` and

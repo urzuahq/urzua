@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A relation pair's `provisional` declaration takes an optional `acknowledged_by` field. A provisional claim

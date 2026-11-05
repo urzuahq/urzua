@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-94, BUG-95, BUG-96]
 ---
 
 Fixes BUG-94: a rule reporting that it was handed nothing no longer certifies the corpus `ok`. The

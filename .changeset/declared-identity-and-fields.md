@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A record type can now declare how its records are identified and read. `identity` takes a

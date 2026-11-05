@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `urzua check --base` now agrees with a full check in five more cases. Changing or deleting a waiver

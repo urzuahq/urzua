@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-24]
 ---
 
 Fixes `BUG-24`: an explicitly-named `check <file>` path that git doesn't track was silently dropped

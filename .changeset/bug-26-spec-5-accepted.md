@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-26]
 ---
 
 `SPEC-5` (`urzua init`) documented a full greenfield mode, `--types`/`--dir` flags, and built-in

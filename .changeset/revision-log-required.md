@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A record type's `revision_log` declaration takes `required: true|false` (`true` when omitted). With

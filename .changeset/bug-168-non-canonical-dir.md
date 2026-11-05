@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-168]
 ---
 
 A record type's `dir` or `extra_dirs` entry written as `./docs/adr`, `docs/adr/` or `docs//adr` is now a

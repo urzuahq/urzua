@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 The source back-pointer matcher now reads every id in `Implements: ADR-1 (note), ADR-2`, continuing

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Index checking reads more shapes, and a new command regenerates an index. A declared `index.freshness`

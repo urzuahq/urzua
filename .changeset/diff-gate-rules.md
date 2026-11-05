@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Two opt-in rules judge the paths a `check --base <ref>` run changed. `diff.source-requires-record`

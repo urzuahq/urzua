@@ -17,6 +17,11 @@ use crate::config::{BoundaryKind, IndexSpec, LocatorKind, RuleOpts, RuleSetting}
 pub struct ClaimOpts {
     pub claim_paths: Vec<String>,
     pub closed_statuses: Vec<String>,
+    /// The frontmatter key a claim file lists the records it closes under
+    /// (`ADR-85`); `None` leaves the rule reading closing verbs alone.
+    pub closes: Option<String>,
+    /// A claim file with frontmatter and without that key is a finding.
+    pub strict: bool,
 }
 
 impl RuleOpts for ClaimOpts {
@@ -24,6 +29,8 @@ impl RuleOpts for ClaimOpts {
         ClaimOpts {
             claim_paths: s.claim_paths.clone().unwrap_or_default(),
             closed_statuses: s.closed_statuses.clone().unwrap_or_default(),
+            closes: s.closes.clone(),
+            strict: s.strict.unwrap_or(false),
         }
     }
 }
@@ -236,6 +243,15 @@ mod tests {
         let o: ClaimOpts = c.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
         assert_eq!(o.claim_paths, ["a", "b"]);
         assert_eq!(o.closed_statuses, ["Done"]);
+        assert_eq!((o.closes, o.strict), (None, false));
+    }
+
+    #[test]
+    fn the_claim_field_options_are_read_through_the_typed_accessor_observed_failing() {
+        let c = config("  claim.status-agreement:\n    level: error\n    claim_paths: [a]\n    closed_statuses: [Done]\n    closes: closes\n    strict: true\n");
+        let o: ClaimOpts = c.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
+        assert_eq!(o.closes.as_deref(), Some("closes"));
+        assert!(o.strict);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-164, BUG-165, BUG-166, BUG-167]
 ---
 
 `fix --apply` and `migrate ids --apply` now change only the lines they mean to: a CRLF record keeps its

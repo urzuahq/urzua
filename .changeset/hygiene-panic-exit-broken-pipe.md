@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 A panic now exits with code 2, the documented code for "could not run", instead of 101, and a closed

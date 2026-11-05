@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-177]
 ---
 
 A suppression type can declare `effective_requires`, the fields a waiver must carry before it takes effect, for

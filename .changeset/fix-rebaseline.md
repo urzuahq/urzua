@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-181]
 ---
 
 Add `urzua fix --rebaseline`, an attributed re-baseline for `@sha256:` evidence pins. Without

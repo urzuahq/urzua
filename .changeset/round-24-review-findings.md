@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Fixes several real defects found by review, plus a standardization pass on a recurring nondeterminism

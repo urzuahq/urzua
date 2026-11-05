@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-13]
 ---
 
 `urzua check` and `urzua audit` now tell a reference to a record that exists on disk but is not tracked by

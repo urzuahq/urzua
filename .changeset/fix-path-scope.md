@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `urzua fix` takes record paths: `urzua fix docs/adr/ADR-1-x.md` examines, computes drift for and

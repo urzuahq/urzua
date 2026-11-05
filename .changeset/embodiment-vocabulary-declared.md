@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 The `Embodiment` states are now declared in config. A top-level `embodiment` key names the drift

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 A scoped `check` no longer reports `status: not-run` beside `blocking: true`. A config finding
