@@ -4176,3 +4176,23 @@ fn ci_wired_recognises_the_gate_action_as_an_invocation() {
         .unwrap();
     assert_eq!(ci["status"], "ok", "{ci}");
 }
+
+#[test]
+fn audit_help_describes_a_deprecated_alias_of_check_not_the_old_rule_pair() {
+    let dir = std::env::temp_dir();
+    for args in [&["--help"][..], &["audit", "--help"][..]] {
+        let output = run_urzua(&dir, args);
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        assert!(
+            text.contains("Deprecated alias of `check`"),
+            "{args:?}: {text}"
+        );
+        assert!(!text.contains("dangling"), "{args:?}: {text}");
+        assert!(
+            !text.contains("Cross-record reconciliation"),
+            "{args:?}: {text}"
+        );
+    }
+    let text = String::from_utf8_lossy(&run_urzua(&dir, &["audit", "--help"]).stdout).to_string();
+    assert!(text.contains("check --rules"), "{text}");
+}

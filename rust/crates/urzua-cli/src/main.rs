@@ -142,13 +142,12 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
-    /// Cross-record reconciliation: supersession reciprocity, dangling
-    /// references. Embodiment consistency lives in `check` and `fix`
-    /// instead -- it turned out to be per-record, not cross-record
-    /// (ADR-0018/0019).
+    /// Deprecated alias of `check`: runs every rule the configuration
+    /// declares and prints `check`'s report, plus a deprecation notice that
+    /// never changes the exit code. Use `check` instead, or `check --rules
+    /// <id>[,<id>...]` for a narrower run. Removed in the next release.
     ///
-    /// Reports only. Never writes -- bulk cross-reference rewriting is a
-    /// real data-loss risk without one.
+    /// Reports only. Never writes.
     Audit,
 
     /// Migrate the corpus itself: identifiers, or field-schema rollout.
