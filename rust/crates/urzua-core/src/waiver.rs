@@ -4,7 +4,7 @@
 //! config-level ignore list. A waived finding is listed, never omitted;
 //! `status`/`blocking` are computed from non-waived findings only.
 
-use crate::config::Config;
+use crate::config::{CiteRequirement, Config, PermanentDecl};
 use crate::field_state::classify_with;
 use crate::record::Record;
 use crate::report::Finding;
@@ -20,6 +20,10 @@ pub struct SuppressionType {
     pub name: String,
     pub effective_requires: Vec<String>,
     pub declared: Option<StatusDecl>,
+    /// Where a suppression without `Expires` may take effect (`ADR-86`).
+    /// `None` is "not declared": permanence is allowed for any rule, as it
+    /// always was. `Some` closes permanence for every rule it does not list.
+    pub permanent: Option<Vec<PermanentDecl>>,
 }
 
 impl SuppressionType {
@@ -40,6 +44,7 @@ impl SuppressionType {
                 .and_then(|t| t.effective_requires.clone())
                 .unwrap_or_default(),
             declared: declared.and_then(|t| t.status_decl()),
+            permanent: declared.and_then(|t| t.permanent.clone()),
         }
     }
 }
@@ -56,6 +61,87 @@ pub struct Suppression {
     /// The `effective_requires` fields this suppression lacks: absent, blank,
     /// a placeholder or pending. Empty means it takes effect (`BUG-177`).
     pub unmet: Vec<String>,
+    /// Whether the type's `permanent` declaration lets this suppression stand
+    /// without an `Expires` (`ADR-86`).
+    pub permanence: Permanence,
+}
+
+/// How a suppression stands under the type's `permanent` declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Permanence {
+    /// Not governed: it has an `Expires`, or the type declares no `permanent`.
+    Ungoverned,
+    /// Permanent, and allowed under this category.
+    Allowed { category: String },
+    /// Permanent, and not allowed; it takes effect for nothing.
+    Refused(PermanenceRefusal),
+}
+
+/// The unmet requirement of a permanent suppression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PermanenceRefusal {
+    /// The type declares `permanent` and lists no entry for the rule.
+    RuleNotListed,
+    /// The category field is absent, blank, a placeholder or pending.
+    CategoryMissing { field: String, allowed: Vec<String> },
+    /// The category field holds a value outside the rule's vocabulary.
+    CategoryUnlisted {
+        field: String,
+        value: String,
+        allowed: Vec<String>,
+    },
+    /// The category requires a citation and the cite field holds none.
+    CiteMissing { field: String, category: String },
+    /// The category requires a citation and it resolves to no record.
+    CiteUnresolved {
+        field: String,
+        value: String,
+        category: String,
+    },
+}
+
+impl PermanenceRefusal {
+    /// The header field the requirement is about, for the finding's action.
+    pub fn field(&self) -> &str {
+        match self {
+            PermanenceRefusal::RuleNotListed => "Expires",
+            PermanenceRefusal::CategoryMissing { field, .. }
+            | PermanenceRefusal::CategoryUnlisted { field, .. }
+            | PermanenceRefusal::CiteMissing { field, .. }
+            | PermanenceRefusal::CiteUnresolved { field, .. } => field,
+        }
+    }
+
+    /// What is unmet, in the words of the finding.
+    pub fn describe(&self, rule: &str) -> String {
+        match self {
+            PermanenceRefusal::RuleNotListed => format!(
+                "it has no Expires and its type declares `permanent` without an entry for '{rule}', so permanence is not allowed for that rule"
+            ),
+            PermanenceRefusal::CategoryMissing { field, allowed } => format!(
+                "it has no Expires and no {field}; `permanent` allows it for '{rule}' only under one of: {}",
+                allowed.join(", ")
+            ),
+            PermanenceRefusal::CategoryUnlisted {
+                field,
+                value,
+                allowed,
+            } => format!(
+                "it has no Expires and its {field} '{value}' is not one `permanent` allows for '{rule}': {}",
+                allowed.join(", ")
+            ),
+            PermanenceRefusal::CiteMissing { field, category } => format!(
+                "its category '{category}' requires a citation and {field} holds none"
+            ),
+            PermanenceRefusal::CiteUnresolved {
+                field,
+                value,
+                category,
+            } => format!(
+                "its category '{category}' requires a citation and {field} '{value}' resolves to no record"
+            ),
+        }
+    }
 }
 
 impl Suppression {
@@ -79,7 +165,15 @@ impl Suppression {
     /// Separate from `is_active`: an ineffective suppression is reported as
     /// such, where an expired one is reported as expired.
     pub fn is_effective(&self) -> bool {
-        self.unmet.is_empty()
+        self.unmet.is_empty() && !matches!(self.permanence, Permanence::Refused(_))
+    }
+
+    /// The category it stands permanent under, when it does.
+    pub fn permanent_category(&self) -> Option<&str> {
+        match &self.permanence {
+            Permanence::Allowed { category } => Some(category),
+            _ => None,
+        }
     }
 
     pub fn covers(&self, finding: &Finding) -> bool {
@@ -101,6 +195,11 @@ pub fn load_suppressions(
     records: &[Record],
     suppression_type: &SuppressionType,
 ) -> Vec<Suppression> {
+    let known: std::collections::HashSet<crate::values::RecordId> = records
+        .iter()
+        .filter_map(crate::rules::record_id)
+        .map(|id| crate::values::RecordId::new(&id))
+        .collect();
     records
         .iter()
         .filter(|r| r.record_type == suppression_type.name)
@@ -121,15 +220,81 @@ pub fn load_suppressions(
                 })
                 .cloned()
                 .collect();
+            let permanence =
+                judge_permanence(r, &rule, expires.is_some(), suppression_type, &known);
             Some(Suppression {
                 id: r.path.to_string_lossy().to_string(),
                 rule,
                 scope,
                 expires,
                 unmet,
+                permanence,
             })
         })
         .collect()
+}
+
+/// Whether the type's `permanent` declaration lets a suppression without
+/// `Expires` take effect (`ADR-86`): its rule has an entry, its reason field
+/// holds one of the entry's categories, and its cite field resolves to a record
+/// when the category requires one. A suppression with an `Expires`, or a type
+/// that declares nothing, is not governed here.
+fn judge_permanence(
+    record: &Record,
+    rule: &str,
+    has_expiry: bool,
+    suppression_type: &SuppressionType,
+    known: &std::collections::HashSet<crate::values::RecordId>,
+) -> Permanence {
+    use PermanenceRefusal::*;
+    let Some(entries) = &suppression_type.permanent else {
+        return Permanence::Ungoverned;
+    };
+    if has_expiry {
+        return Permanence::Ungoverned;
+    }
+    let Some(entry) = entries.iter().find(|e| e.rule == rule) else {
+        return Permanence::Refused(RuleNotListed);
+    };
+    let field = entry.reason_field.clone();
+    let allowed: Vec<String> = entry.categories.iter().map(|c| c.name.clone()).collect();
+    let value = record.header.get(&field);
+    if classify_with(value, suppression_type.declared.as_ref()) != FieldState::Present {
+        return Permanence::Refused(CategoryMissing { field, allowed });
+    }
+    let value = value.unwrap_or_default().trim();
+    let Some(category) = entry.categories.iter().find(|c| c.name == value) else {
+        return Permanence::Refused(CategoryUnlisted {
+            field,
+            value: value.to_string(),
+            allowed,
+        });
+    };
+    if category.cite == Some(CiteRequirement::Required) {
+        // Validated at load: a category requiring a citation has a cite field.
+        let cite_field = entry.cite_field.clone().unwrap_or_default();
+        let cited = record.header.get(&cite_field).unwrap_or_default();
+        let references = crate::rules::extract_references(cited);
+        if references.is_empty() {
+            return Permanence::Refused(CiteMissing {
+                field: cite_field,
+                category: category.name.clone(),
+            });
+        }
+        if let Some(missing) = references
+            .iter()
+            .find(|r| !known.contains(&crate::values::RecordId::new(r)))
+        {
+            return Permanence::Refused(CiteUnresolved {
+                field: cite_field,
+                value: missing.clone(),
+                category: category.name.clone(),
+            });
+        }
+    }
+    Permanence::Allowed {
+        category: category.name.clone(),
+    }
 }
 
 /// Calendar validity (a 31st of February) is deliberately unchecked: it still
@@ -214,6 +379,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: None,
             unmet: Vec::new(),
+            permanence: Permanence::Ungoverned,
         };
         assert!(w.is_active("2020-01-01"));
         assert!(w.is_active("2099-01-01"));
@@ -227,6 +393,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: Some("2026-01-01".into()),
             unmet: Vec::new(),
+            permanence: Permanence::Ungoverned,
         };
         assert!(w.is_active("2025-12-31"));
         assert!(!w.is_active("2026-01-02"));
@@ -245,6 +412,7 @@ scope: docs/adr/ADR-1-x.md
                 scope: "*".into(),
                 expires: Some(bad.into()),
                 unmet: Vec::new(),
+                permanence: Permanence::Ungoverned,
             };
             assert!(
                 !w.is_active("2026-09-16"),
@@ -262,6 +430,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "docs/adr/0001-x.md".into(),
             expires: None,
             unmet: Vec::new(),
+            permanence: Permanence::Ungoverned,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -285,6 +454,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: None,
             unmet: Vec::new(),
+            permanence: Permanence::Ungoverned,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -305,6 +475,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: Some("2020-01-01".into()),
             unmet: Vec::new(),
+            permanence: Permanence::Ungoverned,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -324,7 +495,7 @@ scope: docs/adr/ADR-1-x.md
         SuppressionType {
             name: "waiver".into(),
             effective_requires: vec!["Reason".into()],
-            declared: None,
+            ..Default::default()
         }
     }
 
@@ -364,5 +535,124 @@ scope: docs/adr/ADR-1-x.md
     fn without_effective_requires_a_reasonless_suppression_suppresses() {
         let loaded = load_suppressions(&[reason_record(None)], &SuppressionType::named("waiver"));
         assert!(loaded[0].is_effective());
+    }
+
+    fn permanent_type() -> SuppressionType {
+        let entry = |rule: &str| PermanentDecl {
+            rule: rule.into(),
+            reason_field: "Category".into(),
+            categories: vec![
+                crate::config::PermanentCategory {
+                    name: "perf".into(),
+                    cite: None,
+                },
+                crate::config::PermanentCategory {
+                    name: "decided".into(),
+                    cite: Some(CiteRequirement::Required),
+                },
+            ],
+            cite_field: Some("Justified-by".into()),
+        };
+        SuppressionType {
+            name: "waiver".into(),
+            permanent: Some(vec![entry("field.quality")]),
+            ..Default::default()
+        }
+    }
+
+    fn waiver_with(rule: &str, extra: &str) -> Record {
+        Record::parse(
+            std::path::PathBuf::from("docs/waiver/WAIVER-1-x.md"),
+            "waiver".to_string(),
+            &format!("---\nRule: {rule}\nScope: '*'\n{extra}---\n"),
+        )
+    }
+
+    fn rfc(n: u32) -> Record {
+        Record::parse(
+            std::path::PathBuf::from(format!("docs/rfc/RFC-{n}-x.md")),
+            "rfc".to_string(),
+            "---\nStatus: Accepted\n---\n",
+        )
+    }
+
+    fn permanence_of(rule: &str, extra: &str) -> Permanence {
+        let corpus = [waiver_with(rule, extra), rfc(35)];
+        load_suppressions(&corpus, &permanent_type())
+            .remove(0)
+            .permanence
+    }
+
+    #[test]
+    fn a_permanent_waiver_stands_only_under_a_listed_category_observed_failing() {
+        assert_eq!(
+            permanence_of("field.quality", "Category: perf\n"),
+            Permanence::Allowed {
+                category: "perf".into()
+            }
+        );
+        assert!(matches!(
+            permanence_of("field.quality", "Category: whim\n"),
+            Permanence::Refused(PermanenceRefusal::CategoryUnlisted { .. })
+        ));
+        for blank in ["", "Category: ''\n", "Category: TBD\n"] {
+            assert!(
+                matches!(
+                    permanence_of("field.quality", blank),
+                    Permanence::Refused(PermanenceRefusal::CategoryMissing { .. })
+                ),
+                "{blank:?}"
+            );
+        }
+        assert_eq!(
+            permanence_of("other.rule", "Category: perf\n"),
+            Permanence::Refused(PermanenceRefusal::RuleNotListed)
+        );
+    }
+
+    #[test]
+    fn a_category_requiring_a_citation_needs_a_resolving_one() {
+        assert!(matches!(
+            permanence_of("field.quality", "Category: decided\n"),
+            Permanence::Refused(PermanenceRefusal::CiteMissing { .. })
+        ));
+        assert!(matches!(
+            permanence_of("field.quality", "Category: decided\nJustified-by: RFC-9\n"),
+            Permanence::Refused(PermanenceRefusal::CiteUnresolved { .. })
+        ));
+        // A padded spelling resolves to the same record.
+        for cite in ["RFC-35", "RFC-0035"] {
+            assert_eq!(
+                permanence_of(
+                    "field.quality",
+                    &format!("Category: decided\nJustified-by: {cite}\n")
+                ),
+                Permanence::Allowed {
+                    category: "decided".into()
+                },
+                "{cite}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_expiry_or_an_undeclared_type_leaves_permanence_ungoverned() {
+        assert_eq!(
+            permanence_of("other.rule", "Expires: 2099-01-01\n"),
+            Permanence::Ungoverned
+        );
+        let corpus = [waiver_with("other.rule", "")];
+        let loaded = load_suppressions(&corpus, &SuppressionType::named("waiver"));
+        assert_eq!(loaded[0].permanence, Permanence::Ungoverned);
+        assert!(loaded[0].is_effective());
+    }
+
+    #[test]
+    fn a_refused_permanent_waiver_suppresses_nothing() {
+        let corpus = [waiver_with("field.quality", "Category: whim\n")];
+        let loaded = load_suppressions(&corpus, &permanent_type());
+        let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
+        apply_suppressions(&mut findings, &loaded, "2026-11-05");
+        assert!(findings[0].waived.is_none());
     }
 }

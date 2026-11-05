@@ -256,6 +256,7 @@ mod tests {
                     revision_log: None,
                     role: None,
                     effective_requires: None,
+                    permanent: None,
                 },
             )]
             .into_iter()
