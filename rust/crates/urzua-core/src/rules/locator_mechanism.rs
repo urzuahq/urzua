@@ -23,11 +23,16 @@ use crate::locator::realized_by_locators;
 /// gone before its replacement is, and writing the comment is an edit to a
 /// source file, which no action kind addresses (`ADR-73`, exempt with a
 /// reason). The message says to add the comment first.
+///
+/// With `scope: changed` (`ADR-90`) the rule is a nudge for the moment someone
+/// touches the record: it judges only the records the diff adds or changes, and
+/// the rest are counted in the population's `deferred_by_scope`.
 pub fn embodiment_locator_on_back_pointer_path(
     records: &[Record],
     config: &Config,
     back_pointer_paths: &[String],
     test_paths: &[String],
+    scope: Option<&ChangedOnly>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH;
     let mut findings = Vec::new();
@@ -51,6 +56,12 @@ pub fn embodiment_locator_on_back_pointer_path(
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
+            // `scope: changed` (`ADR-90`): a slot that is there but belongs to a
+            // record the diff did not change is eligible and not judged. An
+            // absent slot was counted absent above, so there is nothing to defer.
+            if scope.is_some_and(|s| s.defers(record)) {
+                return Outcome::DeferredByScope;
+            }
             let id = record_id(record).unwrap_or_else(|| "<id>".to_string());
             let entries = realized_by_locators(value);
             for entry in &entries {

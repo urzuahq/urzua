@@ -24,6 +24,11 @@ use crate::waiver::{Permanence, Suppression};
 /// establishes nothing. Those waivers are eligible and unexamined, never
 /// out of scope (a partial run is not a misconfiguration).
 ///
+/// A rule that declares `scope: changed` (`ADR-90`) did not look at most
+/// records on a whole-corpus run, so a finding absent from it proves nothing:
+/// `defers_to_diff` says whether a rule declared it, and a waiver on such a
+/// rule is eligible and unexamined for the unmatched case, as under `--base`.
+///
 /// `findings` is every finding before waivers are applied.
 pub fn waiver_matches_nothing(
     waivers: &[Suppression],
@@ -31,6 +36,7 @@ pub fn waiver_matches_nothing(
     executed: &[RuleExecution],
     whole_corpus: bool,
     reached: impl Fn(&std::path::Path) -> bool,
+    defers_to_diff: impl Fn(&str) -> bool,
     today: &str,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_WAIVER_MATCHES_NOTHING;
@@ -118,7 +124,7 @@ pub fn waiver_matches_nothing(
             let target_ran = executed
                 .iter()
                 .any(|e| e.rule == w.rule && e.status == RuleStatus::Ran);
-            if !whole_corpus || !target_ran {
+            if !whole_corpus || !target_ran || defers_to_diff(&w.rule) {
                 return Outcome::Absent;
             }
             if findings.iter().any(|f| w.covers(f)) {
@@ -183,7 +189,57 @@ mod tests {
         executed: &[RuleExecution],
         whole: bool,
     ) -> (RuleExecution, Vec<Finding>) {
-        waiver_matches_nothing(waivers, findings, executed, whole, |_| whole, "2026-11-04")
+        waiver_matches_nothing(
+            waivers,
+            findings,
+            executed,
+            whole,
+            |_| whole,
+            |_| false,
+            "2026-11-04",
+        )
+    }
+
+    /// `ADR-90`: a whole-corpus run of a `scope: changed` rule judged almost
+    /// nothing, so the absent finding proves nothing; the waiver is eligible
+    /// and unexamined, and a rule without the option is judged as before.
+    #[test]
+    fn a_waiver_on_a_scope_changed_rule_is_not_reported_as_matching_nothing() {
+        let w = waiver("W", "field.quality", "docs/a.md", None);
+        let ran = [exec_with("field.quality", 1, 0, 0)];
+        let judge = |scoped: bool| {
+            waiver_matches_nothing(
+                std::slice::from_ref(&w),
+                &[],
+                &ran,
+                true,
+                |_| true,
+                move |rule| scoped && rule == "field.quality",
+                "2026-11-04",
+            )
+        };
+        let (exec, f) = judge(true);
+        assert!(f.is_empty(), "{f:?}");
+        let p = exec.population.unwrap();
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (1, 0, 0));
+        assert_eq!(judge(false).1.len(), 1, "without the option it is reported");
+    }
+
+    /// The expired case needs only the waiver record, so the option does not hide it.
+    #[test]
+    fn an_expired_waiver_on_a_scope_changed_rule_is_still_reported() {
+        let w = waiver("W", "field.quality", "docs/a.md", Some("2020-01-01"));
+        let (_, f) = waiver_matches_nothing(
+            &[w],
+            &[],
+            &[exec_with("field.quality", 1, 0, 0)],
+            true,
+            |_| true,
+            |_| true,
+            "2026-11-04",
+        );
+        assert_eq!(f.len(), 1);
+        assert!(f[0].message.contains("expired"));
     }
 
     #[test]
@@ -283,7 +339,8 @@ mod tests {
             "*",
             Some("2020-01-01"),
         );
-        let (_, f) = waiver_matches_nothing(&[w], &[], &[], false, |_| false, "2026-11-04");
+        let (_, f) =
+            waiver_matches_nothing(&[w], &[], &[], false, |_| false, |_| false, "2026-11-04");
         assert!(f.is_empty());
     }
 
