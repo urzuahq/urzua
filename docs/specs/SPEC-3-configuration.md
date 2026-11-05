@@ -1,5 +1,5 @@
 ---
-Version: '0.80'
+Version: '0.81'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -798,6 +798,45 @@ rules:
   severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
   matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
   it suppresses nothing. The uncovered `paths` entry carries an `edit-config` `set` action with no value, naming the entry, so a person picks the corrected path and coverage is never shrunk; the unused `exclude` entry carries an `edit-config` `remove` action naming it.
+
+## The decision gate
+
+`diff.source-requires-record` is opt-in, and by default asks only that some governed record changed
+beside the source. Three further options (`MILE-133`) make it the decision gate: a change to
+declared source paths must also change a decision at a decided status, a record linking one, or a
+fix record. The gate is off unless `decision_types` is declared.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    decision_types:            # type -> the statuses at which one counts as decided
+      adr: ["Accepted"]
+      spec: ["Accepted", "Shipped"]
+    fix_types: ["bug"]         # a record of one of these types exempts the change
+    link_fields: ["Implements"]  # a changed record whose field names a decided decision
+```
+
+- `decision_types` maps a declared record type to a non-empty list of its statuses. The diff is
+  released by a changed record of that type at one of them, judged by the record's own `Status`
+  (the type's `Status` role field) in the working tree.
+- `link_fields` names pointer or narrative fields. A changed record, of any type, whose field names a
+  record of a `decision_types` type at a decided status releases the diff, so a milestone that
+  `Implements` an Accepted ADR does. A reference that resolves to no record, or to a decision still at
+  an undecided status, releases nothing.
+- `fix_types` names record types whose changed records release the diff, so a mechanical fix lands
+  with only a bug record (`AGENTS.md`).
+- A changed decision still at an undecided status does not release the diff and is named in the
+  finding. A deleted record, which has no status to read, satisfies nothing.
+- With the gate declared, a changed record that is none of the three no longer releases the rule.
+  The population and `exclude_paths` behave as without it.
+
+A declaration that could never apply is refused at load (exit 2) rather than leaving the gate quietly
+open: `fix_types` or `link_fields` without `decision_types`; a type that is not declared; a status
+a type's `statuses.values` does not list; an empty list; a type named in both `decision_types` and
+`fix_types`; a `link_fields` entry that is not a pointer or narrative field of any type; and any of
+the three on a rule that does not take them.
 
 ## Relation pairs
 
@@ -1627,3 +1666,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.78`. A type's `statuses` declaration gains `progress` (statuses that claim work advanced) and `blocked` (written waiting statuses, opt-in), and a top-level `roadmap.pairs` names the sequencing pairs the derived `blocked` value reads. The opt-in rule `sequence.status-agreement` reports a blocked record that states a `progress` status, and a written blocked status while nothing blocks the record; a progress-status record with an unresolved or unreadable dependency is counted unreadable even when the type writes no blocked status. **Why:** `MILE-144`, decided in `ADR-83` (maintainer decision, 2026-11-05: `Blocked` is derived only, per `RFC-48`). | **substantive** |
 > | 2026-11-05 | Bumped to `0.79`. A top-level `roadmap: {pairs, group_by}` names the `relation_pairs` entries that are dependencies and the header fields `urzua roadmap` groups by, validated at load. **Why:** `MILE-182`, decided in `ADR-82`: one graph over the declared sequencing pairs, with the pairs declared because an `acyclic` containment pair is not a dependency. | **substantive** |
 > | 2026-11-05 | Bumped to `0.80`. Documented the `locator_kinds` and `pinnable` options of `embodiment.locator-exists`: a `Realized-by` locator may name a directory or glob when the repository declares that kind, a directory or glob is legal when it covers a tracked file, its drift uses the newest commit among the files it covers, its pin hashes the sorted (path, file content hash) list, `explain` shows the files, and an undeclared kind is a finding naming the option. Both options default to `[file]`. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration. | **substantive** |
+> | 2026-11-05 | Bumped to `0.81`. Documented the decision gate options of `diff.source-requires-record` (`decision_types`, `fix_types`, `link_fields`) and their load-time validation. **Why:** `MILE-133`, maintainer decision 2026-11-05. | **substantive** |

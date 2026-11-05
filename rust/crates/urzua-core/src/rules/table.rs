@@ -1463,7 +1463,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_DIFF_SOURCE_REQUIRES_RECORD,
-        description: "A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
+        description: "A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. Declaring `decision_types` (each record type that holds decisions, with the statuses at which one counts as decided) turns it into the decision gate (`MILE-133`): the diff must change a decision record at a decided status, a record whose `link_fields` entry (a pointer or narrative field such as `Implements`) names one, or a record of a `fix_types` type (a mechanical fix needs a bug record and no decision); a changed decision still at an undecided status does not release it and is named in the finding. A deleted record satisfies nothing. `fix_types` and `link_fields` need `decision_types`, and every type, status and field a declaration names must exist, or the config does not load. Off unless declared: without `decision_types`, any governed record releases the rule.",
         scope: Scope::Diff,
         anchor: Anchor::Outside,
         needs_identity_index: false,
@@ -1472,16 +1472,17 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_override_log: false,
         reads_declaration: None,
         header_none: HeaderNone::Exempt("population is changed paths, and only on a --base run"),
-        options: &["source_paths", "exclude_paths"],
+        options: &["source_paths", "exclude_paths", "decision_types", "fix_types", "link_fields"],
         actions: &[
             VariantAction::new("source-without-record", ActionDecl::ADD_RECORD),
+            VariantAction::new("source-without-decision", ActionDecl::ADD_RECORD),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
             let opts: SourceRequiresRecordOpts =
                 c.config.rule_opts(RULE_DIFF_SOURCE_REQUIRES_RECORD);
-            source_requires_record(c.changed_paths, &opts.source_paths, &opts.exclude_paths, c.config)
+            source_requires_record(c.changed_paths, &opts, c.config, c.records, c.index)
         },
     },
     RuleDef {

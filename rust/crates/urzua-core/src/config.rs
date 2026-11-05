@@ -250,6 +250,28 @@ pub struct RuleSetting {
     /// (`MILE-142`, `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_paths: Option<Vec<String>>,
+    /// The decision gate (`MILE-133`): each record type that holds decisions,
+    /// with the statuses at which one counts as decided. Declaring it turns
+    /// `diff.source-requires-record` from "some governed record changed" into
+    /// "a decision at a decided status changed, or a record linking one
+    /// (`link_fields`), or a fix record (`fix_types`)". Only meaningful to
+    /// `diff.source-requires-record`; omitted means the rule asks only for
+    /// any governed record, and `fix_types` and `link_fields` are then refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_types: Option<BTreeMap<String, Vec<String>>>,
+    /// Record types whose records exempt a change from the decision gate
+    /// (`MILE-133`), such as `bug`: a mechanical fix needs a bug record and no
+    /// decision. Only meaningful to `diff.source-requires-record`, and only
+    /// with `decision_types`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix_types: Option<Vec<String>>,
+    /// Pointer or narrative fields (such as a milestone's `Implements`) through
+    /// which a changed record links a decision for the decision gate
+    /// (`MILE-133`): a changed record whose field names a decision at a
+    /// decided status satisfies it. Only meaningful to
+    /// `diff.source-requires-record`, and only with `decision_types`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_fields: Option<Vec<String>>,
     /// Admit header keys beginning `x-` (case-insensitive) as extension keys
     /// (`MILE-141`). Only meaningful to `header.field-set-consistency`, where
     /// omitted means `false`: every undeclared key is a finding. A declared
@@ -1118,6 +1140,8 @@ pub enum ConfigError {
     UndeclaredRuleField { rule: String, field: String },
     #[error("rule '{rule}' option 'field_levels' {reason}")]
     InvalidFieldLevels { rule: String, reason: String },
+    #[error("rule '{rule}' decision gate (`decision_types`, `fix_types`, `link_fields`) {reason}")]
+    InvalidDecisionGate { rule: String, reason: String },
     #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
     OptionRequired {
         rule: String,
@@ -1432,6 +1456,80 @@ pub fn rule_requires_options(rule: &str) -> bool {
             .iter()
             .any(|o| *o == "indexes" || RULE_OPTIONS.iter().any(|r| r.name == *o))
     })
+}
+
+/// Why a decision-gate declaration (`MILE-133`) cannot work, or `None` when it
+/// can. Each declaration names records or fields the configuration must have,
+/// because one that names nothing real would leave the gate silently open.
+fn decision_gate_problem(setting: &RuleSetting, config: &Config) -> Option<String> {
+    let Some(decisions) = &setting.decision_types else {
+        let orphan = if setting.fix_types.is_some() {
+            Some("fix_types")
+        } else if setting.link_fields.is_some() {
+            Some("link_fields")
+        } else {
+            None
+        };
+        return orphan.map(|o| {
+            format!("declares '{o}' without 'decision_types': there is no decision to exempt a change from or to link, so it would never apply")
+        });
+    };
+    if decisions.is_empty() {
+        return Some(
+            "declares an empty 'decision_types'; name a type or omit the option".to_string(),
+        );
+    }
+    for (type_name, statuses) in decisions {
+        let Some(record_type) = config.record_types.get(type_name) else {
+            return Some(format!(
+                "'decision_types' names '{type_name}', which is not a declared record type"
+            ));
+        };
+        if statuses.is_empty() || statuses.iter().any(|s| s.trim().is_empty()) {
+            return Some(format!(
+                "'decision_types' gives '{type_name}' an empty or blank status list; name the statuses at which one counts as decided"
+            ));
+        }
+        if let Some(decl) = record_type.status_decl() {
+            if let Some(unknown) = statuses.iter().find(|s| !decl.values.contains(s)) {
+                return Some(format!(
+                    "'decision_types' names status '{unknown}' for '{type_name}', which that type's `statuses.values` does not list, so it could never match"
+                ));
+            }
+        }
+    }
+    for type_name in setting.fix_types.iter().flatten() {
+        if !config.record_types.contains_key(type_name) {
+            return Some(format!(
+                "'fix_types' names '{type_name}', which is not a declared record type"
+            ));
+        }
+        if decisions.contains_key(type_name) {
+            return Some(format!(
+                "names '{type_name}' in both 'decision_types' and 'fix_types'; a record cannot be both a decision and a fix"
+            ));
+        }
+    }
+    if setting.fix_types.as_ref().is_some_and(Vec::is_empty) {
+        return Some("declares an empty 'fix_types'; name a type or omit the option".to_string());
+    }
+    if setting.link_fields.as_ref().is_some_and(Vec::is_empty) {
+        return Some(
+            "declares an empty 'link_fields'; name a field or omit the option".to_string(),
+        );
+    }
+    for field in setting.link_fields.iter().flatten() {
+        let relational = config.record_types.values().any(|t| {
+            t.pointer_fields.iter().flatten().any(|f| f == field)
+                || t.narrative_fields.iter().flatten().any(|f| f == field)
+        });
+        if !relational {
+            return Some(format!(
+                "'link_fields' names '{field}', which is not a declared pointer_fields or narrative_fields entry of any record type"
+            ));
+        }
+    }
+    None
 }
 
 /// Why an `issue_refs` declaration cannot work, or `None` when it can.
@@ -1995,6 +2093,27 @@ pub fn parse_with_document_models(
                         ),
                     });
                 }
+            }
+        }
+
+        for (option, present) in [
+            ("decision_types", setting.decision_types.is_some()),
+            ("fix_types", setting.fix_types.is_some()),
+            ("link_fields", setting.link_fields.is_some()),
+        ] {
+            if present && !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
+        if setting.level != RuleLevel::Off {
+            if let Some(reason) = decision_gate_problem(setting, &config) {
+                return Err(ConfigError::InvalidDecisionGate {
+                    rule: name.clone(),
+                    reason,
+                });
             }
         }
 
@@ -4488,9 +4607,13 @@ mod exclude_files_tests {
 mod option_table_tests {
     use super::*;
 
-    /// Options that are not list-valued, so `RULE_OPTIONS` (which carries the
+    /// Options that are not plain lists, or are validated together by their own
+    /// check (`decision_gate_problem`), so `RULE_OPTIONS` (which carries the
     /// "required list" consequence text) does not describe them.
     const OTHER_OPTIONS: &[&str] = &[
+        "decision_types",
+        "fix_types",
+        "link_fields",
         "indexes",
         "issue_refs",
         "allow_extension_prefix",
