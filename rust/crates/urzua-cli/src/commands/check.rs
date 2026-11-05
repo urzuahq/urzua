@@ -185,6 +185,7 @@ impl<'a> Context<'a> {
         &'a self,
         may_exist: &'a dyn Fn(&Path) -> bool,
         dir_exists: &'a dyn Fn(&str) -> bool,
+        read_text: &'a dyn Fn(&str) -> urzua_core::locator::SharedText,
         run: rules::RunState<'a>,
     ) -> rules::RuleCtx<'a> {
         let s = self.session;
@@ -214,6 +215,7 @@ impl<'a> Context<'a> {
             live_paths: &self.live_paths,
             may_exist,
             dir_exists,
+            read_text,
             run,
         }
     }
@@ -616,9 +618,16 @@ fn refs_notice(snapshot_path: &str, snapshot: &RefsSnapshot) -> Notice {
 /// answerable once every other rule has reported.
 fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
     let (may_exist, dir_exists) = probes(&context.repo_root);
+    let texts = crate::file_texts::FileTexts::new(context.repo_root.clone());
+    let read_text = |p: &str| texts.get(p);
     let mut executions = Vec::new();
     let mut findings = Vec::new();
-    let main = context.rule_ctx(&may_exist, &dir_exists, rules::RunState::empty());
+    let main = context.rule_ctx(
+        &may_exist,
+        &dir_exists,
+        &read_text,
+        rules::RunState::empty(),
+    );
     for (exec, rule_findings) in rules::run_phase(rules::Phase::Main, &main) {
         executions.push(exec);
         findings.extend(rule_findings);
@@ -626,6 +635,7 @@ fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
     let after_rules = context.rule_ctx(
         &may_exist,
         &dir_exists,
+        &read_text,
         rules::RunState {
             executions: &executions,
             ..rules::RunState::empty()
@@ -699,11 +709,14 @@ fn run_after_scoping(
     findings: &mut Vec<Finding>,
 ) {
     let (may_exist, dir_exists) = probes(&context.repo_root);
+    let texts = crate::file_texts::FileTexts::new(context.repo_root.clone());
+    let read_text = |p: &str| texts.get(p);
     let whole_corpus = scope.whole_corpus();
     let reached = |p: &Path| whole_corpus || scope.in_scope.contains(p);
     let ctx = context.rule_ctx(
         &may_exist,
         &dir_exists,
+        &read_text,
         rules::RunState {
             executions,
             findings,

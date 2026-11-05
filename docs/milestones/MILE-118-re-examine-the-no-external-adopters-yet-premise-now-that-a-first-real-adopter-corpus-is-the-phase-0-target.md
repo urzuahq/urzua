@@ -1,8 +1,9 @@
 ---
 Stable-Id: 01M6CXZV44D4GZWR1D3KT6PZ3J
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:AGENTS.md, spec:docs/adr/ADR-44-pointer-and-narrative-fields-are-config-declared-per-type-not-hardcoded.md, spec:docs/adr/ADR-54-a-break-is-a-break-no-migration-diagnostics-for-formats-we-no-longer-read.md, spec:docs/rfc/RFC-23-config-declared-pointer-and-blocking-fields-instead-of-hardcoded-in-urzua-core.md, spec:docs/rfc/RFC-26-records-not-github-issues-close-the-issue-tracker-as-a-tracking-surface.md, spec:docs/rfc/RFC-38-a-read-only-subset-does-not-earn-a-command-fold-audit-into-check-and-stop-re-deriving-fix-s-detection.md
 ---
 # 118 — Re-examine the 'no external adopters yet' premise now that a first real adopter corpus is the Phase 0 target
 
@@ -37,6 +38,23 @@ rewrite an Accepted decision") any correction goes in a dated note in their Cons
 record that narrows them. The Draft RFCs, `AGENTS.md` (through `SPEC-19`) and the `config.rs` comment
 can change in place.
 
+## Outcome
+
+Decided by the maintainer on 2026-11-05: the premise that this tool has no external adopters holds through Phase 0 and expires at
+the Phase 1 switchover (`MILE-102`), when a real adopter's corpus exists and `RFC-49`'s compatibility contract (proposed in
+`ADR-77`) takes over. Each place the What lists keeps its wording and carries a dated note saying so; none is rewritten, and no
+Accepted record's decision text is edited.
+
+| Place | Outcome |
+|---|---|
+| `AGENTS.md`, "Don't build speculative capability" | Kept; dated note added after the sentence |
+| `rust/crates/urzua-core/src/config.rs`, `pointer_fields` doc comment | Kept; dated note added to the comment |
+| `ADR-44` (Accepted) | Kept; dated note in Consequences |
+| `ADR-54` (Accepted) | Kept; dated note in Consequences, pointing at `ADR-77`'s amendment |
+| `RFC-23` (Accepted) | Kept; dated note section |
+| `RFC-38` (Accepted) | Kept; dated note section |
+| `RFC-26` (Draft) | Kept; dated note section |
+
 ## Done means
 
 Each place that relies on there being no external adopters (`AGENTS.md`'s "Don't build speculative capability" and the other six places the What lists, each checked by grep) is read, the ones that still hold are kept and the ones that do not are rewritten, and the outcome is recorded; an Accepted record is left alone and corrected by a dated note, and a grep for the premise's wording lists only places with an outcome.
@@ -54,3 +72,4 @@ Each place that relies on there being no external adopters (`AGENTS.md`'s "Don't
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
 > | 2026-11-04 | Re-phased from Phase 1 to Phase 0 (pulled into Phase 0 as foundation work); `Status` unchanged. **Why:** Maintainer decision of 2026-11-04 defining Phase 0 as parity on a solid codebase (`SPEC-1`'s Phase 0 exit): it decides whether config and output changes may break callers, which gates every refactor in the foundation set, and adoption follows Phase 0. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Status` changed from `Planned` to `Done`; `Realized-by` added; Outcome section added. The premise holds through Phase 0 and expires at the Phase 1 switchover (`MILE-102`), when `RFC-49`'s compatibility contract takes over; each of the seven places carries a dated note and no Accepted decision text was edited. **Why:** Maintainer decision, 2026-11-05; the PR that delivers the notes sets the evidence and `Done` together. Note: `RFC-38` is now Accepted, so it took a dated note like the other Accepted records, not an in-place edit. | **substantive** |

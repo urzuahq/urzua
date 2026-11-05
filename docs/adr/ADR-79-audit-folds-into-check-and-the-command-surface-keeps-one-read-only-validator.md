@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6MKSV30JT6N72111MQPCC5X
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -43,8 +44,8 @@ decided here.
 
 In the context of a read-only `audit` that duplicates `check` and owns a hardcoded rule pair, facing
 three bugs rooted in that ownership, we decided that **`audit` is folded into `check`: `check` gains
-rule selection, `audit` stops running a rule set of its own and becomes a deprecated read-only alias of
-`check` over that selection, and it is removed the release after**, to achieve one read-only validator
+rule selection, `audit` stops running a rule set of its own and becomes, immediately, a deprecated read-only alias of
+`check` over the repository's configured rules, and it is removed the release after**, to achieve one read-only validator
 whose rules are only ever the ones the repository declared, accepting one release in which the same
 operation has two names.
 
@@ -56,15 +57,15 @@ operation has two names.
   `rules_selected` naming the filter. It is never reported as `not-enabled`, which would say the
   repository declined a policy it declared. `status` and the exit code are computed over the selected
   set exactly as over the full set.
-- **`audit` is an alias, not a rule runner.** It runs through `check`'s engine and the declared config,
-  not through its own rule calls, and its report equals `check --rules` over the rules it selected,
-  including `rules_selected`. A consumer migrating from `audit` changes the invocation and nothing in
+- **`audit` is an alias, not a rule runner.** It runs through `check`'s engine over the rules the
+  config declares and enables, with no rule selection of its own, so its report equals `check`'s.
+  It never owns a subset, so it cannot disagree with `check` or exit 2 on a config `check` accepts. A consumer migrating from `audit` changes the invocation and nothing in
   the shape of what comes back.
 - **One deprecation release.** `audit` emits a `Notice` naming the replacement invocation; a `Notice`
   never moves the exit code (`ADR-46`), so no adopter's build breaks on the warning. It is removed the
   release after, with a clear message for a caller that still invokes it.
-- **`BUG-99` closes when `audit` is removed**, not by a separate patch; its candidate fixes were all
-  patches to the command being retired.
+- **`BUG-99` closes when the alias ships**, because from then on `audit` runs exactly the configured
+  rules `check` runs; removal the release after only retires the second name.
 - **Not decided here:** `RFC-38`'s `fix` half (detect mode consuming the rule's result), and whether
   rules declare a category so `--rules cross-record` is expressible. Both stay `RFC-38`'s open questions.
 
@@ -83,8 +84,8 @@ what limits the cost of being wrong. The report-shape change (`rules_selected`) 
   does not declare.
 - `RFC-38` records that this does not ship in `0.4.0`, which already carries a breaking report-contract
   change; the CLI-surface break wants its own release and a migration note.
-- The deprecation release still lets `audit` exit 2 on a prefixless corpus where the selected rules are
-  not declared, until it is removed.
+- During the deprecation release `audit` behaves exactly as `check` does over the configured rules, so
+  it no longer exits 2 on a corpus `check` accepts (the maintainer's 2026-11-05 amendment while Proposed).
 
 ## References
 
@@ -101,3 +102,4 @@ what limits the cost of being wrong. The report-shape change (`rules_selected`) 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | Amended while Proposed: `audit` becomes an alias of `check` over the configured rules immediately, with no rule selection of its own, so `BUG-99` closes when the alias ships rather than at removal. Then Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
