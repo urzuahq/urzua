@@ -1,5 +1,5 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -28,10 +28,21 @@ record_types:
     role: suppression
     required_fields: ["Rule", "Scope", "Reason"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Expires"]
+    known_fields: ["Stable-Id", "Expires", "Category", "Justified-by"]
     spec: "SPEC-10"
-    pointer_fields: []
+    pointer_fields: ["Justified-by"]
     narrative_fields: []
+    # Optional (ADR-86): where a waiver without Expires may take effect.
+    permanent:
+      - rule: status.delivery-agreement
+        reason_field: Category
+        categories:
+          - {name: docs-or-workflow-only}
+          - {name: performance-only}
+          - {name: test-removed-by-decision, cite: required}
+          - {name: behaviour-preserving-refactor}
+          - {name: unreachable-failure}
+        cite_field: Justified-by
 ```
 
 `role: suppression` (`SPEC-3`) is what makes this type the suppression type; the type's name is
@@ -43,13 +54,16 @@ a config written before the declaration keeps working.
 | `Rule` | a rule id, e.g. `field.quality` | Which rule this waiver covers. |
 | `Scope` | a file path, or `*` | `*` covers every file the rule examines for this waiver's `Rule`. |
 | `Reason` | free text, required | Why this exception is reviewed and accepted, not left to drift — the whole reviewability point of not using an ignore list. |
-| `Expires` | `YYYY-MM-DD`, optional | No expiry means the exception is asserted **structural** (the same shape as SPEC-1's permanent content-scope ceiling). A stated expiry means the waiver **reverts to blocking automatically** once passed — no separate "expired" state anyone has to notice or configure. |
+| `Expires` | `YYYY-MM-DD`, optional | No expiry means the exception is asserted **structural** (the same shape as SPEC-1's permanent content-scope ceiling). A stated expiry means the waiver **reverts to blocking automatically** once passed — no separate "expired" state anyone has to notice or configure. Where the type declares `permanent`, a waiver without `Expires` takes effect only under the conditions in "Permanent waivers" below. |
+| `Category` | one of the declared vocabulary, required of a waiver without `Expires` once `permanent` lists its rule | Why the exception is permanent, in the repository's own vocabulary (this repository's is in the Schema block). The engine names no category; the field is whichever one the `permanent` entry's `reason_field` names. |
+| `Justified-by` | a record id, a pointer field | The record that justifies a permanent waiver, required by a category declared `cite: required` (here `test-removed-by-decision`, citing the RFC that removed the test). Resolved by `pointer.resolution` like any pointer field, and a cited record that becomes `Superseded` is reported by `pointer.target-status` where that rule lists the field. |
 
-No relationship fields (MILE-90/ADR-44): both `pointer_fields` and `narrative_fields` are declared
-empty, not omitted — a waiver names a rule and a scope, never another record, so there's nothing for
-either axis to cover. Declaring both `[]` rather than leaving them undeclared satisfies
-`config.pointer-declaration-missing`, the same "explicit zero, not an implicit default" principle
-`known_fields` already follows.
+One relationship field (MILE-90/ADR-44, amended by ADR-86): `Justified-by` is declared in
+`pointer_fields`, so a waiver can name the record that justifies a permanent exception. Before
+`ADR-86` the type declared both `pointer_fields` and `narrative_fields` as empty (explicit zero, not
+omitted, satisfying `config.pointer-declaration-missing`); `narrative_fields` remains `[]`. A waiver
+still names a rule and a scope first; the citation is optional and required only by a category that
+declares it.
 
 No `Status` field: a waiver's lifecycle is entirely computed from `Expires` (`is_active(today)`),
 not separately authored — unlike every other record type, there is nothing for a human to declare
@@ -76,6 +90,28 @@ that is present and neither blank, a placeholder nor pending. Otherwise it suppr
 target finding appears again (failing toward more findings, as for a missing `Rule`), and with
 `waiver.matches-nothing` enabled a finding on the waiver names the missing field. The default is
 unchanged.
+
+## Permanent waivers
+
+A waiver without `Expires` is permanent (`ADR-86`). Left ungoverned, any rule can be waived forever for
+any reason. The suppression type can declare `permanent` (`SPEC-3`) to say, per rule, which reasons
+allow it. Once declared, a waiver without `Expires` takes effect only when all of these hold:
+
+1. its `Rule` has a `permanent` entry (declaring the key **closes permanence for every unlisted
+   rule**; a repository that declares nothing is unchanged, as is a waiver with an `Expires`);
+2. the entry's `reason_field` (`Category`) holds one of the entry's categories;
+3. where that category is declared `cite: required`, the entry's `cite_field` (`Justified-by`) names a
+   record that resolves.
+
+Otherwise it is **ineffective**: it suppresses nothing, its finding is reported again, and
+`waiver.matches-nothing` reports it as `waiver-ineffective` with a message naming whichever
+requirement is unmet (the `effective_requires` field, the rule's lack of a `permanent` entry, the
+category or the citation). A permanent waiver stays honest through the existing mechanisms: it is
+still listed as `waived`, never omitted; it is reported by `waiver.matches-nothing` when its finding
+disappears, whatever its expiry; and `check` adds an info notice (subject `permanent-waivers`) with
+the number in effect by category, on every run while `permanent` is declared, counted over the whole
+corpus. The scope stays one record per waiver; the permanent waiver is not re-examined when its
+record is edited later.
 
 ## What's deliberately not built
 
@@ -110,3 +146,4 @@ unchanged.
 > | 2026-11-05 | Bumped to `0.8`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.9`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.11`. The type may declare `permanent` (`SPEC-3`): a waiver without `Expires` takes effect only for a listed rule, under a declared category and, where the category requires it, a resolving `Justified-by`; declaring it closes permanence for unlisted rules, and `check` counts permanent waivers by category. Added the `Category` and `Justified-by` fields; the statement that the type has no relationship fields is amended, `Justified-by` being declared in `pointer_fields`. **Why:** `MILE-193` / `ADR-86`. | **substantive** |

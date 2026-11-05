@@ -346,10 +346,9 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
     scope_findings(session, &scope, &mut findings);
-    let waivers = urzua_core::waiver::load_suppressions(
-        &session.records,
-        &urzua_core::waiver::SuppressionType::from_config(&session.config),
-    );
+    let suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
+    let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
+    notices.extend(permanent_waivers_notice(&suppression_type, &waivers));
     let today = urzua_io::today();
     run_after_scoping(
         &context,
@@ -398,6 +397,40 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         notices,
         // The flag wins over the configuration; either only moves the exit code.
         fail_on: fail_on.unwrap_or(session.config.fail_on),
+    })
+}
+
+// Implements: ADR-86 (the report counts permanent waivers by category)
+/// The permanent waivers in effect, counted by category (`ADR-86`), when the
+/// suppression type declares `permanent`. Said on every run, including with
+/// none: a repository that governs permanence is shown how much of it there
+/// is, and a run that found nothing is distinguishable from one that did not
+/// look. Counted over the whole corpus, whatever the scope of the run, so the
+/// number does not change with the paths asked about.
+fn permanent_waivers_notice(
+    suppression_type: &urzua_core::waiver::SuppressionType,
+    waivers: &[urzua_core::waiver::Suppression],
+) -> Option<Notice> {
+    suppression_type.permanent.as_ref()?;
+    let mut by_category: std::collections::BTreeMap<&str, usize> = Default::default();
+    for category in waivers.iter().filter_map(|w| w.permanent_category()) {
+        *by_category.entry(category).or_default() += 1;
+    }
+    let total: usize = by_category.values().sum();
+    let plural = if total == 1 { "" } else { "s" };
+    let breakdown = if by_category.is_empty() {
+        String::new()
+    } else {
+        let parts: Vec<String> = by_category
+            .iter()
+            .map(|(category, n)| format!("{category}: {n}"))
+            .collect();
+        format!(" ({})", parts.join(", "))
+    };
+    Some(Notice {
+        severity: NoticeSeverity::Info,
+        subject: crate::NOTICE_PERMANENT_WAIVERS.to_string(),
+        message: format!("{total} permanent waiver{plural} in effect{breakdown}"),
     })
 }
 

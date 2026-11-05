@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Suppression;
+use crate::waiver::{Permanence, Suppression};
 
 /// `waiver.matches-nothing` (`MILE-168`): a waiver that no longer does
 /// anything is reported, so a stale exception does not stay on file hiding that
@@ -77,14 +77,28 @@ pub fn waiver_matches_nothing(
                 if !reached(&path) {
                     return Outcome::Absent;
                 }
-                let missing = w.unmet.join(", ");
+                // Implements: ADR-86 (the message names the unmet requirement)
+                // Whichever requirement is unmet is named: a field the type
+                // requires, or what `permanent` asks of a waiver without an
+                // expiry.
+                let mut unmet = Vec::new();
+                if !w.unmet.is_empty() {
+                    unmet.push(format!(
+                        "it lacks {}, which its type requires (`effective_requires`)",
+                        w.unmet.join(", ")
+                    ));
+                }
+                let mut field = w.unmet.first().map(String::as_str);
+                if let Permanence::Refused(refusal) = &w.permanence {
+                    unmet.push(refusal.describe(&w.rule));
+                    field = field.or(Some(refusal.field()));
+                }
                 return report(
                     "waiver-ineffective",
-                    &w.unmet[0],
+                    field.unwrap_or("Rule"),
                     format!(
-                        "waiver ({claimed}) is not in effect: it lacks {missing}, which its type \
-                     requires (`effective_requires`) before it suppresses anything; its finding \
-                     is reported again until the field holds a real value"
+                        "waiver ({claimed}) is not in effect: {}; its finding is reported again until the requirement is met",
+                        unmet.join("; ")
                     ),
                 );
             }
@@ -145,6 +159,7 @@ mod tests {
             scope: scope.into(),
             expires: expires.map(str::to_string),
             unmet: Vec::new(),
+            permanence: crate::waiver::Permanence::Ungoverned,
         }
     }
 
