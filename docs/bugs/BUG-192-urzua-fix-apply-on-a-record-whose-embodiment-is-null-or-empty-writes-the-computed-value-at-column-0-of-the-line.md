@@ -2,7 +2,7 @@
 Stable-Id: 01M6MKBDK1D9VWKK0KTYEMF7ZD
 Status: Fixed
 Found-in: 'running urzua fix --apply on a record with `Embodiment: null` and a Realized-by that computes Implemented (2026-11-05)'
-Regression-test: 'rust/crates/urzua-core/src/fix.rs::apply_repair_fills_a_null_tilde_or_empty_value_by_position_observed_failing, rust/crates/urzua-core/src/fix.rs::apply_repair_does_not_touch_a_substring_of_the_field_name_or_prose_observed_failing'
+Realized-by: test:rust/crates/urzua-core/src/fix.rs#apply_repair_fills_a_null_tilde_or_empty_value_by_position_observed_failing@sha256:136de640dfd781b220e334af52033670a370b33bd456664b16ae592b2ac786b7, test:rust/crates/urzua-core/src/fix.rs#apply_repair_does_not_touch_a_substring_of_the_field_name_or_prose_observed_failing@sha256:025008389eb47e78d3da26aa0481c17ad702568664912467076644c7a3d1ecf7
 ---
 # 192 — urzua fix --apply on a record whose Embodiment is null, ~ or empty writes the computed value at column 0 of the line
 
@@ -23,3 +23,4 @@ Fixed in `apply_repair`: the value after `Field:` on the field's own line is rep
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed and fixed. **Why:** `urzua fix --apply` corrupted a record with an empty `Embodiment`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,6 @@
 Stable-Id: 01M36S90N3TVNV9YVV9K6GK8M3
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 24"
-Regression-test: "none -- performance-only, no behavior change; the existing full suite (unchanged pass, unchanged 70-finding real-corpus check) is the fix's own evidence"
 ---
 # 134 — declared_slots_for_roles and declared_cross_record_value rebuild a type's declared-field set per record instead of using the cached by_type map
 
@@ -50,9 +49,14 @@ suite and finding count are the fix's own evidence that the cache lookup and the
 - `field_untrimmed_value`/`header_field_case_mismatch` -- the two rules already doing this correctly,
   the pattern to match.
 
+## Regression test
+
+none -- performance-only, no behavior change; the existing full suite (unchanged pass, unchanged 70-finding real-corpus check) is the fix's own evidence
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified both call sites rebuild a per-type-constant value inside per-record/per-reference loops instead of using the cache this codebase already has for exactly this. Performance-only, left `Status: Open` for its own change rather than rushed into an already-large round. | **substantive** |
 > | 2026-09-23 | Fixed. `declared_slots_for_roles` fixed internally (private, no call sites touched). `declared_cross_record_value`'s signature changed to take the precomputed map; its 3 call sites now build it once per rule invocation, matching the pattern the same functions already use for other per-type maps. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

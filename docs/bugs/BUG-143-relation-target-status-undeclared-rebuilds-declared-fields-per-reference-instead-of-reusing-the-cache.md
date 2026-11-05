@@ -2,7 +2,6 @@
 Stable-Id: 01M376A3SCJT064JEERV4CJ0T8
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 26"
-Regression-test: "none -- performance-only, no behavior change; full suite and real-corpus finding count unchanged"
 ---
 # 143 — relation.target-status-undeclared rebuilds declared-fields per reference instead of reusing the cache
 
@@ -29,8 +28,13 @@ uses. No behavior change: full test suite and real-corpus finding count (70) unc
 
 - `BUG-134` -- the same defect, first instance, in the other reference-resolving rules.
 
+## Regression test
+
+none -- performance-only, no behavior change; full suite and real-corpus finding count unchanged
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by a full-release code review. **Why:** a missed sibling instance of `BUG-134`'s own defect class, in a rule that fix's sweep did not cover. Performance-only: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

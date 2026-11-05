@@ -2,7 +2,7 @@
 Stable-Id: 01M30JTRERM7EJHW8BWNP3NC4S
 Status: Fixed
 Found-in: "Round 11 of the 0.4.0 review, against nine PRs never reviewed in aggregate"
-Regression-test: ".github/workflows/ci.yml, job `release invariants` -- and .github/scripts/release-invariants.test.sh"
+Realized-by: test:.github/scripts/release-invariants.test.sh
 ---
 # 96 — The release invariant guards run only in make ci, not on the unattended path the defects took
 
@@ -45,3 +45,4 @@ same question the guard itself asks about `urzua check`.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

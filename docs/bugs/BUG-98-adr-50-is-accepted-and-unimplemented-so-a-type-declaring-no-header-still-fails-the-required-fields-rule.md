@@ -2,7 +2,7 @@
 Stable-Id: 01M30MEE250445FAWYQMRGNHX5
 Status: Fixed
 Found-in: "Auditing which rules could fire on a type declaring no header, while assigning populations to the rule set"
-Regression-test: "a_type_declaring_no_header_is_not_reported_as_missing_one_observed_failing, a_type_declaring_no_header_is_not_reported_as_deprecated, a_header_none_type_with_required_fields_is_a_contradiction_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/header.rs#a_type_declaring_no_header_is_not_reported_as_missing_one_observed_failing@sha256:5065704a2af97692a3186966322881678f3d896e67f4912ecb2cc6a69fa94866, test:rust/crates/urzua-core/src/rules/declaration.rs#a_header_none_type_with_required_fields_is_a_contradiction_observed_failing@sha256:09675416d6bc177271e76fcb06b3f3b7de162b8d255fa7812615d12b0fd86f78
 ---
 # 98 — ADR-50 is accepted and unimplemented so a type declaring no header still fails the required-fields rule
 
@@ -47,9 +47,14 @@ skips it before the shape-specific insertion code would run.
 - `ADR-50`, the decision this bug is the unimplemented half of.
 - `ADR-55` — a decision that cannot fire is the same defect class as a rule that cannot fire.
 
+## Regression test
+
+a_type_declaring_no_header_is_not_reported_as_missing_one_observed_failing, a_type_declaring_no_header_is_not_reported_as_deprecated, a_header_none_type_with_required_fields_is_a_contradiction_observed_failing, rules.rs
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-21 | Filed. **Why:** surfaced while assigning a population to every rule, which required knowing which types each rule can apply to. `header_shape: none` appears in a ratified decision and in no code path. Filed rather than implemented, because the ADR also calls for a config-level rule and the two belong in one change. | **substantive** |
 > | 2026-09-22 | Fixed. **Why:** the user asked to fix this before the 0.4.0 release; implemented exactly what `ADR-50` already decided, with the consequences it named (`header.deprecated-shape`'s negative test, `urzua new`'s refusal) addressed in the same change rather than left as follow-up gaps. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

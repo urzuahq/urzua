@@ -2,7 +2,7 @@
 Stable-Id: 01M2VH55003E2WS281C12H8BAQ
 Status: Fixed
 Found-in: 'A code review of the unreleased diff since v0.3.0 -- reproduced for all three malformed shapes'
-Regression-test: 'rust/crates/urzua-core/src/config.rs::a_malformed_rule_setting_names_what_was_wrong_observed_failing -- a bad level bare, a bad level in table form, and an unknown key, each asserting its own message and that none mentions `untagged`'
+Realized-by: test:rust/crates/urzua-core/src/config.rs#a_malformed_rule_setting_names_what_was_wrong_observed_failing@sha256:c0db5f5e8540b1f596edaae0b4c3db71d539680480c40d590a338ab377f7879a
 ---
 # 46 — Every malformed rule setting collapses to one opaque untagged-enum message
 
@@ -43,3 +43,4 @@ diagnostics are the point.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** review of the unreleased diff. `untagged` discards inner variant errors, so the message `MILE-80` wrote to name the valid levels is unreachable, and `ADR-53`'s requirement that a wrong key names its alternatives is unmet by the change that claimed to implement it. | **substantive** |
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** `RuleSetting` dispatches on the parsed value -- a mapping takes the table path, a scalar the bare one -- so each branch's error survives. `untagged` was discarding them, which made the message naming the valid levels unreachable and left `ADR-53`'s requirement that a wrong key name its alternatives unmet by the change that claimed to implement it. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

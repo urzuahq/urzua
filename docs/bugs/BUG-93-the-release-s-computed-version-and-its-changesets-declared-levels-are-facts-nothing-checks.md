@@ -2,7 +2,7 @@
 Stable-Id: 01M30EGKJNY72B2NMW9GH47HR2
 Status: Fixed
 Found-in: "Two release defects in one evening, both with the same single symptom"
-Regression-test: ".github/scripts/release-invariants.test.sh"
+Realized-by: test:.github/scripts/release-invariants.test.sh
 ---
 # 93 — The release's computed version and its changesets' declared levels are facts nothing checks
 
@@ -65,3 +65,4 @@ verbs, found here within minutes of the guard existing.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN953GF5BXSZB5DFM2AD9
 Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "rust/crates/urzua-core/src/rules.rs::an_empty_h1_skips_that_line_and_keeps_looking"
+Realized-by: test:rust/crates/urzua-core/src/rules/filename.rs#an_empty_h1_skips_that_line_and_keeps_looking@sha256:7f93591749a88e6144fd1daaf800c07ad210255a73053c0725a8e5c7b28cc5e7
 ---
 # 64 — An empty H1 line abandons the title scan instead of skipping it
 
@@ -35,3 +35,4 @@ exercised.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

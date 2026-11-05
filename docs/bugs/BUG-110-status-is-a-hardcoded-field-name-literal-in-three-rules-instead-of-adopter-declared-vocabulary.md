@@ -2,7 +2,7 @@
 Stable-Id: 01M34BEPVA9BX031V41XEENVZ5
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing@sha256:6d06c500ec1f6e147218f3b24423adc38291c17f26e4feb2b37eace2723f0505
 ---
 # 110 — Status is a hardcoded field name literal in three rules instead of adopter-declared vocabulary
 
@@ -54,3 +54,4 @@ review together identified.
 > |---|---|---|
 > | 2026-09-22 | Filed, not fixed. **Why:** found by a full-release code review; the fix needs a config-schema decision (a new declared key, its default, and migration for the three call sites) that shouldn't be picked under review pressure. | **substantive** |
 > | 2026-09-23 | Fixed via `RFC-42`/`ADR-61`. **Why:** a follow-up review found the same shape recurring in four more rules, so the design was broadened to a general `relation_fields` mechanism covering all of them rather than a `Status`-only patch. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

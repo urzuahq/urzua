@@ -2,7 +2,6 @@
 Stable-Id: 01M268P3T0P9RDA78AWBXAJ4HR
 Status: Not a bug
 Found-in: 'raised as "shouldn''t an explicit --by win as an intentional override" while reviewing this changeset''s own semver classification -- checking RFC-2''s actual stated reasoning (rather than assuming the raised concern was correct) found the opposite: RFC-2 exists specifically because the old --by-wins behavior was identified as indistinguishable from a rubber stamp, and deliberately downgraded --by''s priority for that reason'
-Regression-test: 'not applicable yet -- this record documents a finding to be resolved by design (an RFC amending RFC-2), not a code defect with an obvious fix'
 ---
 # 16 — None of fix's identity-resolution tiers are a real attestation
 
@@ -49,6 +48,10 @@ only that each tier is progressively less like free-form guessing.
   attestation, or exploring whether `fix --apply` should eventually check for a signed containing
   commit as a stronger tier.
 
+## Regression test
+
+not applicable yet -- this record documents a finding to be resolved by design (an RFC amending RFC-2), not a code defect with an obvious fix
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -56,3 +59,4 @@ only that each tier is progressively less like free-form guessing.
 > | 2026-09-10 | Initial bug record, `Status: Open`. Not a code defect with an obvious fix -- disposition is a new RFC amending RFC-2, not yet drafted. | **structural** |
 > | 2026-11-04 | Triage: still real, and a design question rather than a code defect; `Status` stays `Open`. `urzua fix --apply --by <name>` still writes `<name>` as free text and the `gh api user` tier (`urzua-io/src/lib.rs`) is still an unverified session identity. **Why:** the record asks for an RFC amending `RFC-2` (signed commits as the attestation), which no change here can decide. | **substantive** |
 > | 2026-11-05 | `Status` changed from `Open` to `Not a bug`. Fix records attribution, not attestation (`RFC-25`); CI and pull request review are the attestation. The identity `fix --apply` writes is a provisional label by design, so no tier of it was ever meant to be a security control. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN698JZ9AMBY8JNYNYNGZX
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus@sha256:bac9769e5929c7b0401600db6e1d2752f8d357c98f5c846ff1f62db08e4b6db8
 ---
 # 76 — An unreadable tracked record drops out of the corpus and check reports ok
 
@@ -45,3 +45,4 @@ numbers have never been compared.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

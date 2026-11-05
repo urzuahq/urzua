@@ -2,8 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1Z5YTQ1FVF20SGM9JM6C0FF
 Found-in: writing SPEC-15 (the doctor spec) and finding the actual implementation printed `[OK]`/`[WARN]`/`[ERROR]` text lines, directly contradicting ADR-23's "stdout is always JSON, no format flag" contract every other command follows
-Regression-test: doctor_emits_json_not_plain_text_lines (rust/crates/urzua-cli/tests/check_integration.rs)
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#doctor_emits_json_not_plain_text_lines@sha256:b8b8680e7dcc4e6a25ae12a4eac08cc570b95f2ef5151e195dd219c09dff076f
 ---
 # 4 — urzua doctor outputs plain text instead of JSON
 
@@ -42,3 +41,4 @@ contract could still pass its own test suite indefinitely.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M369EMT7WH2ECKJ8RH2ZRQ4M
 Status: Fixed
 Found-in: "A /code-review 109 pass, reviewing this round's PR before merge"
-Regression-test: "a_header_none_type_with_no_known_fields_is_not_a_missing_declaration_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/declaration.rs#a_header_none_type_with_no_known_fields_is_not_a_missing_declaration_observed_failing@sha256:93da6f86472c85ffb3cee75396796f7752dfb944b09ffd939fab8764d7c0d570
 ---
 # 124 — config.known-fields-declaration-missing flags a header-shape-none type that structurally cannot declare known_fields
 
@@ -38,3 +38,4 @@ already uses for `required_fields`, skipping a `none`-shaped type entirely rathe
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a `/code-review 109` pass before merge; a planted-violation test observed failing against the un-exempted rule before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

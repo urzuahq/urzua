@@ -2,7 +2,6 @@
 Stable-Id: 01M23VWTEK4ZKNMZPX4VW70D2P
 Status: Fixed
 Found-in: 'audited live, while reviewing the SPEC-19 reframe (from "AGENTS.md instructions" to "repository agent guardrails") -- checking whether `Parent` should also be corrected on SPEC-19 surfaced the same question for every other spec'
-Regression-test: 'none in the code sense -- this is a corpus-content defect, not a rule/behavior defect. `pointer.resolution` only ever verified that `Parent` resolves to an existing record (ADR-40), never that it''s the *right* record; no rule can check that mechanically. Verified by hand: each corrected value now matches that spec''s own real `Implements`/`Derives-from` lineage instead of a blanket default.'
 ---
 # 10 — Parent field defaults to SPEC-1 across most specs without a real relationship
 
@@ -69,8 +68,13 @@ root pointer.
 - SPEC-1 -- its own child-spec table is the source of truth this bug's corrected values were checked
   against.
 
+## Regression test
+
+none in the code sense -- this is a corpus-content defect, not a rule/behavior defect. `pointer.resolution` only ever verified that `Parent` resolves to an existing record (ADR-40), never that it's the *right* record; no rule can check that mechanically. Verified by hand: each corrected value now matches that spec's own real `Implements`/`Derives-from` lineage instead of a blanket default.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-09 | Initial bug record, `Status: Fixed`. **Why:** found live auditing every spec's `Parent` value against `SPEC-1`'s own child-spec table and each spec's real `Implements`/`Derives-from` lineage -- 7 of 18 specs claimed a relationship `SPEC-1` itself never documented. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

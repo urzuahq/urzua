@@ -2,7 +2,7 @@
 Stable-Id: 01M2WG81C9XDY7DQWF5NM7EWW4
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_scope_keeps_a_finding_about_a_file_git_does_not_track"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_scope_keeps_a_finding_about_a_file_git_does_not_track@sha256:8b90be1cfe6f46f9003da8622479d0c407080aa994625dd60682f5196b9a46ce
 ---
 # 67 — A finding about a file git does not track is dropped by any path scope so check dot passes what check fails
 
@@ -47,3 +47,4 @@ expected to agree, and nothing asserts that they do.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

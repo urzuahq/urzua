@@ -2,7 +2,7 @@
 Stable-Id: 01M6D57BDWZY0HRJABVQB8FBJ9
 Status: Fixed
 Found-in: "Reviewing why ADR-48 and ADR-49 warned on a Derives-from pointing at a Superseded ADR"
-Regression-test: "check_integration.rs's target_status_fields_restricts_which_declared_fields_warn_observed_failing test, which asserts that with fields: [Implements] only the Implements slot warns, and target_status_without_fields_warns_on_every_declared_field, which asserts the omitted option is unchanged"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#target_status_fields_restricts_which_declared_fields_warn_observed_failing@sha256:a7de05cae5e5bff86948fa0fba3eef329ef27d2c2959b8d259bdf4c72c35c884, test:rust/crates/urzua-cli/tests/check_integration.rs#target_status_without_fields_warns_on_every_declared_field@sha256:64df4e494a016f26f114f893ea6909657eb3d97b40b33ee21239858a750dac27
 ---
 # 172 — pointer.target-status cannot distinguish lineage fields from dependency fields
 
@@ -43,3 +43,4 @@ declared field except `Derives-from`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed in one pass. **Why:** a single `not_in` list could not express that a Superseded lineage target is history while a Superseded dependency target is stale. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

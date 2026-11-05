@@ -410,6 +410,40 @@ mod tests {
         assert!(findings[0].message.contains("Status Open"), "{findings:?}");
     }
 
+    /// BUG-90: the count was per claim *file*, so one record claimed closed by
+    /// three changesets reported three examined in a population that has one
+    /// record. It is counted per distinct claimed record; each place the claim
+    /// is written still gets its own finding.
+    #[test]
+    fn several_claim_files_closing_one_record_count_as_one_claim_observed_failing() {
+        let bug = record("docs/bugs/BUG-36-x.md", "bug", "---\nStatus: Open\n---\n");
+        let claims = vec![
+            (".changeset/a.md".to_string(), "closes BUG-36.".to_string()),
+            (
+                ".changeset/b.md".to_string(),
+                "also closes BUG-36.".to_string(),
+            ),
+            (
+                ".changeset/c.md".to_string(),
+                "which closes BUG-36.".to_string(),
+            ),
+        ];
+        let closed = vec!["Fixed".to_string()];
+
+        let records = [bug];
+        let index = build_normalized_index(&records);
+        let config = config_for_required(vec![("bug", vec!["Status"])]);
+        let (exec, findings) =
+            claim_status_agreement(&claims, &verb_only(&closed), &config, &index);
+        let population = exec.population.expect("the rule carries a population");
+        assert_eq!(
+            (population.eligible(), population.examined()),
+            (1, 1),
+            "one record claimed three times is one claim, never more than the corpus holds"
+        );
+        assert_eq!(findings.len(), 3, "each claim site is its own finding");
+    }
+
     /// BUG-100: a target record whose `Status` key is written under a
     /// different case is not judged, not judged-and-wrong. Before the fix
     /// this fabricated the sentinel `"(no Status field)"`, which matched no

@@ -2,7 +2,6 @@
 Stable-Id: 01M33QPNHQ85H3DKFRXKJYFRPJ
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "existing rule test suites, unchanged, exercised against the extracted helpers -- field_slots and pointer_and_narrative_slots, rules.rs"
 ---
 # 105 — the declared field slot list is rebuilt independently by four or more rules
 
@@ -43,8 +42,13 @@ same 70 findings before and after.
   class for a derived candidate list.
 - `BUG-106` — the sibling duplication (a field *union*, not a slot list), fixed in the same pass.
 
+## Regression test
+
+existing rule test suites, unchanged, exercised against the extracted helpers -- field_slots and pointer_and_narrative_slots, rules.rs
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; a mechanical extraction verified as a no-op against the existing test suites and a real-corpus run. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

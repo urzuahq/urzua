@@ -2,8 +2,7 @@
 Stable-Id: 01M2MF5SJQ1PRBKNHX4WFMVNDV
 Status: Fixed
 Found-in: 'building a synthetic corpus to reproduce BUG-23 -- a record whose only `# ` line sat inside a shell snippet reported a mismatch against that snippet'
-Regression-test: 'rust/crates/urzua-core/src/rules.rs :: filename_title_consistency_ignores_an_h1_inside_a_fenced_block_observed_failing, filename_title_consistency_closes_a_fence_only_on_its_own_marker_observed_failing'
-Realized-by: code:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_ignores_an_h1_inside_a_fenced_block_observed_failing@sha256:393560522286aba7e81d3b857bf1b4ec14c4bab30b32d2f0d7d57b21a952e9bb, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_closes_a_fence_only_on_its_own_marker_observed_failing@sha256:28574d683b2a83d580129a16f978171259a9441a33ea5c22cf6a6d284ea92d6d
 ---
 # 30 — filename.title-consistency matches an H1 inside a fenced code block and fabricates a mismatch
 
@@ -75,3 +74,4 @@ the same gap in coverage that let the original defect through, reproduced one le
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** a rule that invents a finding is a worse failure than one that words a real finding badly, and this one fires precisely where the reader has least context to doubt it. Found by reproduction, not by reading -- the branch is unreachable from this repo's own corpus. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

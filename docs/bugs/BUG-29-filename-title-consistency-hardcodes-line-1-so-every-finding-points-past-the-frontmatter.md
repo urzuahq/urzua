@@ -2,8 +2,7 @@
 Stable-Id: 01M2MF5RYBQG72GMM6FE709HEP
 Status: Fixed
 Found-in: 'building a synthetic corpus to reproduce BUG-23 -- every finding came back `line: 1` while the H1 sat on line 7'
-Regression-test: 'rust/crates/urzua-core/src/rules.rs :: filename_title_consistency_reports_the_real_h1_line_observed_failing'
-Realized-by: code:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_reports_the_real_h1_line_observed_failing@sha256:e48108cb7d7bb8f39f1216b0da3194be295ebcee8ddc7090785028b603da4764
 ---
 # 29 — filename.title-consistency hardcodes line 1, so every finding points past the frontmatter
 
@@ -45,3 +44,4 @@ None` rather than a fabricated position, since there is no title to point at.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** found by reproducing `BUG-23` against a synthetic corpus rather than reasoning about the code -- the wrong line number is invisible in this repo, where the rule never fires, and only appears once a corpus actually trips it. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

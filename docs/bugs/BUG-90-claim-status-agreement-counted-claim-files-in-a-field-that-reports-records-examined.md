@@ -2,7 +2,7 @@
 Stable-Id: 01M2YR3J3H6MGCCA71FXNGZC5V
 Status: Fixed
 Found-in: "Round 10 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-core/src/rules.rs::claim_status_agreement counts records resolved against"
+Realized-by: test:rust/crates/urzua-core/src/rules/claim.rs#several_claim_files_closing_one_record_count_as_one_claim_observed_failing@sha256:523633f34e52e6fa832ab64b80cdf343d4617742fd787f53046f310e8815f3f4
 ---
 # 90 — claim.status-agreement counted claim files in a field that reports records examined
 
@@ -36,3 +36,5 @@ corpus contains.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | Regression test added: `several_claim_files_closing_one_record_count_as_one_claim_observed_failing`, observed failing with the fix undone and passing with it. **Why:** this record named no test, so its `Fixed` had no evidence behind it under ADR-84. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); its value named no test, so a regression test was written and cited in `Realized-by`. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,6 @@
 Stable-Id: 01M33QPP9RM9CSPXTATYEXPX42
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "not applicable -- a comment-wording fix has no behavior to regress"
 ---
 # 107 — comments narrate bug-ticket history and use temporal language against the comment convention
 
@@ -25,8 +24,13 @@ Each flagged comment was reworded to state the invariant directly, without a "be
 `property.rs`'s own flagged instance had already been corrected during this same release's earlier
 work, verified by direct inspection before making any further edit there.
 
+## Regression test
+
+not applicable -- a comment-wording fix has no behavior to regress
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; wording-only, no behavior to verify beyond the existing test suite staying green. | **structural** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M30JSVKZ8DMSPCMVN0JHXG1X
 Status: Fixed
 Found-in: "Round 11 of the 0.4.0 review, against nine PRs that had never been reviewed in aggregate"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_rule_handed_nothing_discloses_that_it_certified_nothing"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_rule_handed_nothing_discloses_that_it_certified_nothing@sha256:ec375dadd118982d421796b48df4766f7977a29e43fefddb8c64b66cb5a6e2a1
 ---
 # 94 — The census reports that a rule was handed nothing and the gate does not read it
 
@@ -69,3 +69,4 @@ change.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-21 | Regression test renamed and re-pointed at the disclosure. **Why:** the fix as filed made the gate read the population, and that gate is now deleted -- `BUG-88`'s re-grading established that `eligible: 0` is the cold start of enabling a rule before its scope exists, not a fault. The finding stands: a signal built this release and consumed by nothing is the defect. It is now consumed by `records_read_by_any_rule`, and the test asserts that a two-record corpus whose only rule was handed nothing reports `files_examined: 2, records_read_by_any_rule: 0`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

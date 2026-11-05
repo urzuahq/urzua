@@ -2,7 +2,6 @@
 Stable-Id: 01M2MMFYSSGJWJ5X97Z0FQ5YHT
 Status: Fixed
 Found-in: 'shipping v0.2.1 -- the release PR''s approved `ci` run failed the changeset gate despite the PR carrying the `no-changeset` label, and only passed after a human removed and re-added the label by hand'
-Regression-test: 'the gate no longer reads the event payload at all, so staleness is unrepresentable rather than tested around -- the observable assertion is a release PR reaching green `ci` with no label handling, checkable on the next release'
 Realized-by: code:.github/workflows/ci.yml
 ---
 # 34 — The release PR's changeset gate can never pass on its own, because the label is applied with GITHUB_TOKEN
@@ -93,9 +92,14 @@ a label that was already present.
 - RFC-30 -- the proposed fix: an App token, whose events do trigger workflows.
 - ADR-45, SPEC-20 -- the flow and its spec; `SPEC-20` claims `BUG-15` covers this case.
 
+## Regression test
+
+the gate no longer reads the event payload at all, so staleness is unrepresentable rather than tested around -- the observable assertion is a release PR reaching green `ci` with no label handling, checkable on the next release
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** the workaround that unblocked `v0.2.1` -- removing and re-adding the label by hand -- is not something a release should require, and reading live state instead of a snapshot removes the failure mode rather than routing around it. The held-run approval is a different cause and stays open under `RFC-30`. | **substantive** |
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** found by running the release rather than reading the workflow -- `BUG-15`'s fix reads as complete in both the record and `SPEC-20`, and is inert in exactly the case both cite as its motivation. | **structural** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

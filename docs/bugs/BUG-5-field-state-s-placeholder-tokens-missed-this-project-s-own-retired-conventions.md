@@ -2,8 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1ZF57J080NMEH2FZ6W6E044
 Found-in: planning MILE-79 (a guarded edit command), reasoning through why the ADR-38 incident (Author silently reverted to a placeholder, undetected until a much later corpus-wide check) wasn't caught by field.quality despite field.quality running on every check
-Regression-test: retired_project_placeholder_conventions_are_placeholder_not_present, field_quality_flags_a_retired_placeholder_as_an_error (rust/crates/urzua-core/src/field_state.rs, rust/crates/urzua-core/src/rules.rs)
-Realized-by: code:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/field_state.rs, test:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/field_state.rs#retired_project_placeholder_conventions_are_placeholder_not_present@sha256:93bd89a306f7a4462d5e6d89612bb354976646abfd0502a4018b5934a54ae327, test:rust/crates/urzua-core/src/rules/field.rs#field_quality_flags_a_retired_placeholder_as_an_error@sha256:6ebe9d8381f273a3e0fd683f0f1fcefa7e281a7d1184d41ba953b9954eeef647
 ---
 # 5 — field_state's placeholder tokens missed this project's own retired conventions
 
@@ -47,3 +46,4 @@ value's own status in the corpus changes, not just left as a historical snapshot
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

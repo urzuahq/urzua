@@ -2,7 +2,6 @@
 Stable-Id: 01M2M4GYH2DPTYDC01ZXQAKQBS
 Status: Fixed
 Found-in: 'asked why SPEC-5 was still Draft while describing a shipped command; checking every spec''s Status found a clean date split -- the five oldest are all Draft, everything written later is Accepted'
-Regression-test: 'none -- corpus-content and documentation defect, not a rule/behavior defect. The mechanical detection RFC-28 proposes remains its own, separate, undecided proposal (see Fix below); this record does not depend on it landing.'
 ---
 # 26 — Five specs are marked Draft while their subject is built and shipped
 
@@ -84,6 +83,10 @@ resolution.
 - `rust/crates/urzua-core/src/rules.rs` — `is_terminal_status`, which already knows `Accepted` is
   terminal for a spec.
 
+## Regression test
+
+none -- corpus-content and documentation defect, not a rule/behavior defect. The mechanical detection RFC-28 proposes remains its own, separate, undecided proposal (see Fix below); this record does not depend on it landing.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -92,3 +95,4 @@ resolution.
 > | 2026-09-18 | Three of five flipped; two deliberately not. **Why:** `SPEC-1`, `2` and `3` were verified against the binary first -- every command and flag they name ships -- and now carry `Embodiment: Verified` with real locators, which also brings them into `embodiment.consistency`'s scope for the first time (`BUG-40`). `SPEC-4` stays `Draft` because its subject genuinely does not exist: nothing reads `manifest.yaml`. `SPEC-5` stays `Draft` as the mixed case this record identified -- its adopt path ships, its flags and profiles do not. Remaining work is moving `SPEC-5`'s aspirational sections somewhere that can hold unbuilt design; the mechanical cost this record cited is already gone, since `MILE-80` deleted `pointer.resolution`'s success-reporting half and the 27 `Parent: SPEC-1 ... Status = Draft` warnings with it. | **substantive** |
 > | 2026-09-18 | `Realized-by` added to the `spec` type's `known_fields`. **Why:** `Embodiment` was declared and `Realized-by` was not, which is an incoherent pair -- `embodiment.consistency` reads both and skips any record missing either, so a spec could declare an embodiment state that nothing could ever check. Not a list widened to quiet a diff: the field is the companion to one already declared, and without it the three specs accepted here would have claimed `Verified` with nothing able to verify them. `embodiment.consistency` now examines 36 records, up from 33. | **substantive** |
 > | 2026-09-24 | Fixed. `SPEC-5`'s aspirational sections relocated to `MILE-114`; flipped to `Accepted` with `Embodiment: Verified`. Two more inaccuracies found and corrected in the same pass (the Layout section overclaimed what `init` writes). `SPEC-4` confirmed still correctly `Draft`. All five specs this record found now have a settled, verified `Status`. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

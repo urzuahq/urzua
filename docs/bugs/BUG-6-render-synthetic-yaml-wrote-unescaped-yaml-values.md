@@ -2,7 +2,7 @@
 Stable-Id: 01M1ZK63KBP2T4QK7HVET3M1KJ
 Status: Fixed
 Found-in: found during ADR-33's yaml-frontmatter migration work, before writing the actual conversion tool -- reviewing render_synthetic_yaml's own output shape ahead of reusing its escaping logic
-Regression-test: urzua-core::new_record::tests::render_synthetic_yaml_escapes_a_value_with_an_embedded_colon, render_synthetic_yaml_round_trips_a_numeric_looking_string
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml_escapes_a_value_with_an_embedded_colon@sha256:15315798b5a0f6474aaeb53de2ec397370689e2f56be718bcf6a622d1dd9276c, test:rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml_round_trips_a_numeric_looking_string@sha256:beb7ebeb72b1dbb1480d12d5be41abbebd2176eaefc4a362e6523da554ac371e
 ---
 # 6 — render_synthetic_yaml wrote unescaped YAML values
 
@@ -54,3 +54,4 @@ filled with their real value when `required_fields` names them; `Stable-Id` alon
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial bug record, `Status: Fixed`. | **structural** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M37DNTD6SQV4CB32PKQ6QQXV
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Regression-test: "a_staged_rename_is_discovered_under_its_new_name_only_observed_failing, urzua-io/src/lib.rs"
+Realized-by: test:rust/crates/urzua-io/src/lib.rs#a_staged_rename_is_discovered_under_its_new_name_only_observed_failing@sha256:350c50420e9da70705d325853d37af27cf705826010eae8d013c62148c8d19cc
 ---
 # 150 — discover_tracked_files spawns a redundant third git subprocess for staged deletions
 
@@ -40,3 +40,4 @@ behavior: `--diff-filter=D` never matched a rename either, since git classifies 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-24 | Filed and fixed in one pass, found by a full-release code review. **Why:** a redundant subprocess spawn on every invocation, closed by parsing one call's richer output instead of two calls' overlapping ones. The rename/copy two-path-field case was the real risk in this merge and is explicitly handled and tested. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

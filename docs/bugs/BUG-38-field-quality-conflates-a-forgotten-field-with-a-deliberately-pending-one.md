@@ -2,7 +2,7 @@
 Stable-Id: 01M2Q5574E1HVXH4TNDGXP8YT5
 Status: Fixed
 Found-in: '366220e -- the MILE-80 change (#56), which made one rule id carry both the forgotten-field and the deliberately-unfinished arms'
-Regression-test: 'rust/crates/urzua-core/src/rules/field.rs::a_pending_field_belongs_to_field_pending_not_field_quality -- an unfinished-work marker belongs to field.pending, a blank one stays with field.quality, and neither claims the other'
+Realized-by: test:rust/crates/urzua-core/src/rules/field.rs#a_pending_field_belongs_to_field_pending_not_field_quality@sha256:396fab4343bc5b67df47d045d7fe3596dc1f433f6698aca4125700f33c047bce
 ---
 # 38 — `field.quality` conflates a forgotten field with a deliberately pending one
 
@@ -59,3 +59,4 @@ means is what changed the verdict.
 > | 2026-09-19 | `Regression-test` now names the test that exists. **Why:** the field still read *"not yet written"* after the test was written and observed failing, so this record claimed the work was undone while the work was done. One of eight such records, found by the audit that filed `BUG-57`. | **structural** |
 > | 2026-11-04 | `Regression-test` path updated to `rules/field.rs`, where the test now lives. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Found-in` and `Regression-test` filled with the verifiable commit and the existing test. **Why:** both fields were prose that tripped `field.pending`; they now name `366220e` and the test in `rules/field.rs`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

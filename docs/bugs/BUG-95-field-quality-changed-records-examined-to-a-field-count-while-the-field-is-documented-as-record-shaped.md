@@ -2,7 +2,7 @@
 Stable-Id: 01M30JTQT7HREJD050M4C0JKHP
 Status: Fixed
 Found-in: "Round 11 of the 0.4.0 review, against nine PRs never reviewed in aggregate"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_field_rule_counts_declared_slots_not_records"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_field_rule_counts_declared_slots_not_records@sha256:f27a8f70dbc2a2f66f129205366176119be50e7c7cc0a8e9e0de43465b9109a6
 ---
 # 95 — field.quality changed records_examined to a field count while the field is documented as record-shaped
 
@@ -47,3 +47,4 @@ Nothing asserts the invariant that a `records_examined` accompanied by `scope: r
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
