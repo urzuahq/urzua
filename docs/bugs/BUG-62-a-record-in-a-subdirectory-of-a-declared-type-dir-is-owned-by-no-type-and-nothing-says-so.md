@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN8AQY9N8P4TWZER0GC9D
 Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped@sha256:dec09145ed2a79558a1d1b2d512f6a903a832c9c4ed21f47d81b5f4a8422f4f7
 ---
 # 62 — A record in a subdirectory of a declared type dir is owned by no type and nothing says so
 
@@ -40,3 +40,4 @@ dropped.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M2MF5THK4D6QD6BG2HVK0WCV
 Status: Fixed
 Found-in: 'reviewing the H1 number extraction while fixing BUG-23 -- `# 2026-09-16 Notes` yields the number 20260916'
-Regression-test: 'rust/crates/urzua-core/src/rules/filename.rs::a_date_or_version_title_is_not_an_id_observed_failing, rust/crates/urzua-core/src/rules/filename.rs::a_title_number_too_large_to_compare_is_reported_as_overflow_not_as_absent_observed_failing, rust/crates/urzua-core/src/rules/filename.rs::a_declared_pattern_reads_the_title_id_as_its_prefix_and_a_number'
+Realized-by: test:rust/crates/urzua-core/src/rules/filename.rs#a_date_or_version_title_is_not_an_id_observed_failing@sha256:56c9d696510b994f979b9b697d424bab79582415ace17039ae62e4fa58a567e3, test:rust/crates/urzua-core/src/rules/filename.rs#a_title_number_too_large_to_compare_is_reported_as_overflow_not_as_absent_observed_failing@sha256:6b225f521ea62837bc3e103722f7c5735c5e291f91922459a95f65dbe188dc18, test:rust/crates/urzua-core/src/rules/filename.rs#a_declared_pattern_reads_the_title_id_as_its_prefix_and_a_number@sha256:1b0a0b7a70e4a25ee70ddabea1bedad9cf89fefbc30814fa20decf7252b637e7
 ---
 # 32 — The H1 number extraction smashes separators out of the leading token
 
@@ -62,3 +62,4 @@ what the rule reports when it does not.
 > | 2026-09-16 | Initial record, `Status: Open`. Not fixed -- it needs a decision about what shape a leading token must have, not a wording change, and `BUG-23`/`BUG-29`/`BUG-30` already change this function once. | **structural** |
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `first_h1` (`rules/filename.rs`) still builds the number with `.chars().filter(char::is_ascii_digit)`, so `# 2026-09-16 Notes` yields `20260916`. **Why:** the shape a leading token must have is the decision the record names, tied to `RFC-29` and `RFC-44`. | **substantive** |
 > | 2026-11-05 | Fixed. **Why:** maintainer decision 2026-11-05: read the H1 id with the declared identity pattern, the way file names are read; a non-matching title carries no id; no pattern keeps a strict `PREFIX-N` or `N` read; overflow is reported as such. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

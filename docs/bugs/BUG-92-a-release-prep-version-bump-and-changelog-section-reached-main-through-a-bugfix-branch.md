@@ -2,7 +2,7 @@
 Stable-Id: 01M2YZW0R9Y0XB36KZR8EFDKAM
 Status: Fixed
 Found-in: "Noticing PR #72 had retitled itself from `prepare release 0.4.0` to `0.4.1` while 0.4.0 had never been tagged"
-Regression-test: '`.github/scripts/release-invariants.test.sh`, the case ''a release-prep bump ahead of its tag, with fragments pending (BUG-92)'', run by `make release-invariants` and CI'
+Realized-by: test:.github/scripts/release-invariants.test.sh
 ---
 # 92 — A release-prep version bump and changelog section reached main through a bugfix branch
 
@@ -65,3 +65,4 @@ computation.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Regression-test` filled in: the real value. `Status` is untouched. **Why:** `field.pending` now reads a `Regression-test` placeholder on a `Fixed` bug as a real gap (`MILE-169`), and the `Regression-test` field named a test that was not yet written; it now names the planted-violation case of the release-invariants guard. | **structural** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

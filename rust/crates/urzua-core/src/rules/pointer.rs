@@ -490,6 +490,37 @@ mod tests {
         assert_eq!(findings.len(), 1);
     }
 
+    /// BUG-72: an empty prefix passed the uppercase test vacuously, so a bare
+    /// hyphen-number token was read as a reference. `header.pointer-field-clean`
+    /// called a pointer field holding `-1` clean and `pointer.resolution`
+    /// reported it as a reference that resolves to nothing.
+    #[test]
+    fn a_bare_hyphen_number_token_is_not_a_reference_observed_failing() {
+        use crate::rules::shared::{extract_references, scan_references};
+        assert!(extract_references("-1").is_empty());
+        assert!(scan_references("see -1 and -22 for why").is_empty());
+
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: -1\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
+        let (_, clean) = header_pointer_field_clean(std::slice::from_ref(&source), &config);
+        assert_eq!(clean.len(), 1, "`-1` is not a clean reference: {clean:?}");
+
+        let records = [source];
+        let index = build_normalized_index(&records);
+        let (_, resolution) = pointer_resolution(&records, &config, &index, &Default::default());
+        assert!(
+            resolution.is_empty(),
+            "`-1` was never a reference to resolve: {resolution:?}"
+        );
+    }
+
     #[test]
     fn a_clean_bare_reference_is_not_flagged() {
         let r = record(

@@ -2,7 +2,7 @@
 Stable-Id: 01M6ME4QBH5GKHM9RP6E3E12KT
 Status: Fixed
 Found-in: 'review of the declared transitions (MILE-144, ADR-72), 2026-11-04'
-Regression-test: 'rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-keeps-its-committed-status.yaml, rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-may-take-an-allowed-edge.yaml, rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-reset-to-an-initial-status-is-reported.yaml'
+Realized-by: test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-keeps-its-committed-status.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-may-take-an-allowed-edge.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-j/expectations/a-renamed-record-reset-to-an-initial-status-is-reported.yaml
 ---
 # 191 — A renamed record is judged as new by status.transition-allowed because the diff reports a rename as a deletion plus an addition
 
@@ -39,3 +39,4 @@ Fixed 2026-11-05. `committed_statuses` reads the merge base's copy at the record
 > |---|---|---|
 > | 2026-11-04 | Filed, `Open`. **Why:** found while building the declared transitions; the fix (match a renamed record by `Stable-Id`) is deliberately not part of that change. | **substantive** |
 > | 2026-11-05 | Fixed. **Why:** `committed_statuses` now matches a record the diff reports as added to a deleted record by `Stable-Id`; three acceptance cases in `corpus-j` (rename with the status unchanged, rename with an allowed edge, rename with a reset to an initial status) failed before and pass after. `SPEC-2` and `SPEC-3` document it. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

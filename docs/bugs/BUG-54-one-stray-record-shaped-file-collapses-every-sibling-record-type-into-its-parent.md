@@ -2,7 +2,6 @@
 Stable-Id: 01M2W327VQ8DVP2E0EH788TC69
 Status: Fixed
 Found-in: 'A cumulative code review of v0.3.0..release, run before publishing 0.4.0 -- reproduced against the built binary'
-Regression-test: 'rust/crates/urzua-cli/src/commands/init.rs::a_container_directory_does_not_absorb_the_types_beneath_it_observed_failing -- adr and rfc survive, the container is not proposed, and BUG-43''s archive/ case still folds'
 ---
 # 54 — One stray record-shaped file collapses every sibling record type into its parent
 
@@ -48,6 +47,10 @@ Candidates, unchosen:
 
 The first reads closer to what an adopter means, and is checkable without a threshold.
 
+## Regression test
+
+rust/crates/urzua-cli/src/commands/init.rs::a_container_directory_does_not_absorb_the_types_beneath_it_observed_failing -- adr and rfc survive, the container is not proposed, and BUG-43's archive/ case still folds
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -57,3 +60,4 @@ The first reads closer to what an adopter means, and is checkable without a thre
 > | 2026-09-19 | Regression-test status corrected: `a_container_directory_does_not_absorb_the_types_beneath_it_observed_failing` exists and asserts the `archive/` fold alongside it. Also extended -- review found that proposing the container itself as a type made discovery count every nested record twice (`files_examined: 8` for four records), so a directory with more than one type beneath it is now dropped rather than merely not folded into. | **substantive** |
 > | 2026-09-19 | `Regression-test` now names the test that exists. **Why:** the field still read *"not yet written"* after the test was written and observed failing, so this record claimed the work was undone while the work was done. One of eight such records, found by the audit that filed `BUG-57`. | **structural** |
 > | 2026-09-19 | Superseded by `RFC-35`. **Why:** the container rule this record produced was itself a heuristic, and dropped a directory's own records when it had two record-bearing subdirectories. One type per directory removes the overlap this was patching rather than resolving. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

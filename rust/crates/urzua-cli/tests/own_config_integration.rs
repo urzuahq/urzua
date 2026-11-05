@@ -1,6 +1,6 @@
 //! This repository's own `.urzua/config.yaml`, exercised end to end: the
 //! declarations it ships are what these tests run, not a fixture's.
-//! BUG-123 closes here; BUG-57 and BUG-65 are covered end to end.
+//! BUG-123 closes here; BUG-65 and the ADR-84 bug evidence are covered end to end.
 
 mod common;
 
@@ -102,9 +102,9 @@ fn new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare
     );
 }
 
-fn bug(status: &str, regression_test: &str) -> String {
+fn bug(status: &str, found_in: &str, extra: &str) -> String {
     format!(
-        "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: a review\nRegression-test: {regression_test}\n---\n# 1 — A bug\n\n## What was wrong\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
+        "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: {found_in}\n{extra}---\n# 1 — A bug\n\n## What was wrong\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 
@@ -120,50 +120,43 @@ fn finding_rules(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// BUG-57: a `Fixed` bug whose `Regression-test` says no test exists is a
-/// finding; an `Open` one, and a `Fixed` one naming a test, are not. The
-/// terminal status is declared (`statuses.require`), not inferred, and "not yet
-/// written" is in the type's declared pending vocabulary (BUG-65).
+/// `ADR-84`: a bug's `Status` follows its `Realized-by`. An `Open` bug whose
+/// evidence names a test is a finding `urzua fix` repairs; a `Fixed` one with a
+/// test is not, and neither is an `Open` one with none. A `Fixed` bug with no
+/// evidence at all is reported too: a done record with no evidence is a finding
+/// (a bug that legitimately has none is waived). A bug carrying the retired
+/// `Regression-test` field is reported as an unknown field.
 #[test]
-fn a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not() {
-    for placeholder in [
-        "not yet written -- a planted case",
-        "'Not yet written'",
-        "pending",
-    ] {
-        let dir = repo(
-            "fixed-placeholder",
-            &[("docs/bugs/BUG-1-a-bug.md", &bug("Fixed", placeholder))],
-        );
+fn a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not() {
+    let files = |status: &str, extra: &str| {
+        repo(
+            "bug-evidence",
+            &[
+                ("docs/bugs/BUG-1-a-bug.md", &bug(status, "a review", extra)),
+                ("rust/t.rs", "#[test]\nfn a_real_test() {}\n"),
+            ],
+        )
+    };
+    let by_scope = "Realized-by: test:rust/t.rs\n";
+    let open = files("Open", by_scope);
+    assert_eq!(
+        finding_rules(&open),
+        vec!["status.delivery-agreement".to_string()]
+    );
+    for (status, extra) in [("Fixed", by_scope), ("Open", "")] {
+        let dir = files(status, extra);
         let rules = finding_rules(&dir);
-        assert!(
-            rules.contains(&"status.required-field-missing".to_string()),
-            "{placeholder}: {rules:?}"
-        );
+        assert!(rules.is_empty(), "{status} {extra:?}: {rules:?}");
     }
-    let open = repo(
-        "open-placeholder",
-        &[(
-            "docs/bugs/BUG-1-a-bug.md",
-            &bug("Open", "not yet written -- planted"),
-        )],
+    let unevidenced = files("Fixed", "");
+    assert_eq!(
+        finding_rules(&unevidenced),
+        vec!["status.delivery-agreement".to_string()]
     );
+    let retired = files("Fixed", "Regression-test: rust/t.rs::a_real_test\n");
     assert!(
-        finding_rules(&open).is_empty(),
-        "{:?}",
-        finding_rules(&open)
-    );
-    let real = repo(
-        "fixed-real",
-        &[(
-            "docs/bugs/BUG-1-a-bug.md",
-            &bug("Fixed", "rust/crates/x/tests/y.rs::a_real_test"),
-        )],
-    );
-    assert!(
-        finding_rules(&real).is_empty(),
-        "{:?}",
-        finding_rules(&real)
+        !finding_rules(&retired).is_empty(),
+        "the retired field is no longer a known field of the bug type"
     );
 }
 
@@ -175,14 +168,20 @@ fn the_declared_pending_vocabulary_reads_whole_values_only() {
         "mentions-pending",
         &[(
             "docs/bugs/BUG-1-a-bug.md",
-            &bug(
-                "Fixed",
-                "'rust/crates/x/tests/y.rs::a_pending_value_is_real'",
-            ),
+            &bug("Open", "'a pending review of the release'", ""),
         )],
     );
     let rules = finding_rules(&dir);
     assert!(rules.is_empty(), "{rules:?}");
+    let whole = repo(
+        "whole-pending",
+        &[("docs/bugs/BUG-1-a-bug.md", &bug("Open", "pending", ""))],
+    );
+    assert!(
+        finding_rules(&whole).contains(&"field.pending".to_string()),
+        "{:?}",
+        finding_rules(&whole)
+    );
 }
 
 /// ADR-74 / MILE-185: this repository's rust resolver addresses the struct

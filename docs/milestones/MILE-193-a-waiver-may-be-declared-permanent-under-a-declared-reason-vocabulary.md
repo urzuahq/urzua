@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6NE3QYKTPYG5TR1WYE9QJ54
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: ADR-86
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, code:rust/crates/urzua-cli/src/commands/check.rs, test:rust/crates/urzua-cli/tests/permanent_waiver_integration.rs
 ---
 # 193 — A waiver may be declared permanent under a declared reason vocabulary
 
@@ -32,3 +33,5 @@ The suppression type can declare `permanent` (`ADR-86`): per rule, a waiver with
 > | 2026-11-05 | Filed. **Why:** maintainer request of 2026-11-05; decided in `ADR-86` (Proposed). Depends on `ADR-86` being Accepted. | **substantive** |
 > | 2026-11-05 | Done means updated to match the amended `ADR-86`: 16 records (not 19), the five-category vocabulary, the reworded `waiver-ineffective` message and the `SPEC-10` amendment. **Why:** independent review of `#338`. | **substantive** |
 > | 2026-11-05 | Cleared `Blocked-on`: ADR-86 is Accepted. **Why:** the wait it named is over. | **structural** |
+> | 2026-11-05 | Built the engine and this repository's declaration; `Status` stays `Planned`, with no `Realized-by`, and `Blocked-on` is cleared (`ADR-86` was accepted, #343). The suppression type declares `permanent` (`waiver.rs`, `config.rs`): a waiver without `Expires` takes effect only for a listed rule, under a category of the declared vocabulary and, where the category is `cite: required`, a `Justified-by` that resolves; declaring the key closes permanence for unlisted rules and an undeclared config is unchanged. `waiver-ineffective` names the unmet requirement (`rules/waiver.rs`), `check` reports the permanent waivers by category in an info notice (`check.rs`), and load refuses an unknown rule, an undeclared field, an empty or duplicated category list and a `cite_field` that is not a pointer field. This repository declares the five-category vocabulary for `status.delivery-agreement`, the waiver type gains `Category` and `Justified-by` and its template follows, and `SPEC-2`, `SPEC-3` and `SPEC-10` document it with a minor changeset. **Remaining:** the last Done means, the 16 waivers. They cover `Fixed` bugs that `ADR-84`'s `status.delivery-agreement` build (#335) first reports, so on `main` today each would match no finding and be reported stale by `waiver.matches-nothing`; #335 files them and sets `Done` with `Realized-by`. **Why:** a milestone the pull request only partly delivers keeps its `Status`. | **substantive** |
+> | 2026-11-05 | `Status` Planned -> Done; `Realized-by` added. The last Done means is met: 16 waivers (`WAIVER-35` to `WAIVER-50`) cover `BUG-10`, 14, 15, 21, 26, 107, 189, 115, 116, 122, 134, 143, 43, 54, 105 and 146 under the declared vocabulary, one per record, each with a `Reason` specific to its bug, and `test-removed-by-decision` waivers citing `RFC-35`; `urzua check` reports them by category and has no unwaived finding. **Why:** the `ADR-84` build (`status.delivery-agreement` on bugs) is what first reports these records, so the waivers land with it. The maintainer reviewing the pull request that carries this row is the human decision. | **substantive** |

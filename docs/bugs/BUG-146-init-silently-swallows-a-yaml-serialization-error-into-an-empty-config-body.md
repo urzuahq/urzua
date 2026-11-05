@@ -2,7 +2,6 @@
 Stable-Id: 01M37C018CSWK45571WHKAWKVZ
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Regression-test: "none -- no planted-violation test is practical: root is built entirely from plain strings/sequences/mappings, so serialization cannot actually fail on any reachable input. The fix is correctness-by-construction (loud failure over silent wrong success), not a behavior change for any input this function can be called with."
 ---
 # 146 — init silently swallows a YAML serialization error into an empty config body
 
@@ -39,8 +38,13 @@ still returns a plain `String`.
   the precedent this fix matches exactly.
 - `ADR-46` -- the panic hook that turns an unwrap failure into structured JSON rather than a stderr leak.
 
+## Regression test
+
+none -- no planted-violation test is practical: root is built entirely from plain strings/sequences/mappings, so serialization cannot actually fail on any reachable input. The fix is correctness-by-construction (loud failure over silent wrong success), not a behavior change for any input this function can be called with.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-24 | Filed and fixed in one pass, found by a full-release code review. **Why:** `unwrap_or_default()` on a fallible serialization call is the exact silent-wrong-success shape this project has repeatedly closed elsewhere (`ADR-55`); matched to the existing `emit()` precedent for the correct failure mode instead of inventing a new one. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

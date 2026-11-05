@@ -801,6 +801,51 @@ pub struct RecordTypeConfig {
     /// declares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effective_requires: Option<Vec<String>>,
+    /// Where a suppression may be permanent, and on which reasons
+    /// (`ADR-86`), on the type declaring `role: suppression`. Once declared,
+    /// a suppression without `Expires` takes effect only for a rule listed
+    /// here, with a category from that entry's vocabulary. Omitted means a
+    /// suppression without `Expires` is allowed for any rule, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permanent: Option<Vec<PermanentDecl>>,
+}
+
+// Implements: ADR-86 (the declared vocabulary of permanent suppressions)
+/// One rule a suppression may be permanent for (`RecordTypeConfig::permanent`).
+/// The engine names no category, rule or field: the vocabulary is the
+/// repository's.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermanentDecl {
+    /// A rule id this build ships.
+    pub rule: String,
+    /// The suppression field that holds the category.
+    pub reason_field: String,
+    /// The categories that allow permanence for this rule. Non-empty and
+    /// duplicate-free.
+    pub categories: Vec<PermanentCategory>,
+    /// The pointer field that holds a citation, for a category that requires
+    /// one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cite_field: Option<String>,
+}
+
+/// A category in a `permanent` entry's vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermanentCategory {
+    pub name: String,
+    /// `required` means a suppression in this category must cite a record
+    /// that resolves. Omitted means no citation is needed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cite: Option<CiteRequirement>,
+}
+
+/// Whether a category needs a citation (`PermanentCategory::cite`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CiteRequirement {
+    Required,
 }
 
 /// A role a record type can declare (`RecordTypeConfig::role`).
@@ -1259,6 +1304,8 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares effective_requires {reason}")]
     InvalidEffectiveRequires { record_type: String, reason: String },
+    #[error("record type '{record_type}' declares permanent {reason}")]
+    InvalidPermanent { record_type: String, reason: String },
     #[error("record type '{record_type}' declares revision_log {reason}")]
     InvalidRevisionLog {
         record_type: String,
@@ -1859,6 +1906,14 @@ pub fn parse_with_document_models(
             };
             if let Some(reason) = reason {
                 return Err(ConfigError::InvalidEffectiveRequires {
+                    record_type: name.clone(),
+                    reason,
+                });
+            }
+        }
+        if let Some(entries) = &rt.permanent {
+            if let Some(reason) = permanent_problem(rt, entries) {
+                return Err(ConfigError::InvalidPermanent {
                     record_type: name.clone(),
                     reason,
                 });
@@ -3002,6 +3057,82 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+// Implements: ADR-86 (load-time validation of `permanent`)
+/// Why a type's `permanent` declaration is refused at load (`ADR-86`), or
+/// `None` when it is well formed. A declaration that names a rule this build
+/// lacks, a field the type does not declare or a vocabulary that cannot match
+/// would otherwise be a governance setting that silently governs nothing.
+fn permanent_problem(rt: &RecordTypeConfig, entries: &[PermanentDecl]) -> Option<String> {
+    if rt.role != Some(TypeRole::Suppression) {
+        return Some(
+            "but not `role: suppression` -- only the suppression type has permanent suppressions"
+                .to_string(),
+        );
+    }
+    if entries.is_empty() {
+        return Some("as an empty list -- it would allow nothing; omit it".to_string());
+    }
+    let declared = rt.declared_fields();
+    let declares = |f: &str| declared.iter().any(|d| d.as_str() == f);
+    for (i, entry) in entries.iter().enumerate() {
+        let rule = &entry.rule;
+        if !crate::rules::ALL_RULES.contains(&rule.as_str()) {
+            return Some(format!("for rule '{rule}', which this build does not ship"));
+        }
+        if entries[..i].iter().any(|e| e.rule == *rule) {
+            return Some(format!("for rule '{rule}' twice"));
+        }
+        if !declares(&entry.reason_field) {
+            return Some(format!(
+                "for rule '{rule}' with reason_field '{}', which is in neither `required_fields` nor `known_fields`",
+                entry.reason_field
+            ));
+        }
+        if entry.categories.is_empty() {
+            return Some(format!(
+                "for rule '{rule}' with an empty `categories` list -- it would allow nothing"
+            ));
+        }
+        for (j, category) in entry.categories.iter().enumerate() {
+            if category.name.trim().is_empty() {
+                return Some(format!("for rule '{rule}' with a blank category name"));
+            }
+            if entry.categories[..j]
+                .iter()
+                .any(|c| c.name == category.name)
+            {
+                return Some(format!(
+                    "for rule '{rule}' naming category '{}' twice",
+                    category.name
+                ));
+            }
+        }
+        match &entry.cite_field {
+            Some(cite) => {
+                if !declares(cite) {
+                    return Some(format!(
+                        "for rule '{rule}' with cite_field '{cite}', which is in neither `required_fields` nor `known_fields`"
+                    ));
+                }
+                if !rt.pointer_fields.iter().flatten().any(|f| f == cite) {
+                    return Some(format!(
+                        "for rule '{rule}' with cite_field '{cite}', which is not one of the type's `pointer_fields`"
+                    ));
+                }
+            }
+            None => {
+                if let Some(category) = entry.categories.iter().find(|c| c.cite.is_some()) {
+                    return Some(format!(
+                        "for rule '{rule}' with category '{}' requiring a citation, but no `cite_field`",
+                        category.name
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3163,6 +3294,7 @@ mod tests {
             revision_log: None,
             role: None,
             effective_requires: None,
+            permanent: None,
         };
         let declared = t.declared_fields();
         assert!(declared.contains("Status"));
@@ -4066,6 +4198,60 @@ record_types:
                 "{bad}"
             );
         }
+    }
+
+    /// `ADR-86`: `permanent` belongs to the suppression type, names a rule this
+    /// build ships, fields the type declares and a usable vocabulary.
+    #[test]
+    fn permanent_is_validated_at_load() {
+        let head = "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    known_fields: [Category, Cite]\n    pointer_fields: [Cite]\n    narrative_fields: []\n";
+        let entry = |body: &str| format!("{head}    permanent:\n      - {body}\n");
+        let good = "{rule: field.quality, reason_field: Category, categories: [{name: a}, {name: b, cite: required}], cite_field: Cite}";
+        let ok = parse(&rt_config(&entry(good))).unwrap();
+        let decl = &ok.record_types["w"].permanent.as_ref().unwrap()[0];
+        assert_eq!(decl.categories.len(), 2);
+        assert_eq!(decl.categories[1].cite, Some(CiteRequirement::Required));
+        for (case, bad) in [
+            ("unknown rule", good.replace("field.quality", "no.such")),
+            ("undeclared field", good.replace("Category,", "Nope,")),
+            (
+                "empty categories",
+                "{rule: field.quality, reason_field: Category, categories: []}".to_string(),
+            ),
+            ("duplicate", good.replace("name: b", "name: a")),
+            ("blank", good.replace("name: a", "name: ' '")),
+            (
+                "cite not pointer",
+                good.replace("cite_field: Cite", "cite_field: Category"),
+            ),
+            (
+                "cite required, no field",
+                good.replace(", cite_field: Cite", ""),
+            ),
+        ] {
+            assert!(
+                matches!(
+                    parse(&rt_config(&entry(&bad))),
+                    Err(ConfigError::InvalidPermanent { .. })
+                ),
+                "{case}"
+            );
+        }
+        let twice = format!("{head}    permanent:\n      - {good}\n      - {good}\n");
+        assert!(matches!(
+            parse(&rt_config(&twice)),
+            Err(ConfigError::InvalidPermanent { .. })
+        ));
+        let empty = format!("{head}    permanent: []\n");
+        assert!(matches!(
+            parse(&rt_config(&empty)),
+            Err(ConfigError::InvalidPermanent { .. })
+        ));
+        let no_role = "  w:\n    dir: docs/w\n    required_fields: [Category]\n    permanent:\n      - {rule: field.quality, reason_field: Category, categories: [{name: a}]}\n";
+        assert!(matches!(
+            parse(&rt_config(no_role)),
+            Err(ConfigError::InvalidPermanent { .. })
+        ));
     }
 
     /// `MILE-130`: a type may own several directories; each is validated like

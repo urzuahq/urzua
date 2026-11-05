@@ -2,7 +2,7 @@
 Stable-Id: 01M2VNC7Y6Y36E4FD4Q0RB3T5A
 Status: Fixed
 Found-in: 'Asking why the engine did not catch ADR-4 reserving a `corpora/` directory that does not exist -- the answer generalised, and then found a live instance'
-Regression-test: 'rust/crates/urzua-core/src/rules.rs::a_locator_naming_a_missing_path_is_an_error_observed_failing -- one present and one missing locator on the same record, asserting both are examined, one is reported, and an all-present record is silent'
+Realized-by: test:rust/crates/urzua-core/src/rules/embodiment.rs#a_locator_naming_a_missing_path_is_an_error_observed_failing@sha256:34d04b0fdf97db89637ce1ad93f6e3c621e53d8742eea63669c07519e563e162
 ---
 # 49 — A `Realized-by` locator can point at a file that does not exist, and nothing checks
 
@@ -67,3 +67,4 @@ Two constraints from things already learned:
 > | 2026-09-19 | Filed. **Why:** asked why the tool had not caught `ADR-4`'s stale directory table, given that it gates this repository on every push. It cannot: no rule compares a record to the working tree. Planting a nonexistent locator produced zero findings, and auditing all 129 found `ADR-42` claiming a file `ADR-52` deleted two days earlier. | **substantive** |
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** `embodiment.locator-exists` reports a `Realized-by` locator absent from the working tree, opt-in and levelled like every rule (`ADR-53`), with the CLI supplying existence so `urzua-core` stays pure (`ADR-5`). Declared `error` here and it immediately caught the live instance -- `ADR-42` naming `.urzua/config.toml`, deleted by `ADR-52` two days earlier -- and blocked. That record is corrected. | **substantive** |
 > | 2026-09-19 | Existence is now *tracked and on disk*, not either alone, and the CLI closure has a test. **Why:** review found the tracked-set check silent on a staged deletion -- `git rm` drops a path from `ls-files` but leaves it in `diff --cached`, and discovery unions the two, so the rule missed exactly the case it was written for. Observed failing: the new integration test reports `left: 0, right: 1` against the tracked-only check. The unit test's stub `present` proved nothing about that, which is `BUG-22`'s failure shape -- the pure half tested, the wiring not. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M6D2KHY3CT24XMZZZJ5Q7YY9
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 29"
-Regression-test: 'rust/crates/urzua-core/src/graph.rs::the_read_population_counts_an_unreadable_header_and_names_it_observed_failing, rust/crates/urzua-cli/tests/check_integration.rs::graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_failing, rust/crates/urzua-cli/tests/check_integration.rs::graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice'
+Realized-by: test:rust/crates/urzua-core/src/graph.rs#the_read_population_counts_an_unreadable_header_and_names_it_observed_failing@sha256:bb5853ba35f86f6cd80f35c8c85830ddcf280c0943a39a78325f1a263756e57b, test:rust/crates/urzua-cli/tests/check_integration.rs#graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_failing@sha256:c2c182de4bce7def3268c353e962b263bc4111c170bdc952dc75cfca20319701, test:rust/crates/urzua-cli/tests/check_integration.rs#graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice@sha256:f101595e064cfb39a9bd9c5fca6b48191818ecb9b7acb5bd5629a05f3fff4c1d
 ---
 # 169 — graph and explain report ok with no disclosure of what they examined, so an unreadable header drops its edges silently
 
@@ -55,3 +55,4 @@ There it was a selector that matched nothing; here it is a corpus, or a header, 
 > | 2026-11-02 | Filed. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture. Left `Status: Open` -- the fix needs a decision, not a quick edit. | **substantive** |
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. With `Derives-from: ADR-1` changed to `Derives-from: ADR-1: bad: yaml`, `urzua graph` returns `{"status":"ok","edges":[]}`, exit 0, and `urzua explain src/nonexistent.rs` returns `ok` with `governing_records: []`, neither with a population or a notice. **Why:** the decision (a population plus notices, or `not-run`, or a partial status) is the one the record lists. | **substantive** |
 > | 2026-11-05 | Fixed. **Why:** maintainer decision 2026-11-05: both commands report the population block plus a warning notice naming the unreadable records; status stays ok. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

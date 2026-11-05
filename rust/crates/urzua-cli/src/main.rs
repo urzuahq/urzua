@@ -29,6 +29,8 @@ mod session;
 /// `Notice.subject` constants, one per emitter, matching `Finding.rule`'s
 /// existing `const RULE_ID` convention (ADR-0046).
 pub(crate) const NOTICE_IDENTITY: &str = "identity";
+/// `check` count of the permanent waivers in effect, by category (`ADR-86`).
+pub(crate) const NOTICE_PERMANENT_WAIVERS: &str = "permanent-waivers";
 /// `init` notice that a type's records disagree on, or parse under none of,
 /// the header shapes (`BUG-151`).
 pub(crate) const NOTICE_HEADER_SHAPE: &str = "header-shape";

@@ -2,8 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1Y4SP0QDPAW46065XBT3T0M
 Found-in: raised directly -- questioning why filenames are zero-padded to a fixed width at all, since a fixed width bounds the total count a type can ever hold
-Regression-test: a_five_digit_filename_still_resolves_bug_0002_observed_failing, a_reference_resolves_regardless_of_zero_padding (rust/crates/urzua-core/src/rules.rs)
-Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs
+Realized-by: code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-core/src/rules/identity.rs#a_five_digit_filename_still_resolves_bug_0002_observed_failing@sha256:c6c211b53673fcc7a3860427bc88fe9317bdf168163a1328c15333a19e59dadd, test:rust/crates/urzua-core/src/rules/identity.rs#a_reference_resolves_regardless_of_zero_padding@sha256:c7aba9a539e154df6c5f94144717e14a7d84db3e1b3d68486813d0f3c19ee08b
 ---
 # 2 — record_id hardcoded a 4-digit numeric prefix, bounding every type at 9999 records
 
@@ -49,3 +48,4 @@ two representations of the same number are recognized as equal.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Initial record: defect found, fixed, and verified same-day. | **structural** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

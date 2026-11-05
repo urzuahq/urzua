@@ -2,7 +2,6 @@
 Stable-Id: 01M3630KTMZ3JT51978GPKVW5X
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "none -- performance-only, no behavior change; full suite and real-corpus finding count unchanged. No benchmark added; the fix removes a bulk final sort in favor of incremental BTreeSet inserts, which needs no corpus larger than this repo's own to be correct by construction."
 ---
 # 122 — census_records clones and sorts a PathBuf per examined slot instead of per record
 
@@ -46,9 +45,14 @@ record count) rather than the full candidate list. No behavior change.
   count, the same shape this bug's cost scales with.
 - `BUG-113` -- the precedent for deferring a real-but-currently-negligible-cost fix.
 
+## Regression test
+
+none -- performance-only, no behavior change; full suite and real-corpus finding count unchanged. No benchmark added; the fix removes a bulk final sort in favor of incremental BTreeSet inserts, which needs no corpus larger than this repo's own to be correct by construction.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed, not fixed. **Why:** found by a full-release code review; real but measured as negligible on this repository's own corpus, so left open to track rather than fixed under review pressure with no benchmark to verify against. | **substantive** |
 > | 2026-09-23 | Fixed. The user asked for this class of filed-but-deferred defect to be closed before 0.4.0 regardless of benchmark pressure. `examined_records` is now a `BTreeSet`, dedupe done incrementally rather than in a final sort pass. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -1,5 +1,5 @@
 ---
-Version: '0.86'
+Version: '0.88'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -155,6 +155,34 @@ Two details carry weight:
   (`waiver-ineffective`, naming the field). Omitted, a suppression needs only `Rule` and `Scope`, as
   before. An empty list, a blank or repeated name, a name the type does not declare, or the key on a
   type without the role is a load error.
+- **The suppression type may declare where a suppression can be permanent: `permanent`**
+  (`ADR-86`). A list with one entry per rule; only on the type with `role: suppression`:
+
+  ```yaml
+  record_types:
+    waiver:
+      role: suppression
+      permanent:
+        - rule: status.delivery-agreement
+          reason_field: Category        # a field the type declares
+          categories:
+            - {name: docs-or-workflow-only}
+            - {name: test-removed-by-decision, cite: required}
+          cite_field: Justified-by      # a pointer field the type declares
+  ```
+
+  Declared, a suppression without `Expires` takes effect only if its `Rule` has an entry, its
+  `reason_field` holds one of that entry's categories, and, for a category with `cite: required`, its
+  `cite_field` names a record that resolves. Otherwise it suppresses nothing, its finding is reported
+  again, and with `waiver.matches-nothing` enabled the waiver is reported (`waiver-ineffective`,
+  naming the unmet requirement). **Declaring the key closes permanence for every rule it does not
+  list.** A suppression with an `Expires` is unaffected, and `check` adds an info notice
+  (`permanent-waivers`) counting the permanent suppressions in effect by category. Omitted, a
+  suppression without `Expires` is allowed for any rule, as before. The engine names no category, rule
+  or field. A load error: the key on a type without the role, an empty list, a rule this build does
+  not ship or one listed twice, a `reason_field` or `cite_field` the type does not declare, a
+  `cite_field` that is not one of its `pointer_fields`, an empty, blank or duplicated category list,
+  or a category with `cite: required` and no `cite_field`.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -1799,6 +1827,9 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.81`. Documented the decision gate options of `diff.source-requires-record` (`decision_types`, `fix_types`, `link_fields`) and their load-time validation. **Why:** `MILE-133`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.82`. A resolver's `member` may be a list of entries, each with its own `start` and `end`, tried together (a Rust method ends `brace_balanced`, a struct field `indent`); a `container` may match a `struct` as well as an `impl`, so `Type::field` is addressable. A single mapping is read as before. Vectors 21-24 added. **Why:** `ADR-74` made the symbol the scope, but its `member` could name only an `fn`, so a decision about one struct field could pin only a line range, which shifts when anything is inserted above it; the declared resolver now reaches the field, with no language knowledge in the engine (`ADR-74` point 5: a member declares its own start pattern and end kind from the closed set). | **substantive** |
 > | 2026-11-05 | Bumped to `0.83`. Documents the `closes` and `strict` options of `claim.status-agreement`: a changeset fragment lists the records it closes in a one-line frontmatter key, each id must resolve (`claim.id-unresolved`) and be at a terminal status its own type declares, a block list or malformed value is `claim.field-malformed`, `strict` makes a fragment without the key a finding, and a file with no frontmatter is out of scope and disclosed, except that under `strict` an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed`. **Why:** `BUG-66`, decided by `ADR-85`; the fence case because the pinned release tool rejects both. | **substantive** |
+> | 2026-11-05 | Bumped to `0.84`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.84`. Documents the top-level `block_on: introduced \| all` key for the editor hook: `introduced` is the default and what an absent key means, `all` blocks on any error in the edited record, any other value is a load error. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.85`. `info` is a rule level and a `field_levels` level and a boundary `severity` (`ADR-87`, `MILE-194`): findings are reported and counted, never `blocking`, never fail `fail_on`, and a rule set to `info` caps every declared severity at `info`. `fail_on: info` and every other unrecognised level are refused at load, the level message listing `off`, `info`, `warn` and `error`. **Why:** `MILE-194` builds `ADR-87`. | **substantive** |
-> | 2026-11-05 | Bumped to `0.86`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.86`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.87`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.88`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |

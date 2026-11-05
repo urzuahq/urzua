@@ -2,7 +2,7 @@
 Stable-Id: 01M36MCH8GCXW17X4JCZ3X4C4K
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 22"
-Regression-test: 'rust/crates/urzua-core/src/rules/embodiment.rs::a_comma_inside_a_locator_path_is_part_of_the_path_observed_failing, rust/crates/urzua-core/src/rules/embodiment.rs::a_comma_followed_by_a_category_prefix_separates_entries, rust/crates/urzua-core/src/rules/embodiment.rs::a_comma_followed_by_an_unknown_prefix_stays_in_the_path'
+Realized-by: test:rust/crates/urzua-core/src/rules/embodiment.rs#a_comma_inside_a_locator_path_is_part_of_the_path_observed_failing@sha256:1cfff64ae09c86c8f2f051b4df93e93728608c049f6f0e404dd40d12aa1b5f39, test:rust/crates/urzua-core/src/rules/embodiment.rs#a_comma_followed_by_a_category_prefix_separates_entries@sha256:46445d2683577618be7663125e5460c7d0204565d8939d016639fd720d4980fd, test:rust/crates/urzua-core/src/rules/embodiment.rs#a_comma_followed_by_an_unknown_prefix_stays_in_the_path@sha256:06258ff68ac235daebde360d91ec758ad316593d4a99486913f304d76fdaeade
 ---
 # 129 — parse_realized_by truncates a locator path at a literal comma before checking for the category delimiter
 
@@ -71,3 +71,4 @@ naming nothing, which `embodiment.locator-exists` reports instead of the entry v
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified by tracing the exact split logic against the failure scenario. Left `Status: Open` -- the fix needs a delimiter/escaping decision this record deliberately doesn't make on its own. | **substantive** |
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `parse_realized_by` (`rules/embodiment.rs`) still splits on `,` before `:`, so `Realized-by: code:src/weird,name.rs` yields the locator `src/weird` and silently drops `name.rs`. **Why:** the escaping or rejection policy is the open decision the record names. | **substantive** |
 > | 2026-11-05 | Fixed. **Why:** maintainer decision 2026-11-05: a comma separates `Realized-by` entries only when a category prefix follows it; otherwise it is part of the path. `SPEC-2` states the rule. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -133,11 +133,11 @@ fn bug(status: &str, header_extra: &str, heading: &str) -> String {
 }
 
 #[test]
-fn a_bug_needs_found_in_and_regression_test_and_a_what_was_wrong_section() {
+fn a_bug_needs_found_in_and_a_what_was_wrong_section() {
     let path = "docs/bugs/BUG-1-a-bug.md";
     let missing = repo("bug-missing", &[(path, &bug("Open", "", "What was wrong"))]);
     assert!(check_rules(&missing, "BUG-1-").contains(&"header.required-fields".to_string()));
-    let ok = "Found-in: a review\nRegression-test: pending\n";
+    let ok = "Found-in: a review\n";
     let good = repo("bug-good", &[(path, &bug("Open", ok, "What was wrong"))]);
     assert!(check_rules(&good, "BUG-1-").is_empty());
     let alias = repo("bug-alias", &[(path, &bug("Open", ok, "What is wrong"))]);
@@ -148,7 +148,7 @@ fn a_bug_needs_found_in_and_regression_test_and_a_what_was_wrong_section() {
 
 #[test]
 fn a_bug_status_outside_the_declared_vocabulary_is_a_finding_and_fixed_may_be_filed() {
-    let ok = "Found-in: a review\nRegression-test: x::y\n";
+    let ok = "Found-in: a review\n";
     let closed = repo(
         "bug-closed",
         &[(
@@ -157,12 +157,16 @@ fn a_bug_status_outside_the_declared_vocabulary_is_a_finding_and_fixed_may_be_fi
         )],
     );
     assert!(check_rules(&closed, "BUG-1-").contains(&"status.undeclared-value".to_string()));
+    let evidenced = "Found-in: a review\nRealized-by: test:rust/t.rs\n";
     let fixed = repo(
         "bug-fixed",
-        &[(
-            "docs/bugs/BUG-1-a-bug.md",
-            &bug("Fixed", ok, "What was wrong"),
-        )],
+        &[
+            (
+                "docs/bugs/BUG-1-a-bug.md",
+                &bug("Fixed", evidenced, "What was wrong"),
+            ),
+            ("rust/t.rs", "#[test]\nfn a_real_test() {}\n"),
+        ],
     );
     assert!(check_rules(&fixed, "BUG-1-").is_empty());
 }

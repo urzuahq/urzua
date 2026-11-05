@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN68KSMPKWF5RX6XGK3RQE
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_symlinked_claim_file_is_read_not_skipped"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlinked_claim_file_is_read_not_skipped@sha256:dc4b5fa61d9fc8842c25356e7f0c74fe31bc079567aae40e6ac281d24351ff81
 ---
 # 75 — A symlinked claim file is skipped in a walk that aborts on every other failure
 
@@ -44,3 +44,4 @@ reading for it.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

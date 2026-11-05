@@ -2,7 +2,7 @@
 Stable-Id: 01M6N0R3T1R3DST4TUSB5G1LL1
 Status: Fixed
 Found-in: 'creating ADR-72 in this repository (2026-11-04), which made citation.resolution resolve ADR-18 and RFC-5 citations of ADR-72 to it; the waivers for them were removed in #256 because waiver.matches-nothing reported them'
-Regression-test: 'rust/crates/urzua-core/src/rules/citation.rs::the_incident_an_id_later_created_as_a_real_record_changes_nothing_observed_failing, rust/crates/urzua-cli/tests/citation_resolution_integration.rs::a_declared_non_reference_id_survives_the_id_becoming_a_real_record_end_to_end_observed_failing'
+Realized-by: test:rust/crates/urzua-core/src/rules/citation.rs#the_incident_an_id_later_created_as_a_real_record_changes_nothing_observed_failing@sha256:9f2f2e2fb6610691bbc5330f19f9c68337dc8cde9d71485bd62d0f0025939703, test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs#a_declared_non_reference_id_survives_the_id_becoming_a_real_record_end_to_end_observed_failing@sha256:10edc012ee879fb3e8c84797e0e495b75fb34d4d2c1d35daca070f903c13a66c
 ---
 # 190 — An illustrative citation of an id from another corpus silently starts resolving to an unrelated real record once that id exists
 
@@ -54,3 +54,4 @@ Built as `ADR-75` decides: `citation.resolution` takes `non_reference_field`, a 
 > | 2026-11-04 | Deciding ADR drafted: `ADR-75` (Proposed) proposes the per-record header declaration, with the inline marker and three other shapes weighed and five open questions. Nothing is built; `Status` stays `Open` and `Regression-test` stays `pending`. **Why:** the shape is written into records, including frozen ones, and no Accepted record decides it, so the maintainer decides first. | **substantive** |
 > | 2026-11-04 | Done means corrected, and the Why sentence about the next ids. **Why:** the engine reads "ADR-72/73/74" as the single citation `ADR-72`, so `ADR-73` and `ADR-74` were never captured and cannot be declared (a declared id the record never cites is itself reported); the exposure is general, not this pair. Found in the review of `ADR-75`. `Status` unchanged. | **substantive** |
 > | 2026-11-04 | `Status` changed from Open to Fixed and `Regression-test` filled; the declaration is built as `ADR-75` decides (see Fix). **Why:** the fix and its tests, observed failing first, are in the same PR. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

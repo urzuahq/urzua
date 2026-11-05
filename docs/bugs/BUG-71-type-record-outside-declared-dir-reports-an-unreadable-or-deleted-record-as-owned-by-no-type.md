@@ -2,7 +2,7 @@
 Stable-Id: 01M2WG8327QXG0VRRR57FRYHT5
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_staged_deletion_is_not_reported_as_owned_by_no_type"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_staged_deletion_is_not_reported_as_owned_by_no_type@sha256:d0550f183580b4b6417b310448d33104163605ed1c53272ec02d6b383b32f311
 ---
 # 71 — type.record-outside-declared-dir reports an unreadable or deleted record as owned by no type
 
@@ -46,3 +46,4 @@ an owned file the loader cannot read.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

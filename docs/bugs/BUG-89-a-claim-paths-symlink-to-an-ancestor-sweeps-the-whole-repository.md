@@ -2,7 +2,7 @@
 Stable-Id: 01M2YR3HK3BB9EWBCBB8H17GVW
 Status: Fixed
 Found-in: "Round 10 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once@sha256:ea2178098d2da4779e8fc9820e50aac8c422e0d939cb7f2203be21ccb4e38c5b
 ---
 # 89 — A claim_paths symlink to an ancestor sweeps the whole repository
 
@@ -45,3 +45,4 @@ scenarios of the other two.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

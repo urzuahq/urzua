@@ -2,7 +2,7 @@
 Stable-Id: 01M2W3287VC8RN7XCW9DKEA4BB
 Status: Fixed
 Found-in: 'A cumulative code review of v0.3.0..release'
-Regression-test: 'covered by a_locator_naming_a_staged_deletion_is_reported_observed_failing; the message split is prose, asserted by reading'
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_locator_naming_a_staged_deletion_is_reported_observed_failing@sha256:c443ae612ce0c52fd19eaa3ccb5e94eca7bc011a9979d798dae0b31e6ebceccc
 Blocked-on: —
 ---
 # 55 — `embodiment.locator-exists` reports an untracked path as "not in the working tree"
@@ -30,3 +30,4 @@ claim about it changes.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed and fixed. **Why:** the finding was accurate about the message and not about the behaviour -- scoping to the tracked set is right, saying "not in the working tree" about a file that is in the working tree is not. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
