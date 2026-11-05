@@ -180,6 +180,8 @@ record_types:
       - "Stable-Id"
       - "Implements"
       - "Blocked-on"
+      - "Depends-on"
+      - "Blocks"
       - "Realized-by"
     statuses:
       values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
@@ -221,6 +223,8 @@ record_types:
     spec: "SPEC-6"
     pointer_fields:
       - "Implements"
+      - "Depends-on"
+      - "Blocks"
     narrative_fields:
       - "Blocked-on"
   bug:
@@ -309,6 +313,17 @@ relation_pairs:
       # The amended RFC may acknowledge a pending amendment in its own field
       # (MILE-163) without asserting the amendment before it is accepted.
       acknowledged_by: "Amended-by-pending"
+  # The sequencing relation (RFC-48, MILE-27): a record cannot finish until the
+  # records it Depends-on do. Only Depends-on is written; Blocks is its inverse,
+  # declared so a record that does write it still takes part, and otherwise
+  # read from the records (reciprocity: none). `acyclic` makes sequence.cycle
+  # report a loop through either field.
+  - name: sequencing
+    forward: "Depends-on"
+    inverse: "Blocks"
+    reciprocity: none
+    cross_type: true
+    acyclic: true
 
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
@@ -368,6 +383,10 @@ rules:
   relation.supersession-reciprocity: error
   relation.pair-reciprocity: error
   relation.target-status-undeclared: error
+  # The sequencing relation (MILE-27): no loop, and no Depends-on value that
+  # names nothing.
+  sequence.cycle: error
+  sequence.unresolved-blocker: error
   revision-log.change-class-required: error
   # Judged on a `--base` run against the merge base's copy of the record
   # (BUG-51); `not-applicable` on a whole-repo run.
@@ -408,7 +427,7 @@ rules:
     # Every declared pointer/narrative field except Derives-from: lineage to a
     # Superseded record is permanently true history, not a stale dependency
     # (BUG-172).
-    fields: ["Implements", "Amends", "Parent", "Blocked-on"]
+    fields: ["Implements", "Amends", "Parent", "Blocked-on", "Depends-on"]
   # Code that cites a record (`Implements: ADR-12`) must cite one at a status
   # its type declares `implementable` (MILE-133). Zero findings when enabled.
   embodiment.back-pointer-decision-accepted:
