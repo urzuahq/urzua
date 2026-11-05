@@ -1,7 +1,7 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-08
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs
 Author: beauwilliams
@@ -94,3 +94,4 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-04 | Bumped to `0.9`. Stated that the `Version` bump with every substantive or structural entry is now checked on a `--base` run, by `revision-log.version-bump-required` with `revision_log.version_bump` declared on this type. **Why:** `BUG-51`, maintainer decision of 2026-11-04: only the entry half of the rule was enforced. | **substantive** |
 > | 2026-11-05 | Bumped to `0.10`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.11`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

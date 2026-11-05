@@ -1,7 +1,7 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs
 Author: beauwilliams
@@ -94,3 +94,4 @@ computed from non-waived findings only.
 > | 2026-11-04 | Bumped to `0.6`. Dropped the reference to the removed `header_layout` option. **Why:** `MILE-85`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.7`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.8`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

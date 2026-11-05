@@ -1,7 +1,7 @@
 ---
-Version: '0.76'
+Version: '0.77'
 Date: 2026-08-20
-Status: Accepted
+Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
 Embodiment: Verified
 Author: beauwilliams
@@ -698,3 +698,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.75`. `embodiment.consistency` judges a scoped pin by the hash of its resolved span: an edit elsewhere in the file is not drift, there is no file-based grace window for it, and a scope that does not resolve is reported by `embodiment.locator-exists` and not also as drift. **Why:** `MILE-185` / `ADR-74`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.76`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.77`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

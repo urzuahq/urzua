@@ -1,7 +1,7 @@
 ---
-Version: '0.18'
+Version: '0.19'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs
 Author: beauwilliams
@@ -292,3 +292,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.17`. `--rebaseline` re-pins a scoped pin from the hash of its resolved span, keeps the scope in its spelling, shows the span beside the hashes and lists a scoped pin that does not resolve under `failed_pins` instead of re-pinning it; `explain <path>#<scope>` is named as the authoring route. **Why:** `MILE-185` / `ADR-74` -- re-hashing whatever is at a range now would turn a deleted symbol into a silent pass. | **substantive** |
 > | 2026-11-05 | Bumped to `0.18`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.19`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

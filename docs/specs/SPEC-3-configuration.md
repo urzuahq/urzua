@@ -1,7 +1,7 @@
 ---
-Version: '0.65'
+Version: '0.66'
 Date: 2026-08-20
-Status: Accepted
+Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
 Embodiment: Verified
 Author: beauwilliams
@@ -1269,3 +1269,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.64`. Clarified that an unpinned scope that does not resolve is reported by `embodiment.locator-exists` while drift is still judged on the whole file, and that a commit anchor is not judged for drift. **Why:** review of `MILE-185` part 2, reconciling `ADR-74` points 6 and 8. | **substantive** |
 > | 2026-11-05 | Bumped to `0.65`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.66`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |

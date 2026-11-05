@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh
 Date: 2026-09-10
-Version: '0.6'
+Version: '0.7'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -171,3 +171,4 @@ unrepresentable — including on a re-run, which replays the original payload.
 > | 2026-11-04 | Bumped to `0.5`. The `rust` job also runs `cargo machete` (unused dependencies) and `cargo deny check` (advisories, bans, licenses, sources; `rust/deny.toml`), both pinned prebuilt binaries verified by checksum; `make deny` and `make ci` run them locally. **Why:** `MILE-176` -- `yaml_serde` is a young single-supplier crate, and nothing failed on an unused dependency. | **substantive** |
 > | 2026-11-05 | Bumped to `0.6`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.7`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
