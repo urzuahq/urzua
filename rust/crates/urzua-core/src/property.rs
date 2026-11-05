@@ -212,6 +212,7 @@ mod tests {
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
+                locator_resolvers: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -336,6 +337,7 @@ mod tests {
             schema_version: 2,
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -501,7 +503,13 @@ mod tests {
             ),
             (
                 "embodiment.locator-exists",
-                rules::embodiment_locator_exists(&records, &config, &|_| true, &|_| false),
+                rules::embodiment_locator_exists(
+                    &records,
+                    &config,
+                    &|_| true,
+                    &crate::locator::no_file_text,
+                    &|_| false,
+                ),
             ),
             (
                 "embodiment.locator-promotion-candidate",
@@ -569,6 +577,7 @@ mod tests {
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
+                locator_resolvers: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

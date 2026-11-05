@@ -482,6 +482,7 @@ pub(crate) fn compute_drifted_records_at(
         .and_then(|s| s.drift_audit_field.as_deref())
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
     // Implements: ADR-67 (the grace window)
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
@@ -561,13 +562,47 @@ pub(crate) fn compute_drifted_records_at(
             continue;
         }
 
-        for (locator, pin) in rules::realized_by_pinned_locators(realized_by_value) {
+        for entry in urzua_core::locator::realized_by_locators(realized_by_value) {
+            // A locator that does not parse is `embodiment.locator-exists`' finding.
+            let Ok(parsed) = entry.parsed else { continue };
+            // A commit anchor is reserved for MILE-84 and is reported by
+            // `embodiment.locator-exists` as unsupported; it is not judged
+            // for drift on the file's history either.
+            if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
+                continue;
+            }
+            let locator = parsed.path.clone();
             let locator_path = PathBuf::from(&locator);
-            if let Some(pinned) = pin {
+            if let (Some(urzua_core::locator::Anchor::Pin(pinned)), Some(_)) =
+                (&parsed.anchor, &parsed.scope)
+            {
+                // Implements: ADR-74 (a scoped pin drifts on its span's hash)
+                // The file's last commit says nothing about the scope, so there
+                // is no file-based grace window: only a declared audit date can
+                // hold a scoped pin back.
+                let urzua_core::fix::PinRead::Current { hash, .. } =
+                    crate::pins::read_pin(repo_root, config, &texts, &parsed)
+                else {
+                    // A scope that does not resolve is reported by the rule and
+                    // not also judged for drift.
+                    continue;
+                };
+                if hash != *pinned {
+                    let audited_fresh = matches!((audit_time, grace_secs), (Some(t), Some(grace)) if now_unix - t < grace);
+                    if audited_fresh {
+                        fresh_records.insert(record.path.clone());
+                    } else {
+                        drifted.insert(record.path.clone());
+                        break;
+                    }
+                }
+                continue;
+            }
+            if let Some(urzua_core::locator::Anchor::Pin(pinned)) = &parsed.anchor {
                 // Implements: ADR-67 (a pin drifts on its content hash)
                 // A pin replaces the git-history heuristic for this locator.
                 let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
-                let changed = current.is_some_and(|c| c != pinned);
+                let changed = current.is_some_and(|c| c != *pinned);
                 let fresh = changed
                     && last_commit_for_path
                         .entry(locator_path.clone())

@@ -46,3 +46,4 @@ A `Realized-by` locator can name a line or a pinned commit (a shape such as `cod
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-04 | The anchor slot is taken: `ADR-74` fixes the locator grammar `path[#scope][@anchor]`, so the candidate `path@<short-sha>:<line>` is written `path#L<line>@<short-sha>`, and a commit anchor is `@` and 7 to 64 lowercase hex. A locator carrying one parses and `embodiment.locator-exists` reports it "commit anchor not yet supported" until this milestone's ADR decides what a commit anchor verifies. `Status` unchanged. **Why:** `ADR-74` was accepted 2026-11-04 and binds the slot order so the two features cannot collide on `@`. | **substantive** |

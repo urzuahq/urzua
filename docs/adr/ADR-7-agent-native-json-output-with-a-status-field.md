@@ -1,6 +1,6 @@
 ---
 Status: Superseded
-Embodiment: Implemented
+Embodiment: Deprecated
 Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:81ca2e7df37e541da100a5797caa3c1367c05a2f78e19d095f4489f853ae3d53, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
@@ -63,3 +63,4 @@ Cheap to revise before v0 ships to any external user.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/report.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified for a Superseded record: report.rs changes are the refs and citation.issue-exists additions; the status-field JSON output this record decided is unchanged. | **structural** |
+> | 2026-11-05 | `Embodiment` set to the declared sticky state `Deprecated` (was `Implemented`). Reason: drift review of 2026-11-04. This record is Superseded by `ADR-23` and its Decision no longer describes the code: it decides an opt-in `--format json` flag with human-readable output by default, while the CLI has no `--format` flag and prints only JSON. Re-baselining the pin on `report.rs` would certify a claim the code does not make. **Why:** a Superseded record's evidence is not re-verified; `Deprecated` is human-set and `embodiment.consistency` leaves it alone. | **structural** |

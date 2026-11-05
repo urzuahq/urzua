@@ -531,7 +531,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, or is empty. Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -544,6 +544,10 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-empty", ActionDecl::FIELD_SET),
             VariantAction::new("locator-missing", ActionDecl::FIELD_SET),
             VariantAction::new("locator-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
+            VariantAction::new("locator-malformed", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
         run: |c| {
@@ -569,7 +573,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 let path = std::path::Path::new(p);
                 !tracked.contains(path) && (c.may_exist)(path)
             };
-            embodiment_locator_exists(c.records, c.config, &present, &untracked_on_disk)
+            embodiment_locator_exists(c.records, c.config, &present, c.read_text, &untracked_on_disk)
         },
     },
     RuleDef {
