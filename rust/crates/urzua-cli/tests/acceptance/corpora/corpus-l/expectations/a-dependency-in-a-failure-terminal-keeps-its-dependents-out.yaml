@@ -1,5 +1,5 @@
 id: a-dependency-in-a-failure-terminal-keeps-its-dependents-out
-corpus: corpus-k
+corpus: corpus-l
 commits:
   - write:
       records/MILE-2-m2.md: "---\nStatus: WontDo\nPhase: 0\n---\n# MILE-2 — m2\n"

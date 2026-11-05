@@ -1,5 +1,5 @@
 id: a-cycle-is-reported-and-never-looped-on
-corpus: corpus-k
+corpus: corpus-l
 commits:
   - write:
       records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-4\n---\n# MILE-2 — m2\n"

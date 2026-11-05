@@ -1,5 +1,5 @@
 id: the-critical-path-is-the-smallest-id-sequence-among-the-longest-chains
-corpus: corpus-k
+corpus: corpus-l
 commits:
   - write:
       records/MILE-11-m11.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-11 — m11\n"

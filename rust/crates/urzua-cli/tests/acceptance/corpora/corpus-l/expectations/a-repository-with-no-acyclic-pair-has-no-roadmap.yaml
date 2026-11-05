@@ -1,5 +1,5 @@
 id: a-repository-with-no-acyclic-pair-has-no-roadmap
-corpus: corpus-k
+corpus: corpus-l
 commits:
   - write:
       records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-1\n---\n# MILE-2 — m2\n"

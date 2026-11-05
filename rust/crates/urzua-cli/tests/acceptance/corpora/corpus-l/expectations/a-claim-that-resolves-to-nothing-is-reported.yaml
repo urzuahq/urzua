@@ -1,5 +1,5 @@
 id: a-claim-that-resolves-to-nothing-is-reported
-corpus: corpus-k
+corpus: corpus-l
 commits:
   - write:
       records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-99\n---\n# MILE-2 — m2\n"

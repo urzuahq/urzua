@@ -1,5 +1,5 @@
 id: a-declared-pair-no-record-carries-a-value-for-is-reported
-corpus: corpus-k
+corpus: corpus-l
 commits:
   - write:
       records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-2 — m2\n"
