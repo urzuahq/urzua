@@ -503,7 +503,8 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     }
 
     // ---- critical path: the longest chain of included records, and among the
-    // longest the lexicographically smallest id sequence, blocker first.
+    // longest the lexicographically smallest id sequence, blocker first. Empty
+    // when nothing has an included dependency (maintainer decision, 2026-11-05).
     let mut longest: BTreeMap<&RecordId, usize> = BTreeMap::new();
     let mut by_wave: Vec<&RecordId> = included.iter().collect();
     by_wave.sort_by_key(|id| std::cmp::Reverse(wave[*id]));
@@ -523,7 +524,10 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         longest.insert(id, tail + 1);
     }
     let mut critical_path: Vec<String> = Vec::new();
-    if let Some(top) = longest.values().max().copied() {
+    // A chain needs an edge: when no included record has an included
+    // dependency every record is a chain of one, and naming one of them would
+    // present an arbitrary id as critical, so the path is empty.
+    if let Some(top) = longest.values().max().copied().filter(|top| *top > 1) {
         let mut at = smallest(
             longest
                 .iter()

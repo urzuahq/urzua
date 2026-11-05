@@ -15,6 +15,7 @@
 //!       failure: [WontFix]        # terminal failure
 //!       implementable: [Open]     # code may cite it (optional)
 //!       claim_retained: []        # may keep an Implemented claim (optional)
+//!       blocked: []               # written statuses that mean "waiting" (optional)
 //!       pending: [pending, "not yet written", {pattern: "^\\(pending"}]
 //!       require: [{when: [Fixed], fields: [Regression-test]}]
 //!       forbid:  [{when: [Open], fields: [Fixed-in]}]
@@ -48,6 +49,21 @@ pub struct StatusDecl {
     /// Could later be derived from transitions (MILE-144).
     #[serde(default)]
     pub claim_retained: Vec<String>,
+    /// Non-terminal statuses a person writes to say the record is waiting on a
+    /// dependency (`MILE-144`, `RFC-48`). With a sequencing relation declared,
+    /// `sequence.status-agreement` holds them to the derived `blocked` value: a
+    /// record is blocked when any `Depends-on` target is not in its own type's
+    /// `success`. A type declaring none is not examined by that rule.
+    #[serde(default)]
+    pub blocked: Vec<String>,
+    /// Statuses that claim the work has advanced, and so contradict being
+    /// derived-blocked (`MILE-144`, `ADR-83`). May include a `success` status
+    /// (a record cannot finish before its dependencies do); it never lists a
+    /// `failure` or `blocked` status. A status outside the list, `Planned` for
+    /// instance, is correct for a blocked record. A type declaring neither this
+    /// nor `blocked` is not examined by `sequence.status-agreement`.
+    #[serde(default)]
+    pub progress: Vec<String>,
     /// Whole field values that mean "not done yet", replacing the compiled-in
     /// substring match for this type (BUG-65). Omitted keeps that match.
     #[serde(default)]
@@ -182,6 +198,21 @@ impl StatusDecl {
         let pending = self.pending.as_ref()?;
         let value = value.trim();
         Some(pending.iter().any(|p| p.matches(value)))
+    }
+
+    /// Whether a written status says the record is waiting (`blocked`).
+    pub fn is_blocked_status(&self, status: &str) -> bool {
+        self.blocked.iter().any(|v| v == status)
+    }
+
+    /// Whether a written status claims the work has advanced (`progress`).
+    pub fn is_progress_status(&self, status: &str) -> bool {
+        self.progress.iter().any(|v| v == status)
+    }
+
+    /// Whether `status` finishes the work: the type's `success` list.
+    pub fn is_success(&self, status: &str) -> bool {
+        self.success.iter().any(|v| v == status)
     }
 
     /// Whether the type declares a lifecycle graph (`ADR-72`).
@@ -328,6 +359,8 @@ fn validate_one(
     check_list("failure", &d.failure, true)?;
     check_list("implementable", &d.implementable, true)?;
     check_list("claim_retained", &d.claim_retained, true)?;
+    check_list("blocked", &d.blocked, true)?;
+    check_list("progress", &d.progress, true)?;
     if let Some(p) = &d.pending {
         check_pending(p)?;
     }
@@ -336,6 +369,8 @@ fn validate_one(
         ("failure", &d.failure),
         ("implementable", &d.implementable),
         ("claim_retained", &d.claim_retained),
+        ("blocked", &d.blocked),
+        ("progress", &d.progress),
     ] {
         if let Some(v) = list.iter().find(|v| !d.declares(v)) {
             return Err(format!("`{what}` names '{v}', which is not in `values`"));
@@ -343,6 +378,23 @@ fn validate_one(
     }
     if let Some(v) = d.success.iter().find(|v| d.failure.contains(v)) {
         return Err(format!("'{v}' is in both `success` and `failure`"));
+    }
+    // A blocked status is a waiting state: a terminal one is finished, and
+    // `sequence.status-agreement` would contradict itself over it.
+    if let Some(v) = d.blocked.iter().find(|v| d.is_terminal(v)) {
+        return Err(format!(
+            "'{v}' is in `blocked` and is also terminal (`success` or `failure`); a blocked status is a waiting state"
+        ));
+    }
+    // A progress status says the work advanced; a failed record has not, and a
+    // waiting status cannot also be one (`ADR-83`).
+    if let Some(v) = d.progress.iter().find(|v| d.failure.contains(v)) {
+        return Err(format!("'{v}' is in both `progress` and `failure`"));
+    }
+    if let Some(v) = d.progress.iter().find(|v| d.blocked.contains(v)) {
+        return Err(format!(
+            "'{v}' is in both `progress` and `blocked`; a record cannot both claim progress and be waiting"
+        ));
     }
     validate_transitions(d)?;
     if let Some(delivery) = &d.delivery {
@@ -593,6 +645,49 @@ mod tests {
         let d = c.record_types["bug"].status_decl().unwrap();
         assert_eq!(d.implementable, vec!["Planned", "InProgress"]);
         assert!(!d.is_terminal("InProgress"));
+    }
+
+    #[test]
+    fn blocked_loads_and_is_validated() {
+        let c = parse(&cfg("      values: [Planned, Blocked, Done]\n      success: [Done]\n      blocked: [Blocked]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert_eq!(d.blocked, vec!["Blocked"]);
+        assert!(d.is_blocked_status("Blocked") && !d.is_blocked_status("Planned"));
+        assert!(d.is_success("Done") && !d.is_success("Blocked"));
+        assert!(err("      values: [Open]\n      blocked: [Gone]\n").contains("blocked"));
+        assert!(
+            err("      values: [Open, Blocked]\n      blocked: [Blocked, Blocked]\n")
+                .contains("twice")
+        );
+        assert!(
+            err("      values: [Open, Done]\n      success: [Done]\n      blocked: [Done]\n")
+                .contains("waiting state")
+        );
+        assert!(err(
+            "      values: [Open, Dropped]\n      failure: [Dropped]\n      blocked: [Dropped]\n"
+        )
+        .contains("waiting state"));
+    }
+
+    #[test]
+    fn progress_loads_and_is_validated() {
+        let c = parse(&cfg("      values: [Planned, InProgress, Done, Dropped]\n      success: [Done]\n      failure: [Dropped]\n      progress: [InProgress, Done]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert!(d.is_progress_status("InProgress") && d.is_progress_status("Done"));
+        assert!(!d.is_progress_status("Planned"));
+        assert!(err("      values: [Open]\n      progress: [Gone]\n").contains("progress"));
+        assert!(
+            err("      values: [Open, Doing]\n      progress: [Doing, Doing]\n").contains("twice")
+        );
+        assert!(err(
+            "      values: [Open, Dropped]\n      failure: [Dropped]\n      progress: [Dropped]\n"
+        )
+        .contains("both `progress` and `failure`"));
+        // A written waiting status cannot also claim progress.
+        assert!(err(
+            "      values: [Open, Blocked]\n      blocked: [Blocked]\n      progress: [Blocked]\n"
+        )
+        .contains("both `progress` and `blocked`"));
     }
 
     #[test]

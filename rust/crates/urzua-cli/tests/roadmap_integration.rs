@@ -224,7 +224,9 @@ fn a_blocker_in_a_failure_terminal_keeps_its_dependents_out_of_every_list() {
     let r = roadmap(&dir);
     assert_eq!(strings(&r["ready"]), ["MILE-5"]);
     assert_eq!(r["waves"], serde_json::json!([["MILE-5"]]));
-    assert_eq!(strings(&r["critical_path"]), ["MILE-5"]);
+    // MILE-5's only dependency is finished, so no open record has an included
+    // dependency: there is no chain, and the critical path is empty.
+    assert_eq!(r["critical_path"], serde_json::json!([]));
     assert_eq!(
         r["needs_replan"],
         serde_json::json!([
@@ -321,6 +323,26 @@ rules:
     let r = roadmap(&dir);
     assert_eq!(r["cycles"], serde_json::json!([["MILE-2", "MILE-3"]]));
     assert_eq!(strings(&r["pairs"]), ["sequencing", "gating"]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_critical_path_is_empty_when_no_open_record_has_an_included_dependency() {
+    // A flat repository: three open records, none depending on another. Naming
+    // one of them critical would present an arbitrary id as a chain.
+    let dir = repo(
+        "flat",
+        &config(""),
+        &[
+            (1, "Planned", ""),
+            (2, "Planned", ""),
+            (3, "InProgress", ""),
+        ],
+        &[],
+    );
+    let r = roadmap(&dir);
+    assert_eq!(strings(&r["ready"]), ["MILE-1", "MILE-2", "MILE-3"]);
+    assert_eq!(r["critical_path"], serde_json::json!([]));
     std::fs::remove_dir_all(&dir).ok();
 }
 

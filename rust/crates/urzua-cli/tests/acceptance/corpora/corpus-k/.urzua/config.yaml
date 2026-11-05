@@ -1,0 +1,31 @@
+# Schema version 2 (current): the same configuration as config-v1.yaml, with the
+# rules a version-1 build ran named at the severity they ran, and nothing that
+# version 2 no longer has.
+schema_version: 2
+rules:
+  header.required-fields: error
+  header.field-set-consistency: warn
+  type.no-declared-spec: warn
+  config.pointer-declaration-missing: error
+  config.pointer-field-not-known: error
+  config.pointer-narrative-overlap: error
+  pointer.resolution: error
+  header.pointer-field-clean: warn
+  field.quality: error
+  field.pending: warn
+  filename.title-consistency: error
+  revision-log.change-class-required: error
+  embodiment.consistency: warn
+  embodiment.locator-promotion-candidate: warn
+  relation.supersession-reciprocity: error
+  config.schema-version-outdated: warn
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Date]
+    header_shape: yaml-frontmatter
+    known_fields: [Status, Date, Derives-from]
+    pointer_fields: [Derives-from]
+    narrative_fields: []
+    spec: SPEC-16

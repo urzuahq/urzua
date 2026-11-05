@@ -13,7 +13,7 @@ expect_json:
   - {at: /roadmap/schema, equals: 1}
   - {at: /roadmap/ready, equals: ["MILE-5"]}
   - {at: /roadmap/waves, equals: [["MILE-5"]]}
-  - {at: /roadmap/critical_path, equals: ["MILE-5"]}
+  - {at: /roadmap/critical_path, equals: []}
   - {at: /roadmap/needs_replan, equals: [{"record": "MILE-3", "reason": "failed-dependency", "via": "MILE-2"}, {"record": "MILE-4", "reason": "depends-on-excluded", "via": "MILE-3"}]}
   - {at: /roadmap/records/MILE-3/wave, equals: null}
   - {at: /roadmap/records/MILE-3/blocked, equals: true}
