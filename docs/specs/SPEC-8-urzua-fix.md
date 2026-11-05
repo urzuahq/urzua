@@ -1,5 +1,5 @@
 ---
-Version: '0.16'
+Version: '0.17'
 Date: 2026-09-07
 Status: Accepted
 Embodiment: Verified
