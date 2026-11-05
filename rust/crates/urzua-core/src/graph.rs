@@ -208,10 +208,13 @@ mod tests {
     fn no_relation_field_overrides() -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -223,10 +226,13 @@ mod tests {
     ) -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),

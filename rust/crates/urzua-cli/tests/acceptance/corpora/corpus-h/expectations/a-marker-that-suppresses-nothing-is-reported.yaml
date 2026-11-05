@@ -1,0 +1,6 @@
+id: a-marker-that-suppresses-nothing-is-reported
+corpus: corpus-h
+invocation: [--config, .urzua/boundaries.yaml, check]
+expect_exit: 1
+expect_findings:
+  - {rule: boundary.published-path-reference, file: mirror/stale.rs, severity: warning, message_contains: "suppresses nothing", no_suggested_action: true}

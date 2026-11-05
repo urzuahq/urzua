@@ -1,0 +1,21 @@
+id: a-dependency-in-a-failure-terminal-keeps-its-dependents-out
+corpus: corpus-l
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: WontDo\nPhase: 0\n---\n# MILE-2 — m2\n"
+      records/MILE-3-m3.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-2\n---\n# MILE-3 — m3\n"
+      records/MILE-4-m4.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-3\n---\n# MILE-4 — m4\n"
+      records/MILE-5-m5.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-1\n---\n# MILE-5 — m5\n"
+invocation: [roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/schema, equals: 1}
+  - {at: /roadmap/ready, equals: ["MILE-5"]}
+  - {at: /roadmap/waves, equals: [["MILE-5"]]}
+  - {at: /roadmap/critical_path, equals: []}
+  - {at: /roadmap/needs_replan, equals: [{"record": "MILE-3", "reason": "failed-dependency", "via": "MILE-2"}, {"record": "MILE-4", "reason": "depends-on-excluded", "via": "MILE-3"}]}
+  - {at: /roadmap/records/MILE-3/wave, equals: null}
+  - {at: /roadmap/records/MILE-3/blocked, equals: true}
+  - {at: /roadmap/records/MILE-3/blocked_by, equals: ["MILE-2"]}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

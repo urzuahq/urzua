@@ -1,0 +1,20 @@
+schema_version: 2
+roadmap:
+  pairs: [sequencing, gating]
+record_types:
+  milestone:
+    dir: records
+    prefix: MILE
+    required_fields: [Status, Phase]
+    known_fields: [Depends-on, Blocks, Gated-by, Gates]
+    header_shape: yaml-frontmatter
+    pointer_fields: [Depends-on, Blocks, Gated-by, Gates]
+    statuses:
+      values: [Planned, Done, WontDo]
+      success: [Done]
+      failure: [WontDo]
+relation_pairs:
+  - {name: sequencing, forward: Depends-on, inverse: Blocks, reciprocity: none, cross_type: true, acyclic: true}
+  - {name: gating, forward: Gated-by, inverse: Gates, reciprocity: none, cross_type: true, acyclic: true}
+rules:
+  sequence.cycle: error

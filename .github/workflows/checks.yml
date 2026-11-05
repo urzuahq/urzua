@@ -69,8 +69,14 @@ jobs:
         run: cargo deny check
       - name: cargo build --release
         run: cargo build --workspace --release --locked
-      - name: cargo test
-        run: cargo test --workspace --locked
+      # The tests run under a fresh TMPDIR, and the run fails when any urzua-*
+      # fixture directory is left in it (BUG-193). The guard's own
+      # planted-violation cases run first.
+      - name: cargo test (and no leaked fixture directories)
+        working-directory: .
+        run: |
+          .github/scripts/test-no-leak.test.sh
+          .github/scripts/test-no-leak.sh
       # The records gate is the reusable unit other repositories adopt
       # (MILE-180), run here against the binary just built: `urzua check`, and
       # on a pull request `urzua check --base` against the PR base, reported as

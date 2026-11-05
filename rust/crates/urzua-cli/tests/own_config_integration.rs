@@ -2,6 +2,8 @@
 //! declarations it ships are what these tests run, not a fixture's.
 //! BUG-123 closes here; BUG-57 and BUG-65 are covered end to end.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -20,9 +22,8 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// A fresh git repo holding the repository's own config and `files`.
-fn repo(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-own-config-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-own-config-{name}"));
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     for ty_dir in ["adr", "rfc", "specs", "bugs", "milestones", "waiver"] {
         std::fs::create_dir_all(dir.join("docs").join(ty_dir)).unwrap();

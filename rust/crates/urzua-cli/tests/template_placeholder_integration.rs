@@ -2,6 +2,8 @@
 //! value identical to its type's template text for that field as a
 //! Placeholder. Off unless declared.
 
+mod common;
+
 use std::process::Command;
 
 const BUG_TEMPLATE: &str = "# NNNN — Title\n\n> Status: Open | Fixed | WontFix\n> Found-in: how/where this was actually discovered\n> Regression-test: path/name of the test proving this is fixed\n\n## What was wrong\n\nx\n";
@@ -13,8 +15,7 @@ fn config(option: &str) -> String {
 }
 
 fn run(name: &str, config: &str, template: Option<&str>, bug: &str) -> (serde_json::Value, i32) {
-    let dir = std::env::temp_dir().join(format!("urzua-tplph-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new(&format!("urzua-tplph-{name}"));
     std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
     std::fs::create_dir_all(dir.join("docs/notes")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();

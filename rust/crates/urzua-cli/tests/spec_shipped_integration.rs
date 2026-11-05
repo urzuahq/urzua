@@ -2,12 +2,13 @@
 //! Realized-by. Runs this repository's own `.urzua/config.yaml`, so the shipped
 //! declaration is what is exercised.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
 fn run_with_own_config(name: &str, spec: &str) -> serde_json::Value {
-    let dir = std::env::temp_dir().join(format!("urzua-shipped-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new(&format!("urzua-shipped-{name}"));
     std::fs::create_dir_all(dir.join("docs/specs")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     assert!(Command::new("git")

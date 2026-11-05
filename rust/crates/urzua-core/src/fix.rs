@@ -328,7 +328,13 @@ pub struct PinSpan {
 /// `embodiment.locator-exists`' finding).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PinRead {
-    Current { hash: String, span: Option<PinSpan> },
+    /// `files` is the files a directory or glob pin covers (`BUG-176`); empty
+    /// for a file or a scope.
+    Current {
+        hash: String,
+        span: Option<PinSpan>,
+        files: Vec<String>,
+    },
     Failed(String),
     Unreadable,
 }
@@ -343,6 +349,10 @@ pub struct PinDrift {
     /// The resolved span of a scoped pin; absent for a file-level one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub span: Option<PinSpan>,
+    /// The files a directory or glob pin covers now, for the reviewer; absent
+    /// for a file or a scope.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
     /// The locator as written before its pin, which the re-pin edits in place.
     #[serde(skip)]
     pub spelling: String,
@@ -426,7 +436,7 @@ pub fn detect_rebaselines(
                         });
                     }
                 }
-                PinRead::Current { hash, span } => {
+                PinRead::Current { hash, span, files } => {
                     if hash != recorded
                         && !pins
                             .iter()
@@ -437,6 +447,7 @@ pub fn detect_rebaselines(
                             recorded_hash: recorded,
                             current_hash: hash,
                             span,
+                            files,
                             spelling: locator.spelling.clone(),
                         });
                     }
@@ -558,10 +569,13 @@ mod tests {
     fn no_relation_field_overrides() -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -680,10 +694,13 @@ mod tests {
         );
         let config = Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),
@@ -976,6 +993,7 @@ mod tests {
                 PinRead::Current {
                     hash: H2.to_string(),
                     span: None,
+                    files: Vec::new(),
                 }
             } else {
                 PinRead::Unreadable
@@ -996,6 +1014,7 @@ mod tests {
         let lookup = |_: &crate::locator::Locator| PinRead::Current {
             hash: H2.to_string(),
             span: None,
+            files: Vec::new(),
         };
         let (_, found, _) = detect_rebaselines(&[r], &no_relation_field_overrides(), &lookup);
         let content = format!(
@@ -1039,6 +1058,7 @@ mod tests {
                     end: 14,
                     text: "fn bar() {}".to_string(),
                 }),
+                files: Vec::new(),
             },
             _ => PinRead::Failed("'Gone' matches nothing".to_string()),
         };

@@ -1,0 +1,16 @@
+id: a-loop-across-two-declared-pairs-is-a-cycle
+corpus: corpus-l
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-3\n---\n# MILE-2 — m2\n"
+      records/MILE-3-m3.md: "---\nStatus: Planned\nPhase: 0\nGated-by: MILE-2\n---\n# MILE-3 — m3\n"
+      records/MILE-4-m4.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-4 — m4\n"
+invocation: [--config, .urzua/two-pairs.yaml, roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/schema, equals: 1}
+  - {at: /roadmap/cycles, equals: [["MILE-2", "MILE-3"]]}
+  - {at: /roadmap/ready, equals: ["MILE-4"]}
+  - {at: /roadmap/needs_replan, equals: [{"record": "MILE-2", "reason": "cycle", "via": null}, {"record": "MILE-3", "reason": "cycle", "via": null}]}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

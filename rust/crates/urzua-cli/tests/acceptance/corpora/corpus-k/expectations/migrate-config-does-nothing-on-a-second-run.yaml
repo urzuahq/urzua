@@ -1,0 +1,13 @@
+id: migrate-config-does-nothing-on-a-second-run
+corpus: corpus-k
+setup:
+  - [--config, .urzua/config-v1.yaml, migrate, config]
+invocation: [--config, .urzua/config-v1.yaml, migrate, config]
+# The setup run rewrote the file in place; this run finds it current.
+expect_exit: 0
+expect_json:
+  - {at: /outcome, equals: nothing-to-do}
+  - {at: /from, equals: 2}
+  - {at: /to, equals: 2}
+  - {at: /changes, equals: []}
+mutation_exempt: the migrate command is not a rule; it has no rule to switch off.

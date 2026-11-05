@@ -5,9 +5,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use urzua_core::config::Config;
+use urzua_core::config::{Config, LocatorKind};
 use urzua_core::record::Record;
-use urzua_core::report::ScopeSource;
+use urzua_core::report::{Failure, ScopeSource};
 use urzua_core::rules;
 
 /// The contract value for how a run selected its records. The adapter lives
@@ -58,10 +58,18 @@ pub(crate) fn default_config_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".urzua/config.yaml")
 }
 
-pub(crate) fn load_config(path: &PathBuf) -> Result<Config, String> {
+pub(crate) fn load_config(path: &PathBuf) -> Result<Config, Failure> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
-    urzua_core::config::parse(&content).map_err(|e| e.to_string())
+    urzua_core::config::parse(&content).map_err(|e| match e {
+        // The structured form rides along so a could-not-run report can carry
+        // `{found, supported, current, migration}` (`ADR-77`).
+        urzua_core::config::ConfigError::SchemaVersionOutOfWindow(v) => Failure {
+            message: v.to_string(),
+            schema_version: Some(Box::new(v)),
+        },
+        other => Failure::from(other.to_string()),
+    })
 }
 
 pub(crate) fn load_records(
@@ -520,6 +528,8 @@ pub(crate) fn compute_drifted_records_at(
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
     let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let locator_opts: rules::LocatorExistsOpts =
+        config.rule_opts(rules::RULE_EMBODIMENT_LOCATOR_EXISTS);
     // Implements: ADR-67 (the grace window)
     // Inside the window, so not yet drift. An undatable commit is never held
     // back: the window only ever suppresses what it can prove is fresh.
@@ -610,13 +620,38 @@ pub(crate) fn compute_drifted_records_at(
             }
             let locator = parsed.path.clone();
             let locator_path = PathBuf::from(&locator);
-            if let (Some(urzua_core::locator::Anchor::Pin(pinned)), Some(_)) =
-                (&parsed.anchor, &parsed.scope)
+            // BUG-176: a directory or glob locator the config accepts
+            // The files such a locator covers. A kind the config does not
+            // declare is not judged this way: `embodiment.locator-exists`
+            // reports it and drift is read from the path's history as before.
+            let covered: Option<(LocatorKind, Vec<String>)> = if parsed.scope.is_none() {
+                texts
+                    .locator_files(&parsed.path)
+                    .ok()
+                    .and_then(|m| Some((m.kind?, m.files)))
+                    .filter(|(kind, _)| {
+                        *kind != LocatorKind::File && locator_opts.locator_kinds.contains(kind)
+                    })
+            } else {
+                None
+            };
+            if let Some((kind, files)) = &covered {
+                // Nothing matched, or a pin the config does not allow on this
+                // kind, is `embodiment.locator-exists`' finding.
+                if files.is_empty()
+                    || (parsed.anchor.is_some() && !locator_opts.pinnable.contains(kind))
+                {
+                    continue;
+                }
+            }
+            if let (Some(urzua_core::locator::Anchor::Pin(pinned)), true) =
+                (&parsed.anchor, parsed.scope.is_some() || covered.is_some())
             {
                 // Implements: ADR-74 (a scoped pin drifts on its span's hash)
                 // The file's last commit says nothing about the scope, so there
                 // is no file-based grace window: only a declared audit date can
-                // hold a scoped pin back.
+                // hold a scoped pin back. A directory or glob pin is held back
+                // the same way (`BUG-176`).
                 let urzua_core::fix::PinRead::Current { hash, .. } =
                     crate::pins::read_pin(repo_root, config, &texts, &parsed)
                 else {
@@ -665,7 +700,15 @@ pub(crate) fn compute_drifted_records_at(
             let Some(locator_commit) = last_commit_for_path
                 .entry(locator_path.clone())
                 .or_insert_with(|| {
-                    urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or_else(|e| {
+                    let commit = match &covered {
+                        // The newest commit among the matched files.
+                        Some((_, files)) => {
+                            let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+                            urzua_io::last_commit_for_paths(repo_root, &files)
+                        }
+                        None => urzua_io::last_commit_for_path(repo_root, &locator_path),
+                    };
+                    commit.unwrap_or_else(|e| {
                         note(&mut problems, e);
                         None
                     })
@@ -774,13 +817,37 @@ pub(crate) fn read_files_under(
     prefixes: &[String],
     rule: &str,
 ) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        prefixes
+            .iter()
+            .any(|entry| rules::path_is_published(path, entry))
+    })
+}
+
+/// [`read_files_under`] for entries that are a prefix or a glob (`MILE-158`):
+/// the boundary rule's paths.
+pub(crate) fn read_files_matching(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    entries: &[String],
+    rule: &str,
+) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        entries
+            .iter()
+            .any(|entry| rules::path_matches_entry(path, entry))
+    })
+}
+
+fn read_files_where(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    rule: &str,
+    wanted: impl Fn(&std::path::Path) -> bool,
+) -> Result<Vec<rules::PublishedFile>, String> {
     let mut out = Vec::new();
     for path in &discovered.paths {
-        if discovered.staged_deletions.contains(path)
-            || !prefixes
-                .iter()
-                .any(|entry| rules::path_is_published(path, entry))
-        {
+        if discovered.staged_deletions.contains(path) || !wanted(path) {
             continue;
         }
         let full = repo_root.join(path);
@@ -1082,4 +1149,50 @@ pub(crate) fn read_index_artifacts(
         });
     }
     Ok(out)
+}
+
+/// Reads the declared override log for `override.unreviewed` (`MILE-188`), in
+/// the CLI because `urzua-core` is pure (`ADR-5`). Only read when the rule is
+/// enabled. A missing file and one that is not text are handed over as such,
+/// never as empty; a path resolving outside the repository, or any other I/O
+/// failure, aborts, since a log the rule could not read is one it did not judge.
+pub(crate) fn read_override_log(
+    repo_root: &std::path::Path,
+    config: &Config,
+) -> Result<Option<rules::OverrideLog>, String> {
+    let enabled = config
+        .rules
+        .get(rules::RULE_OVERRIDE_UNREVIEWED)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off);
+    let (true, Some(path)) = (enabled, &config.override_log) else {
+        return Ok(None);
+    };
+    let repo_canonical = repo_root
+        .canonicalize()
+        .map_err(|e| format!("override.unreviewed: could not resolve the repository root: {e}"))?;
+    let content = match repo_root.join(path).canonicalize() {
+        Ok(resolved) if !path_is_inside_repo(&repo_canonical, &resolved) => {
+            return Err(format!(
+                "override.unreviewed: {path} resolves outside the repository"
+            ))
+        }
+        Ok(resolved) => match urzua_io::read_to_string(&resolved) {
+            Ok(text) => rules::OverrideLogContent::Text(text),
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                rules::OverrideLogContent::NotText
+            }
+            Err(_) if resolved.is_dir() => rules::OverrideLogContent::NotText,
+            Err(e) => return Err(format!("override.unreviewed: could not read {path}: {e}")),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => rules::OverrideLogContent::Missing,
+        Err(e) => {
+            return Err(format!(
+                "override.unreviewed: could not resolve {path}: {e}"
+            ))
+        }
+    };
+    Ok(Some(rules::OverrideLog {
+        path: path.clone(),
+        content,
+    }))
 }

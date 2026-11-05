@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N6RR4HNM6QKZK73FDHT6GQ
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -49,7 +50,7 @@ verifiable without reading a sentence, accepting that the author has to write th
 left undeclared is not detected by this ADR alone.
 
 - **The field is declared, not known.** Config names the field (this repository: `closes`) on the existing
-  claim-reading rule, as an option beside `claim_paths`. The engine knows no field name, record type or
+  claim-reading rule `claim.status-agreement`, as options beside `claim_paths` and `closed_statuses`. The engine knows no field name, record type or
   status: the listed ids are checked against whatever types the repository declares, and "closed" is each
   type's declared terminal statuses. Declaring none changes nothing; the rule is opt-in like every other
   (`ADR-53`).
@@ -57,15 +58,29 @@ left undeclared is not detected by this ADR alone.
   checked when present. With `true`, a fragment in a declared claim path that lacks the field is a finding,
   so a fragment that names a record without declaring whether it closes it is caught; `closes: []` is the
   declaration that it closes nothing. This repository enables `strict`.
-- **Its value is a list of record ids,** on one line: `closes: [BUG-60, BUG-61]`, or a single id. Each id
-  must resolve; one that resolves to nothing is reported, never skipped. An empty list is a valid
-  declaration that the change closes nothing.
+- **Its value is a list of record ids,** on one line: `closes: [BUG-60, BUG-61]`, or a single id. An empty
+  list is a valid declaration that the change closes nothing.
+- **Frontmatter parsing is new.** `read_claim_files` (`discovery.rs`) returns raw file text and
+  `claim_status_agreement` reads only prose lines; nothing parses fragment frontmatter today. The
+  implementing change adds a deliberately small parser for the declared key only: the file begins with a
+  `---` block, and the key's value is a one-line flow list `[a, b]`, a scalar, or `[]`. Other keys are
+  ignored. A block list (`closes:` followed by `- ` lines), a list continued over several lines, or a value
+  that is not a list or an id is a new finding, `claim.field-malformed`, naming the file and line; it is never
+  guessed at. A file in a claim path with no frontmatter block is not a fragment: it is counted out of scope
+  and disclosed, never given a finding, which is how a non-fragment such as a `README.md` in the directory is
+  excluded without the engine knowing its name.
+- **An id that resolves to nothing is a new, reported finding.** Today a claimed reference that matches no
+  record is eligible and skipped silently (`Outcome::Absent` in `rules/claim.rs`). With the field declared,
+  a listed id that resolves to no record is an error (`claim.id-unresolved`), gated by the same opt-in
+  config. It applies only to ids from the structured field. The verb-found claims keep today's behaviour
+  (skipped and counted), so a repository that has not declared the field sees no change.
 - **Each listed record must be in a declared closed status** when the PR merges. Closed means the type's
   declared success or failure terminals (`is_finished`, `BUG-178`), not the fallback `closed_statuses`
   list. A listed record that is still open is an error: the fragment claims a closure the record does not
-  show. On a run with `--base`, only fragments the diff adds or changes are examined, so a listed record
-  that was already closed at the merge base is not an error, and a historical fragment is not re-judged
-  when its record is later reopened. Without `--base` every fragment on disk is examined, as today.
+  show. No diff scoping is added: `read_claim_files` reads every `.md` in the claim paths and `check`
+  applies no diff filter to them, with or without `--base`, and this ADR keeps that. A historical fragment
+  whose record is later reopened is therefore judged again; that is accepted as a rare, correct report that a
+  claim no longer holds.
 - **Prose is never parsed for claims by this feature.** A reference in the body of a fragment is a
   citation. The field is the only declared claim.
 - **The existing closing-verb reading becomes a deprecated convenience.** It keeps working for a
@@ -76,8 +91,8 @@ left undeclared is not detected by this ADR alone.
   being to close the record or to take it out of the list (`ADR-73`); the finding does not choose.
 
 **The release tooling tolerates the extra key (tested).** The release workflow pins knope 0.23.0
-(checksummed in `prepare-release.yml`). Run in a scratch repository with this repository's
-`PrepareRelease` step, `knope prepare-release --dry-run` over fragments whose frontmatter carries the
+(checksummed in `prepare-release.yml`). The test was run in a scratch repository containing this
+repository's `knope.toml` with its `PrepareRelease` step: `knope prepare-release --dry-run` over fragments whose frontmatter carries the
 package bump plus an extra `closes` key produced the same version bump and changelog as the same fragment
 without it. Results:
 
@@ -91,8 +106,9 @@ without it. Results:
 So the field is a **single line**, and a block list is not available. The key is ignored by knope and does
 not reach the changelog. This is a property of one pinned version of one tool, so the implementing change
 must keep a test that runs the pinned knope over a fragment carrying the field, and a knope upgrade
-re-runs it. Whether an unknown key stays harmless in a workspace of several named packages was not
-tested; this repository has one.
+re-runs it as a CI test, not a one-off. Whether an unknown key stays harmless in a workspace of several
+named packages was not tested; this repository has one. That is an untested risk for any adopter with a
+multi-package workspace, who should run the same test before declaring the field.
 
 ## Reversibility
 
@@ -103,9 +119,10 @@ decision.
 
 ## Consequences
 
-- `SPEC-3` gains the claim-field option and `SPEC-2` the findings (a listed id that resolves to nothing; a
-  listed record that is open), each with a revision row. The CLI reads fragment frontmatter as data and
-  ignores every key but the declared one, including knope's own bump keys.
+- `SPEC-3` gains the claim-field options on `claim.status-agreement` and `SPEC-2` the findings (a listed id
+  that resolves to nothing; a listed record that is open; a malformed value; a fragment without the field
+  under `strict`), each with a revision row. The CLI reads fragment frontmatter as data and ignores every key
+  but the declared one, including knope's own bump keys.
 - This repository declares `closes` and the changeset convention in `CONTRIBUTING.md` and the changelog
   guidance gains one sentence.
 - `BUG-66` closes once this is built, with a regression test that a fragment listing a still-open record in
@@ -115,19 +132,16 @@ decision.
 - The records a release closes are not in the user-facing changelog, because knope ignores the key. A
   release note that wants them still writes them in prose.
 - Under `strict`, every fragment carries the field (`closes: []` when it closes nothing), an edit on each
-  one. The fragments already unreleased in this repository lack it, so enabling `strict` needs them migrated
-  in the same change, or the check scoped to fragments a PR adds (`--base`); that choice belongs to the
-  implementing change.
+  one. The fragments already unreleased in this repository lack it, so the implementing change that enables
+  `strict` migrates every existing fragment in the same change. There is no diff scoping to lean on, and
+  none is added; the result is checkable with a plain `urzua check`, without `--base`.
 
-## Open questions
+## Resolved questions
 
-1. **How are the fragments that already exist handled when `strict` is enabled** here: migrated, or only
-   fragments a PR adds or changes examined?
-2. **Is a closed status "by the time the PR merges" checkable without `--base`?** On a branch run the
-   record is read at the PR head; a record closed in a later commit of the same PR passes, which is the
-   intent. A merge-queue run reads the merged tree. Nothing further is needed unless a reviewer disagrees.
-3. **Where does the field live if knope is replaced?** The form is portable frontmatter, but a different
-   tool may reject extra keys. The test above is the guard.
+1. Existing fragments under `strict` are migrated in the implementing change; no diff scoping is added.
+2. "Closed by the time the PR merges" is checkable without `--base`: a branch run reads the record at the PR
+   head, so a record closed in a later commit of the same PR passes, and a merge-queue run reads the merged
+   tree.
 
 ## References
 
@@ -142,3 +156,5 @@ decision.
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 to reject `ADR-81` and make a changeset's claim a structured field; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-05 | Amended while Proposed: whether the field is required on every fragment is a `strict: true|false` config option, default false (checked when present); under `strict` a fragment without the field is a finding, and this repository enables it. The single-line flow-list constraint from the knope test stays. Phrased over declared records and statuses, with no type named. **Why:** maintainer answers of 2026-11-05 to the open questions. | **substantive** |
+> | 2026-11-05 | Amended while Proposed after review: the claim that `--base` diff scoping exists today is dropped (every fragment is read and `check` applies no diff filter), and under `strict` existing fragments are migrated in the implementing change; an id the field lists that resolves to nothing is a new finding gated by the opt-in config and applying only to the structured field; frontmatter parsing is stated as new, with a finding for a block list or malformed value and non-fragments (no frontmatter) counted out of scope; the knope 0.23.0 test is described and kept as a CI test, with multi-package workspaces noted as untested risk; the options are placed on `claim.status-agreement`; the open question about replacing knope is removed. **Why:** review blockers on the Proposed text. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

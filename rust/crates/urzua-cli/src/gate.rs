@@ -1,5 +1,3 @@
-pub(crate) use urzua_core::rules::gate_and_run as gated;
-
 /// `Ok` means "checked and clean", so it requires that some rule actually ran.
 /// A run with no rule at all has established nothing, and reporting it clean is
 /// indistinguishable from a corpus that passed (ADR-55). Reachable since rules

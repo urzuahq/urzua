@@ -1,7 +1,9 @@
 //! MILE-159: `urzua fix [PATHS...]` examines and repairs only those paths.
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -41,9 +43,8 @@ fn record(n: u32, embodiment: &str) -> String {
 
 /// Two records, both stating `Not started` against an implemented locator,
 /// so each has one pending repair.
-fn fixture(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-fix-paths-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fix-paths-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("docs/other")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -71,7 +72,6 @@ fn a_path_limits_the_examination_and_the_repairs_to_that_record() {
     assert_eq!(repairs.len(), 1, "{v}");
     assert_eq!(repairs[0]["record"], "docs/adr/ADR-1-a.md", "{v}");
     assert_eq!(v["population"]["examined"], 1, "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -79,7 +79,6 @@ fn a_directory_path_selects_every_record_under_it() {
     let dir = fixture("dir");
     let v = json(&run_urzua(&dir, &["fix", "docs/adr"]));
     assert_eq!(v["repairs"].as_array().unwrap().len(), 2, "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -98,7 +97,6 @@ fn a_path_matching_no_record_is_reported_not_skipped() {
             .contains("matched no record"),
         "{v}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -120,7 +118,6 @@ fn apply_with_a_path_writes_only_that_record() {
     let b = std::fs::read_to_string(dir.join("docs/adr/ADR-2-b.md")).unwrap();
     assert!(a.contains("Embodiment: Not started"), "{a}");
     assert!(b.contains("Embodiment: Implemented"), "{b}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -141,5 +138,4 @@ fn ids_outside_the_given_paths_are_reported_as_matching_no_repair() {
     assert_eq!(v["status"], "partial-failure", "{v}");
     let b = std::fs::read_to_string(dir.join("docs/adr/ADR-2-b.md")).unwrap();
     assert!(b.contains("Not started"), "{b}");
-    std::fs::remove_dir_all(&dir).ok();
 }

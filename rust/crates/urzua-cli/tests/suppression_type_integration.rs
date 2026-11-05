@@ -1,6 +1,8 @@
 //! BUG-74: which record type suppresses findings is a declaration
 //! (`role: suppression`), not the literal type name `waiver`.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -27,9 +29,8 @@ fn type_block(name: &str, dir: &str, role: bool) -> String {
 
 /// ADR-1 lacks Author, a live `header.required-fields` finding. Each
 /// `(dir, file)` holds a record covering it.
-fn corpus(name: &str, config: &str, records: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-supp-type-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn corpus(name: &str, config: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-supp-type-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();

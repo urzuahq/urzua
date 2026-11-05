@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use urzua_core::config::Config;
+use urzua_core::config::{Config, LocatorKind};
 use urzua_core::fix::{PinRead, PinSpan};
 use urzua_core::locator::{self, FileText, Locator, ScopeError};
 
@@ -18,8 +18,15 @@ pub(crate) fn read_pin(
     locator: &Locator,
 ) -> PinRead {
     let Some(scope) = &locator.scope else {
+        if let Some(read) = read_files_pin(repo_root, config, texts, &locator.path) {
+            return read;
+        }
         return match urzua_io::sha256_hex_of_file(&repo_root.join(&locator.path)) {
-            Some(hash) => PinRead::Current { hash, span: None },
+            Some(hash) => PinRead::Current {
+                hash,
+                span: None,
+                files: Vec::new(),
+            },
             None => PinRead::Unreadable,
         };
     };
@@ -41,7 +48,55 @@ pub(crate) fn read_pin(
                     end: span.end,
                     text: pinned,
                 }),
+                files: Vec::new(),
             }
         }
     }
+}
+
+// BUG-176: a pin on a directory or glob hashes the sorted paths and content hashes of its files
+/// What a directory or glob locator that the repository lets be pinned hashes
+/// to now: the hash of the sorted list of (path, file content hash) for every
+/// tracked file it matches, with those files. `None` when `path` is not such a
+/// locator (a file, a kind the config does not declare pinnable, or a path that
+/// names nothing), so the caller reads it as it always has.
+pub(crate) fn read_files_pin(
+    repo_root: &Path,
+    config: &Config,
+    texts: &FileTexts,
+    path: &str,
+) -> Option<PinRead> {
+    let (_, covered) = pinned_kind(config, texts, path)?;
+    let mut pairs = Vec::new();
+    for file in &covered {
+        let Some(hash) = urzua_io::sha256_hex_of_file(&repo_root.join(file)) else {
+            return Some(PinRead::Unreadable);
+        };
+        pairs.push((file.clone(), hash));
+    }
+    if pairs.is_empty() {
+        return Some(PinRead::Unreadable);
+    }
+    Some(PinRead::Current {
+        hash: urzua_io::sha256_hex_of_str(&locator::files_pin_text(&pairs)),
+        span: None,
+        files: covered,
+    })
+}
+
+/// The kind and covered files of `path` when it is a directory or glob that
+/// `locator_kinds` accepts and `pinnable` lets carry a pin.
+pub(crate) fn pinned_kind(
+    config: &Config,
+    texts: &FileTexts,
+    path: &str,
+) -> Option<(LocatorKind, Vec<String>)> {
+    let opts: urzua_core::rules::LocatorExistsOpts =
+        config.rule_opts(urzua_core::rules::RULE_EMBODIMENT_LOCATOR_EXISTS);
+    let located = texts.locator_files(path).ok()?;
+    let kind = located.kind?;
+    (kind != LocatorKind::File
+        && opts.locator_kinds.contains(&kind)
+        && opts.pinnable.contains(&kind))
+    .then_some((kind, located.files))
 }
