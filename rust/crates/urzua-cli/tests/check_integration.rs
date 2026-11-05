@@ -970,6 +970,55 @@ fn init_real_write_omits_config_yaml_from_the_report() {
     assert!(dir.join(".urzua/config.yaml").exists());
 }
 
+/// A directory of numbered pages with no headers may not be a record directory,
+/// and adopt says so; a directory of slug-named files that carry headers is one,
+/// and adopt proposes it.
+#[test]
+fn init_flags_headerless_numbered_pages_and_finds_a_slug_named_record_directory() {
+    let dir = fixture_repo("init-scan");
+    for d in ["pages", "specs"] {
+        std::fs::create_dir_all(dir.join("docs").join(d)).unwrap();
+    }
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "---\nStatus: Accepted\n---\n# 0001 - X\n",
+    )
+    .unwrap();
+    for n in ["0001-intro.md", "0002-setup.md"] {
+        std::fs::write(dir.join("docs/pages").join(n), "# Page\n\nJust prose.\n").unwrap();
+    }
+    for n in ["alpha.md", "beta.md", "gamma.md"] {
+        std::fs::write(
+            dir.join("docs/specs").join(n),
+            "# Thing\n\n> Status: Draft\n> Owner: someone\n\n## Body\n",
+        )
+        .unwrap();
+    }
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["init", "--dry-run"]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    let dirs: Vec<&str> = parsed["proposed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["dir"].as_str().unwrap())
+        .collect();
+    assert!(dirs.contains(&"docs/adr"), "{dirs:?}");
+    assert!(dirs.contains(&"docs/specs"), "{dirs:?}");
+    let notices = parsed["notices"].to_string();
+    assert!(
+        notices.contains("may hold pages rather than records: docs/pages"),
+        "the headerless directory is flagged: {notices}"
+    );
+    assert!(
+        !notices.contains("may hold pages rather than records: docs/adr"),
+        "{notices}"
+    );
+}
+
 /// BUG-132: `x/y` and `z/y` share a base name and disambiguate to `x-y` and
 /// `z-y` -- but an unrelated `x-y` directory already proposes that exact
 /// name, and nothing after disambiguation checks for it. `render_config_yaml`
@@ -3438,6 +3487,33 @@ fn a_bare_number_corpus_is_reported_once_per_type_with_rename_guidance() {
         .find(|r| r["rule"] == "filename.identity-pattern")
         .unwrap();
     assert_eq!(exec["population"]["examined"], 2);
+}
+
+/// A corpus of hundreds of bare-number files must not put every rename in one
+/// message: the first few are named and the rest are counted.
+#[test]
+fn a_large_bare_number_corpus_names_a_few_renames_and_counts_the_rest() {
+    let names: Vec<String> = (1..=9).map(|n| format!("{n:04}-a.md")).collect();
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let dir = filename_pattern_repo(
+        "filename-bare-large",
+        &refs,
+        "{filename.identity-pattern: warn}",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let m = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == "filename.identity-pattern")
+        .unwrap()["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(m.contains("0001-a.md -> ADR-0001-a.md"), "{m}");
+    assert!(m.contains("and 4 more"), "{m}");
+    assert!(!m.contains("0009-a.md"), "{m}");
 }
 
 #[test]

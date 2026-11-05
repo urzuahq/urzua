@@ -1,5 +1,5 @@
 ---
-Version: '0.89'
+Version: '0.90'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -475,7 +475,8 @@ Two details carry weight:
     no single correct value and is repaired by adding evidence.
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
     case-insensitive) equals one of the whole-value entries or matches one of the pattern entries. It **replaces** the compiled-in match, which treats
-    any value containing `pending` as pending (`BUG-65`); a value that merely mentions the word is a
+    a value containing `pending` as a whole word as pending (`BUG-65`); `spending` and a path such as
+    `docs/pending-settlement/x.md` (a token with a `/`) are real values, and a value that merely mentions the word is a
     real value. A type that omits `pending` keeps the compiled-in match. The rule's optional
     boolean `pending_until_required` (`MILE-169`, `false` by default) defers a pending value in a
     field some `statuses.require` entry names, until the record's status is one that requires it:
@@ -1838,3 +1839,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.87`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.88`. `roadmap.pairs` also sets what `sequence.cycle` reads as one graph: a loop that uses an edge of each of two declared pairs is reported, and an `acyclic` pair not named, or an absent `roadmap.pairs`, keeps the per-pair reading. The load-time check that each named pair declares `acyclic: true` is what guarantees every pair in that graph is cycle-checked. **Why:** `MILE-192`, following `ADR-82` (design re-check of 2026-11-05): the roadmap saw a cross-pair loop that `check` did not. | **substantive** |
 > | 2026-11-05 | Bumped to `0.89`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.90`. The compiled-in `field.pending` match reads `pending` as a whole word and ignores a path-shaped token, so `spending` and `docs/pending-settlement/x.md` are no longer pending; a type declaring `statuses.pending` is unchanged. **Why:** Phase 0 hardening from an adopter switchover -- a waiver `Scope` path containing `spending` was reported as unfinished work. | **substantive** |

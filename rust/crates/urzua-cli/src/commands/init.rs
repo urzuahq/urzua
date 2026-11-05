@@ -185,6 +185,126 @@ pub fn infer_header_shapes(
     notices
 }
 
+/// Notice subject for what adopt's directory scan found worth a second look.
+pub(crate) const NOTICE_INIT_SCAN: &str = "init-scan";
+
+fn has_header(content: &str) -> bool {
+    !matches!(read_header(content), HeaderReading::Unreadable)
+}
+
+fn nested_either_way(a: &Path, b: &Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
+}
+
+/// Name each proposed type none of whose record-shaped files carries a header.
+/// Such a directory may hold numbered pages (site content, requirement
+/// documents) rather than records, or Nygard-style records whose metadata is
+/// prose, and the file names cannot tell the two apart; so it stays proposed
+/// (`BUG-151`) and the notice tells the adopter to look. Reads only.
+pub fn flag_headerless(
+    repo_root: &Path,
+    discovered: &[PathBuf],
+    proposed: &[ProposedRecordType],
+) -> Vec<Notice> {
+    let headerless: Vec<String> = proposed
+        .iter()
+        .filter(|rt| {
+            !discovered.iter().any(|rel| {
+                rel.parent() == Some(Path::new(&rt.dir))
+                    && rel
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(is_record_shaped)
+                    && std::fs::read_to_string(repo_root.join(rel))
+                        .is_ok_and(|content| has_header(&content))
+            })
+        })
+        .map(|rt| format!("{} ({} file(s))", rt.dir, rt.record_count))
+        .collect();
+    if headerless.is_empty() {
+        return Vec::new();
+    }
+    vec![Notice {
+        severity: NoticeSeverity::Warning,
+        subject: NOTICE_INIT_SCAN.to_string(),
+        message: format!(
+            "no file in these proposed directories has a header, so they may hold pages rather than records: {}; remove a type from the proposed config if it is not a record directory",
+            headerless.join(", ")
+        ),
+    }]
+}
+
+/// Propose directories whose files are not numbered records but do carry
+/// headers (a flat spec directory named by slug, for example). A directory
+/// qualifies when at least two of its markdown files have a header and those
+/// are at least half of the directory's markdown files. A directory nested in,
+/// or containing, an already proposed one is skipped: discovery matches by path
+/// prefix, so the outer type would already cover it.
+pub fn detect_unnumbered_record_types(
+    repo_root: &Path,
+    discovered: &[PathBuf],
+    proposed: &[ProposedRecordType],
+) -> Vec<ProposedRecordType> {
+    let mut dirs: std::collections::BTreeMap<PathBuf, (usize, usize)> =
+        std::collections::BTreeMap::new();
+    for rel in discovered {
+        let Some(file_name) = rel.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let lower = file_name.to_ascii_lowercase();
+        if !lower.ends_with(".md")
+            || file_name.starts_with('_')
+            || lower == "readme.md"
+            || lower == "index.md"
+            || is_record_shaped(file_name)
+        {
+            continue;
+        }
+        let Some(parent) = rel.parent().filter(|p| !p.as_os_str().is_empty()) else {
+            continue;
+        };
+        if proposed
+            .iter()
+            .any(|rt| nested_either_way(parent, Path::new(&rt.dir)))
+        {
+            continue;
+        }
+        let entry = dirs.entry(parent.to_path_buf()).or_insert((0, 0));
+        entry.0 += 1;
+        if std::fs::read_to_string(repo_root.join(rel)).is_ok_and(|c| has_header(&c)) {
+            entry.1 += 1;
+        }
+    }
+    let mut taken: std::collections::BTreeSet<String> =
+        proposed.iter().map(|rt| rt.name.clone()).collect();
+    let mut out = Vec::new();
+    for (dir, (total, headed)) in dirs {
+        if headed < 2 || headed * 2 < total {
+            continue;
+        }
+        let base = proposed_name(&dir);
+        let name = if taken.contains(&base) {
+            dir.components()
+                .map(|c| c.as_os_str().to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join("-")
+        } else {
+            base
+        };
+        if !taken.insert(name.clone()) {
+            continue;
+        }
+        out.push(ProposedRecordType {
+            name,
+            dir: dir.to_string_lossy().to_string(),
+            record_count: total,
+            prefix: None,
+            header_shape: HeaderShape::YamlFrontmatter,
+        });
+    }
+    out
+}
+
 fn proposed_name(dir: &Path) -> String {
     let last = dir
         .file_name()
@@ -382,10 +502,33 @@ pub fn run(dry_run: bool) -> ExitCode {
     };
 
     let mut proposed = detect_record_types(&discovered.paths);
+    let mut notices = flag_headerless(&repo_root, &discovered.paths, &proposed);
+    let unnumbered = detect_unnumbered_record_types(&repo_root, &discovered.paths, &proposed);
+    if !unnumbered.is_empty() {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: NOTICE_INIT_SCAN.to_string(),
+            message: format!(
+                "proposed from headers alone, because their file names carry no record number: {}; check that each is a record directory",
+                unnumbered
+                    .iter()
+                    .map(|rt| rt.dir.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        });
+        proposed.extend(unnumbered);
+    }
     if proposed.is_empty() {
-        return emit(&CouldNotRun::from(
-            "no record-shaped files found in the tracked set -- nothing to adopt",
-        ));
+        let scanned = notices
+            .iter()
+            .map(|n| n.message.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return emit(&CouldNotRun::from(format!(
+            "no record directory found in the tracked set -- nothing to adopt{}{scanned}",
+            if scanned.is_empty() { "" } else { ": " }
+        )));
     }
 
     // Disambiguation (above, on base name only) can still collide: a
@@ -410,7 +553,11 @@ pub fn run(dry_run: bool) -> ExitCode {
         .unwrap_or(&config_path)
         .to_path_buf();
 
-    let mut notices = infer_header_shapes(&repo_root, &discovered.paths, &mut proposed);
+    notices.extend(infer_header_shapes(
+        &repo_root,
+        &discovered.paths,
+        &mut proposed,
+    ));
     notices.extend(withheld_rule_notices());
 
     let rendered = render_config_yaml(&proposed);

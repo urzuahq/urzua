@@ -1,5 +1,5 @@
 ---
-Version: '0.101'
+Version: '0.102'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -62,7 +62,7 @@ corpora can be published at all, and the fastest deliverable must not sit behind
 ### Phase A — the loop closes
 
 **Done when `urzua check` runs in this repository's CI and fails on a deliberately broken record.**
-Nothing more. Unscoped: a path argument narrows which findings are reported (`BUG-67`), and this
+Nothing more. Unscoped: a path argument narrows which findings are reported (`BUG-67`) and which records' git history `embodiment.consistency` reads, so a one-record check does not pay for the whole corpus's blame; and this
 repository's corpus is no longer confined to `docs/` -- the claim files a rule reads live beside it.
 
 Scope:
@@ -908,3 +908,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.99`. `status.delivery-agreement`'s generated row now says the rule applies to any type that declares `statuses.delivery`, that `back_pointer_evidence: false` stops a back-pointer counting as evidence, and that `unevidenced_tiers` may be empty so a type never reports the second direction; the finding for a not-done record names the evidence field it was computed from. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.100`. `sequence.cycle` reads the pairs `roadmap.pairs` names as one graph, so a loop that uses an edge of each of two declared pairs is reported on every member, with the cycle's path and the pairs it crosses in the message, under the new finding variant `sequence-cycle-cross-pair` (exempt: which dependency to drop is a choice). A loop inside one declared pair keeps its message and variant; an `acyclic` pair not named in `roadmap.pairs`, and a repository with no `roadmap.pairs`, are read per pair as before. **Why:** `MILE-192`, following `ADR-82`: `check` and `urzua roadmap` now agree on a cross-pair loop. | **substantive** |
 > | 2026-11-05 | Bumped to `0.101`. A YAML frontmatter header keeps each number and boolean as written (`Version: 1.10` reads `1.10`, not `1.1`), skips a leading byte-order mark instead of reading the header as absent, and keeps a non-string key (`1: x`) under its text rather than dropping it; `citation.issue-exists` refuses a refs snapshot whose `issues` or `pulls` are not strictly ascending. **Why:** Phase 0 hardening of the core model: each one made a rule judge a value or file other than the one on disk. | **substantive** |
+> | 2026-11-05 | Bumped to `0.102`. A path or diff scope computes embodiment drift and claim ages for the records in scope only, since a record's drift reaches no other record's finding; `filename.identity-pattern`'s all-files-mismatch finding names the first five renames and counts the rest. **Why:** Phase 0 hardening from an adopter switchover -- `check <one path>` took as long as the whole corpus, and the finding named 466 renames in one string. | **substantive** |

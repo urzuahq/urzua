@@ -114,3 +114,69 @@ fn fix_does_not_run_when_embodiment_consistency_is_off() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("embodiment.consistency"), "{text}");
 }
+
+/// A run narrowed to one path reports on that record alone, so it must not pay
+/// for the git history of every other record: the blame calls name only the
+/// record in scope, and the whole-corpus run still blames both.
+#[test]
+fn a_path_scoped_check_blames_only_the_records_in_scope() {
+    let dir = repo("scoped-blame", "embodiment.consistency: warn");
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-y.md"),
+        "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:code.rs\n---\n# 2 — Y\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "second record"]);
+
+    let real_git = String::from_utf8(
+        Command::new("sh")
+            .args(["-c", "command -v git"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let shim_dir = common::TempDir::new("urzua-fixgit-shim");
+    let log = shim_dir.join("calls.log");
+    let shim = shim_dir.join("git");
+    std::fs::write(
+        &shim,
+        format!(
+            "#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = blame ] && echo \"$*\" >> '{}'; done\nexec '{}' \"$@\"\n",
+            log.display(),
+            real_git.trim()
+        ),
+    )
+    .unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(
+        "{}:{}",
+        shim_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let blames = |args: &[&str]| -> String {
+        let _ = std::fs::remove_file(&log);
+        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+            .args(args)
+            .current_dir(&dir)
+            .env("PATH", &path)
+            .output()
+            .unwrap();
+        assert!(out.status.code().is_some_and(|c| c <= 1), "{out:?}");
+        std::fs::read_to_string(&log).unwrap_or_default()
+    };
+
+    let scoped = blames(&["check", "docs/adr/ADR-1-x.md"]);
+    assert!(scoped.contains("ADR-1-x.md"), "{scoped}");
+    assert!(!scoped.contains("ADR-2-y.md"), "{scoped}");
+
+    let whole = blames(&["check"]);
+    assert!(
+        whole.contains("ADR-1-x.md") && whole.contains("ADR-2-y.md"),
+        "{whole}"
+    );
+}
