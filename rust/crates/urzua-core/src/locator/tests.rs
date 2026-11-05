@@ -225,7 +225,7 @@ fn rust() -> LocatorResolver {
         r#"
 name: rust
 glob: "**/*.rs"
-start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*(fn|struct|enum|trait|type|static|mod|const)\s+{symbol}\b'
+start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*(fn|struct|enum|trait|union)\s+{symbol}\b'
 end: brace_balanced
 leading: '^\s*(#\[|///|//!)'
 container:
@@ -704,4 +704,16 @@ fn spec_3_vectors_for_the_rust_resolver() {
     for (text, scope, expected) in rows {
         assert_eq!(span(text, scope), expected, "{scope} in {text:?}");
     }
+}
+
+#[test]
+fn a_semicolon_ended_item_is_not_swallowed_into_the_next_fn() {
+    // `const`, `static`, `type` and `mod x;` end at a `;`, not a brace: under a
+    // brace_balanced start they would run on into the next item, so the Rust
+    // resolver does not claim them. They fail loudly instead of pinning two items.
+    let text = "pub const X: u8 = 1;\npub type T = u8;\npub const fn cf() {\n}\nfn next() {\n}\n";
+    assert!(span(text, "X").is_err());
+    assert!(span(text, "T").is_err());
+    assert_eq!(span(text, "cf"), Ok((3, 4)));
+    assert_eq!(span(text, "next"), Ok((5, 6)));
 }
