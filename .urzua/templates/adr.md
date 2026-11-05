@@ -39,3 +39,8 @@ the institutional knowledge lives.
 ## References
 
 Related ADRs, RFCs, research findings.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|

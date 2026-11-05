@@ -60,3 +60,9 @@ deferred further.
 - RFC-1 — the proposal this decides (core schema and §1a's profile-declaration model only).
 - ADR-8 — the header-closure model this schema's field set is validated through.
 - `.urzua/config.yaml` — the config shape that makes profiles declared, not enumerated.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

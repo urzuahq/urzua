@@ -191,3 +191,9 @@ back-pointer, and cannot break a reference — every change is additive.
 - ADR-3 — stable identifiers and merge-time display numbers, the prevention half.
 - RFC-1 §1a — declared profiles, which is where a `Vacated` status and the `Vacated-to` field
   would be declared rather than hardcoded.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
