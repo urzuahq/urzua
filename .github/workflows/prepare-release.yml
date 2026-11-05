@@ -24,7 +24,7 @@ jobs:
     # without this guard every such push would otherwise fail loudly
     # (PrepareRelease finding no pending changes) rather than just being a
     # no-op.
-    if: "!contains(github.event.head_commit.message, 'chore: prepare release')"
+    if: "!startsWith(github.event.head_commit.message, 'chore: prepare release')"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -33,10 +33,29 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # The release branch and PR must be pushed and opened by a GitHub App, not
+      # GITHUB_TOKEN: GitHub starts no workflow run from a GITHUB_TOKEN event, so
+      # `ci` (a required check on main) would never run on the release PR. There
+      # is deliberately no fallback to GITHUB_TOKEN.
+      - name: require the release app secrets
+        env:
+          APP_ID: ${{ secrets.RELEASE_APP_ID }}
+          APP_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            echo "::error::RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY must be set as repository secrets so the release PR is opened by a GitHub App and CI runs on it; see the maintainer setup steps for branch protection"
+            exit 1
+          fi
+      - id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: install knope 0.23.0 (pinned, checksummed)
         run: |
@@ -70,7 +89,7 @@ jobs:
       # emitting that identifier.
       - name: open or update the release PR (ADR-0045)
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -uo pipefail
           out=$(knope prepare-release --verbose 2>&1) && rc=0 || rc=$?
