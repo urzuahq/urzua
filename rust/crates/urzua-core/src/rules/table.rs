@@ -260,7 +260,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_CLAIM_STATUS_AGREEMENT,
-        description: "A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared.",
+        description: "A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared. A claim is a closing verb followed by a record reference in prose (`Fixes BUG-60`), which is a deprecated convenience: a claim written without the verb is not seen. The optional `closes` option (`ADR-85`) names a frontmatter key in which a claim file lists, on one line, the records it closes (`closes: [BUG-60, BUG-61]`, a single id, or `[]` for none), and that data is checked instead of a sentence: a listed id that resolves to no record is `claim.id-unresolved`; a listed record not at a terminal status its own type declares (the type's `statuses` success and failure, not `closed_statuses`) is an error naming the record, and offers an `edit-field` on its `Status`; a value that is a block list, a list continued over several lines or not a list of record ids is `claim.field-malformed`, never guessed at. Only the frontmatter block is read for it and every other key is ignored, so a release tool's own keys are untouched. The optional `strict` option (default `false`, needs `closes`) makes a claim file that has a frontmatter block and lacks the key a finding (`claim.field-missing`); `closes: []` declares that it closes nothing. A file with no frontmatter block is not a fragment: counted out of scope in the population and named in a notice, never given a finding; the exception is a file whose `---` fence is never closed or has a blank line before it, which the release tool refuses to read, and which under `strict` is `claim.field-malformed`. With `closes` declared the closing-verb reading still runs over the body, and `check` prints how many claims it found. Without `closes` nothing changes.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         needs_identity_index: false,
@@ -269,15 +269,19 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_override_log: false,
         reads_declaration: None,
         header_none: HeaderNone::Exempt("population is claims, not records"),
-        options: &["claim_paths", "closed_statuses"],
+        options: &["claim_paths", "closed_statuses", "closes", "strict"],
         actions: &[
             VariantAction::new("claim-status-disagrees", ActionDecl::Exempt("the rule catches a claim that may be false, so the right fix is often the claim file, a non-record file with no action kind yet, and editing the record Status would be the mechanical answer and possibly the wrong one")),
+            VariantAction::new("claim-closes-open", ActionDecl::FIELD_SET),
+            VariantAction::new("claim-id-unresolved", ActionDecl::Exempt("the id names no record, so there is no record to edit; the fix is to correct the id in the claim file, a non-record file with no action kind yet, or to file the record")),
+            VariantAction::new("claim-field-malformed", ActionDecl::Exempt("the edit is to the claim file, a non-record file with no action kind yet")),
+            VariantAction::new("claim-field-missing", ActionDecl::Exempt("the edit is to the claim file, a non-record file with no action kind yet, and which records the change closes is the author's to say")),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
             let opts: ClaimOpts = c.config.rule_opts(RULE_CLAIM_STATUS_AGREEMENT);
-            claim_status_agreement(c.claims, &opts.closed_statuses, c.config, c.index)
+            claim_status_agreement(c.claims, &opts, c.config, c.index)
         },
     },
     RuleDef {

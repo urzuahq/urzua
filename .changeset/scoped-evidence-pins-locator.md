@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A `Realized-by` locator can carry a scope between its path and its pin: `code:path#Symbol` for a

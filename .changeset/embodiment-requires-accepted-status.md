@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 New opt-in rule `embodiment.requires-accepted-status`: a record whose `Status` is not an accepted status

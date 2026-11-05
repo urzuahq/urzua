@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M2WDKB3Y7SCHKRWPN87BXVZ6
-Status: Open
+Status: Fixed
 Found-in: "Five bug records shipped as Status: Open in the same branch that fixed them, with a changeset naming all five; claim.status-agreement ran over the changeset and reported nothing"
-Regression-test: "not yet written -- a changeset naming a record that is still open must not report a clean run"
-Blocked-on: RFC-36
+Regression-test: "rust/crates/urzua-core/src/rules/claim.rs::a_fragment_listing_a_still_open_record_is_an_error_observed_failing, rust/crates/urzua-core/src/rules/claim.rs::strict_asks_every_fragment_for_the_field_observed_failing, rust/crates/urzua-cli/tests/claim_field_integration.rs::a_fragment_listing_a_still_open_record_fails_the_check_observed_failing, rust/crates/urzua-cli/tests/claim_field_integration.rs::strict_catches_the_incident_shape_a_fragment_naming_a_record_and_declaring_nothing_observed_failing"
+Realized-by: code:rust/crates/urzua-core/src/rules/claim.rs, code:rust/crates/urzua-core/src/rules/claim_field.rs, test:rust/crates/urzua-cli/tests/claim_field_integration.rs
 ---
 # 66 — A changeset that names a record without a closing verb is invisible to claim.status-agreement
 
@@ -54,3 +54,4 @@ claims at all.
 > | 2026-11-05 | Waits on `RFC-36`; `Status` stays `Open`. **Why:** Maintainer decision, 2026-11-05: what counts as a claim is `RFC-36`'s to decide, so this bug is not worked until it is decided. | **substantive** |
 > | 2026-11-05 | Unblocked by `ADR-81` (Proposed), which records the decision to accept `RFC-36`: keep the closing verb and add an opt-in rule for a bare reference to an open record in declared text. `Status` stays `Open`. **Why:** the block was on `RFC-36`'s decision; the fix waits only for the rule to be built. | **substantive** |
 > | 2026-11-05 | `ADR-81` is Rejected, so the 2026-11-05 unblock above no longer stands. This bug closes once `ADR-85` is built (a changeset declares the records it closes in a structured field, and a listed record that is still open is an error). `Status` stays `Open`. **Why:** maintainer decision of 2026-11-05; the fix is the structured field, not a rule over bare references. | **substantive** |
+> | 2026-11-05 | Fixed. `claim.status-agreement` takes the `closes` and `strict` options: a fragment lists the records it closes in a one-line frontmatter key, and a listed record that is still open is an error, so the incident's own shape (five bugs named `(BUG-60)` while `Open`) is caught under `strict` because the fragment lacks the key. This repository enables both and every fragment carries `closes:`. `Blocked-on` is removed: `RFC-36` is not what decided this. **Why:** `ADR-85`, the structured field decided on 2026-11-05; a declared claim is exact and a citation is never mistaken for one. | **substantive** |

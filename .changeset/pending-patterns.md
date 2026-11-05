@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `statuses.pending` accepts a pattern entry, `{pattern: "^\\(pending"}`, beside whole values, so a family of

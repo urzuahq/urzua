@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `embodiment.consistency` gains three opt-in refinements of drift, all off by default. A `Realized-by`

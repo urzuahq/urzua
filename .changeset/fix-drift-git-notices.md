@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `urzua fix` computes embodiment drift only when `embodiment.consistency` is enabled, as `check`

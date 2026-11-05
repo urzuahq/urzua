@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 The five record-scoped rules report a population. `revision-log.change-class-required` now shows

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-74]
 ---
 
 The record type that suppresses findings is now declared with `role: suppression` in `.urzua/config.yaml`, so a

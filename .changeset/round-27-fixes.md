@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-147, BUG-148, BUG-149, BUG-150]
 ---
 
 Round 27's `/code-review` found and fixed four more defects:

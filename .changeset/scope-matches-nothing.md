@@ -1,5 +1,6 @@
 ---
 default: major
+closes: [MILE-106]
 ---
 
 **Breaking: each `population` in `rules_executed` gains `out_of_scope`.** It counts candidates the

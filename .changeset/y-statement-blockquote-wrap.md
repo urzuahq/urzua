@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-181]
 ---
 
 `section.shape` with the `y-statement` shape no longer reports a phrase as missing when the block is

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `urzua rules` lists the rules in the order `urzua check` runs them and reports them in

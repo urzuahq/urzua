@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-41]
 ---
 
 A record type can declare pairs of fields that must be declared together with `companion_fields`, a

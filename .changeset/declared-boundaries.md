@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-125]
 ---
 
 Adds declared boundaries: an opt-in rule, `boundary.published-path-reference`, that reads the paths your repository publishes, vendors or generates, and enforces what follows from each kind. A boundary is a set of path prefixes or globs with a `kind` (`published`, `vendored` or `generated`), a required `reason` and a `severity`:

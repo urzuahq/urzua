@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-115]
 ---
 
 `urzua export --format json` now emits each record's sections. For a record type that declares

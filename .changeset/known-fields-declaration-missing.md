@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-110]
 ---
 
 Adds a new opt-in rule, `config.known-fields-declaration-missing`: reports a record type that

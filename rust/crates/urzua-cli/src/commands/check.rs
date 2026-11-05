@@ -618,8 +618,11 @@ fn load_context<'a>(
     }
     let claims = read_claim_files(
         repo_root,
-        &claim_opts.map_or_else(Vec::new, |o| o.claim_paths),
+        claim_opts.as_ref().map_or(&[][..], |o| &o.claim_paths),
     )?;
+    if let Some(opts) = &claim_opts {
+        notices.extend(rules::claim_field_notices(&claims, opts));
+    }
 
     let boundary_opts: rules::PublishedPathOpts = config
         .enabled_rule_opts(rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)

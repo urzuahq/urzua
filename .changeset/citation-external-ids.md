@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `citation.resolution` accepts an optional `external_ids` list of prefixed ids that are not records of

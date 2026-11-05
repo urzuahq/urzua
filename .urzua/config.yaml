@@ -504,6 +504,12 @@ rules:
     level: error
     claim_paths: [".changeset"]
     closed_statuses: ["Fixed", "Done", "Accepted", "Rejected", "Superseded", "Retired", "Withdrawn"]
+    # A changeset says which records it closes as data (ADR-85, BUG-66), and the
+    # rule checks that instead of a sentence. `strict`: every fragment carries the
+    # key, `closes: []` when it closes nothing. A record the change only mentions
+    # is not listed.
+    closes: closes
+    strict: true
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]

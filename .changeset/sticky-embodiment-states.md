@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `embodiment.consistency` takes an optional `sticky_states` list of `Embodiment` values a person sets

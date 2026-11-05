@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-184]
 ---
 
 `citation.issue-exists` can now also check named header fields. Declare `issue_refs.fields: ["Found-in"]`
