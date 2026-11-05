@@ -1,0 +1,15 @@
+id: a-migrated-config-checks-clean
+corpus: corpus-k
+setup:
+  - [--config, .urzua/config-v1.yaml, migrate, config]
+invocation: [--config, .urzua/config-v1.yaml, check]
+# After the rewrite the same file loads at the current version, so the warning
+# is gone and the rules the upgrade named still run.
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+expect_no_findings:
+  - {rule: config.schema-version-outdated}
+expect_rules_ran:
+  - header.required-fields
+  - pointer.resolution

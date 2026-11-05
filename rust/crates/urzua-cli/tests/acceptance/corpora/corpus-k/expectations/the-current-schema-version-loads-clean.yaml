@@ -1,0 +1,10 @@
+id: the-current-schema-version-loads-clean
+corpus: corpus-k
+invocation: [check]
+# A config at the current schema version is read as written: the outdated rule
+# examines the file and reports nothing.
+expect_exit: 0
+expect_rules_ran:
+  - config.schema-version-outdated
+expect_no_findings:
+  - {rule: config.schema-version-outdated}

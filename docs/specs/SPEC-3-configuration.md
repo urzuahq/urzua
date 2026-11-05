@@ -1,5 +1,5 @@
 ---
-Version: '0.73'
+Version: '0.80'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -369,7 +369,33 @@ Two details carry weight:
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
   committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
-  derived `blocked` value is not part of this declaration (`MILE-27`).
+  The derived `blocked` value is the next declaration.
+
+  `progress` (optional, `MILE-144`, `RFC-48`, `ADR-83`) names the statuses that claim the work has
+  advanced, for example `InProgress` and `Done`; it must be a subset of `values`, deduplicated, and
+  disjoint from `failure` and `blocked`. It may include a `success` status, because a record cannot
+  finish before its dependencies do. `implementable` is not read for this: it means "code may cite
+  it". `blocked` (optional) names the non-terminal statuses a person writes to say a record is
+  waiting, for example `Blocked`; it must be a subset of `values` and disjoint from `success`,
+  `failure` and `progress`. `RFC-48` computes `blocked` and never writes it, so a repository that
+  follows it declares `progress` and no `blocked`, and no record states a waiting status; a type that
+  still writes one declares `blocked` to have it checked both ways.
+
+  With a sequencing relation declared in `roadmap.pairs` (below), a record is blocked when any record it
+  depends on, in either field of a declared pair (a written `Blocks` counts), is not in a status its own
+  type declares `success`. `success` is the one list of done statuses. A dependency in a `failure`
+  status, with no `Status`, or whose type declares no `success` therefore blocks. The opt-in rule
+  `sequence.status-agreement` reports a blocked record that states a `progress` status, and a status
+  listed in `blocked` while nothing blocks the record; a blocked record in a status that claims no
+  progress, `Planned` for instance, is correct. Only a type that declares `progress` or `blocked` is
+  examined. The finding offers `edit-field` `set` on `Status`, carrying the declared blocked status as
+  the value only when the type declares exactly one, the record is not in a `success` status, and the
+  declared `transitions` (when any) allow the move. A value that cannot be computed is not guessed: a
+  record in a `blocked` or `progress` status that would be reported unblocked is counted unreadable when
+  it names a `Depends-on` value that resolves to nothing or to a record whose header cannot be read, or
+  when a record that may write an inverse claim has an unreadable header; a type that declares only
+  `progress` is guarded the same way. Enabling the rule with no `roadmap.pairs`, or with no type
+  declaring `progress` or `blocked`, is a load error.
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -644,7 +670,7 @@ see and correct; a default applied silently at read time is a fact nobody review
 ## Exit threshold: `fail_on`
 
 A top-level `fail_on` sets the lowest unwaived finding severity that makes `urzua check` and
-`urzua audit` exit 1 (`MILE-145`):
+`urzua audit` (an alias of `check`, `ADR-79`) exit 1 (`MILE-145`):
 
 ```yaml
 fail_on: warning   # error (default) | warning
@@ -657,6 +683,41 @@ fail_on: warning   # error (default) | warning
 - Only the exit code changes. The report is byte-identical under either value: `blocking` and
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
+
+## Override log: `override_log`
+
+A top-level `override_log` declares the committed log of editor-hook overrides (`ADR-78` item 1,
+`MILE-188`), a repository-relative file path:
+
+```yaml
+override_log: .urzua/override-log.md
+rules:
+  override.unreviewed: warn
+```
+
+- **Format.** A Markdown table with the columns `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason`
+  and `Reviewed-by`, in that order, the same table shape as a record's revision log. Prose and
+  headings around the table are free. The hook writes the file's introduction and header when the
+  file does not exist, and appends one row for each finding it lets through, `Reviewed-by` blank.
+- **Reviewed means a person has named themselves.** An entry is reviewed once its `Reviewed-by` cell
+  names a person: a blank cell, a placeholder (`TBD`, `todo`, `name`, or a cell of only dashes) and a
+  value the repository's record types declare as pending (their `statuses.pending` vocabulary, the
+  one `field.pending` uses) are not a review, and neither is the word `pending` where no type declares
+  a vocabulary. Setting it is an edit to the committed file, so the change is visible in the pull request
+  that makes it. It is the smallest form that needs no git history, no record type and no second
+  file: an alternative that asks whether a later commit acknowledged the entry would make the verdict
+  depend on history a shallow checkout cannot see (the failure `ADR-69` names).
+- **`override.unreviewed`** (`SPEC-2`) reads the file and reports each entry not reviewed in that
+  sense as a warning on the log, naming the override, the record, the rule and the reason. A
+  row with the wrong number of cells is a finding, never skipped. A declared log that does not
+  exist, or that is not text, is reported and counted unreadable: it is never read as an empty log.
+  The hook creates the file on the first override, so a repository that declares `override_log`
+  commits the file with its header.
+- **Declared, never defaulted.** Enabling `override.unreviewed` without `override_log` is a load
+  error (exit 2), as is a value that is blank, absolute, ends in `/` or has a `..` component. Declaring
+  `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
+- The hook (`SPEC-8`) is the only other reader of the key: it takes the top-level `override_log:` line
+  from `.urzua/config.yaml`, and when it is absent it says the override is not recorded.
 
 ## Diff rule path options
 
@@ -683,8 +744,60 @@ rules:
     exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
 ```
 
-A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
-`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
+A glob that cannot compile (an unclosed `[`) is refused at load. `back_pointer_paths` stays a
+prefix list: a `*` in it is a literal character. `published_paths` and a boundary's `paths` and
+`exclude` take the same prefix-or-glob entries (see "Boundaries").
+
+## Boundaries
+
+`boundary.published-path-reference` reads **declared boundaries** (`RFC-11` sections 1 to 3,
+`ADR-80`, `MILE-125`): paths that publish beyond the corpus, each with a kind, a reason and a
+severity. A boundary is a declared fact, and the prohibitions follow from its kind.
+
+```yaml
+rules:
+  boundary.published-path-reference:
+    level: error                # enables the rule; each boundary's severity sets its findings' level
+    ignore_marker: "record-id-ok"   # optional; declared, never compiled in
+    boundaries:
+      - paths: ["packages/*/src"]     # prefixes or globs (MILE-158)
+        kind: published               # published | vendored | generated
+        reason: "Published to the registry."   # required, non-blank
+        severity: error               # error | warn
+        exclude: ["packages/*/src/fixtures"]   # optional, the violation check only
+    published_paths: ["pkg/sdk"]      # the compatible form, still supported
+```
+
+- **`paths`** (required, non-empty), **`kind`**, **`reason`** and **`severity`** are required. Any
+  other `kind`, a blank `reason`, a `severity` other than `error` or `warn`, or a path that is
+  absolute, contains `..` or a backslash, or is an invalid glob is refused at load.
+- **A boundary's `severity` is the level of every finding it produces.** The rule's `level` only
+  enables the rule: `level: warn` over a boundary declaring `error` reports errors, and
+  `level: error` over a boundary declaring `warn` reports warnings.
+- **`published`:** a record identifier inside it is a violation. Any identifier carrying a declared
+  type prefix counts, in prose as well as in a marker, resolvable or not.
+- **`generated`:** a back-pointer inside it (an `Implements:` or `Verifies:` comment citing a
+  record) is reported, because a human-authored marker there is overwritten. A plain record
+  identifier is not reported.
+- **`vendored`:** declared, with no prohibition. A file only a vendored boundary covers is counted
+  eligible and unexamined.
+- **`published_paths` is read as a published boundary** with no reason required and the rule's
+  `level` as its severity. It is not deprecated; when both forms are declared both apply. The rule
+  needs at least one boundary or one `published_paths` entry to load.
+- **Violation and evidence are separate matchers.** The boundary check reads any record
+  identifier; the evidence collector keeps its narrow `Implements:` / `Verifies:` reader and skips
+  every file under a `published` boundary's `paths`, whether or not the file is also excluded. A
+  marker inside a published path is therefore never evidence, and prose citing a record is never
+  evidence anywhere. The skip applies only while the boundary rule is enabled.
+- **Exceptions are declared, at the width of the thing excused.** A boundary's `exclude` entries
+  (prefixes or globs) remove paths from that boundary's violation check only; the excluded files
+  stay in the population as eligible and unexamined, not out of scope, so
+  `config.scope-matches-nothing` does not read a deliberate exclusion as an unreachable boundary. The declared `ignore_marker` text excuses the single line it appears
+  on and no other. The engine compiles in no marker.
+- **Nothing declared may match nothing silently.** Each of these is a finding at the boundary's
+  severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
+  matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
+  it suppresses nothing. The uncovered `paths` entry carries an `edit-config` `set` action with no value, naming the entry, so a person picks the corrected path and coverage is never shrunk; the unused `exclude` entry carries an `edit-config` `remove` action naming it.
 
 ## Relation pairs
 
@@ -796,12 +909,45 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   enabled, and a prose entry when `header.pointer-field-clean` is enabled. In a repository that follows
   `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
   guard for the roadmap: the graph is only computed when no claim was dropped.
+- **Which pairs are dependencies: `roadmap.pairs`** (`ADR-83`). A pair can be `acyclic` without being a
+  dependency: a containment pair (`Parent`/`Children`) is checked for cycles, but a child does not wait
+  on its parent finishing. The top-level `roadmap: {pairs: [name, ...]}` names the `relation_pairs`
+  entries that are dependencies, and the derived `blocked` value reads exactly those, so `check` and
+  the roadmap command cannot disagree. Each name must be a declared pair that sets `acyclic: true`,
+  listed once; anything else is a load error. `sequence.cycle` and `sequence.unresolved-blocker` still
+  read every `acyclic` pair.
+- **The derived `blocked` value** is read from these edges by `sequence.status-agreement` (see
+  `statuses.progress` and `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
-  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
-  `MILE-182`).
+  `sequence.terminal-parent-open-child` and the `condition` record type are `RFC-48`'s other parts and
+  belong to other milestones. `urzua roadmap` is built (`MILE-182`, `ADR-82`) and reads the same
+  `roadmap.pairs` as the derived `blocked` value, below.
 
-Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
+### `roadmap` (`ADR-82`, `MILE-182`)
+
+```yaml
+roadmap:
+  pairs: ["sequencing"]          # relation_pairs entries that are dependencies
+  group_by: ["Phase", "Track"]   # header fields to group by, outermost first
+```
+
+`urzua roadmap` (output in `SPEC-2`) computes one graph over the pairs `pairs` names. A pair can be
+`acyclic` without being a dependency: a containment pair (`Parent`/`Children`) is checked for cycles,
+but a child does not wait on its parent finishing, so only the pairs named here order work. Both keys
+are optional and default to empty. Absent `pairs` means no roadmap: the command says so in a note and
+`export --format json` carries no `roadmap` key.
+
+- `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
+- `group_by`: each name must be a field some record type declares (`required_fields` or
+  `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
+  A field no open record carries is not an error; the roadmap notes it.
+
+Load-time errors, reported as `roadmap: ...`: a `pairs` name that is not a declared pair, one that does
+not declare `acyclic: true`, a repeated `pairs` or `group_by` entry, a blank or padded `group_by` name,
+and a `group_by` name no type declares. A declaration that can never apply would read as a clean
+roadmap, so it is refused (`ADR-7`).
+
+Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
@@ -831,13 +977,101 @@ config is structured.
 Criterion 4 is the point of the spec. The claim is only worth something if we would notice it being
 false.
 
+## Supported schema versions
+
+`schema_version` is the first key of every config and is required (`ADR-12`, `ADR-52`). A release
+reads the current version `N` and the one before it, `N-1` (`ADR-77`, decided in `RFC-49`); a version
+older than `N-1` or newer than `N` is outside the window. Each release is one row; its upgrade step is
+the one from the row's older version to its newer.
+
+| Release | Reads | Writes |
+|---|---|---|
+| `0.4.0` | 1, 2 | 2 |
+
+`urzua check` and every other command that loads the config behave in one of three ways:
+
+- **At `N`.** Read as written.
+- **At `N-1`.** Upgraded in memory to `N` before any rule runs, so a rule only ever sees the current
+  shape. `config.schema-version-outdated` (`SPEC-2`) reports one warning on the config file, naming the
+  version found, the current version, the keys the upgrade dropped and the command that rewrites the
+  file. Under `fail_on: warning` that fails a strict repository until the file is migrated. The rule is
+  opt-in like every rule, and the upgrade enables it (the upgraded config and the file `migrate config`
+  writes both name it at `warn`), so a config upgraded once is reported by the next release that moves
+  the version again.
+- **Outside the window.** The run does not start: exit 2, `status: not-run`, the usual `error`
+  sentence, and a `schema_version_error` object:
+
+  ```json
+  {
+    "found": 7,
+    "supported": [1, 2],
+    "current": 2,
+    "migration": { "release": null, "command": null, "note": "this config is newer than this build; ..." }
+  }
+  ```
+
+  `migration.release` is the oldest release that still reads `found` and `migration.command` the
+  command to run with it (`urzua migrate config`); both are `null` when no release reads `found` (a
+  version newer than `current`, or one no release ever read), and `note` says what to do either way.
+  Nothing else in the file is read first, so a bad key in a config of the wrong version is not reported
+  in place of the version.
+
+`urzua migrate config` (`SPEC-14`) rewrites an `N-1` config to `N` in place, keeping its comments, and
+lists every key it added, changed, renamed, moved or dropped. A second run reports `nothing-to-do`.
+It never reads a version outside the window, so there is no chain of steps: an adopter who skips a
+release installs the older release that reads their version, migrates, and moves on.
+
+### Version 1
+
+Version 1 is the shape `.urzua/config.yaml` had from its introduction (`ADR-52`) until `MILE-80` made
+every rule opt-in. It was current on `main` for a day and no release read it as YAML: the `0.3.0`
+release read `.urzua/config.toml` at `schema_version: 1`, a format nothing reads any more (`ADR-54`). The
+upgrade to version 2 does exactly what that break did:
+
+- **No `rules` table.** A version-1 build ran every rule, each at a severity the rule chose, and a
+  version-1 config with a `rules` key is refused as not a version-1 config. The upgrade names every
+  rule the version-1 build ran, at the severity it ran, so the config keeps running what it ran:
+  `header.required-fields`, `config.pointer-declaration-missing`, `config.pointer-field-not-known`,
+  `config.pointer-narrative-overlap`, `pointer.resolution`, `filename.title-consistency`,
+  `revision-log.change-class-required` and `relation.supersession-reciprocity` at `error`;
+  `header.field-set-consistency`, `type.no-declared-spec`, `header.pointer-field-clean`,
+  `embodiment.consistency` and `embodiment.locator-promotion-candidate` at `warn`; and `field.quality`
+  at `error` with `field.pending` at `warn`, the two halves of one version-1 rule.
+- **Dropped, and reported as dropped.** The per-type `header_layout` key and the rule that read it
+  (`header.layout-consistency`); `header.deprecated-shape`, whose header shapes no release reads;
+  `narrative-field.stale`, which version 2 refuses without a `terminal_statuses` list a version-1
+  config had no place to declare; and `pointer.target-status`, which version 1 ran by announcing the
+  status of every resolved reference and which version 2 runs only for statuses a repository declares.
+- **Not converted.** A version-1 config that names a removed `header_shape` (`blockquote`,
+  `bold-list`) is not made valid by the upgrade: those shapes are no longer read (`MILE-85`), so the
+  upgraded config fails to load with that error and `migrate config` leaves the file as it was.
+- **Refused.** A version-1 record type that omits `header_shape` meant `blockquote`, and the default
+  is now `yaml-frontmatter`. The upgrade does not carry that across silently, and it cannot write
+  `blockquote`, which no release reads (`ADR-54`: a break is a break). It refuses, in memory and in
+  `migrate config`, with an error naming each such type (`record_types.<name>`), the removed shape and
+  the repair: rewrite the type's records as YAML frontmatter and declare `header_shape:
+  yaml-frontmatter` (or `none`) on the type. The file is left as it was.
+
+### When a version bump is required
+
+`schema_version` changes only for a break: a removed or renamed key, a changed meaning for an existing
+key, or a default that changes behaviour for an unchanged config. An additive optional key whose
+default preserves behaviour is not a break and needs no bump. A reviewer applies this to a config
+change; a change that is a break and does not bump the version is a defect in the change.
+
+A bump to `N+1` is one change that: raises `CURRENT_SCHEMA_VERSION`; replaces the upgrade step in
+`urzua-core::schema_version` with the one from `N` to `N+1` (the previous step is deleted, not kept);
+adds a row to the table above and to `RELEASES`; enables `config.schema-version-outdated` in the new
+step; and adds a fixture config at each supported version to the acceptance corpora, with a case
+proving each loads to the same effective config.
+
 ## Open questions
 
 - **Can scoped overrides express per-package variation without becoming a second config format?**
   The moment overrides gain their own resolution order, this is per-package configs with extra
   steps.
-- **Does the config need a version field?** It has no consumers yet, so a version costs nothing now
-  and is unaddable later without a migration.
+- **Does the config need a version field?** Answered: it has one, `schema_version`, and a window of
+  versions a release reads (see "Supported schema versions").
 - **Where do back-pointer patterns live** — config, or fixed by the record format (ADR-2)? Making
   them configurable is what lets a corpus keep its existing `Implements:` convention; fixing them is
   what makes cross-repo resolution possible (roadmap Phase 4).
@@ -1154,8 +1388,34 @@ rules:
   `Not started`. A record stating any other value there is not judged and stays unexamined in the
   census. `urzua fix` repairs the cited records only.
 
-The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
-option-on-a-rule-that-does-not-take-it load error.
+`test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
+(below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
+
+### Preferring the lighter mechanism: `embodiment.locator-on-back-pointer-path` (`ADR-78` item 4, `MILE-189`)
+
+An opt-in warning for a `Realized-by` locator on a file the back-pointer scan already reads, where an
+`Implements:` or `Verifies:` comment would say the same thing. It declares its own paths, as
+`embodiment.back-pointer-decision-accepted` does, so it does not depend on the other rule being on.
+
+```yaml
+rules:
+  embodiment.locator-on-back-pointer-path:
+    level: warn
+    back_pointer_paths: ["src", "tests"]
+    test_paths: ["tests"]      # optional, each entry inside a back_pointer_paths entry
+```
+
+- It flags a `code:` locator on a file under `back_pointer_paths` (an `Implements:` comment is code tier
+  anywhere) and a `test:` locator on a file under `test_paths` (a `Verifies:` comment counts only there).
+- It does not flag what a comment cannot say: a `spec:` locator, a `test:` locator outside `test_paths`,
+  a locator with a `#scope`, or a locator with an `@sha256` pin. `Realized-by` is the only option for
+  those, and for any path the comment scan cannot reach, which is why this is a nudge and not an error.
+- It offers no edit action. Removing the locator before the comment exists would delete the evidence
+  and leave `Embodiment` disagreeing with what is computed, and the other half of the repair is a comment in a
+  source file, which no action kind addresses (`ADR-73`: an exemption with a reason, as for
+  `embodiment.back-pointer-*`). The author adds the `Implements:` or `Verifies:` comment first, then
+  removes the locator from `Realized-by`.
+- `back_pointer_paths` is required (a load error without it); `test_paths` is optional.
 
 ### Sticky Embodiment states (`MILE-148`)
 
@@ -1359,4 +1619,11 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
-> | 2026-11-05 | Bumped to `0.73`. Documented the `locator_kinds` and `pinnable` options of `embodiment.locator-exists`: a `Realized-by` locator may name a directory or glob when the repository declares that kind, a directory or glob is legal when it covers a tracked file, its drift uses the newest commit among the files it covers, its pin hashes the sorted (path, file content hash) list, `explain` shows the files, and an undeclared kind is a finding naming the option. Both options default to `[file]`. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
+> | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
+> | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
+> | 2026-11-05 | Bumped to `0.77`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
+> | 2026-11-05 | Bumped to `0.78`. A type's `statuses` declaration gains `progress` (statuses that claim work advanced) and `blocked` (written waiting statuses, opt-in), and a top-level `roadmap.pairs` names the sequencing pairs the derived `blocked` value reads. The opt-in rule `sequence.status-agreement` reports a blocked record that states a `progress` status, and a written blocked status while nothing blocks the record; a progress-status record with an unresolved or unreadable dependency is counted unreadable even when the type writes no blocked status. **Why:** `MILE-144`, decided in `ADR-83` (maintainer decision, 2026-11-05: `Blocked` is derived only, per `RFC-48`). | **substantive** |
+> | 2026-11-05 | Bumped to `0.79`. A top-level `roadmap: {pairs, group_by}` names the `relation_pairs` entries that are dependencies and the header fields `urzua roadmap` groups by, validated at load. **Why:** `MILE-182`, decided in `ADR-82`: one graph over the declared sequencing pairs, with the pairs declared because an `acyclic` containment pair is not a dependency. | **substantive** |
+> | 2026-11-05 | Bumped to `0.80`. Documented the `locator_kinds` and `pinnable` options of `embodiment.locator-exists`: a `Realized-by` locator may name a directory or glob when the repository declares that kind, a directory or glob is legal when it covers a tracked file, its drift uses the newest commit among the files it covers, its pin hashes the sorted (path, file content hash) list, `explain` shows the files, and an undeclared kind is a finding naming the option. Both options default to `[file]`. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration. | **substantive** |

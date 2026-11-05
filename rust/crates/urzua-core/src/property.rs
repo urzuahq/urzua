@@ -209,10 +209,13 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                roadmap: Default::default(),
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
                 locator_resolvers: Default::default(),
+                upgraded_from: None,
+                override_log: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -340,6 +343,9 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            roadmap: Default::default(),
+            upgraded_from: None,
+            override_log: None,
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -362,7 +368,7 @@ mod tests {
                     sections: None,
                     statuses: Some(
                         yaml_serde::from_str(
-                            "{values: [Open, Done], success: [Done], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
+                            "{values: [Open, Done], success: [Done], progress: [Open], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
                         )
                         .unwrap(),
                     ),
@@ -502,6 +508,10 @@ mod tests {
                 ),
             ),
             (
+                "sequence.status-agreement",
+                rules::sequence_status_agreement(&records, &config, &record_index),
+            ),
+            (
                 "embodiment.consistency",
                 rules::embodiment_consistency(
                     &records,
@@ -586,10 +596,13 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                roadmap: Default::default(),
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
                 locator_resolvers: Default::default(),
+                upgraded_from: None,
+                override_log: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

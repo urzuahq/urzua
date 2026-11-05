@@ -4,7 +4,7 @@ description: >-
   checks the checkout has the history drift reads, runs `urzua check` and, on a
   pull request, `urzua check --base`, and reports the findings as inline
   annotations and one summary comment that is updated rather than stacked.
-# Implements: MILE-180, ADR-71
+# A reusable gate for repositories that adopt urzua.
 #
 # Adopting repositories:
 #

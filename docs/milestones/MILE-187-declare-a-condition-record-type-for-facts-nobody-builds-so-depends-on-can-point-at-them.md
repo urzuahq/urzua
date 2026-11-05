@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: RFC-48
 Depends-on: MILE-182
-Blocked-on: MILE-182 (urzua roadmap reads the type)
+Blocked-on: —
 ---
 # 187 — Declare a condition record type for facts nobody builds, so Depends-on can point at them
 
@@ -32,3 +32,4 @@ A `condition` record type, declared entirely in `.urzua/config.yaml`, for a depe
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** Maintainer decision, 2026-11-05: the `condition` record type of `RFC-48` is a Phase 0 milestone, so waits on facts are structured and the computed roadmap sees them. | **substantive** |
+> | 2026-11-05 | `Blocked-on` cleared. **Why:** `MILE-182` is Done, so `urzua roadmap` exists to read the type; the dependency stays declared in `Depends-on`. `Status` unchanged. | **structural** |

@@ -1,0 +1,16 @@
+id: a-declared-pair-no-record-carries-a-value-for-is-reported
+corpus: corpus-l
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-2 — m2\n"
+      records/MILE-3-m3.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-3 — m3\n"
+invocation: [roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/schema, equals: 1}
+  - {at: /roadmap/ready, equals: ["MILE-2", "MILE-3"]}
+  - {at: /roadmap/notes/0/kind, equals: "pair-matches-nothing"}
+  - {at: /roadmap/notes/0/pair, equals: "sequencing"}
+  - {at: /roadmap/records/MILE-2/wave, equals: 0}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

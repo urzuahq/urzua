@@ -223,9 +223,10 @@ The chain above is one path through this repo's own graph, documented here becau
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real: backfills a collision-free stable ID ([ULID](docs/adr/ADR-21-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
 | `migrate schema --report` | Real: previews which records lack a real value for a proposed new required field, before it's ever added to config |
+| `migrate config` | Real: rewrites a config from the previous `schema_version` to the current one, in place, reporting every key it added, changed, dropped, renamed or moved ([ADR-77](docs/adr/ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)) |
 | `doctor` | Real: reports on the tool's own configuration health, not record content |
 | `new <type> [title]` | Real: fills a checked-in template (or synthesizes YAML frontmatter if none exists) with a fresh stable ID, never asking for a number ([ADR-27](docs/adr/ADR-27-urzua-new-fills-the-template-in-not-the-decision.md)) |
-| `audit` | Real: supersession reciprocity and dangling cross-references, read-only ([ADR-30](docs/adr/ADR-30-urzua-audit-reuses-checks-rule-functions.md)) |
+| `audit` | Deprecated alias of `check` over the configured rules, with a deprecation notice; removed in the next release ([ADR-79](docs/adr/ADR-79-audit-folds-into-check-and-the-command-surface-keeps-one-read-only-validator.md)). `check --rules <id>,...` selects declared rules |
 | `migrate schema --assist-waivers`/`--apply`, `export`, `import` | Not implemented yet: exit 2 with "not implemented yet" |
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs/rfc/) / [`docs/adr/`](docs/adr/) for what's designed but not yet built, including the fuller claim-graph model (AND/OR composites, cross-record-shared claims) this release's Embodiment tracking deliberately ships a narrower slice of first.

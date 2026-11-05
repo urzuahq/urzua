@@ -327,6 +327,15 @@ pub enum PopulationUnit {
     File,
     /// One path in the changed set of a `--base` run.
     ChangedPath,
+    /// One entry of a declared header field's list (`MILE-186`, `ADR-75`
+    /// clause 3): an id a record names without citing it as a reference. The
+    /// entry exists because the record declares it, so an uncited or malformed
+    /// one is still counted.
+    FieldEntry,
+    /// The configuration file itself, for a rule that judges how it was read.
+    ConfigFile,
+    /// One entry of a committed log a rule reads (`override.unreviewed`).
+    Entry,
 }
 
 /// What a rule decided about one candidate it was handed.
@@ -602,6 +611,12 @@ pub struct CheckReport {
     /// (`ADR-53`) -- but no reader takes `0` here for a clean corpus.
     pub records_read_by_any_rule: usize,
     pub rules_executed: Vec<RuleExecution>,
+    /// The rule ids `--rules` restricted the run to, in the order given and
+    /// without repeats; `null` on a run that was not restricted (`ADR-79`). A
+    /// rule outside the selection is omitted from `rules_executed`, never
+    /// listed as `not-enabled`, which would say the repository declined a
+    /// policy it declared.
+    pub rules_selected: Option<Vec<String>>,
     pub scope: ScopeInfo,
     pub blocking: bool,
     pub findings: Vec<Finding>,
@@ -687,17 +702,65 @@ impl Report for CheckReport {
 pub struct CouldNotRun {
     pub status: ReportStatus,
     pub error: String,
+    /// Present when the config's `schema_version` is outside the window this
+    /// build reads (`ADR-77`): the same facts `error` states, as data an agent
+    /// can branch on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_version_error: Option<crate::schema_version::SchemaVersionError>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
 
 impl CouldNotRun {
-    pub fn from(error: impl Into<String>) -> Self {
+    pub fn from(error: impl Into<Failure>) -> Self {
+        let Failure {
+            message,
+            schema_version,
+        } = error.into();
         CouldNotRun {
             status: ReportStatus::NotRun,
-            error: error.into(),
+            error: message,
+            schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
         }
+    }
+}
+
+/// Why a command could not run: a message, and the structured form of the
+/// cause when it has one. Every `String` error converts into it, so a command
+/// that only has a sentence is unchanged; the config loader is the one source
+/// of the structured part (`ADR-77`).
+#[derive(Debug, Clone)]
+pub struct Failure {
+    pub message: String,
+    /// Boxed so a `Result<_, Failure>` stays small on the success path.
+    pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Failure {
+            message,
+            schema_version: None,
+        }
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(message: &str) -> Self {
+        Failure::from(message.to_string())
+    }
+}
+
+impl From<Failure> for String {
+    fn from(failure: Failure) -> Self {
+        failure.message
     }
 }
 
@@ -795,6 +858,26 @@ impl Report for GraphReport {
     }
 }
 
+/// `urzua roadmap`'s report (`ADR-82`): the computed order of work, read-only
+/// like `GraphReport`. The roadmap's own notes carry what could not be read;
+/// the exit code is 0 whenever it could be computed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RoadmapReport {
+    pub status: ReportStatus,
+    pub roadmap: crate::rules::Roadmap,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+impl Report for RoadmapReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
 /// One header field of an exported record, in file order. A list entry, not a
 /// map entry: a repeated key is a defect `check` reports, and a map would
 /// hide it.
@@ -864,6 +947,10 @@ pub struct ExportReport {
     pub record_count: usize,
     pub types: Vec<ExportTypeCount>,
     pub records: Vec<ExportedRecord>,
+    /// The computed roadmap (`ADR-82`), present only when `roadmap.pairs` is
+    /// declared: a repository that has not opted in sees no new key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roadmap: Option<crate::rules::Roadmap>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
@@ -1186,6 +1273,7 @@ mod tests {
             files_examined: 1,
             records_read_by_any_rule: 0,
             rules_executed: vec![],
+            rules_selected: None,
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
                 base: None,
@@ -1206,6 +1294,7 @@ mod tests {
             files_examined: 1,
             records_read_by_any_rule: 1,
             rules_executed: vec![],
+            rules_selected: None,
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
                 base: None,

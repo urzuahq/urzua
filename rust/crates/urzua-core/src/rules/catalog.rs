@@ -31,7 +31,9 @@ pub const RULE_RELATION_PAIR_RECIPROCITY: &str = "relation.pair-reciprocity";
 pub const RULE_RELATION_CROSS_TYPE_DISALLOWED: &str = "relation.cross-type-disallowed";
 pub const RULE_SEQUENCE_CYCLE: &str = "sequence.cycle";
 pub const RULE_SEQUENCE_UNRESOLVED_BLOCKER: &str = "sequence.unresolved-blocker";
+pub const RULE_SEQUENCE_STATUS_AGREEMENT: &str = "sequence.status-agreement";
 pub const RULE_RELATION_TARGET_STATUS_UNDECLARED: &str = "relation.target-status-undeclared";
+pub const RULE_CONFIG_SCHEMA_VERSION_OUTDATED: &str = "config.schema-version-outdated";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
@@ -65,3 +67,7 @@ pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
 pub const RULE_WAIVER_MATCHES_NOTHING: &str = "waiver.matches-nothing";
+
+pub const RULE_OVERRIDE_UNREVIEWED: &str = "override.unreviewed";
+pub const RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH: &str =
+    "embodiment.locator-on-back-pointer-path";

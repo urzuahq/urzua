@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails, with a stated reason, when the checkout cannot answer what the gate
 # asks of it. Drift reads git history, and a shallow checkout makes it unable to
-# detect anything while reading as clean (ADR-71, MILE-159), so history depth is
+# detect anything while reading as clean, so history depth is
 # a precondition of the result. With BASE_REF set, also makes sure the base
 # branch is present locally as origin/<BASE_REF>.
 set -euo pipefail

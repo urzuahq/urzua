@@ -1,0 +1,15 @@
+# Schema version 1: the shape `.urzua/config.yaml` had before `rules` existed.
+# There is no `rules` table, every rule ran at the severity it chose, and a type
+# could declare a `header_layout`.
+schema_version: 1
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Date]
+    header_shape: yaml-frontmatter
+    header_layout: one-per-line
+    known_fields: [Status, Date, Derives-from]
+    pointer_fields: [Derives-from]
+    narrative_fields: []
+    spec: SPEC-16
