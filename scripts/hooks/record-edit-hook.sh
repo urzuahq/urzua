@@ -83,7 +83,7 @@ esac
 
 bin="${URZUA_BIN:-}"
 [ -n "$bin" ] || { [ -x "$root/rust/target/release/urzua" ] && bin="$root/rust/target/release/urzua" || bin="$(command -v urzua || true)"; }
-{ [ -n "$bin" ] && [ -x "$bin" ]; } || { cat >/dev/null; unjudged "no urzua binary found; run 'make rust-build' or set URZUA_BIN"; }
+{ [ -n "$bin" ] && [ -x "$bin" ]; } || { cat >/dev/null; unjudged "no urzua binary found; install urzua on PATH or set URZUA_BIN"; }
 
 report="$("$bin" check --stdin-path "$rel" 2>/dev/null)"; code=$?
 echo "$report" | jq -e . >/dev/null 2>&1 || unjudged "urzua exited $code with output that is not JSON"
@@ -100,7 +100,10 @@ fi
 [ "$code" -le 1 ] || unjudged "urzua exited $code with status '$status'"
 
 hist="$(echo "$report" | jq -r '[.notices[]? | select(.subject=="embodiment-drift-git") | .message] | join("; ")')"
-[ -z "$hist" ] || unjudged "git history unreadable: $hist"
+# Missing history costs only the rules that read it (embodiment drift). Every other
+# finding is still judged and still blocks; the message says what was skipped.
+histnote=""
+[ -z "$hist" ] || histnote=$'\nNOT judged here: embodiment drift (the age of the evidence), because git history is unreadable: '"$hist"
 
 # Unwaived findings only: a waived finding is excluded from the blocking exit code.
 live='[.findings[]? | select((.waived // null) == null)]'
@@ -120,7 +123,10 @@ if [ "$block_on" = introduced ] && [ "$errors" != "[]" ] && [ -f "$rel" ]; then
   fi
 fi
 
-describe() { echo "$1" | jq -r '.[] | "  \(.file):\(.line // "-"): [\(.rule)] \(.message)" + (if .suggested_action.kind == "run-command" then " (run: " + (.suggested_action.target.argv | join(" ")) + ")" else "" end)'; }
+# A "run:" hint repairs the record on disk, so it is shown only for a finding the
+# disk already has. A finding this edit introduced is absent from disk, where the
+# command would answer "matched no pending repair": those are listed without it.
+describe() { echo "$1" | jq -r --arg hint "${2:-hint}" '.[] | "  \(.file):\(.line // "-"): [\(.rule)] \(.message)" + (if $hint == "hint" and .suggested_action.kind == "run-command" then " (run: " + (.suggested_action.target.argv | join(" ")) + ")" else "" end)'; }
 # What actually ran, from the report: the rules that judged this record, and the
 # enabled rules a single-record edit cannot judge (they run at commit and in CI).
 ran_summary() {
@@ -133,13 +139,16 @@ ran_summary() {
          else "" end)
       + "."'
 }
-note=""
+note="$histnote"
 [ "$existing" = "[]" ] || note+=$'\nAlready failing on disk before this edit (not blocked):\n'"$(describe "$existing")"
 [ "$others" = "[]" ] || note+=$'\nWarnings (shown, not blocking):\n'"$(describe "$others")"
 
 if [ "$introduced" = "[]" ]; then
   shown="$(jq -cn --argjson a "$existing" --argjson b "$others" '$a + $b')"
   if [ "$shown" = "[]" ]; then
+    if [ -n "$histnote" ]; then
+      emit allow-with-warnings "record-edit-hook: urzua judged $rel with what it can see; no findings. $(ran_summary)$histnote"; exit 0
+    fi
     emit allow "record-edit-hook: urzua judged $rel; no findings. $(ran_summary)"; exit 0
   fi
   emit allow-with-warnings "record-edit-hook: urzua judged $rel; nothing this edit introduced blocks it. $(ran_summary)$note" "$shown"; exit 0
@@ -169,20 +178,20 @@ persist_override() { # log-path name rel findings-json reason
 
 if [ "$override_given" -eq 1 ]; then
   if [ -z "${override//[[:space:]]/}" ]; then
-    emit block "record-edit-hook: blocked. An override needs a name (--override NAME or URZUA_HOOK_OVERRIDE=NAME); an empty one is not accepted."$'\n'"$(describe "$introduced")" "$introduced"; exit 1
+    emit block "record-edit-hook: blocked. An override needs a name (--override NAME or URZUA_HOOK_OVERRIDE=NAME); an empty one is not accepted."$'\n'"$(describe "$introduced" nohint)" "$introduced"; exit 1
   fi
   logpath="$(declared_log)"
   recorded="record-edit-hook: this override is NOT recorded: no override_log is declared in .urzua/config.yaml."
   if [ -n "$logpath" ]; then
     if [ -z "${reason//[[:space:]]/}" ]; then
-      emit block "record-edit-hook: blocked. An override is recorded in $logpath and needs a reason (--reason TEXT or URZUA_HOOK_REASON=TEXT)."$'\n'"$(describe "$introduced")" "$introduced"; exit 1
+      emit block "record-edit-hook: blocked. An override is recorded in $logpath and needs a reason (--reason TEXT or URZUA_HOOK_REASON=TEXT)."$'\n'"$(describe "$introduced" nohint)" "$introduced"; exit 1
     fi
     persist_override "$logpath" "$override" "$rel" "$introduced" "$reason" || {
-      emit block "record-edit-hook: blocked. The override could not be recorded in $logpath, and an override that is not recorded is not allowed."$'\n'"$(describe "$introduced")" "$introduced"; exit 1; }
+      emit block "record-edit-hook: blocked. The override could not be recorded in $logpath, and an override that is not recorded is not allowed."$'\n'"$(describe "$introduced" nohint)" "$introduced"; exit 1; }
     recorded="Recorded in $logpath; a person reviews it by setting Reviewed-by on its row."
   fi
-  emit allow-override "record-edit-hook: OVERRIDE '$override' let this edit to $rel through despite:"$'\n'"$(describe "$introduced")"$'\n'"$recorded$note" "$introduced"; exit 0
+  emit allow-override "record-edit-hook: OVERRIDE '$override' let this edit to $rel through despite:"$'\n'"$(describe "$introduced" nohint)"$'\n'"$recorded$note" "$introduced"; exit 0
 fi
 
-emit block "record-edit-hook: blocked. urzua reports errors this edit introduced:"$'\n'"$(describe "$introduced")"$'\n'"Fix the record as the findings say. The rest of the edit is fine. To proceed anyway, a named override is required: URZUA_HOOK_OVERRIDE=<name>.$note" "$introduced"
+emit block "record-edit-hook: blocked. urzua reports errors this edit introduced:"$'\n'"$(describe "$introduced" nohint)"$'\n'"Fix the record as the findings say. The rest of the edit is fine. To proceed anyway, a named override is required: URZUA_HOOK_OVERRIDE=<name>.$note" "$introduced"
 exit 1

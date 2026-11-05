@@ -127,6 +127,10 @@ fn a_hand_set_embodiment_is_blocked_with_the_computed_value_and_evidence() {
         );
         assert!(why.contains("computed from Realized-by"), "{why}");
         assert!(
+            !why.contains("(run:"),
+            "a repair command cannot apply to an edit that is not on disk: {why}"
+        );
+        assert!(
             why.contains("[embodiment.consistency]"),
             "names the rule: {why}"
         );
@@ -217,12 +221,12 @@ fn when_urzua_cannot_judge_the_edit_proceeds_and_says_so() {
     );
 }
 
-#[test]
-fn an_unreadable_history_is_cannot_judge() {
-    let src = fixture("shallow-src", RECORD);
+/// A depth-1 clone of a fixture whose history has two commits.
+fn shallow_clone(name: &str) -> common::TempDir {
+    let src = fixture(name, RECORD);
     std::fs::write(src.join("src/a.rs"), "fn a() { }\n").unwrap();
     git(&src, &["commit", "-q", "-am", "second"]);
-    let dst = common::TempDir::new("urzua-hook-shallow");
+    let dst = common::TempDir::new(&format!("urzua-hook-{name}-clone"));
     assert!(Command::new("git")
         .args(["clone", "-q", "--depth", "1"])
         .arg(format!("file://{}", src.display()))
@@ -230,13 +234,37 @@ fn an_unreadable_history_is_cannot_judge() {
         .status()
         .unwrap()
         .success());
+    dst
+}
+
+#[test]
+fn a_shallow_clone_still_blocks_what_needs_no_history_and_says_what_it_skipped() {
+    let dst = shallow_clone("shallow-block");
     let wrong = RECORD.replace("Not started", "Verified");
     let (code, v) = core(&dst, &["docs/adr/ADR-1-a.md"], &[], &wrong);
-    assert_eq!(code, 0, "{v}");
-    assert_eq!(v["verdict"], "allow-unjudged", "{v}");
+    assert_eq!(code, 1, "{v}");
+    assert_eq!(v["verdict"], "block", "{v}");
+    let msg = v["message"].as_str().unwrap();
+    assert!(msg.contains("[embodiment.consistency]"), "{msg}");
     assert!(
-        v["message"].as_str().unwrap().contains("shallow clone"),
-        "{v}"
+        msg.contains("embodiment drift") && msg.contains("shallow clone"),
+        "the skipped rule is disclosed: {msg}"
+    );
+}
+
+#[test]
+fn a_shallow_clone_with_nothing_wrong_allows_with_the_skipped_rule_disclosed() {
+    let dst = shallow_clone("shallow-clean");
+    let ok = RECORD.replace("Not started", "Implemented");
+    let (code, v) = core(&dst, &["docs/adr/ADR-1-a.md"], &[], &ok);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let msg = v["message"].as_str().unwrap();
+    assert!(
+        msg.contains("NOT judged")
+            && msg.contains("embodiment drift")
+            && msg.contains("shallow clone"),
+        "{msg}"
     );
 }
 

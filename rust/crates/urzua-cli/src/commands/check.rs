@@ -603,17 +603,32 @@ fn claim_path_notices(repo_root: &Path, opts: &rules::ClaimOpts) -> Result<Vec<N
 /// is computed, from its proposed content (`MILE-191`, as `fix --stdin-path`).
 fn load_drift(
     session: &Session,
-    prospective: Option<&Prospective>,
+    scope: &ReportScope,
 ) -> (crate::discovery::DriftedRecords, HashMap<PathBuf, u64>) {
     let (repo_root, config) = (&session.repo_root, &session.config);
     if enabled_setting(config, rules::RULE_EMBODIMENT_CONSISTENCY).is_none() {
         return (Default::default(), HashMap::new());
     }
-    let only: Vec<urzua_core::record::Record> = prospective
-        .into_iter()
-        .flat_map(|p| session.records.iter().find(|r| r.path == p.path).cloned())
-        .collect();
-    let records = if prospective.is_some() {
+    let prospective = scope.prospective.as_ref();
+    // Under a path or diff scope only the records in scope are reported on, and
+    // a record's drift reaches no other record's finding, so the others are not
+    // blamed: that history is most of a run's cost.
+    let only: Vec<urzua_core::record::Record> = match prospective {
+        Some(p) => session
+            .records
+            .iter()
+            .filter(|r| r.path == p.path)
+            .cloned()
+            .collect(),
+        None if !scope.whole_corpus() => session
+            .records
+            .iter()
+            .filter(|r| scope.in_scope.contains(&r.path))
+            .cloned()
+            .collect(),
+        None => Vec::new(),
+    };
+    let records = if prospective.is_some() || !scope.whole_corpus() {
         only.as_slice()
     } else {
         session.records.as_slice()
@@ -689,7 +704,7 @@ fn load_context<'a>(
     let drift_wanted =
         selection.is_none_or(|s| s.iter().any(|r| r == rules::RULE_EMBODIMENT_CONSISTENCY));
     let (drift, claim_ages) = if drift_wanted {
-        load_drift(session, scope.prospective.as_ref())
+        load_drift(session, scope)
     } else {
         (Default::default(), HashMap::new())
     };

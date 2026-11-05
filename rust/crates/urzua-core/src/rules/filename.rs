@@ -344,10 +344,17 @@ pub fn filename_identity_pattern(
                     "none of record type '{type_name}''s {} file(s) matches {convention}, so \
                      no identity-reading rule can examine any of them; rename each: {}",
                     off.len(),
-                    off.iter()
-                        .map(|r| guidance(r))
-                        .collect::<Vec<_>>()
-                        .join("; ")
+                    {
+                        // A corpus can hold hundreds of such files; naming every
+                        // rename in one string made the finding unreadable.
+                        const SHOWN: usize = 5;
+                        let mut names: Vec<String> =
+                            off.iter().take(SHOWN).map(|r| guidance(r)).collect();
+                        if off.len() > SHOWN {
+                            names.push(format!("and {} more", off.len() - SHOWN));
+                        }
+                        names.join("; ")
+                    }
                 ),
             });
         } else {

@@ -1,5 +1,5 @@
 ---
-Version: '0.14'
+Version: '0.15'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -63,6 +63,8 @@ without an edit:
   inconsistency and the fix (add `Stable-Id` to the type's `known_fields`).
 
 ## Display-number assignment
+
+A type whose directory does not exist yet is numbered from 1 and the directory is created when the record is written; `new` says so on stderr.
 
 Scans the type's directory for the highest existing numeric prefix and takes the next integer —
 **never reused**, even if a number was deleted, since a cross-reference elsewhere may still assume
@@ -139,3 +141,4 @@ take content and parameters, returning a string.
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.13`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.14`. `urzua new` reports a could-not-run when the highest existing number is the largest a `u32` holds, instead of overflowing and reissuing a number. **Why:** Phase 0 hardening of the core model. | **substantive** |
+> | 2026-11-05 | Bumped to `0.15`. `new` creates the type's directory for its first record instead of failing with `could not read`. **Why:** Phase 0 hardening from an adopter switchover -- the first `urzua new waiver` failed. | **substantive** |

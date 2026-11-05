@@ -59,6 +59,11 @@ pub fn run(
             Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
                 "urzua: extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
             ),
+            // The first record of a type: its directory does not exist yet and
+            // is created when the record is written.
+            Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
+                "urzua: {declared_dir} does not exist yet; creating it for the first {record_type} record"
+            ),
             Err(e) => {
                 return emit(&CouldNotRun::from(format!(
                     "could not read {}: {e}",
@@ -231,6 +236,12 @@ pub fn run(
         out
     };
 
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return emit(&CouldNotRun::from(format!(
+            "could not create {}: {e}",
+            dir.display()
+        )));
+    }
     let file_path = dir.join(&filename);
     // `create_new` is atomic (matching `FixLock`'s own pattern) -- a
     // separate `exists()` check followed by `write` would leave a race

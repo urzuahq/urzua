@@ -1,5 +1,5 @@
 ---
-Version: '0.103'
+Version: '0.104'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -62,7 +62,7 @@ corpora can be published at all, and the fastest deliverable must not sit behind
 ### Phase A — the loop closes
 
 **Done when `urzua check` runs in this repository's CI and fails on a deliberately broken record.**
-Nothing more. Unscoped: a path argument narrows which findings are reported (`BUG-67`), and this
+Nothing more. Unscoped: a path argument narrows which findings are reported (`BUG-67`) and which records' git history `embodiment.consistency` reads, so a one-record check does not pay for the whole corpus's blame; and this
 repository's corpus is no longer confined to `docs/` -- the claim files a rule reads live beside it.
 
 Scope:
@@ -913,3 +913,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.101`. A YAML frontmatter header keeps each number and boolean as written (`Version: 1.10` reads `1.10`, not `1.1`), skips a leading byte-order mark instead of reading the header as absent, and keeps a non-string key (`1: x`) under its text rather than dropping it; `citation.issue-exists` refuses a refs snapshot whose `issues` or `pulls` are not strictly ascending. **Why:** Phase 0 hardening of the core model: each one made a rule judge a value or file other than the one on disk. | **substantive** |
 > | 2026-11-05 | Bumped to `0.102`. `check --base` pulls in an unchanged record whose `Realized-by` glob locator covers a changed file (it had compared the glob as a path prefix and missed it); a missing merge base in a shallow clone says so and how to fix it instead of "the histories are unrelated"; `status.transition-allowed` counts a base copy it cannot read as unreadable, with a notice, instead of as a new record (rule-table row regenerated). The `back-pointer-uncovered-path`, `back-pointer-uncovered-test-path` and `decision-uncovered-path` edit-config actions now target the configuration file instead of the declared source path. **Why:** review of the CLI and the core rules found each: `check --base` exited 0 where a full check exits 1, a read error skipped a transition check, and an agent applying the action edited a source path. | **substantive** |
 > | 2026-11-05 | Bumped to `0.103`. The generated description of `embodiment.locator-on-back-pointer-path` states that a record of a type declaring `statuses.delivery.back_pointer_evidence: false` is not flagged and that a locator whose file already carries the comment is told to drop the locator. **Why:** hardening review: the nudge told a `Fixed` bug to drop its only counted evidence, and told a locator to add a comment that was already there. | **substantive** |
+> | 2026-11-05 | Bumped to `0.104`. A path or diff scope computes embodiment drift and claim ages for the records in scope only, since a record's drift reaches no other record's finding; `filename.identity-pattern`'s all-files-mismatch finding names the first five renames and counts the rest. **Why:** Phase 0 hardening from an adopter switchover -- `check <one path>` took as long as the whole corpus, and the finding named 466 renames in one string. | **substantive** |
