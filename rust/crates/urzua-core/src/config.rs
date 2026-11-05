@@ -229,6 +229,12 @@ pub struct RuleSetting {
     /// record prefix. Only meaningful to `citation.resolution`; optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_ids: Option<Vec<String>>,
+    /// The header field in which a record lists, as comma-separated exact ids,
+    /// the ids it names without citing as a reference (`BUG-190`, `ADR-75`).
+    /// Must be a known field that is not a pointer, narrative or relation-role
+    /// field. Only meaningful to `citation.resolution`; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_reference_field: Option<String>,
     /// The `##` headings whose backtick-quoted paths `citation.path-exists`
     /// reads (`MILE-143`), matched exactly after trimming. Only meaningful to
     /// that rule.
@@ -944,6 +950,8 @@ pub enum ConfigError {
         entry: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'non_reference_field' {reason}")]
+    InvalidNonReferenceField { rule: String, reason: String },
     #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
     InvalidExternalId {
         rule: String,
@@ -1486,6 +1494,14 @@ pub fn parse_with_document_models(
                 });
             }
         }
+        if setting.non_reference_field.is_some()
+            && !crate::rules::rule_accepts_option(name, "non_reference_field")
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "non_reference_field".to_string(),
+            });
+        }
         if setting.skip_revision_log.is_some()
             && !crate::rules::rule_accepts_option(name, "skip_revision_log")
         {
@@ -1745,6 +1761,53 @@ pub fn parse_with_document_models(
                         reason,
                     });
                 }
+            }
+        }
+    }
+    // `non_reference_field` must name a field some type declares (the header is
+    // a closed structure) that no rule resolves or stale-checks: a pointer,
+    // narrative or relation-role field would read the ids as references, the
+    // opposite of the declaration (`ADR-75`).
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let Some(field) = setting.non_reference_field.as_deref() else {
+            continue;
+        };
+        let bad = |reason: String| ConfigError::InvalidNonReferenceField {
+            rule: name.clone(),
+            reason,
+        };
+        if field.trim().is_empty() || field.trim() != field {
+            return Err(bad("is empty or has surrounding whitespace".to_string()));
+        }
+        let known = config.record_types.values().any(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::from(field))
+        });
+        if !known {
+            return Err(bad(format!(
+                "names '{field}', which no record type lists in `known_fields` (or `required_fields`)"
+            )));
+        }
+        for (type_name, t) in &config.record_types {
+            let role = if t.pointer_fields.iter().flatten().any(|f| f == field) {
+                Some("pointer_fields")
+            } else if t.narrative_fields.iter().flatten().any(|f| f == field) {
+                Some("narrative_fields")
+            } else if RelationRole::ALL
+                .into_iter()
+                .any(|r| t.relation_field(r) == field)
+            {
+                Some("a relation-role field")
+            } else {
+                None
+            };
+            if let Some(role) = role {
+                return Err(bad(format!(
+                    "names '{field}', which record type '{type_name}' declares in {role}; those rules would resolve the ids as references"
+                )));
             }
         }
     }
@@ -2606,6 +2669,71 @@ rules:
     }
 
     #[test]
+    fn non_reference_field_must_be_a_known_plain_field_of_citation_resolution() {
+        let base = |extra: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [\"Status\", \"Non-reference-ids\", \"Derives-from\", \"Note\"]\n{extra}rules:\n"
+            )
+        };
+        let rule = |field: &str| {
+            format!("  citation.resolution:\n    level: error\n    non_reference_field: {field}\n")
+        };
+        let ok = parse(&format!("{}{}", base(""), rule("Non-reference-ids"))).unwrap();
+        assert_eq!(
+            ok.rules["citation.resolution"]
+                .non_reference_field
+                .as_deref(),
+            Some("Non-reference-ids")
+        );
+        // Still optional.
+        assert!(parse(&format!("{}  citation.resolution: error\n", base(""))).is_ok());
+        // Unknown to every type: the header is a closed structure.
+        let err = parse(&format!("{}{}", base(""), rule("Nope")))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("non_reference_field") && err.contains("Nope"),
+            "{err}"
+        );
+        // A pointer, a narrative or a relation-role field would resolve or
+        // stale-check the ids, the opposite of the intent.
+        for (extra, field) in [
+            (
+                "    pointer_fields: [\"Derives-from\"]\n    narrative_fields: []\n",
+                "Derives-from",
+            ),
+            (
+                "    pointer_fields: []\n    narrative_fields: [\"Note\"]\n",
+                "Note",
+            ),
+            ("    relation_fields: {supersession: \"Note\"}\n", "Note"),
+            (
+                "    relation_fields: {status: \"Non-reference-ids\"}\n",
+                "Non-reference-ids",
+            ),
+        ] {
+            let err = parse(&format!("{}{}", base(extra), rule(field)))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("non_reference_field"), "{field}: {err}");
+        }
+        // The default relation roles count too.
+        let err = parse(&format!("{}{}", base(""), rule("Status")))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("non_reference_field"), "{err}");
+        // Another rule does not take it.
+        let elsewhere = format!(
+            "{}  field.quality:\n    level: error\n    non_reference_field: Note\n",
+            base("")
+        );
+        assert!(parse(&elsewhere)
+            .unwrap_err()
+            .to_string()
+            .contains("does not take the option 'non_reference_field'"));
+    }
+
+    #[test]
     fn an_unknown_rule_name_is_rejected_and_names_the_valid_set() {
         let yaml = r#"
 schema_version: 2
@@ -3430,6 +3558,7 @@ mod option_table_tests {
         "allow_extension_prefix",
         "pending_until_required",
         "skip_revision_log",
+        "non_reference_field",
         "field_levels",
         "drift_grace_days",
         "drift_audit_field",

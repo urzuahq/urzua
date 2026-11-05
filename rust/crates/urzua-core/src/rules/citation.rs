@@ -15,7 +15,14 @@ use super::*;
 /// share a record prefix but are not records (a public standard number such as
 /// `RFC-4122` under an `RFC` prefix): a matching citation is counted out of
 /// scope rather than resolved, so it is visible in the population as eligible
-/// and unexamined and never reported as dangling or as a misconfiguration. The header region is not read (the pointer and
+/// and unexamined and never reported as dangling or as a misconfiguration.
+/// The optional `non_reference_field` option (`BUG-190`, `ADR-75`) names a
+/// header field in which one record lists, as comma-separated exact ids, the
+/// ids it names without citing as a reference: a citation of such an id in
+/// that record only is set aside the same way (`external_ids` first), a
+/// declared id the record never cites and a malformed entry are findings, and
+/// [`non_reference_notices`] tells which declared ids now match a real record.
+/// The header region is not read (the pointer and
 /// narrative rules own it) and fenced code blocks are skipped; an inline code
 /// span is read, since nothing declares otherwise. The population's unit is the
 /// citation, so a run over a corpus that cites nothing reports `0` examined,
@@ -46,6 +53,10 @@ pub fn citation_resolution(
         .and_then(|s| s.skip_revision_log)
         .unwrap_or(false);
 
+    let declarations = read_declarations(records, config, &prefixes);
+    // Declared entries (by record path and position) some citation matched.
+    let mut cited_entries: HashSet<(PathBuf, usize)> = HashSet::new();
+
     struct Citation<'a> {
         record: &'a Record,
         line: usize,
@@ -66,6 +77,13 @@ pub fn citation_resolution(
         for (line, token) in cited_prose_identifiers(text, record.header.region, &prefixes) {
             if skipped.contains(&line) {
                 continue;
+            }
+            if let Some(d) = declarations.get(&record.path) {
+                for (i, (_, id)) in d.ids.iter().enumerate() {
+                    if id.matches(&token) {
+                        cited_entries.insert((record.path.clone(), i));
+                    }
+                }
             }
             candidates.push(Citation {
                 record,
@@ -88,6 +106,13 @@ pub fn citation_resolution(
                 // id is the declaration working.
                 return Outcome::Absent;
             }
+            // Named, not cited (`ADR-75`): in the declaring record only.
+            if declarations
+                .get(&c.record.path)
+                .is_some_and(|d| d.ids.iter().any(|(_, id)| id.matches(&c.token)))
+            {
+                return Outcome::Absent;
+            }
             if !index.contains_key(&crate::values::RecordId::new(&c.token)) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -105,6 +130,46 @@ pub fn citation_resolution(
         },
     );
 
+    let field = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.non_reference_field.as_deref())
+        .unwrap_or_default();
+    let mut paths: Vec<&PathBuf> = declarations.keys().collect();
+    paths.sort();
+    for path in paths {
+        let d = &declarations[path];
+        let mut report = |message: String, source: ActionSource| {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Error,
+                file: path.clone(),
+                line: Some(d.line),
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: source,
+                message,
+            });
+        };
+        for (entry, reason) in &d.malformed {
+            report(
+                format!("{field} entry '{entry}' {reason}"),
+                ActionSource::new("non-reference-malformed").field(field),
+            );
+        }
+        for (i, (entry, _)) in d.ids.iter().enumerate() {
+            if !cited_entries.contains(&(path.clone(), i)) {
+                report(
+                    format!("{field} declares {entry}, which this record never cites in prose"),
+                    ActionSource::new("non-reference-uncited")
+                        .field(field)
+                        .text(entry.as_str()),
+                );
+            }
+        }
+    }
+
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
@@ -114,6 +179,108 @@ pub fn citation_resolution(
         },
         findings,
     )
+}
+
+/// One record's `non_reference_field` declaration (`ADR-75`).
+struct NonReferenceDeclaration {
+    /// The line of the field in the file.
+    line: usize,
+    /// Valid entries: the text as written and the parsed id.
+    ids: Vec<(String, ExternalId)>,
+    /// Entries that are not an exact id of a declared prefix, with the reason.
+    malformed: Vec<(String, String)>,
+}
+
+/// Every record's declaration, by path; empty when the option is unset.
+/// A record with no header, or without the field, declares nothing.
+fn read_declarations(
+    records: &[Record],
+    config: &Config,
+    prefixes: &[String],
+) -> HashMap<PathBuf, NonReferenceDeclaration> {
+    let mut out = HashMap::new();
+    let Some(field) = config
+        .rules
+        .get(RULE_CITATION_RESOLUTION)
+        .and_then(|s| s.non_reference_field.as_deref())
+    else {
+        return out;
+    };
+    for record in records {
+        let Some(f) = record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.as_str() == field)
+        else {
+            continue;
+        };
+        let mut d = NonReferenceDeclaration {
+            line: f.line,
+            ids: Vec::new(),
+            malformed: Vec::new(),
+        };
+        for entry in f.value.split(',') {
+            let entry = entry.trim();
+            match parse_exact_id(entry, prefixes) {
+                Ok(id) => d.ids.push((entry.to_string(), id)),
+                Err(reason) => d.malformed.push((entry.to_string(), reason)),
+            }
+        }
+        out.insert(record.path.clone(), d);
+    }
+    out
+}
+
+/// One aggregated `Info` notice naming the declared non-reference ids that now
+/// match a real record (`ADR-75`): the declaration still applies, the author
+/// is told the id is no longer unclaimed. Never a finding, so never an exit
+/// code. An id `external_ids` already sets aside is not listed. Empty when the
+/// option is unset or nothing matches.
+pub fn non_reference_notices(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> Vec<Notice> {
+    let prefixes = declared_prefixes(config);
+    let external: Vec<ExternalId> = config
+        .rules
+        .get(RULE_CITATION_RESOLUTION)
+        .and_then(|s| s.external_ids.as_ref())
+        .into_iter()
+        .flatten()
+        .filter_map(|e| parse_external_id(e, &prefixes).ok())
+        .collect();
+    let declarations = read_declarations(records, config, &prefixes);
+    let mut paths: Vec<&PathBuf> = declarations.keys().collect();
+    paths.sort();
+    let mut parts = Vec::new();
+    for path in paths {
+        let ids: Vec<&str> = declarations[path]
+            .ids
+            .iter()
+            .filter(|(entry, _)| {
+                !external.iter().any(|e| e.matches(entry))
+                    && index.contains_key(&crate::values::RecordId::new(entry))
+            })
+            .map(|(entry, _)| entry.as_str())
+            .collect();
+        if !ids.is_empty() {
+            parts.push(format!("{} declares {}", path.display(), ids.join(", ")));
+        }
+    }
+    if parts.is_empty() {
+        return Vec::new();
+    }
+    vec![Notice {
+        severity: NoticeSeverity::Info,
+        subject: RULE_CITATION_RESOLUTION.to_string(),
+        message: format!(
+            "{} record(s) declare non-reference ids that now match a real record; the declaration still applies: {}",
+            parts.len(),
+            parts.join("; ")
+        ),
+    }]
 }
 
 /// `citation.path-exists` (`MILE-143`): a repository path cited in backticks
@@ -644,6 +811,16 @@ pub fn parse_external_id(entry: &str, prefixes: &[String]) -> Result<ExternalId,
     })
 }
 
+/// Parse one exact id (`PREFIX-N`, no range) under a declared prefix. The one
+/// id grammar of `external_ids`' exact path and `non_reference_field`
+/// (`ADR-75`), so the two cannot disagree on what an id is.
+pub fn parse_exact_id(entry: &str, prefixes: &[String]) -> Result<ExternalId, String> {
+    if entry.contains("..") {
+        return Err("is a range; give one exact id".to_string());
+    }
+    parse_external_id(entry, prefixes)
+}
+
 /// Every `(line, identifier)` in `text` outside the header region and outside
 /// fenced code blocks. Lines are 1-indexed, matching `Header::region`.
 fn cited_prose_identifiers(
@@ -972,6 +1149,188 @@ mod tests {
             " RFC-1",
         ] {
             assert!(parse_external_id(bad, &prefixes).is_err(), "{bad:?}");
+        }
+    }
+
+    const NON_REF: &str = "Non-reference-ids";
+
+    fn nonref_config(extra: &str) -> Config {
+        let mut config = config_with_types(vec![("adr", type_config(None))]);
+        let setting: crate::config::RuleSetting = yaml_serde::from_str(&format!(
+            "level: error\nnon_reference_field: {NON_REF}\n{extra}"
+        ))
+        .unwrap();
+        config
+            .rules
+            .insert(RULE_CITATION_RESOLUTION.to_string(), setting);
+        config
+    }
+
+    fn run_nonref(
+        docs: &[(&str, &str)],
+        extra: &str,
+    ) -> (RuleExecution, Vec<Finding>, Vec<Notice>) {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        let config = nonref_config(extra);
+        let (index, _) = build_index_reporting_collisions(&records);
+        let (exec, findings) = citation_resolution(&records, &config, &full_text, &index);
+        let notices = non_reference_notices(&records, &config, &index);
+        (exec, findings, notices)
+    }
+
+    fn declaring(ids: &str, body: &str) -> String {
+        format!("---\nStatus: Accepted\n{NON_REF}: {ids}\n---\n# 1 — X\n\n{body}\n")
+    }
+
+    const DECLARER: &str = "docs/adr/ADR-1-x.md";
+    const OTHER: &str = "docs/adr/ADR-2-y.md";
+
+    #[test]
+    fn a_declared_non_reference_id_is_neither_resolved_nor_reported_observed_failing() {
+        let doc = declaring("ADR-72", "As in ADR-72/73/74.");
+        let (exec, findings, _) = run_nonref(&[(DECLARER, &doc)], "");
+        assert!(findings.is_empty(), "{findings:?}");
+        let p = exec.population.unwrap();
+        // Eligible and unexamined, as an external id is; never out of scope.
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (1, 0, 0));
+    }
+
+    #[test]
+    fn the_declaration_is_scoped_to_its_own_record_observed_failing() {
+        let doc = declaring("ADR-72", "As in ADR-72.");
+        let other = "---\nStatus: Accepted\n---\n# 2 — Y\n\nSee ADR-72.\n";
+        let (_, findings, _) = run_nonref(&[(DECLARER, &doc), (OTHER, other)], "");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].file.ends_with("ADR-2-y.md"));
+        assert!(findings[0].message.contains("ADR-72"));
+    }
+
+    #[test]
+    fn a_declaration_hides_only_the_ids_it_names_observed_failing() {
+        let doc = declaring("ADR-72", "ADR-72 and ADR-99.");
+        let (_, findings, _) = run_nonref(&[(DECLARER, &doc)], "");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-99"));
+    }
+
+    #[test]
+    fn ids_compare_by_value_and_a_list_is_comma_separated_observed_failing() {
+        let doc = declaring("ADR-072, ADR-5", "ADR-72 and ADR-0005 and ADR-6.");
+        let (_, findings, _) = run_nonref(&[(DECLARER, &doc)], "");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("ADR-6"));
+    }
+
+    #[test]
+    fn a_declared_id_the_record_never_cites_is_a_finding_naming_field_id_and_line_observed_failing()
+    {
+        let doc = declaring("ADR-72, ADR-73", "Only ADR-72 is written here.");
+        let (_, findings, _) = run_nonref(&[(DECLARER, &doc)], "");
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let f = &findings[0];
+        assert_eq!(f.line, Some(3));
+        assert!(f.message.contains(NON_REF) && f.message.contains("ADR-73"));
+        assert!(!f.message.contains("ADR-72"), "{}", f.message);
+    }
+
+    #[test]
+    fn an_id_cited_only_in_the_header_a_fence_or_a_skipped_log_is_uncited_observed_failing() {
+        let body = "```\nADR-72\n```\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Cited ADR-72. | **substantive** |\n";
+        let doc = declaring("ADR-72", body);
+        let records = vec![record(DECLARER, "adr", &doc)];
+        let full_text: HashMap<PathBuf, String> = [(PathBuf::from(DECLARER), doc.clone())]
+            .into_iter()
+            .collect();
+        let config = nonref_config("skip_revision_log: true\n");
+        let (index, _) = build_index_reporting_collisions(&records);
+        let (_, findings) = citation_resolution(&records, &config, &full_text, &index);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("never cites"));
+    }
+
+    #[test]
+    fn a_malformed_entry_is_a_finding_and_never_dropped_observed_failing() {
+        for bad in ["ADR-72,", "adr-72", "FOO-72", "ADR-7..9", "ADR-x", ""] {
+            let doc = declaring(bad, "ADR-72 is written here.");
+            let (_, findings, _) = run_nonref(&[(DECLARER, &doc)], "");
+            assert!(
+                findings
+                    .iter()
+                    .any(|f| f.line == Some(3) && f.message.contains(NON_REF)),
+                "{bad:?}: {findings:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn external_ids_take_precedence_over_the_declaration_observed_failing() {
+        let doc = declaring("ADR-72", "See ADR-72.");
+        let (exec, findings, _) = run_nonref(&[(DECLARER, &doc)], "external_ids: [\"ADR-72\"]\n");
+        // Precedence (ADR-75): external_ids takes the citation first. It still
+        // counts as cited for the declaration, so the redundant declaration is
+        // not reported as uncited.
+        assert!(findings.is_empty(), "{findings:?}");
+        assert_eq!(exec.population.unwrap().eligible(), 1);
+    }
+
+    #[test]
+    fn the_incident_an_id_later_created_as_a_real_record_changes_nothing_observed_failing() {
+        let doc = declaring("ADR-72", "A worked example: ADR-72/73/74.");
+        let real = "---\nStatus: Accepted\n---\n# 72 — Real\n";
+        let before = run_nonref(&[(DECLARER, &doc)], "");
+        let after = run_nonref(&[(DECLARER, &doc), ("docs/adr/ADR-72-real.md", real)], "");
+        assert!(before.1.is_empty() && after.1.is_empty(), "{:?}", after.1);
+        assert!(before.2.is_empty());
+        assert_eq!(after.2.len(), 1, "{:?}", after.2);
+        let n = &after.2[0];
+        assert_eq!(n.severity, NoticeSeverity::Info);
+        assert!(n.message.contains("ADR-72") && n.message.contains("ADR-1-x.md"));
+    }
+
+    #[test]
+    fn the_notice_is_one_aggregate_and_skips_external_ids() {
+        let a = declaring("ADR-72, ADR-73", "ADR-72 ADR-73");
+        let b = "---\nStatus: Accepted\nNon-reference-ids: ADR-72\n---\n# 2 — Y\n\nADR-72\n";
+        let docs = [
+            (DECLARER, a.as_str()),
+            (OTHER, b),
+            ("docs/adr/ADR-72-r.md", "---\nStatus: Accepted\n---\n# 72\n"),
+            ("docs/adr/ADR-73-r.md", "---\nStatus: Accepted\n---\n# 73\n"),
+        ];
+        let (_, _, notices) = run_nonref(&docs, "external_ids: [\"ADR-73\"]\n");
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        let m = &notices[0].message;
+        assert!(m.contains("ADR-1-x.md") && m.contains("ADR-2-y.md"), "{m}");
+        assert!(m.contains("ADR-72") && !m.contains("ADR-73"), "{m}");
+    }
+
+    #[test]
+    fn without_the_option_nothing_changes() {
+        let doc = declaring("ADR-72", "See ADR-72.");
+        let r = record(DECLARER, "adr", &doc);
+        let full_text: HashMap<PathBuf, String> = [(PathBuf::from(DECLARER), doc.clone())]
+            .into_iter()
+            .collect();
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        let records = vec![r];
+        let (index, _) = build_index_reporting_collisions(&records);
+        let (_, findings) = citation_resolution(&records, &config, &full_text, &index);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(non_reference_notices(&records, &config, &index).is_empty());
+    }
+
+    #[test]
+    fn parse_exact_id_accepts_one_id_and_refuses_ranges() {
+        let prefixes = vec!["ADR".to_string()];
+        assert!(parse_exact_id("ADR-072", &prefixes)
+            .unwrap()
+            .matches("ADR-72"));
+        for bad in ["ADR-1..3", "adr-1", "ADR-", "ADR-1,", " ADR-1", "FOO-1"] {
+            assert!(parse_exact_id(bad, &prefixes).is_err(), "{bad:?}");
         }
     }
 

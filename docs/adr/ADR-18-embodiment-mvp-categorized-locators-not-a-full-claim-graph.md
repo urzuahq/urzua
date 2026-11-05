@@ -8,6 +8,7 @@ Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-5
+Non-reference-ids: ADR-72
 ---
 # 18 — Embodiment MVP: categorized locator lists, not a full claim graph
 
@@ -81,3 +82,4 @@ growing into composites later is additive to the schema, not a breaking change t
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 809e4004d. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/embodiment.rs` a49eedaabcd0 -> 6b61cdfe6465. Reason: Re-verified: compute_embodiment still takes the highest non-empty tier over the same five states; the changes since the pin (per-field severity, grace window, sticky states, test back-pointers as a test tier) are additive. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Added the `Non-reference-ids` header field declaring `ADR-72`. **Why:** the text writes "ADR-72/73/74" as a worked example from another corpus, and a real `ADR-72` here would otherwise capture that citation (`BUG-190`, `ADR-75`). The field carries no decision; the Decision is unchanged. | **structural** |
