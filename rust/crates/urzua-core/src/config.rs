@@ -62,7 +62,16 @@ pub struct Config {
     /// `override.unreviewed` reads it. Absent means no log is declared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub override_log: Option<String>,
+    /// Which errors the editor hook blocks on (`ADR-78` amendment, `MILE-195`,
+    /// `SPEC-3`): `introduced` (the default, and what an absent key means) or
+    /// `all`. The engine does not read it; the hook does, from the
+    /// committed file, and any other value is a load error here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block_on: Option<String>,
 }
+
+/// The values `block_on` accepts (`SPEC-3`).
+pub const BLOCK_ON_VALUES: [&str; 2] = ["introduced", "all"];
 
 /// `roadmap` (`SPEC-3`, `ADR-82`): which `relation_pairs` are dependencies, and
 /// how `urzua roadmap` groups its records. A pair can be `acyclic` without
@@ -2859,6 +2868,16 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
         if dir_names_nothing(path) || dir_escapes_repo(path) || path.trim().ends_with('/') {
             return bad(format!(
                 "override_log '{path}' is not a repository-relative file path"
+            ));
+        }
+    }
+    // The hook reads `block_on` from the file; a value it would not recognise
+    // is refused here too, never defaulted (`MILE-195`).
+    if let Some(value) = &config.block_on {
+        if !BLOCK_ON_VALUES.contains(&value.as_str()) {
+            return bad(format!(
+                "block_on '{value}' is not one of {}",
+                BLOCK_ON_VALUES.join(", ")
             ));
         }
     }
