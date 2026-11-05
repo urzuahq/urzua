@@ -120,7 +120,7 @@ much as to a change's own author. The loop:
 5. **Ship each round as one PR**: fresh branch off `origin/main`, a changeset (`.changeset/*.md`)
    per PR describing what an adopter would care about — skip it for the same cases "Before calling
    anything done" already exempts (CI config, internal refactors, docs-only changes) — then `gh pr
-   comment <n> --body "@coderabbitai review"` after pushing, `gh pr checks <n>` polled until
+   comment <n> --body "@coderabbitai review"` after pushing, `gh api repos/{owner}/{repo}/commits/<sha>/check-runs` (REST; `gh pr checks` uses GraphQL, which can be blocked) polled until
    resolved. **Never force-push.** Merging
    belongs to the human running the session, with one exception: when the maintainer has authorized
    merging for the session, an agent may squash-merge (or enable squash auto-merge on) a PR once CI

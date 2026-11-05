@@ -85,6 +85,23 @@ jobs:
         run: .github/scripts/knope-closes-compat.test.sh
       - name: cargo build --release
         run: cargo build --workspace --release --locked
+      # Guards that previously ran only under `make ci`, so a stale rule table or
+      # a broken release guard passed CI, and publish-release's pre-tag gate
+      # skipped the release invariants.
+      - name: release guard planted-violation cases
+        working-directory: .
+        run: .github/scripts/release-guard.test.sh
+      - name: release invariants planted-violation cases
+        working-directory: .
+        run: .github/scripts/release-invariants.test.sh
+      - name: release invariants on this ref
+        working-directory: .
+        run: |
+          .github/scripts/release-invariants.sh \
+            .changeset rust/Cargo.toml "$(git tag --sort=-v:refname | head -1)"
+      - name: SPEC-2 rule table is current
+        working-directory: .
+        run: make rule-table-check
       # The tests run under a fresh TMPDIR, and the run fails when any urzua-*
       # fixture directory is left in it (BUG-193). The guard's own
       # planted-violation cases run first.

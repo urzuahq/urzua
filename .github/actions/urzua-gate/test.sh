@@ -126,6 +126,9 @@ inst SHA256=deadbeef >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'checksum mismatch' "$tmp/err.txt"; }
 expect "install: a checksum mismatch fails" $?
 
+grep -q -- "--signer-workflow o/r/.github/workflows/publish-release.yml" "$tmp/gh.log"
+expect "install: the attestation is pinned to the release workflow" $?
+
 FAKE_ATTEST=fail inst >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'attestation failed' "$tmp/err.txt"; }
 expect "install: a failed attestation fails" $?
