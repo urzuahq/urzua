@@ -92,4 +92,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A changeset declares the records it closes in a structured field](ADR-85-a-changeset-declares-the-records-it-closes-in-a-structured-field.md)
 - [A waiver may be permanent when the repository declares which reasons allow it](ADR-86-a-waiver-may-be-permanent-when-the-repository-declares-which-reasons-allow-it.md)
 - [A rule may have the level info: its findings are reported and counted but never trip fail_on](ADR-87-a-rule-may-have-the-level-info-its-findings-are-reported-and-counted-but-never-trip-fail-on.md)
+- [The closing-verb reading of claim.status-agreement can be turned off where the structured field is declared](ADR-88-the-closing-verb-reading-of-claim-status-agreement-can-be-turned-off-where-the-structured-field-is-declared.md)
 <!-- urzua:index:end -->
