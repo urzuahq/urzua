@@ -577,6 +577,23 @@ pub struct RevisionLogDecl {
     pub heading: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
+    /// Which revision-log change classes require the record's version field to
+    /// change (`BUG-51`). Absent for every type unless declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_bump: Option<VersionBumpDecl>,
+}
+
+/// A type's version-bump requirement: a revision-log row of one of `classes`
+/// added to a changed record means the record's `field` must differ from the
+/// merge base's. Read by `revision-log.version-bump-required`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VersionBumpDecl {
+    /// The header field that carries the version.
+    pub field: String,
+    /// The change classes (the revision log's Class column, without emphasis)
+    /// that require a bump.
+    pub classes: Vec<String>,
 }
 
 /// The default marker line: what every repository used before the identity
@@ -647,6 +664,13 @@ impl RecordTypeConfig {
             }) => RevisionLogId::Marker(m.clone()),
             _ => RevisionLogId::default(),
         }
+    }
+
+    /// The version-bump requirement this type declares, if any (`BUG-51`).
+    pub fn version_bump(&self) -> Option<&VersionBumpDecl> {
+        self.revision_log
+            .as_ref()
+            .and_then(|d| d.version_bump.as_ref())
     }
 
     /// Whether `urzua fix --apply` needs this type's revision-log section
@@ -1364,7 +1388,7 @@ pub fn parse_with_document_models(
         }
         if let Some(decl) = &rt.revision_log {
             let reason = match (&decl.marker, &decl.heading) {
-                (None, None) if decl.required.is_some() => None,
+                (None, None) if decl.required.is_some() || decl.version_bump.is_some() => None,
                 (None, None) => Some("neither `marker` nor `heading` -- name one"),
                 (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
                 (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
@@ -1375,6 +1399,18 @@ pub fn parse_with_document_models(
                 }
                 _ => None,
             };
+            let reason = reason.or_else(|| {
+                let bump = decl.version_bump.as_ref()?;
+                if bump.field.trim().is_empty() {
+                    Some("a `version_bump` with a blank `field` -- it names no field")
+                } else if bump.classes.is_empty() {
+                    Some("a `version_bump` with no `classes` -- it would require nothing")
+                } else if bump.classes.iter().any(|c| c.trim().is_empty()) {
+                    Some("a `version_bump` with a blank class -- it would match no row")
+                } else {
+                    None
+                }
+            });
             if let Some(reason) = reason {
                 return Err(ConfigError::InvalidRevisionLog {
                     record_type: name.clone(),
@@ -1921,6 +1957,12 @@ pub struct RelationPair {
     /// unechoed claim, because that type cannot hold the inverse field.
     #[serde(default)]
     pub types: Option<Vec<String>>,
+    /// The pair is a sequencing relation that must not loop (`RFC-48`,
+    /// `MILE-27`): `sequence.cycle` reports a cycle through its claims and
+    /// `sequence.unresolved-blocker` a claim that names no record. Defaults to
+    /// `false`; it applies to any pair, not only a dependency one.
+    #[serde(default)]
+    pub acyclic: bool,
 }
 
 /// Which claimants make a pair's claim provisional, and how loudly an
@@ -2131,6 +2173,20 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    // A sequencing rule with no acyclic pair to read examines nothing (ADR-7).
+    if !config.relation_pairs.iter().any(|p| p.acyclic) {
+        for rule in crate::rules::rule_ids_where(|d| d.requires_acyclic_pair) {
+            if config
+                .rules
+                .get(rule)
+                .is_some_and(|s| s.level != RuleLevel::Off)
+            {
+                return bad(format!(
+                    "rule '{rule}' is enabled but no relation_pairs entry declares `acyclic: true`, so it would examine nothing"
+                ));
+            }
+        }
+    }
     // A pair rule with nothing to pair is a check that ran on nothing.
     if config.relation_pairs.is_empty() {
         for rule in crate::rules::rule_ids_where(|d| d.requires_relation_pairs) {
@@ -2144,6 +2200,22 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
                 ));
             }
         }
+    }
+    // A version-bump rule with no type declaring a bump is a check that ran on
+    // nothing (`BUG-51`).
+    if config
+        .rules
+        .get(crate::rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+        && !config
+            .record_types
+            .values()
+            .any(|t| t.version_bump().is_some())
+    {
+        return bad(format!(
+            "rule '{}' is enabled but no record type declares revision_log.version_bump, so it would examine nothing",
+            crate::rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
+        ));
     }
     Ok(())
 }
@@ -3323,6 +3395,30 @@ record_types:
                 AMEND_PAIR
             ))
             .is_ok());
+        }
+    }
+
+    #[test]
+    fn acyclic_defaults_to_false_and_parses_when_declared() {
+        let c = parse(&pair_cfg("", AMEND_PAIR)).unwrap();
+        assert!(!c.relation_pairs[0].acyclic);
+        let y = "relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: none, acyclic: true}\n";
+        assert!(parse(&pair_cfg("", y)).unwrap().relation_pairs[0].acyclic);
+    }
+
+    #[test]
+    fn enabling_a_sequence_rule_without_an_acyclic_pair_is_refused() {
+        let acyclic = "relation_pairs:\n  - {name: a, forward: Amends, inverse: Amended-by, reciprocity: none, acyclic: true}\n";
+        for rule in ["sequence.cycle", "sequence.unresolved-blocker"] {
+            // No pair at all, and a pair that is not acyclic: both would examine nothing.
+            for pairs in ["", AMEND_PAIR] {
+                let e =
+                    parse(&pair_cfg(&format!("rules: {{{rule}: error}}\n"), pairs)).unwrap_err();
+                assert!(matches!(e, ConfigError::InvalidRelationPair { .. }), "{e}");
+                assert!(e.to_string().contains("acyclic"), "{e}");
+            }
+            assert!(parse(&pair_cfg(&format!("rules: {{{rule}: off}}\n"), "")).is_ok());
+            assert!(parse(&pair_cfg(&format!("rules: {{{rule}: error}}\n"), acyclic)).is_ok());
         }
     }
 

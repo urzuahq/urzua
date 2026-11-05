@@ -1,5 +1,5 @@
 ---
-Version: '0.60'
+Version: '0.62'
 Date: 2026-08-20
 Status: Accepted
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -112,6 +112,12 @@ Two details carry weight:
   `required` may stand alone (`revision_log: {required: false}`), leaving the identity at its
   default; an empty `{}` is still an error. `revision-log.change-class-required`,
   `urzua fix`'s revision row and the `skip_revision_log` option of `citation.path-exists` and `citation.resolution` all read it.
+  The declaration also takes `version_bump: {field, classes}` (`BUG-51`), absent for every type
+  unless written: a field name and the change classes (the revision log's Class column) that require
+  that field to change. `revision-log.version-bump-required` reports a changed record that adds a row
+  of one of those classes while its field equals the merge base's. `field` must be non-blank and
+  `classes` a non-empty list of non-blank names, else the config fails to load; `version_bump` may
+  stand alone like `required`. Enabling the rule when no type declares one is a load error.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -655,6 +661,7 @@ relation_pairs:
     inverse: "Resolved-by"    # the resolved record -> this one
     reciprocity: required     # required | none
     cross_type: true          # optional, default true
+    acyclic: false            # optional (MILE-27), default false
     types: [rfc]              # optional (MILE-155), default: every type declaring a side
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
@@ -709,6 +716,56 @@ revisits it:
   (`MILE-80`), so a per-pair severity has nothing to set.
 - **Direction-mismatch.** `relation.direction-mismatch` is not built; an unechoed claim already
   reports a mismatched direction, because the echo is read from the opposite field.
+
+### Sequencing: `acyclic` (`MILE-27`, `RFC-48`)
+
+`acyclic: true` declares the pair a sequencing relation that must not loop. The graph has one edge per
+resolved claim, drawn the way the field declares it: `A.forward = B` is `A -> B` ("A cannot finish
+until B does"), and `A.inverse = B` is `B -> A`, so a record that writes only the inverse side still
+takes part. Two rules read acyclic pairs, and only those:
+
+- `sequence.cycle` reports every record on a cycle, with a shortest cycle through it
+  (`MILE-1 -> MILE-2 -> MILE-1`). A record that names itself is a cycle of one. The cycle may cross
+  record types where the pair allows it. A record is reported even when it wrote none of the claims
+  that close the loop.
+- `sequence.unresolved-blocker` reports a value in either field that names no record: a reference
+  that resolves to no discovered record, and a comma-separated entry that is not a record reference
+  (prose), so prose cannot sit in the field and be dropped from the graph unseen. An entry is a
+  reference only when the whole trimmed entry is one record reference: `MILE-4 MILE-5` and
+  `MILE-5 (see note)` are prose. The nothing-here sentinel and an unwritten field are not findings.
+  A target whose header cannot be read is disclosed under its own entry, not blamed on the citer.
+  A claim a pointer rule already reports is not reported again (see Overlap below).
+
+Readings of what `RFC-48` leaves open, decided in `ADR-76`:
+
+- **`reciprocity` is independent of `acyclic`.** `none` is the intended spelling for a pair whose
+  inverse is computed, never written (`Depends-on` / `Blocks`); `required` also works and adds the
+  echo check.
+- **`provisional` and `types` apply as for any pair.** A claim to a type outside `types` is no edge.
+  `provisional` does not soften either sequence rule.
+- **A written `Blocks` is an edge.** `RFC-48` calls `Blocks` derived and never written; it is declared
+  only because a pair must name two fields some type declares. A repository follows `RFC-48` by writing
+  `Depends-on` only. A `Blocks` that is written still counts, because reading the forward field alone
+  would hide a loop through it.
+- **Edges are only resolved claims.** A claim that resolves to nothing is `sequence.unresolved-blocker`'s,
+  and does not hide a real cycle among the claims that resolve. An edge into a record whose header
+  cannot be read is dropped too, so a cycle through such a record is not seen; the record is disclosed
+  in the rule's population.
+- **One graph per pair.** A loop that crosses two acyclic pairs is not detected by `sequence.cycle`.
+- **One finding per record on a cycle.** A large cycle yields one finding per member, by design, so a
+  diff-scoped run that examines one member still sees it.
+- **Overlap.** When a pair field is also one of the type's `pointer_fields`, `sequence.unresolved-blocker`
+  skips what the pointer rules already report: an unresolved target when `pointer.resolution` is
+  enabled, and a prose entry when `header.pointer-field-clean` is enabled. In a repository that follows
+  `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
+  guard for the roadmap: the graph is only computed when no claim was dropped.
+- **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
+  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
+  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
+  `MILE-182`).
+
+Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
+the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
 declared by no type (the pair could never examine a record), a field used by two pairs or twice by one
@@ -1058,5 +1115,7 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.57`. A type's `statuses` declaration gains `initial` and `transitions`, its lifecycle graph, validated at load, read by the new opt-in rules `status.transition-allowed` (needs `--base`) and `status.unreachable-state`. The `embodiment` declaration must mark at least one tier `claims_built`. **Why:** `MILE-144`, `ADR-72`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.58`. Documented the optional `non_reference_field` option of `citation.resolution`: a header field listing the exact ids a record names without citing as a reference, set aside in that record only, with a finding for a declared id never cited and for a malformed entry, a load error for a field that is unknown or a pointer, narrative or relation-role field, and an aggregated Info notice for ids that now match a real record. **Why:** `BUG-190`, decided by `ADR-75`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.59`. Documented the `field.quality` option `template_placeholders`: off unless declared `true`, it reads a required field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, in place of the compiled-in placeholder tokens. **Why:** `BUG-22`, maintainer decision of 2026-11-04: a token list transcribed from one repository's templates protects no other corpus. | **substantive** |
-> | 2026-11-05 | Bumped to `0.60`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-04 | Bumped to `0.60`. Documented `acyclic` on a `relation_pairs` entry and the rules `sequence.cycle` and `sequence.unresolved-blocker` that read it, with the readings `ADR-76` decides for each question `RFC-48` leaves open, including that a written `Blocks` is an edge and that `sequence.unresolved-blocker` yields to enabled pointer rules. Enabling either rule with no acyclic pair is a load error. This repository declares the `sequencing` pair (`Depends-on` / `Blocks`). **Why:** `MILE-27` -- the declared sequencing relation with cycle detection. | **substantive** |
+> | 2026-11-04 | Bumped to `0.61`. Documented the `revision_log.version_bump` declaration: a field name and a list of change classes whose added revision-log rows require that field to change, read by `revision-log.version-bump-required`. **Why:** `BUG-51`, maintainer decision of 2026-11-04; `SPEC-18` requires a `Version` bump with every substantive or structural entry and nothing checked it. Off for every type unless declared. | **substantive** |
+> | 2026-11-05 | Bumped to `0.62`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
