@@ -1,5 +1,5 @@
 ---
-Version: '0.4'
+Version: '0.5'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -22,6 +22,14 @@ like" (`graph`).
 
 Every record whose `Realized-by` names `path` as evidence, with which category (`spec:`/`code:`/
 `test:`) matched. Reuses ADR-18's Embodiment MVP's categorized-locator data directly — no new field.
+
+`governing_records` entries carry `scope` when the record pins a symbol or line range within the
+file (`ADR-74`). Given `urzua explain <path>#<scope>` the report also carries `scope`: `scope`,
+`resolver` (for a symbol), `start` and `end` (1-based, inclusive), `text` (the pinned bytes),
+`sha256` and `pin`, the locator to paste after `code:` in `Realized-by`. This is the authoring
+route for a scoped pin, and it shows the resolved span because an early end (a `}` in a string)
+cannot be detected by the engine. A scope that does not resolve, a file that is not UTF-8 and a
+locator carrying an anchor are `not-run` with the reason.
 
 Exact-match only: no glob, no directory prefix, no fuzzy match. A corpus citing a file by a
 different relative path than the one queried finds nothing. Coverage is only as complete as
@@ -83,3 +91,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
 > | 2026-09-09 | `urzua graph` is now config-driven (MILE-90/ADR-44): edges come from each type's declared `pointer_fields`/`narrative_fields`, not a hardcoded field list, and every edge gains a `kind` field. Fixed BUG-11 in the same pass (`graph`'s own index never normalized reference padding, unlike `pointer_resolution`'s). Added `Implements: ADR-44`. **Why:** this spec's own text previously claimed `graph` "requires no config change," which stopped being true the moment this shipped -- leaving it unstated would have been the exact "spec goes factually stale the moment a decision lands" gap this project's own history keeps flagging. | **substantive** |
+> | 2026-11-05 | Bumped to `0.5`. `explain <path>#<scope>` resolves a scope and prints the span and its pin; `governing_records` entries name the scope a record pins. **Why:** `MILE-185` / `ADR-74` -- a person cannot reproduce a resolver by hand, so `explain` is the authoring route for a scoped pin. | **substantive** |

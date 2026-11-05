@@ -237,6 +237,8 @@ When a bigger version of something is plausible but unproven, build the narrow v
 bigger one as a milestone, don't build it preemptively. The same applies to backward-compatibility
 code: don't add a shim, tolerance, or default "for when someone needs it" without a real case in
 front of you — this tool has no external adopters yet whose behavior needs preserving.
+(Note, 2026-11-05: this holds through Phase 0 and expires at the Phase 1 switchover (`MILE-102`), when a real
+adopter's corpus exists and `RFC-49`'s compatibility contract (proposed in `ADR-77`) takes over; `MILE-118`.)
 
 If you find *existing* compatibility or tolerance code whose stated justification no longer holds
 against this repo's own real, current state — a "for future adopters" comment where no adopter
