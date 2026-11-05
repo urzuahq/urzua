@@ -167,7 +167,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_POINTER_RESOLUTION,
-        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted.",
+        description: "A type's config-declared `pointer_fields` \u{222a} `narrative_fields` (MILE-90/ADR-44) resolves to a real record when it names one — a dangling reference is a finding, a resolved one is silent (`pointer.target-status` and `narrative-field.stale` separately judge what a resolved target's status means). No hardcoded field list — an undeclared type is skipped, not defaulted. A reference to a record whose file exists on disk but is not tracked by git is told apart from one that exists nowhere (`BUG-13`): a different finding variant, naming the file, because discovery reads only tracked and staged files; the same holds for `relation.supersession-reciprocity`, `relation.pair-reciprocity` and `sequence.unresolved-blocker`.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
@@ -178,11 +178,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pointer-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("pointer-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            pointer_resolution(c.records, c.config, c.index)
+            pointer_resolution(c.records, c.config, c.index, c.untracked_records)
         },
     },
     RuleDef {
@@ -300,11 +301,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("supersession-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("supersession-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("supersession-unreciprocated", ActionDecl::FIELD_APPEND),
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| supersession_reciprocity(c.records, c.config, c.index),
+        run: |c| supersession_reciprocity(c.records, c.config, c.index, c.untracked_records),
     },
     RuleDef {
         id: RULE_RELATION_PAIR_RECIPROCITY,
@@ -319,12 +321,13 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pair-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("pair-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("pair-unreciprocated", ActionDecl::FIELD_APPEND),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            relation_pair_reciprocity(c.records, c.config, c.index)
+            relation_pair_reciprocity(c.records, c.config, c.index, c.untracked_records)
         },
     },
     RuleDef {
@@ -378,11 +381,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("blocker-unresolved", ActionDecl::FIELD_SET),
+            VariantAction::new("blocker-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("blocker-not-a-reference", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| sequence_unresolved_blocker(c.records, c.config, c.index),
+        run: |c| sequence_unresolved_blocker(c.records, c.config, c.index, c.untracked_records),
     },
     RuleDef {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
@@ -558,7 +562,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -570,6 +574,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("locator-empty", ActionDecl::FIELD_SET),
             VariantAction::new("locator-missing", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("locator-malformed", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
@@ -595,7 +600,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 // so only a definite absence counts.
                 (c.may_exist)(path)
             };
-            embodiment_locator_exists(c.records, c.config, &present, c.read_text)
+            // Real, but not tracked: the repair is `git add`, not a new locator.
+            let untracked_on_disk = |p: &str| {
+                let path = std::path::Path::new(p);
+                !tracked.contains(path) && (c.may_exist)(path)
+            };
+            embodiment_locator_exists(c.records, c.config, &present, c.read_text, &untracked_on_disk)
         },
     },
     RuleDef {
