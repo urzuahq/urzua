@@ -95,7 +95,11 @@ fn init_withholds_every_rule_that_reads_a_declaration() {
             continue;
         };
         seen += 1;
-        assert!(!config.contains(def.id), "{} was proposed:\n{config}", def.id);
+        assert!(
+            !config.contains(def.id),
+            "{} was proposed:\n{config}",
+            def.id
+        );
         assert!(stdout.contains(def.id), "notice omits {}: {stdout}", def.id);
         assert!(
             stdout.contains(declaration.key()),
@@ -104,6 +108,9 @@ fn init_withholds_every_rule_that_reads_a_declaration() {
         );
     }
     assert!(stdout.contains("revision-log.version-bump-required"));
-    assert!(seen >= 5, "expected at least five declaration-reading rules");
+    assert!(
+        seen >= 5,
+        "expected at least five declaration-reading rules"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }
