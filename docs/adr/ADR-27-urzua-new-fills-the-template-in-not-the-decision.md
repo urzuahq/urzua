@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1e4723c81adcaf65d6b3c61d7714a09b5b07dbafed80986922d35f00156ba384, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:850e21078331458ea66da45eb6abcd23edee8513034b25b77e0a626cce1e0192, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:c1190b45b3531137fa9ec845949035834436273e01958f124b23a972256f48c7, test:rust/crates/urzua-core/src/new_record.rs@sha256:850e21078331458ea66da45eb6abcd23edee8513034b25b77e0a626cce1e0192
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -110,3 +110,4 @@ The decision is unchanged: `urzua new` fills in the template and leaves `Status`
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Amendment added: numbering spans every directory the type declares (`extra_dirs`, `MILE-130`); proposed, pending maintainer acceptance. **Why:** the drift check found `new.rs` numbering across `all_dirs()` while the text said "the type's directory" (#306). | **substantive** |
 > | 2026-11-05 | Amendment of 2026-11-05 accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/new_record.rs` 15511d30876e -> 850e21078331, `rust/crates/urzua-cli/src/commands/new.rs` 1e4723c81adc -> c1190b45b353. Reason: new.rs now numbers across every directory the type declares (MILE-130, extra_dirs), which the accepted 2026-11-05 amendment records; new_record.rs only gained template_header_values for BUG-22 placeholder detection, additive and not on the numbering or fill path. The decision and its amendments hold **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
