@@ -1,7 +1,7 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
@@ -90,3 +90,4 @@ missing if invoked without both `--report` and `--field <Name>`, rather than doi
 > | 2026-09-11 | Added `migrate ids`'s output contract (`missing`/`results`, BUG-20, ADR-46) -- previously undocumented, since the command printed plain-text prose rather than JSON. `--apply` now also exits 1 on a real write failure, matching `fix --apply`'s own signal for the same shape of outcome. | **substantive** |
 > | 2026-11-05 | Bumped to `0.5`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: the `migrate` unit tests in `urzua-core/src/migrate.rs` and the `migrate_ids_*` tests in `check_integration.rs`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.6`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |

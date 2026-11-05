@@ -1,7 +1,7 @@
 ---
-Version: '0.13'
+Version: '0.14'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/status_model.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs
 Author: beauwilliams
@@ -139,4 +139,5 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-04 | Added the "Required sections" section and bumped to `0.11`: every milestone carries `## Done means`, declared under `sections` and enforced by `section.required`, with `WontDo` exempt. **Why:** maintainer decision of 2026-11-04: "done" was being judged from the What, and the closure audit found closures that over-claimed; stating the criteria on every record lets a closure be checked against them. | **substantive** |
 > | 2026-11-05 | Bumped to `0.12`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `a_milestone_must_state_its_done_means_unless_it_is_wontdo`, `a_done_milestone_needs_delivery_evidence_and_evidence_under_planned_is_a_disagreement`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/status_model.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
-> | 2026-11-05 | Bumped to `0.13`. `Blocked` is removed from the `Status` value set: it is derived from `Depends-on` and surfaced by `check` and the roadmap, never written. A waiting milestone is `Planned`, with the wait in `Depends-on` (a record) and `Blocked-on` (the explanation). **Why:** `RFC-48` ("accepting this RFC includes amending `SPEC-6`'s `Status` value set to remove `Blocked`"), decided for this repository in `ADR-83`. | **substantive** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.13`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.14`. `Blocked` is removed from the `Status` value set: it is derived from `Depends-on` and surfaced by `check` and the roadmap, never written. A waiting milestone is `Planned`, with the wait in `Depends-on` (a record) and `Blocked-on` (the explanation). **Why:** `RFC-48` ("accepting this RFC includes amending `SPEC-6`'s `Status` value set to remove `Blocked`"), decided for this repository in `ADR-83`. | **substantive** |

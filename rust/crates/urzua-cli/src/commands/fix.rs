@@ -94,7 +94,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     let (scoped, unmatched) = if let Some(stdin_path) = &stdin_path {
         // The proposed content replaces the on-disk record (or adds a new one)
         // for this one path; nothing else is examined or drifted.
-        let rel = match relative_to_root(&repo_root, stdin_path) {
+        let rel = match crate::discovery::relative_to_root(&repo_root, stdin_path) {
             Ok(rel) => rel,
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
@@ -273,33 +273,6 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     ))
 }
 
-/// `p` (absolute, or relative to the working directory) as a repo-relative
-/// path, without requiring that it exist.
-fn relative_to_root(repo_root: &std::path::Path, p: &std::path::Path) -> Result<PathBuf, String> {
-    let cwd = std::env::current_dir()
-        .and_then(|c| c.canonicalize())
-        .unwrap_or_default();
-    let joined = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        cwd.join(p)
-    };
-    let mut normal = PathBuf::new();
-    for c in joined.components() {
-        match c {
-            std::path::Component::ParentDir => {
-                normal.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => normal.push(other),
-        }
-    }
-    normal
-        .strip_prefix(repo_root)
-        .map(PathBuf::from)
-        .map_err(|_| format!("{} is outside the repository", p.display()))
-}
-
 /// The records `PATHS` select: a record whose repo-relative path equals a
 /// path or sits under it (a directory). No paths selects every record. Each
 /// path that selects nothing comes back as a failure naming it.
@@ -314,7 +287,7 @@ fn scope_records(
     let mut unmatched = Vec::new();
     let mut scopes = Vec::new();
     for p in paths {
-        match relative_to_root(repo_root, p) {
+        match crate::discovery::relative_to_root(repo_root, p) {
             Ok(rel) => scopes.push((p.clone(), rel)),
             Err(e) => unmatched.push((p.clone(), e)),
         }
