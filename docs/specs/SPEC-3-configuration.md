@@ -1,5 +1,5 @@
 ---
-Version: '0.67'
+Version: '0.68'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -118,6 +118,22 @@ Two details carry weight:
   of one of those classes while its field equals the merge base's. `field` must be non-blank and
   `classes` a non-empty list of non-blank names, else the config fails to load; `version_bump` may
   stand alone like `required`. Enabling the rule when no type declares one is a load error.
+- **A record type may declare that it is the suppression type: `role: suppression`** (`BUG-74`).
+  The records of that type suppress the findings they name (`SPEC-10`); the engine reads this
+  declaration and knows no type name:
+
+  ```yaml
+  record_types:
+    exception:            # any name
+      dir: docs/exceptions
+      role: suppression
+  ```
+
+  At most one type declares it (two are a load error naming both), and `suppression` is the only
+  value; any other is refused at load. **Fallback:** when no type declares a role, the type named
+  `waiver` is the suppression type, so a config written before the declaration existed keeps its
+  suppression unchanged. Once a type declares the role, a type merely named `waiver` suppresses
+  nothing. A config with neither a declaring type nor a type named `waiver` has no suppression.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -1271,3 +1287,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.66`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.67`. Documented that `status.transition-allowed` matches a renamed record to its merge-base copy by `Stable-Id`. **Why:** `BUG-191` -- a rename read as a deletion plus an addition, so the record was judged as new. | **substantive** |
+> | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |

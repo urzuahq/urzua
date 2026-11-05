@@ -709,6 +709,7 @@ mod tests {
                         ..Default::default()
                     }),
                     revision_log: None,
+                    role: None,
                 },
             )]
             .into_iter()

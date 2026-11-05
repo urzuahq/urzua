@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Waiver;
+use crate::waiver::Suppression;
 
 /// `waiver.matches-nothing` (`MILE-168`): a waiver that no longer does
 /// anything is reported, so a stale exception does not stay on file hiding that
@@ -8,7 +8,7 @@ use crate::waiver::Waiver;
 /// Three states, each a finding on the waiver record:
 ///
 /// - **Expired**: its `Expires` has passed, or is not a real `YYYY-MM-DD`
-///   date. `apply_waivers` already ignores it, so its finding resurfaces; this
+///   date. `apply_suppressions` already ignores it, so its finding resurfaces; this
 ///   names the record that is left behind. Reported once as expired, never
 ///   also as unmatched.
 /// - **Unknown rule**: it names a rule this build does not ship, so it can
@@ -26,7 +26,7 @@ use crate::waiver::Waiver;
 ///
 /// `findings` is every finding before waivers are applied.
 pub fn waiver_matches_nothing(
-    waivers: &[Waiver],
+    waivers: &[Suppression],
     findings: &[Finding],
     executed: &[RuleExecution],
     whole_corpus: bool,
@@ -123,8 +123,8 @@ mod tests {
     use super::*;
     use crate::rules::tests::{examined, exec_with};
 
-    fn waiver(id: &str, rule: &str, scope: &str, expires: Option<&str>) -> Waiver {
-        Waiver {
+    fn waiver(id: &str, rule: &str, scope: &str, expires: Option<&str>) -> Suppression {
+        Suppression {
             id: id.into(),
             rule: rule.into(),
             scope: scope.into(),
@@ -147,7 +147,7 @@ mod tests {
     }
 
     fn run(
-        waivers: &[Waiver],
+        waivers: &[Suppression],
         findings: &[Finding],
         executed: &[RuleExecution],
         whole: bool,

@@ -1,4 +1,5 @@
-//! A waiver is a first-class record (RFC-0015, ADR-0011): reviewable,
+//! A suppression record -- a waiver, in this repository's word -- is a
+//! first-class record (RFC-0015, ADR-0011): reviewable,
 //! authored, with a required reason and an optional expiry -- never a
 //! config-level ignore list. A waived finding is listed, never omitted;
 //! `status`/`blocking` are computed from non-waived findings only.
@@ -7,7 +8,7 @@ use crate::record::Record;
 use crate::report::Finding;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Waiver {
+pub struct Suppression {
     pub id: String,
     pub rule: String,
     /// A file path, or `"*"` for every file the rule examines.
@@ -17,7 +18,7 @@ pub struct Waiver {
     pub expires: Option<String>,
 }
 
-impl Waiver {
+impl Suppression {
     /// A waiver with a passed expiry is not a waiver (RFC-0015 §3): treated
     /// as though it doesn't exist, with no separate "expired" state to
     /// configure.
@@ -42,14 +43,17 @@ impl Waiver {
     }
 }
 
-/// Parse waiver records out of the discovered corpus. A waiver missing
+/// Parse suppression records out of the discovered corpus: the records of the
+/// type named `suppression_type`, which the config declares with
+/// `role: suppression` (`Config::suppression_type`) -- the engine knows no
+/// type name. A suppression missing
 /// `Rule` or `Scope` is skipped rather than crashing the run -- a malformed
 /// waiver should never take down `check` itself, and an un-parseable waiver
 /// simply waives nothing, which fails toward more findings, not fewer.
-pub fn load_waivers(records: &[Record]) -> Vec<Waiver> {
+pub fn load_suppressions(records: &[Record], suppression_type: &str) -> Vec<Suppression> {
     records
         .iter()
-        .filter(|r| r.record_type == "waiver")
+        .filter(|r| r.record_type == suppression_type)
         .filter_map(|r| {
             // Reserved keys (Header::get_reserved), not adopter vocabulary --
             // a waiver record spelling these in another case has made a typo,
@@ -58,7 +62,7 @@ pub fn load_waivers(records: &[Record]) -> Vec<Waiver> {
             let rule = r.header.get_reserved("Rule")?.to_string();
             let scope = r.header.get_reserved("Scope")?.to_string();
             let expires = r.header.get_reserved("Expires").map(|s| s.to_string());
-            Some(Waiver {
+            Some(Suppression {
                 id: r.path.to_string_lossy().to_string(),
                 rule,
                 scope,
@@ -83,7 +87,7 @@ fn is_iso_date(value: &str) -> bool {
 /// Mark each finding covered by an active waiver. Findings are never
 /// removed -- only annotated -- so the caller's `blocking` computation must
 /// itself skip waived findings; this function does not touch severity.
-pub fn apply_waivers(findings: &mut [Finding], waivers: &[Waiver], today: &str) {
+pub fn apply_suppressions(findings: &mut [Finding], waivers: &[Suppression], today: &str) {
     for finding in findings.iter_mut() {
         for waiver in waivers.iter().filter(|w| w.is_active(today)) {
             if waiver.covers(finding) {
@@ -129,7 +133,7 @@ scope: docs/adr/ADR-1-x.md
 ---
 ",
         );
-        let waivers = load_waivers(&[r]);
+        let waivers = load_suppressions(&[r], "waiver");
         assert_eq!(
             waivers.len(),
             1,
@@ -141,7 +145,7 @@ scope: docs/adr/ADR-1-x.md
 
     #[test]
     fn a_permanent_waiver_is_always_active() {
-        let w = Waiver {
+        let w = Suppression {
             id: "w1".into(),
             rule: "r".into(),
             scope: "*".into(),
@@ -153,7 +157,7 @@ scope: docs/adr/ADR-1-x.md
 
     #[test]
     fn an_expired_waiver_is_not_active() {
-        let w = Waiver {
+        let w = Suppression {
             id: "w1".into(),
             rule: "r".into(),
             scope: "*".into(),
@@ -170,7 +174,7 @@ scope: docs/adr/ADR-1-x.md
         // forever. A waiver nobody can expire is the one failure this
         // mechanism must not have.
         for bad in ["soon", "TBD", "Q4", "2026-9-16"] {
-            let w = Waiver {
+            let w = Suppression {
                 id: "w1".into(),
                 rule: "r".into(),
                 scope: "*".into(),
@@ -186,13 +190,13 @@ scope: docs/adr/ADR-1-x.md
     #[test]
     fn a_matching_active_waiver_marks_the_finding_waived_not_removed() {
         let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
-        let waivers = vec![Waiver {
+        let waivers = vec![Suppression {
             id: "docs/waiver/0001-x.md".into(),
             rule: "field.quality".into(),
             scope: "docs/adr/0001-x.md".into(),
             expires: None,
         }];
-        apply_waivers(&mut findings, &waivers, "2026-09-04");
+        apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
         assert_eq!(findings.len(), 1, "waiving must never remove a finding");
         assert_eq!(
@@ -208,13 +212,13 @@ scope: docs/adr/ADR-1-x.md
             finding("field.quality", "docs/adr/0002-y.md"),
             finding("pointer.resolution", "docs/adr/0002-y.md"),
         ];
-        let waivers = vec![Waiver {
+        let waivers = vec![Suppression {
             id: "w1".into(),
             rule: "field.quality".into(),
             scope: "*".into(),
             expires: None,
         }];
-        apply_waivers(&mut findings, &waivers, "2026-09-04");
+        apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
         assert!(findings[0].waived.is_some());
         assert!(findings[1].waived.is_some());
@@ -227,13 +231,13 @@ scope: docs/adr/ADR-1-x.md
     #[test]
     fn an_expired_waiver_does_not_cover_anything() {
         let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
-        let waivers = vec![Waiver {
+        let waivers = vec![Suppression {
             id: "w1".into(),
             rule: "field.quality".into(),
             scope: "*".into(),
             expires: Some("2020-01-01".into()),
         }];
-        apply_waivers(&mut findings, &waivers, "2026-09-04");
+        apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
         assert!(findings[0].waived.is_none());
     }

@@ -317,6 +317,9 @@ record_types:
       - "Blocked-on"
   waiver:
     dir: "docs/waiver"
+    # The suppression type (BUG-74): the engine reads this declaration, not the
+    # type name, so the records here suppress findings whatever the type is called.
+    role: suppression
     # The padded form, chosen so the declared identity is exercised here
     # (MILE-151): `urzua new waiver` fits its file name and H1 to this pattern,
     # and the identity rules read the same grammar back. The one existing
