@@ -9,10 +9,7 @@
 //! declared field).
 
 use super::{BoundaryOrigin, ResolvedBoundary};
-use crate::config::{
-    BoundaryKind, BoundarySeverity, IndexSpec, LocatorKind, RuleLevel, RuleOpts, RuleSetting,
-};
-use crate::report::FindingSeverity;
+use crate::config::{BoundaryKind, IndexSpec, LocatorKind, RuleOpts, RuleSetting};
 
 /// `claim.status-agreement`: the paths scanned and the statuses that count as
 /// closed.
@@ -66,26 +63,24 @@ impl RuleOpts for PublishedPathOpts {
                 origin: BoundaryOrigin::Declared(idx),
                 kind: b.kind,
                 reason: Some(b.reason.clone()),
-                severity: match b.severity {
-                    BoundarySeverity::Error => FindingSeverity::Error,
-                    BoundarySeverity::Warn => FindingSeverity::Warning,
-                },
+                severity: b.severity.severity(),
                 paths: b.paths.clone(),
                 exclude: b.exclude.clone().unwrap_or_default(),
             })
             .collect();
         if let Some(paths) = s.published_paths.as_ref().filter(|p| !p.is_empty()) {
-            boundaries.push(ResolvedBoundary {
-                origin: BoundaryOrigin::PublishedPaths,
-                kind: BoundaryKind::Published,
-                reason: None,
-                severity: match s.level {
-                    RuleLevel::Warn => FindingSeverity::Warning,
-                    _ => FindingSeverity::Error,
-                },
-                paths: paths.clone(),
-                exclude: Vec::new(),
-            });
+            // A rule that is off runs nothing, so it has no boundary to resolve;
+            // every other level gives the boundary its own severity.
+            if let Some(severity) = s.level.severity() {
+                boundaries.push(ResolvedBoundary {
+                    origin: BoundaryOrigin::PublishedPaths,
+                    kind: BoundaryKind::Published,
+                    reason: None,
+                    severity,
+                    paths: paths.clone(),
+                    exclude: Vec::new(),
+                });
+            }
         }
         PublishedPathOpts {
             boundaries,

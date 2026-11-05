@@ -1,5 +1,5 @@
 ---
-Version: '0.95'
+Version: '0.96'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -360,10 +360,19 @@ Design language from this spec's original Phase B scope, with no shipped rule be
   open questions (nested-scope inheritance, glob-vs-subject width) are still unresolved.
 
 Severity per rule comes from config (SPEC-3) in principle; in practice severity is still hardcoded
-per rule at the source (`Error`/`Warning` only, no `Info`), not yet read from any config field —
+per rule at the source (`Error`, `Warning` or, at a rule set to `level: info`, `Info`), not yet read from any config field —
 tracked as MILE-80, which also names the still-open question of a richer severity taxonomy versus a
 separate log-verbosity axis. `status` reports what was found; whether that fails the build is the
 caller's choice and lives in `blocking`.
+
+A finding's `severity` is `"error"`, `"warning"` or `"info"` (`ADR-87`). `info` is opt-in: it appears
+only for a rule the repository sets to `level: info` (`SPEC-3`), or for a `field_levels` entry or a
+boundary `severity` of `info`. An info finding is a full finding (rule, file, line, message,
+population and `suggested_action` as at `warning`), is listed in `findings`, and counts toward
+`status`: a run with an unwaived info finding is `findings-present`. It never sets `blocking` and never
+trips `fail_on` (see Exit codes). A rule set to `info` reports nothing above `info`: a `field_levels`
+entry or a boundary `severity` declared higher does not lift it. A config that uses no `info` produces
+a byte-identical report.
 
 ## Output contract
 
@@ -706,7 +715,7 @@ judge the same records (`sequence.cycle`, `sequence.unresolved-blocker`) are unc
 
 | Code | When |
 |---|---|
-| 0 | no findings at or above the configured blocking severity |
+| 0 | no findings at or above the configured blocking severity; an `info` finding never counts, under either `fail_on` |
 | 1 | blocking findings; under `fail_on: warning` (or `--fail-on warning`), also any unwaived warning (`SPEC-3`) |
 | 2 | the check could not run — bad config, unreadable path, explicit paths matching zero files |
 
@@ -885,3 +894,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.93`. Adds the roadmap output (`urzua roadmap`): the `RoadmapReport` object, how waves, ready, the critical path, cycles and `needs_replan` are read, natural id order, and the closed set of note kinds. `critical_path` is an empty list when no open record has an included dependency, not one arbitrary record. **Why:** `MILE-182`, decided in `ADR-82`; maintainer decision of 2026-11-05 on the flat-repository case. | **substantive** |
 > | 2026-11-05 | Bumped to `0.94`. `embodiment.locator-exists` takes the options `locator_kinds` and `pinnable` (default `[file]`): a directory or glob locator is legal when the repository declares that kind and it covers a tracked file; a kind not declared, and a pin on a kind not pinnable, are reported with the new variants `locator-kind-undeclared` and `locator-kind-unpinnable` (`edit-field` `set`); the rule table is regenerated. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration; `SPEC-3` states the semantics. | **substantive** |
 > | 2026-11-05 | Bumped to `0.95`. `diff.source-requires-record` takes the optional `decision_types`, `fix_types` and `link_fields` options and, with `decision_types` declared, is the decision gate: the diff must change a decision record at a decided status, a record linking one, or a fix record, and the finding offers the new `source-without-decision` variant (`add-record`, naming the type when one type holds decisions). Without them the rule is unchanged. **Why:** `MILE-133`, maintainer decision 2026-11-05: extend the existing diff rule instead of adding a parallel one. | **substantive** |
+> | 2026-11-05 | Bumped to `0.96`. A finding's `severity` gains `"info"` (`ADR-87`, `MILE-194`): reported, listed in `findings` and counted in `status` like a warning, never `blocking` and never an exit-1 under either `fail_on`; a rule set to `info` caps every finding at `info`. §Rules and Exit codes say so. **Why:** `MILE-194` builds `ADR-87`. | **substantive** |
