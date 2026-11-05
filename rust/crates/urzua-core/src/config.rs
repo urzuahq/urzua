@@ -3419,7 +3419,9 @@ rules:
     /// treats every claim as a violation, including correct ones.
     #[test]
     fn a_rule_missing_an_option_it_requires_is_rejected_observed_failing() {
-        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        // The type declares a `Status` field and no `statuses`, so the fallback
+        // lists are still needed (BUG-178).
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\nrules:\n";
 
         let no_statuses = format!(
             "{base}  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n"
