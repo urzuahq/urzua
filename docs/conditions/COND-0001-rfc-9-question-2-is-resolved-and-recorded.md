@@ -1,7 +1,6 @@
 ---
 Stable-Id: 01M6NNKBVYT98MBB7B1QBRY7C9
 Status: Open
-Met-by: RFC-9
 ---
 # COND-0001 — RFC-9 question 2 is resolved and recorded
 
@@ -20,3 +19,4 @@ Met when the maintainer resolves question 2 of `RFC-9` (whether inferred, LLM-au
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed `Open`. **Why:** `MILE-187`, the first records of the `condition` type (`RFC-48`). A person, not the PR that files it, moves it to `Met` or `Dropped`. | **structural** |
+> | 2026-11-05 | `Met-by` removed while `Open`. **Why:** `Met-by` records the fact; it is set when a person moves the condition to `Met`, and names the `RFC-9` text or ADR that holds the answer then. | **structural** |

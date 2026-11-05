@@ -52,7 +52,7 @@ Files are `COND-NNNN-slug.md` (`ADR-36`), with a four-digit padded number, and t
 | Field | Values | Notes |
 |---|---|---|
 | `Status` | `Open`, `Met`, `Dropped` | `Open` is the only initial state: a condition is filed `Open`, never already `Met`. It moves to `Met` or `Dropped`, and both are terminal (`ADR-72`); a mistaken closure is a new condition, not a reopening. |
-| `Met-by` | a record reference | The record that shows the signal happened, such as the ADR that records the decision or the milestone that names the adopter's ask. Required once `Status` is `Met` (`status.required-field-missing`). It may be filled while the condition is `Open` only where the record to be written is known to exist already; a condition that waits on a record not yet written leaves it `null`. A pointer field, so it must resolve to a record. |
+| `Met-by` | a record reference | The record that shows the signal happened, such as the ADR that records the decision or the milestone that names the adopter's ask. Required once `Status` is `Met` (`status.required-field-missing`). It is left unset while the condition is `Open`: it records the fact, and the fact has not happened yet, even where the record that will hold it is already known. A pointer field, so it must resolve to a record. |
 
 `Met` is the type's success state and `Dropped` its failure state, which is all the sequencing rules
 and the roadmap read.
@@ -107,3 +107,4 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Initial spec. **Why:** `MILE-187`, maintainer decision of 2026-11-05: the `condition` type of `RFC-48` is declared in configuration so waits on facts are structured and the computed roadmap sees them. | **structural** |
+> | 2026-11-05 | `Met-by` is unset while `Open`. **Why:** review of `MILE-187`: `Met-by` names the record that shows the signal happened, so naming a record before then asserts evidence that does not exist; `COND-1` no longer sets `Met-by: RFC-9`. | **structural** |

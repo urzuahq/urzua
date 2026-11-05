@@ -276,6 +276,61 @@ fn the_roadmap_blocks_on_open_keeps_dropped_out_and_frees_met() {
 }
 
 #[test]
+fn any_type_declaring_depends_on_resolves_to_a_condition_not_only_milestones() {
+    // This repository's adr and rfc types declare no Depends-on, so its own
+    // corpus cannot prove the generic claim. A decision type that does declare it
+    // can: the edge resolves to a condition and the roadmap reads it the same.
+    let repo = scenario("condition", "COND", "docs/conditions");
+    let cfg = repo.join(".urzua/config.yaml");
+    let mut text = std::fs::read_to_string(&cfg).unwrap();
+    text.push_str(
+        "  decision:
+    dir: docs/decisions
+    prefix: DEC
+    required_fields: [Status]
+    known_fields: [Depends-on, Blocks]
+    pointer_fields: [Depends-on, Blocks]
+    narrative_fields: []
+    statuses:
+      values: [Proposed, Accepted, Rejected]
+      success: [Accepted]
+      failure: [Rejected]
+",
+    );
+    std::fs::write(&cfg, text).unwrap();
+    for (n, target) in [(1, "COND-1"), (2, "COND-2"), (3, "COND-3"), (4, "COND-9")] {
+        write(
+            &repo,
+            &format!("docs/decisions/DEC-{n}-d.md"),
+            &format!("---\nStatus: Proposed\nDepends-on: {target}\n---\n# DEC-{n} — d\n"),
+        );
+    }
+    git(&repo, &["add", "-A"]);
+    let report = urzua(&repo, &["check", "docs/"]);
+    let found = findings(&report, "COND");
+    assert_eq!(
+        on(&found, "pointer.resolution"),
+        ["DEC-4-d.md", "MILE-4-m.md"],
+        "only the missing condition is unresolved, from either type: {report}"
+    );
+    let r = urzua(&repo, &["roadmap"])["roadmap"].clone();
+    let rec = |id: &str| r["records"][id].clone();
+    assert_eq!(rec("DEC-1")["blocked_by"], serde_json::json!(["COND-1"]));
+    assert_eq!(rec("DEC-1")["ready"], false);
+    assert_eq!(rec("DEC-2")["blocked"], false);
+    assert_eq!(rec("DEC-2")["ready"], true);
+    assert_eq!(rec("DEC-3")["ready"], false);
+    assert!(
+        r["needs_replan"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["record"] == "DEC-3" && n["reason"] == "failed-dependency"),
+        "{r}"
+    );
+}
+
+#[test]
 fn the_engine_has_no_special_case_for_the_name_condition() {
     let named = scenario("condition", "COND", "docs/conditions");
     let other = scenario("fact", "FACT", "docs/facts");
