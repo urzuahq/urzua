@@ -124,7 +124,9 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
   something else is not refused. A baseline that cannot be judged leaves every error introduced.
 - `allow-with-warnings`: judged; the warnings (and any error already on disk) are in `message` and the
   Claude Code adapter shows them to the agent. Nothing blocks.
-- `allow`: judged against every enabled rule, no findings.
+- `allow`: judged, no findings. The message counts the rules that ran and names each enabled rule
+  that cannot judge a single-record edit (`not-applicable` in the report), so an agent is never told
+  "every rule" when some were not run. Those rules run at commit and in CI.
 - `allow-unjudged`: urzua is missing, answers `not-run` (including a configuration in which no enabled
   rule can look at the record), exits otherwise than 0 or 1, prints non-JSON, or reports an
   `embodiment-drift-git` notice. The edit proceeds and the message says plainly that it was not judged.
@@ -137,9 +139,11 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
 The Claude Code adapter `scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
 `Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
 Code's hook output; a second harness is a second adapter over the same core. Measured on this corpus
-(`MILE-187`, release build, 522 records): about 0.6s per record through the core when the edit has no
-errors, which is one `check --stdin-path` run, and about 1.1s when it has errors, which pays for the
-second, baseline run; the Claude Code adapter adds about 0.04s. `fix --stdin-path` alone is about 0.2s.
+(`MILE-187`, release build, 522 records, best of 20 runs on a loaded 4-core machine): about 0.43s per
+record through the core when the edit has no errors, which is one `check --stdin-path` run, and about
+0.77s when it has errors, which pays for the second, baseline run; the Claude Code adapter adds about
+0.04s. Compiling each pending pattern once per process, instead of on every field, took a single run
+from about 0.55s to about 0.42s. `fix --stdin-path` alone is about 0.2s.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit

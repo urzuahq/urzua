@@ -159,8 +159,8 @@ every other source.
 
 **`stdin` scope** (`MILE-187`, `ADR-78`) is selected by `urzua check --stdin-path <path>`, the
 prospective-content form of `check` that `fix --stdin-path` is for `fix` (`SPEC-8`). It reads the
-proposed content of one record from stdin and judges it against every enabled rule, writing nothing; it
-is the call the editor hook relays.
+proposed content of one record from stdin and judges it against every enabled rule that can judge one
+record, writing nothing; it is the call the editor hook relays.
 
 - **The proposal replaces the on-disk record** (or adds one: the path need not exist yet) before any
   rule runs, in the records and their text. `urzua-core` is handed that data like any other; the stdin
@@ -173,6 +173,13 @@ is the call the editor hook relays.
   outside the records (`Config`, `Outside`, `Directory` or `ChangedPath` in the rule table) is listed
   in `rules_executed` as `not-applicable`, never `ran` with nothing found. This is also what keeps a
   single-record run to about half a second on this corpus.
+- **A rule that compares with a committed copy is judged against HEAD's.** The proposed record is
+  the one changed record, and its committed copy is the record at `HEAD`: `status.transition-allowed`
+  judges the proposed `Status` against HEAD's, and `revision-log.version-bump-required` judges a row the
+  proposal adds against HEAD's revision log and version. A record `HEAD` does not have is new: it has
+  nothing to compare with, so the transition rule starts it at an initial status and the bump rule leaves
+  it unexamined. `filename.identity-pattern` and `type.record-outside-declared-dir` are not judged here
+  (they are about a directory or a path, not the content), and are left to `check`.
 - **Drift is computed for that record only**, from the proposed text, as `fix --stdin-path` does.
 - **A path no record type governs** is `not-run` (exit 2) with an `error` naming it, as is a run with
   no enabled rule that can look at the record. Combining `--stdin-path` with `PATHS` or `--base` is

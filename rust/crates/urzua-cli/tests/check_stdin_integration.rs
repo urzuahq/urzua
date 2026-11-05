@@ -202,3 +202,106 @@ fn a_rule_that_cannot_report_on_a_record_is_not_applicable_and_not_reported() {
         .unwrap_or_else(|| panic!("the rule is listed: {v}"));
     assert_eq!(exec["status"], "not-applicable", "{v}");
 }
+
+const HEAD_CONFIG: &str = "schema_version: 2\nrules:\n  status.transition-allowed: error\n  revision-log.version-bump-required: error\nrecord_types:\n  spec:\n    dir: \"docs/specs\"\n    prefix: \"SPEC\"\n    required_fields: [\"Status\", \"Version\"]\n    header_shape: \"yaml-frontmatter\"\n    revision_log: {marker: \"**Revision log**\", version_bump: {field: Version, classes: [substantive]}}\n    statuses: {values: [Draft, Accepted, Shipped], initial: [Draft], transitions: {Draft: [Accepted], Accepted: [Shipped], Shipped: []}}\n";
+const SPEC_PATH: &str = "docs/specs/SPEC-1-x.md";
+
+fn spec(status: &str, version: &str, rows: &[&str]) -> String {
+    let mut s = format!(
+        "---\nStatus: {status}\nVersion: '{version}'\n---\n# 1 - X\n\nBody.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n"
+    );
+    for r in rows {
+        s.push_str(&format!("> | {r} |\n"));
+    }
+    s
+}
+
+const ROW1: &str = "2026-11-01 | Initial. | **substantive**";
+const ROW2: &str = "2026-11-04 | Rewrote the intro. | **substantive**";
+
+fn head_fixture(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("urzua-stdin-head-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("docs/specs")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), HEAD_CONFIG).unwrap();
+    std::fs::write(dir.join(SPEC_PATH), spec("Accepted", "0.1", &[ROW1])).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+    dir
+}
+
+fn execution<'a>(v: &'a serde_json::Value, rule: &str) -> &'a serde_json::Value {
+    v["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["rule"] == rule)
+        .unwrap_or_else(|| panic!("{rule} is listed: {v}"))
+}
+
+#[test]
+fn a_status_edge_the_type_does_not_allow_is_judged_against_the_committed_copy() {
+    let dir = head_fixture("transition");
+    // Accepted -> Draft is not an edge; the committed copy says Accepted.
+    let proposed = spec("Draft", "0.1", &[ROW1]);
+    let v = json(&run_stdin(
+        &dir,
+        &["check", "--stdin-path", SPEC_PATH],
+        &proposed,
+    ));
+    assert_eq!(execution(&v, "status.transition-allowed")["status"], "ran", "{v}");
+    assert!(
+        rules_of(&v).iter().any(|r| r == "status.transition-allowed"),
+        "{v}"
+    );
+    // An allowed edge is judged and clean.
+    let ok = spec("Shipped", "0.1", &[ROW1]);
+    let v = json(&run_stdin(&dir, &["check", "--stdin-path", SPEC_PATH], &ok));
+    assert_eq!(execution(&v, "status.transition-allowed")["status"], "ran", "{v}");
+    assert!(rules_of(&v).is_empty(), "{v}");
+}
+
+#[test]
+fn a_new_revision_row_without_a_version_bump_is_judged_against_the_committed_copy() {
+    let dir = head_fixture("bump");
+    let unbumped = spec("Accepted", "0.1", &[ROW1, ROW2]);
+    let v = json(&run_stdin(
+        &dir,
+        &["check", "--stdin-path", SPEC_PATH],
+        &unbumped,
+    ));
+    assert!(
+        rules_of(&v)
+            .iter()
+            .any(|r| r == "revision-log.version-bump-required"),
+        "{v}"
+    );
+    let bumped = spec("Accepted", "0.2", &[ROW1, ROW2]);
+    let v = json(&run_stdin(
+        &dir,
+        &["check", "--stdin-path", SPEC_PATH],
+        &bumped,
+    ));
+    assert!(rules_of(&v).is_empty(), "{v}");
+    assert_eq!(
+        execution(&v, "revision-log.version-bump-required")["status"],
+        "ran",
+        "{v}"
+    );
+}
+
+#[test]
+fn a_record_new_at_head_has_no_committed_copy_to_compare_with() {
+    let dir = head_fixture("new");
+    let new_path = "docs/specs/SPEC-2-y.md";
+    let v = json(&run_stdin(
+        &dir,
+        &["check", "--stdin-path", new_path],
+        &spec("Draft", "0.1", &[ROW1, ROW2]),
+    ));
+    assert!(rules_of(&v).is_empty(), "{v}");
+}

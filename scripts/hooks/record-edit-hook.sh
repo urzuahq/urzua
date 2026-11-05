@@ -4,8 +4,8 @@
 #   record-edit-hook.sh [--override NAME] <record-path> < proposed-content
 #
 # Judges the content a harness is about to write to <record-path>, before it is
-# written, by relaying `urzua check --stdin-path` (SPEC-2): every enabled rule,
-# on the edited record. This script holds no rule knowledge: it never computes
+# written, by relaying `urzua check --stdin-path` (SPEC-2): every enabled rule that
+# can judge a single record. The rules it could not judge are named in the message. This script holds no rule knowledge: it never computes
 # Embodiment or checks a header, it reads urzua's JSON.
 #
 # Contract
@@ -27,7 +27,8 @@
 #                        unparsable output). The edit proceeds; the message says so.
 #   allow-override       a block was overridden by name; the name is in the output
 #   not-governed         urzua says no record type governs the path: not a record
-#   allow                judged, nothing to report
+#   allow                judged, nothing to report; the message counts the rules that ran
+#                        and names the enabled rules a single record cannot be judged by
 # An error finding that is also reported for the record as it is on disk (a
 # problem this edit did not introduce) does not block the edit; it is listed in
 # `message` as pre-existing.
@@ -95,6 +96,18 @@ if [ "$errors" != "[]" ] && [ -f "$rel" ]; then
 fi
 
 describe() { echo "$1" | jq -r '.[] | "  \(.file):\(.line // "-"): [\(.rule)] \(.message)" + (if .suggested_action.kind == "run-command" then " (run: " + (.suggested_action.target.argv | join(" ")) + ")" else "" end)'; }
+# What actually ran, from the report: the rules that judged this record, and the
+# enabled rules a single-record edit cannot judge (they run at commit and in CI).
+ran_summary() {
+  echo "$report" | jq -r '
+    [.rules_executed[]? | select(.status=="ran") | .rule] as $ran
+    | [.rules_executed[]? | select(.status=="not-applicable") | .rule] as $na
+    | "\($ran | length) rules ran on this record"
+      + (if ($na | length) > 0
+         then "; \($na | length) enabled rules cannot judge a single-record edit and were NOT run here (they run at commit and in CI): \($na | join(", "))"
+         else "" end)
+      + "."'
+}
 note=""
 [ "$existing" = "[]" ] || note+=$'\nAlready failing on disk before this edit (not blocked):\n'"$(describe "$existing")"
 [ "$others" = "[]" ] || note+=$'\nWarnings (shown, not blocking):\n'"$(describe "$others")"
@@ -102,9 +115,9 @@ note=""
 if [ "$introduced" = "[]" ]; then
   shown="$(jq -cn --argjson a "$existing" --argjson b "$others" '$a + $b')"
   if [ "$shown" = "[]" ]; then
-    emit allow "record-edit-hook: urzua judged $rel against every enabled rule; no findings."; exit 0
+    emit allow "record-edit-hook: urzua judged $rel; no findings. $(ran_summary)"; exit 0
   fi
-  emit allow-with-warnings "record-edit-hook: urzua judged $rel; nothing this edit introduced blocks it.$note" "$shown"; exit 0
+  emit allow-with-warnings "record-edit-hook: urzua judged $rel; nothing this edit introduced blocks it. $(ran_summary)$note" "$shown"; exit 0
 fi
 
 if [ "$override_given" -eq 1 ]; then

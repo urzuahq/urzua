@@ -378,3 +378,22 @@ fn a_header_error_can_be_overridden_by_name() {
         "{v}"
     );
 }
+
+#[test]
+fn the_allow_message_names_what_ran_and_what_could_not_be_judged() {
+    let root = fixture_with("ran", GOOD, WIDE);
+    let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], GOOD);
+    assert_eq!((code, v["verdict"].as_str()), (0, Some("allow")), "{v}");
+    let msg = v["message"].as_str().unwrap();
+    assert!(!msg.contains("every enabled rule"), "{msg}");
+    assert!(msg.contains(" rules ran on this record"), "{msg}");
+}
+
+#[test]
+fn a_rule_anchored_outside_the_record_is_listed_as_not_judged() {
+    let config = WIDE.replace("rules: {", "rules: {type.no-declared-spec: warn, ");
+    let root = fixture_with("notjudged", GOOD, &config);
+    let (_, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[], GOOD);
+    let msg = v["message"].as_str().unwrap();
+    assert!(msg.contains("type.no-declared-spec"), "{msg}");
+}

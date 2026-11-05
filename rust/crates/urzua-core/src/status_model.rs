@@ -135,11 +135,23 @@ impl PendingEntry {
             PendingEntry::Value(v) => v.trim().eq_ignore_ascii_case(value),
             // Validated at load, so a pattern that does not compile here (a
             // hand-built declaration) simply matches nothing.
-            PendingEntry::Pattern(p) => regex::Regex::new(&p.pattern)
-                .map(|re| re.is_match(value))
-                .unwrap_or(false),
+            PendingEntry::Pattern(p) => compiled(&p.pattern).is_some_and(|re| re.is_match(value)),
         }
     }
+}
+
+/// A pending pattern, compiled once per process. A pending value is asked of
+/// every field of every record by several rules, so compiling per call was a
+/// third of a single-record `check --stdin-path` run (`MILE-187`).
+fn compiled(pattern: &str) -> Option<std::sync::Arc<regex::Regex>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Arc<regex::Regex>>>>> = OnceLock::new();
+    let mut cache = CACHE.get_or_init(Default::default).lock().ok()?;
+    cache
+        .entry(pattern.to_string())
+        .or_insert_with(|| regex::Regex::new(pattern).ok().map(Arc::new))
+        .clone()
 }
 
 /// Fields tied to the statuses in `when`.

@@ -97,12 +97,12 @@ struct Context<'a> {
 /// record new in the diff has no merge-base copy and gets no entry.
 fn load_base_text(
     session: &Session,
-    scope: &ReportScope,
+    changes: Option<&urzua_io::GitChanges>,
     notices: &mut Vec<Notice>,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut out = HashMap::new();
     let (Some(changes), Some(_)) = (
-        &scope.changed,
+        changes,
         enabled_setting(
             &session.config,
             rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
@@ -141,6 +141,21 @@ fn load_base_text(
         }
     }
     Ok(out)
+}
+
+/// The one change a proposed record is: its path, against HEAD's copy. A path
+/// HEAD does not have is an addition, so it has nothing to compare with.
+fn head_changes_for(repo_root: &Path, path: &Path) -> urzua_io::GitChanges {
+    let mut changes = urzua_io::GitChanges {
+        merge_base: "HEAD".to_string(),
+        changed: HashSet::from([path.to_path_buf()]),
+        deleted: HashSet::new(),
+        added: HashSet::new(),
+    };
+    if urzua_io::read_at_commit(repo_root, "HEAD", path).is_err() {
+        changes.added.insert(path.to_path_buf());
+    }
+    changes
 }
 
 /// `field.quality`'s `template_placeholders` (`BUG-22`): each declared type's
@@ -603,7 +618,16 @@ fn load_context<'a>(
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
-    let base_text = load_base_text(session, scope, &mut notices)?;
+    // The diff rules judge a changed record against a committed copy. A
+    // proposed record is the one changed record, and its committed copy is
+    // HEAD's (`MILE-187`): status transitions and version bumps are then
+    // judged on a single-record edit instead of reported not-applicable.
+    let head_changes = scope
+        .prospective
+        .as_ref()
+        .map(|p| head_changes_for(repo_root, &p.path));
+    let changes = scope.changed.as_ref().or(head_changes.as_ref());
+    let base_text = load_base_text(session, changes, &mut notices)?;
     let templates = load_templates(repo_root, config, &mut notices)?;
 
     Ok((
@@ -628,11 +652,8 @@ fn load_context<'a>(
                 .cloned()
                 .collect(),
             // The diff rules judge the changed set itself; `None` without `--base`.
-            changed_paths: scope
-                .changed
-                .as_ref()
-                .map(|c| c.changed.iter().cloned().collect()),
-            committed_statuses: scope.changed.as_ref().map(|c| {
+            changed_paths: changes.map(|c| c.changed.iter().cloned().collect()),
+            committed_statuses: changes.map(|c| {
                 crate::diff_scope::committed_statuses(
                     repo_root,
                     &session.config,
