@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1e4723c81adcaf65d6b3c61d7714a09b5b07dbafed80986922d35f00156ba384, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:850e21078331458ea66da45eb6abcd23edee8513034b25b77e0a626cce1e0192, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:c1190b45b3531137fa9ec845949035834436273e01958f124b23a972256f48c7, test:rust/crates/urzua-core/src/new_record.rs@sha256:850e21078331458ea66da45eb6abcd23edee8513034b25b77e0a626cce1e0192
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -77,6 +77,21 @@ template and leaves `Status`, `Deciders` and `Embodiment` to the author is uncha
   never fetched is still invisible. The declared `identity` pattern also decides the width of the
   number in the file name and the H1, and `Stable-Id` is always written (`MILE-151`, `BUG-188`).
 
+## Amendment (2026-11-05): numbering spans every directory the type declares
+
+*Status of this amendment: accepted 2026-11-05 by the maintainer (drafted 2026-11-05 at the maintainer's request). The Decision text above is unchanged.*
+
+The 2026-11-04 amendment's Numbering bullet, and the Decision before it, say `new` numbers from "the
+type's directory". Since `MILE-130` (#259), a record type may declare `extra_dirs` beside `dir`, and
+every listed directory is one identity namespace. `new` therefore writes the record into `dir` but
+numbers past the highest id found in **any** of the type's directories, and skips a number claimed in
+any of them on another local or remote-tracking ref (`new.rs` `all_dirs()`). An `extra_dirs` entry
+that does not exist holds no ids: `new` numbers without it and says so on stderr, and
+`type.dir-matches-nothing` reports it.
+
+The decision is unchanged: `urzua new` fills in the template and leaves `Status`, `Deciders` and
+`Embodiment` to the author. A type that declares no `extra_dirs` numbers exactly as before.
+
 ## References
 
 - SPEC-1 — `new`'s one-line contract this ADR fills in the mechanism for.
@@ -93,3 +108,6 @@ template and leaves `Status`, `Deciders` and `Embodiment` to the author is uncha
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/new_record.rs`, `rust/crates/urzua-cli/src/commands/new.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: urzua new still fills the template and leaves the decision to the author; changes since are the declared identity pattern, padded H1, an always-written Stable-Id and the removal of the blockquote shapes. The Decision text on those shapes and author tiering is stale and is left for an amendment. | **structural** |
 > | 2026-11-04 | Amendment added: the blockquote and bold-list refusal no longer applies (`MILE-85`), `Author` resolves `gh api user` first (`ADR-31`), and numbering skips numbers claimed on other refs and follows the declared identity pattern (`MILE-89`, `MILE-151`, `BUG-188`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment added: numbering spans every directory the type declares (`extra_dirs`, `MILE-130`); proposed, pending maintainer acceptance. **Why:** the drift check found `new.rs` numbering across `all_dirs()` while the text said "the type's directory" (#306). | **substantive** |
+> | 2026-11-05 | Amendment of 2026-11-05 accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/new_record.rs` 15511d30876e -> 850e21078331, `rust/crates/urzua-cli/src/commands/new.rs` 1e4723c81adc -> c1190b45b353. Reason: new.rs now numbers across every directory the type declares (MILE-130, extra_dirs), which the accepted 2026-11-05 amendment records; new_record.rs only gained template_header_values for BUG-22 placeholder detection, additive and not on the numbering or fill path. The decision and its amendments hold **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

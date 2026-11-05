@@ -252,7 +252,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_FILENAME_TITLE_CONSISTENCY,
-        description: "The filename's display number and the H1's display number agree (ADR-3).",
+        description: "The filename's display number and the H1's display number agree (ADR-3). The H1's id is read the way a filename's is (`BUG-32`): with a declared `identity` pattern, the leading token must be the pattern's `prefix` and a number (`SPEC-3`); with none, a leading `PREFIX-N` or a bare `N`. A title that does not match, such as `# 2026-09-16 Notes` or `# v1.2 Release`, is reported as carrying no record id and never read as a number, and a number too large to compare is reported as such.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
@@ -380,7 +380,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
-        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
+        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. A record of a type that declares `revision_log: {required: true}` with no revision-log section is a finding too (`BUG-50`); a type that does not declare it, or declares `false`, is not held to a log and its records without one stay unexamined. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -391,6 +391,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("change-class-missing", ActionDecl::SECTION_SET),
+            VariantAction::new("revision-log-missing", ActionDecl::SECTION_ADD),
         ],
         phase: Phase::Main,
         run: |c| revision_log_change_class(c.records, c.config, c.full_text),
@@ -1006,7 +1007,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_TRANSITION_ALLOWED,
-        description: "A changed record's `Status` moved along an edge its type's `statuses.transitions` does not list, comparing the status the merge base committed with the one in the change under check, or a record new in the change starts at a status outside `statuses.initial` (`MILE-144`, `ADR-72`). Needs `--base`: a whole-repo run reports it not-applicable, not a pass. A type declaring no `transitions` is not examined, a record the diff did not change is eligible and not examined, and a record whose committed status cannot be read or is no longer declared is counted unreadable. A renamed record reads as new (`BUG-191`), because the diff reports a rename as a deletion plus an addition. A repository whose ADRs and RFCs enter at `Proposed` or `Draft` and are accepted in a later change declares that as `initial`, so a record filed already accepted is reported; this repository does so.",
+        description: "A changed record's `Status` moved along an edge its type's `statuses.transitions` does not list, comparing the status the merge base committed with the one in the change under check, or a record new in the change starts at a status outside `statuses.initial` (`MILE-144`, `ADR-72`). Needs `--base`: a whole-repo run reports it not-applicable, not a pass. A type declaring no `transitions` is not examined, a record the diff did not change is eligible and not examined, and a record whose committed status cannot be read or is no longer declared is counted unreadable. A record added at a path the merge base lacks is matched by `Stable-Id` to a record the diff deleted, so a renamed record is judged against the status it had before and not called new (`BUG-191`); one with no `Stable-Id` or no match reads as new, and one matching several deleted records is counted unreadable. A repository whose ADRs and RFCs enter at `Proposed` or `Draft` and are accepted in a later change declares that as `initial`, so a record filed already accepted is reported; this repository does so.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1329,7 +1330,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_WAIVER_MATCHES_NOTHING,
-        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Three cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
+        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there, so it suppresses nothing and its finding is reported again); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
         scope: Scope::Run,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1340,6 +1341,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("waiver-expired", ActionDecl::FIELD_SET),
+            VariantAction::new("waiver-ineffective", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-unknown-rule", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-matches-no-finding", ActionDecl::FIELD_SET),
         ],

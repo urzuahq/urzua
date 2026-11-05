@@ -80,3 +80,9 @@ hooks, a library API). The window for changing this cheaply is roughly "before v
 ## References
 
 - `README.md` — flagged Rust as named but unjustified
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
