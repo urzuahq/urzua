@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-125, BUG-126, BUG-127, MILE-111]
 ---
 
 Fixes `BUG-125`: a rule's silence about `Outcome::Unreadable` (a header present but not parseable)

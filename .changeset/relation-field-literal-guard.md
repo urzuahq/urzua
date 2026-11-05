@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-118, BUG-119, BUG-120]
 ---
 
 Adds a mechanical guard (`crates/urzua-cli/tests/relation_field_literals.rs`) against

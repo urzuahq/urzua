@@ -1,5 +1,6 @@
 ---
 default: major
+closes: [BUG-98, BUG-100, BUG-101, BUG-102, BUG-105, BUG-108, BUG-109]
 ---
 
 Fixes two opposite-direction defects in how a declared field's value is read when its exact-cased key

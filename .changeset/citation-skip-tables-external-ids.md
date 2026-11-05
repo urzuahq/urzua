@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-186]
 ---
 
 `citation.path-exists` accepts an optional `skip_revision_log` flag: when `true`, each record's

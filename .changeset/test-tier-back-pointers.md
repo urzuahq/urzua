@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `embodiment.back-pointer-resolution` takes an optional `test_paths` option declaring the test class:

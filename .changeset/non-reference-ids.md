@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-190]
 ---
 
 `citation.resolution` accepts an optional `non_reference_field` naming a header field in which a

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-91]
 ---
 
 Fixes BUG-91: `doctor`'s `ci-wired` check scans every workflow rather than reading

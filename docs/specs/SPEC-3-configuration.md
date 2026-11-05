@@ -1,5 +1,5 @@
 ---
-Version: '0.76'
+Version: '0.77'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -508,6 +508,66 @@ Non-reference-ids: ADR-72
 - When a declared id resolves to a real record, `check` prints one aggregated `Info` notice naming
   the records and ids. A notice never changes the exit code.
 - Adding the field to an Accepted record is a `structural` revision-log row, not an amendment.
+
+## Declared, not parsed: `claim.status-agreement`'s `closes` and `strict`
+
+A changeset fragment says which records it closes as data, in a frontmatter key, and
+`claim.status-agreement` checks the data instead of a sentence (`BUG-66`, `ADR-85`):
+
+```yaml
+rules:
+  claim.status-agreement:
+    level: error
+    claim_paths: [".changeset"]
+    closed_statuses: ["Fixed", "Done"]   # the verb reading's list; see below
+    closes: closes                       # optional: the frontmatter key; none declared, nothing below applies
+    strict: true                         # optional, default false, needs closes
+```
+
+```yaml
+---
+default: minor
+closes: [BUG-60, BUG-61]
+---
+```
+
+- **`closes`** names the key. The engine knows no field name, record type or status: the listed ids
+  resolve against whatever types the repository declares. It must be one key, not empty, with no
+  whitespace, `:` or `#`. Declaring neither option leaves the rule exactly as it was.
+- **`strict`** (`false` by default) makes a claim file that has a frontmatter block and lacks the
+  key a finding (`claim.field-missing`), so a fragment that names a record without saying whether it
+  closes it is caught. `closes: []` is the declaration that it closes nothing. `strict` without
+  `closes` is a load-time error, and so is either option on any other rule.
+- **The value is one line:** a flow list `[A-1, B-2]`, a single id, or `[]`. Single or double
+  quotes around an id are read as the id. The parser is deliberately small: it reads the `---`
+  block the file begins with, reads only the declared key, and ignores every other key, including the
+  release tool's own bump keys. A block list (`closes:` then `- ` lines), a list continued over
+  several lines, a key written twice, an empty entry or a value that is not a record id is
+  `claim.field-malformed`, naming the file and the key's line; it is never guessed at.
+- **A listed id that resolves to no record** is `claim.id-unresolved`, an error. It applies only to
+  ids from this field: a reference the closing-verb reading finds that matches no record is still
+  skipped and counted as eligible and unexamined.
+- **A listed record must be closed.** Closed is the type's declared `statuses` terminals (`success`
+  and `failure`), never `closed_statuses`: a type declaring none has no declared close, so a record
+  of it listed here is reported. An open record, or one whose status cannot be read, is an error
+  naming the record and its status, with a suggested `edit-field` on that record's `Status`
+  (`ADR-73`); the finding does not choose between closing the record and taking it off the list.
+  Every claim file under `claim_paths` is read, with or without `--base`.
+- **A file with no frontmatter block** (it does not begin with a closed `---` block) is not a
+  fragment: it is counted out of scope in the rule's population and named in an `Info` notice, and
+  never given a finding. That is how a `README.md` in the directory is excluded without the engine
+  knowing its name.
+- **Prose is not read for this claim.** The frontmatter block is skipped by the closing-verb
+  reading once `closes` is declared, so the key is not read again as the verb "closes". That reading
+  still runs over the body, unchanged, as a deprecated convenience; `check` prints an `Info` notice
+  with how many closing-verb claims it found, so a repository can see when it is safe to stop. Removing
+  it is a separate decision.
+- **The release tool must tolerate the key.** The pinned knope accepts a one-line list, a scalar
+  and `[]`, ignores the key and gives the same bump and changelog, and rejects a block list and a
+  list continued over two lines. `.github/scripts/knope-closes-compat.test.sh` runs the pinned knope
+  over a fragment carrying the key (`make knope-closes-compat`; CI installs the pinned release) and
+  fails if the installed version is not the pin. A workspace of several named packages was not
+  tested; an adopter with one should run the same test before declaring the field.
 
 ## Cited issues and pull requests: `citation.issue-exists`
 
@@ -1430,3 +1490,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
 > | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
 > | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
+> | 2026-11-05 | Bumped to `0.77`. Documents the `closes` and `strict` options of `claim.status-agreement`: a changeset fragment lists the records it closes in a one-line frontmatter key, each id must resolve (`claim.id-unresolved`) and be at a terminal status its own type declares, a block list or malformed value is `claim.field-malformed`, `strict` makes a fragment without the key a finding, and a file with no frontmatter is out of scope and disclosed. **Why:** `BUG-66`, decided by `ADR-85`. | **substantive** |

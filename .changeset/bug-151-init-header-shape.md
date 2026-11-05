@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-151]
 ---
 
 `urzua init` now proposes the header shape each record type's existing records use, instead of

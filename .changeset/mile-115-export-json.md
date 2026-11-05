@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 # Add `urzua export --format json`

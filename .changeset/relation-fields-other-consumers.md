@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-118, BUG-119, BUG-120]
 ---
 
 Fixes `BUG-118`, `BUG-119`, `BUG-120`: `RFC-42`/`ADR-61` made `Status`/`Embodiment`/`Realized-by`/

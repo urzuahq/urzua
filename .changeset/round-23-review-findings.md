@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 Fixes three real defects found by review:

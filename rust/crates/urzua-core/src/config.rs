@@ -140,6 +140,17 @@ pub struct RuleSetting {
     /// never inferred: a built-in list is how a rule silently stops applying.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_statuses: Option<Vec<String>>,
+    /// The frontmatter key in which a claim file lists, on one line, the
+    /// records it closes (`ADR-85`). Declared, never known: the engine names
+    /// no field. Only meaningful to `claim.status-agreement`; optional, and
+    /// declaring none leaves the rule exactly as it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closes: Option<String>,
+    /// When `true`, a claim file with frontmatter but without the `closes` key
+    /// is a finding (`ADR-85`). Only meaningful to `claim.status-agreement`,
+    /// needs `closes`, and `false` by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
     /// Statuses that mean a referenced record's work is over. Only meaningful
     /// to `narrative-field.stale`. Declared per repository rather than compiled
     /// in: a built-in table keyed on this repository's own type names is how the
@@ -1135,6 +1146,12 @@ pub enum ConfigError {
     },
     #[error("rule '{rule}' option 'non_reference_field' {reason}")]
     InvalidNonReferenceField { rule: String, reason: String },
+    #[error("rule '{rule}' option '{option}' {reason}")]
+    InvalidClaimField {
+        rule: String,
+        option: &'static str,
+        reason: String,
+    },
     #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
     InvalidExternalId {
         rule: String,
@@ -1762,6 +1779,17 @@ pub fn parse_with_document_models(
                 option: "non_reference_field".to_string(),
             });
         }
+        for (option, present) in [
+            ("closes", setting.closes.is_some()),
+            ("strict", setting.strict.is_some()),
+        ] {
+            if present && !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
         if setting.skip_revision_log.is_some()
             && !crate::rules::rule_accepts_option(name, "skip_revision_log")
         {
@@ -2127,6 +2155,37 @@ pub fn parse_with_document_models(
                     });
                 }
             }
+        }
+    }
+    // `closes` names a frontmatter key, so it must be one the one-line reader
+    // can find; `strict` judges the presence of that key, so it needs one. An
+    // option that could never apply is refused, not ignored (`ADR-85`).
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let bad = |option: &'static str, reason: &str| ConfigError::InvalidClaimField {
+            rule: name.clone(),
+            option,
+            reason: reason.to_string(),
+        };
+        if let Some(key) = setting.closes.as_deref() {
+            if key.is_empty()
+                || key
+                    .chars()
+                    .any(|c| c.is_whitespace() || c == ':' || c == '#')
+            {
+                return Err(bad(
+                    "closes",
+                    "must be one frontmatter key: not empty, with no whitespace, ':' or '#'",
+                ));
+            }
+        }
+        if setting.strict.is_some() && setting.closes.is_none() {
+            return Err(bad(
+                "strict",
+                "needs `closes`: it judges whether a claim file carries that key",
+            ));
         }
     }
     // `non_reference_field` must name a field some type declares (the header is
@@ -2972,6 +3031,45 @@ rules:
         .unwrap_err()
         .to_string()
         .contains("does not take the option 'reference_sections'"));
+    }
+
+    /// `ADR-85`: `closes` and `strict` are options of `claim.status-agreement`
+    /// alone, optional, and `strict` needs `closes`.
+    #[test]
+    fn closes_and_strict_belong_to_the_claim_rule_and_strict_needs_closes_observed_failing() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let claim = "  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n    closed_statuses: [\"Fixed\"]\n";
+        let ok = parse(&format!(
+            "{base}{claim}    closes: closes\n    strict: true\n"
+        ))
+        .unwrap();
+        let s = &ok.rules["claim.status-agreement"];
+        assert_eq!(s.closes.as_deref(), Some("closes"));
+        assert_eq!(s.strict, Some(true));
+        // Declaring neither is the rule as it was.
+        let none = parse(&format!("{base}{claim}")).unwrap();
+        assert_eq!(none.rules["claim.status-agreement"].closes, None);
+        // Another rule refuses both.
+        for option in ["closes: closes", "strict: true"] {
+            let err = parse(&format!(
+                "{base}  field.quality:\n    level: error\n    {option}\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("does not take the option"), "{option}: {err}");
+        }
+        // `strict` judges the key, so it needs one.
+        let err = parse(&format!("{base}{claim}    strict: false\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("strict") && err.contains("closes"), "{err}");
+        // A key the one-line reader could not find is refused.
+        for bad in ["\"\"", "\"a b\"", "\"a:b\"", "\"a#b\""] {
+            let err = parse(&format!("{base}{claim}    closes: {bad}\n"))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("closes"), "{bad}: {err}");
+        }
     }
 
     #[test]
@@ -4277,6 +4375,8 @@ mod option_table_tests {
         "template_placeholders",
         "skip_revision_log",
         "non_reference_field",
+        "closes",
+        "strict",
         "field_levels",
         "drift_grace_days",
         "drift_audit_field",

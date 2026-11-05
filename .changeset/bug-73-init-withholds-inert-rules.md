@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-73]
 ---
 
 `urzua init` no longer proposes `field.quality`, `field.pending`, `header.field-set-consistency` or

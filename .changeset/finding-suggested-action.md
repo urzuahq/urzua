@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-44]
 ---
 
 `urzua check` findings can now carry a `suggested_action`: what to do about the finding, as data an

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-114, BUG-115, BUG-116, BUG-117]
 ---
 
 Fixes `BUG-114`: `parse_record_filename`'s prefix check accepted only ASCII-uppercase letters, so a

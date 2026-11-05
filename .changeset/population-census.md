@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 Adds the census: a rule declares the population it will judge as a candidate list, and `eligible` is

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-98]
 ---
 
 A record type that declares `sections.depth: 2` has its `###` headings read as sections nested under

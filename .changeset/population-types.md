@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `rules_executed` entries begin carrying a `population` — what a rule was eligible to examine and what

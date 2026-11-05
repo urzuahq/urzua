@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-136]
 ---
 
 `relation.supersession-reciprocity` read a resolved target's own field via a plain `.get()` with no

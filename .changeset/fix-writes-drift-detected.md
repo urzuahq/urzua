@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `urzua fix` now detects and, with `--apply`, writes `Embodiment: Drift detected` for a record whose

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Add `required` and `exempt_statuses` under a record type's `sections` declaration, and two opt-in

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 An index `format` for `index.freshness` and `urzua index` can use placeholders for declared header
