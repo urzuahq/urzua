@@ -1,5 +1,5 @@
 ---
-Version: '0.77'
+Version: '0.78'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -369,7 +369,33 @@ Two details carry weight:
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
   committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
-  derived `blocked` value is not part of this declaration (`MILE-27`).
+  The derived `blocked` value is the next declaration.
+
+  `progress` (optional, `MILE-144`, `RFC-48`, `ADR-83`) names the statuses that claim the work has
+  advanced, for example `InProgress` and `Done`; it must be a subset of `values`, deduplicated, and
+  disjoint from `failure` and `blocked`. It may include a `success` status, because a record cannot
+  finish before its dependencies do. `implementable` is not read for this: it means "code may cite
+  it". `blocked` (optional) names the non-terminal statuses a person writes to say a record is
+  waiting, for example `Blocked`; it must be a subset of `values` and disjoint from `success`,
+  `failure` and `progress`. `RFC-48` computes `blocked` and never writes it, so a repository that
+  follows it declares `progress` and no `blocked`, and no record states a waiting status; a type that
+  still writes one declares `blocked` to have it checked both ways.
+
+  With a sequencing relation declared in `roadmap.pairs` (below), a record is blocked when any record it
+  depends on, in either field of a declared pair (a written `Blocks` counts), is not in a status its own
+  type declares `success`. `success` is the one list of done statuses. A dependency in a `failure`
+  status, with no `Status`, or whose type declares no `success` therefore blocks. The opt-in rule
+  `sequence.status-agreement` reports a blocked record that states a `progress` status, and a status
+  listed in `blocked` while nothing blocks the record; a blocked record in a status that claims no
+  progress, `Planned` for instance, is correct. Only a type that declares `progress` or `blocked` is
+  examined. The finding offers `edit-field` `set` on `Status`, carrying the declared blocked status as
+  the value only when the type declares exactly one, the record is not in a `success` status, and the
+  declared `transitions` (when any) allow the move. A value that cannot be computed is not guessed: a
+  record in a `blocked` or `progress` status that would be reported unblocked is counted unreadable when
+  it names a `Depends-on` value that resolves to nothing or to a record whose header cannot be read, or
+  when a record that may write an inverse claim has an unreadable header; a type that declares only
+  `progress` is guarded the same way. Enabling the rule with no `roadmap.pairs`, or with no type
+  declaring `progress` or `blocked`, is a load error.
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -883,12 +909,20 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   enabled, and a prose entry when `header.pointer-field-clean` is enabled. In a repository that follows
   `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
   guard for the roadmap: the graph is only computed when no claim was dropped.
+- **Which pairs are dependencies: `roadmap.pairs`** (`ADR-83`). A pair can be `acyclic` without being a
+  dependency: a containment pair (`Parent`/`Children`) is checked for cycles, but a child does not wait
+  on its parent finishing. The top-level `roadmap: {pairs: [name, ...]}` names the `relation_pairs`
+  entries that are dependencies, and the derived `blocked` value reads exactly those, so `check` and
+  the roadmap command cannot disagree. Each name must be a declared pair that sets `acyclic: true`,
+  listed once; anything else is a load error. `sequence.cycle` and `sequence.unresolved-blocker` still
+  read every `acyclic` pair.
+- **The derived `blocked` value** is read from these edges by `sequence.status-agreement` (see
+  `statuses.progress` and `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
-  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
-  `MILE-182`).
+  `sequence.terminal-parent-open-child`, the `condition` record type and `urzua roadmap` are
+  `RFC-48`'s other parts and belong to other milestones (`MILE-182`).
 
-Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
+Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
@@ -1519,3 +1553,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
 > | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
 > | 2026-11-05 | Bumped to `0.77`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
+> | 2026-11-05 | Bumped to `0.78`. A type's `statuses` declaration gains `progress` (statuses that claim work advanced) and `blocked` (written waiting statuses, opt-in), and a top-level `roadmap.pairs` names the sequencing pairs the derived `blocked` value reads. The opt-in rule `sequence.status-agreement` reports a blocked record that states a `progress` status, and a written blocked status while nothing blocks the record; a progress-status record with an unresolved or unreadable dependency is counted unreadable even when the type writes no blocked status. **Why:** `MILE-144`, decided in `ADR-83` (maintainer decision, 2026-11-05: `Blocked` is derived only, per `RFC-48`). | **substantive** |

@@ -34,6 +34,8 @@ pub enum Declaration {
     PointerFields,
     /// `revision_log.version_bump` (`BUG-51`).
     VersionBump,
+    /// `statuses.blocked` or `statuses.progress` (`MILE-144`).
+    BlockedOrProgress,
 }
 
 impl Declaration {
@@ -44,6 +46,7 @@ impl Declaration {
             Declaration::KnownFields => "known_fields",
             Declaration::PointerFields => "pointer_fields",
             Declaration::VersionBump => "revision_log.version_bump",
+            Declaration::BlockedOrProgress => "statuses.blocked or statuses.progress",
         }
     }
 }
@@ -402,6 +405,26 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         companion: None,
         run: |c| sequence_unresolved_blocker(c.records, c.config, c.index, c.untracked_records),
+    },
+    RuleDef {
+        id: RULE_SEQUENCE_STATUS_AGREEMENT,
+        description: "A record's written `Status` contradicts the derived `blocked` value (`MILE-144`, `RFC-48`, `ADR-83`). A record is blocked when any record it depends on, over the pairs `roadmap.pairs` declares and in either field, is not in a status its own type declares `success`; a dependency in a `failure` status, with no `Status`, or whose type declares no `success` blocks. Reports a blocked record that states a status its type lists in `statuses.progress` (`Done` included when listed; `Planned` is not progress), and a status the type lists in `statuses.blocked` while nothing blocks the record. Opt-in per type: only a type that declares `progress` or `blocked` is examined, and enabling the rule with no `roadmap.pairs`, or with no type declaring either, is a config load error. A value that cannot be computed is not guessed: a record in a `blocked` or a `progress` status that would be reported unblocked is counted unreadable when it names a dependency that resolves to nothing or to an unreadable record, or when a record that may write an inverse claim cannot be read, whether or not the type writes a `blocked` status at all (`ADR-83`).",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        needs_identity_index: true,
+        requires_relation_pairs: true,
+        requires_acyclic_pair: true,
+        requires_override_log: false,
+        reads_declaration: Some(Declaration::BlockedOrProgress),
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        actions: &[
+            VariantAction::new("status-blocked-unblocked", ActionDecl::FIELD_SET),
+            VariantAction::new("status-blocked-derived", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| sequence_status_agreement(c.records, c.config, c.index),
     },
     RuleDef {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
@@ -1700,6 +1723,10 @@ mod tests {
             vec![
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (
+                    RULE_SEQUENCE_STATUS_AGREEMENT,
+                    Declaration::BlockedOrProgress
+                ),
                 (
                     RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                     Declaration::VersionBump
