@@ -550,3 +550,36 @@ pub(super) fn declared_field_severity(
         RuleLevel::Off => None,
     }
 }
+
+/// Record files that exist on disk in a record type's directory but that git
+/// does not track, by identifier (`BUG-13`). Discovery reads only tracked and
+/// staged files (`ADR-6`), so a reference to one of these resolves to nothing;
+/// the file is real, though, and the repair differs from a typo's. The caller
+/// supplies it because the rule layer touches no filesystem and no git.
+pub type UntrackedRecords = HashMap<crate::values::RecordId, PathBuf>;
+
+/// The variant and message for a reference that resolves to no discovered
+/// record (`BUG-13`): `untracked_variant` when the caller found a file for it
+/// on disk that git does not track, `missing_variant` when nothing exists.
+/// `suffix` ends the message in the rule's own words.
+pub(super) fn unresolved_reference(
+    field: &str,
+    reference: &str,
+    untracked: &UntrackedRecords,
+    (missing_variant, untracked_variant): (&'static str, &'static str),
+    suffix: &str,
+) -> (&'static str, String) {
+    match untracked.get(&crate::values::RecordId::new(reference)) {
+        Some(path) => (
+            untracked_variant,
+            format!(
+                "{field}: {reference} resolves to {}, which exists on disk but is not tracked by git, so discovery does not see it{suffix}",
+                path.display()
+            ),
+        ),
+        None => (
+            missing_variant,
+            format!("{field}: {reference} does not resolve to any discovered record{suffix}"),
+        ),
+    }
+}

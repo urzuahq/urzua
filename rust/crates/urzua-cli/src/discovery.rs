@@ -150,6 +150,55 @@ pub(crate) fn load_records(
     Ok((records, full_text))
 }
 
+/// Record files that exist on disk directly in a record type's directories but
+/// that git does not track, by identifier (`BUG-13`). Discovery reads only
+/// tracked and staged files (`ADR-6`), so a reference to a record drafted but
+/// not yet `git add`ed resolves to nothing; this is the on-disk fact that lets
+/// a rule say so, supplied here because `urzua-core` touches no filesystem.
+/// Read with the loader's own identity rules. A file that cannot be read yields
+/// no entry: the hint is lost and the reference reads as missing, as before.
+pub(crate) fn untracked_records(
+    repo_root: &Path,
+    config: &Config,
+    tracked: &[PathBuf],
+) -> urzua_core::rules::UntrackedRecords {
+    let tracked: std::collections::HashSet<&Path> = tracked.iter().map(PathBuf::as_path).collect();
+    let mut on_disk: Vec<PathBuf> = Vec::new();
+    for type_config in config.record_types.values() {
+        for dir in type_config.all_dirs() {
+            let Ok(entries) = std::fs::read_dir(repo_root.join(dir)) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if !entry.file_type().is_ok_and(|t| t.is_file()) {
+                    continue;
+                }
+                let rel = Path::new(dir).join(entry.file_name());
+                if !tracked.contains(rel.as_path()) {
+                    on_disk.push(rel);
+                }
+            }
+        }
+    }
+    on_disk.sort();
+    on_disk.dedup();
+    let Ok((records, _)) = load_records(
+        repo_root,
+        &on_disk,
+        &std::collections::HashSet::new(),
+        config,
+    ) else {
+        return Default::default();
+    };
+    records
+        .iter()
+        .filter_map(|record| {
+            urzua_core::rules::record_id(record)
+                .map(|id| (urzua_core::values::RecordId::new(&id), record.path.clone()))
+        })
+        .collect()
+}
+
 /// Parses `content` as the record at `rel_path` would be loaded, though the
 /// file need not exist: the type is the one whose directory holds the path,
 /// under the same filename rules `load_records` applies. For the proposed

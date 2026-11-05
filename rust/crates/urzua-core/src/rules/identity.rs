@@ -162,7 +162,7 @@ mod tests {
         )]);
         let records = [target, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -188,7 +188,7 @@ mod tests {
         )]);
         let records = [target, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -213,7 +213,7 @@ mod tests {
         )]);
         let records = [legacy_style, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -241,7 +241,7 @@ mod tests {
         )]);
         let records = [milestone, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert!(findings.is_empty(), "{findings:?}");
     }
 
