@@ -228,26 +228,24 @@ record_types:
       - "Blocks"
       - "Realized-by"
     statuses:
-      values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
+      values: ["Planned", "InProgress", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
-      # Blocked is derived (MILE-144): a milestone is blocked when a Depends-on
-      # target is not Done. A written Blocked must agree with that, and an
-      # implementable status must not be written while it is blocked
-      # (sequence.status-agreement).
-      blocked: ["Blocked"]
+      # Blocked is derived only (RFC-48, ADR-83): a milestone is blocked when a
+      # Depends-on target is not Done, and no milestone writes it as a status.
+      # A blocked milestone may be Planned; InProgress and Done claim progress
+      # a blocked milestone cannot have (sequence.status-agreement).
+      progress: ["InProgress", "Done"]
       # Done is implementable: code that implements a delivered milestone keeps
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.
       implementable: ["Planned", "InProgress", "Done"]
-      # A milestone starts Planned, or Blocked when filed already waiting, or Done
-      # when the PR that files it delivers it. Done can be reopened; WontDo is
-      # terminal (SPEC-6).
-      initial: ["Planned", "Blocked", "Done"]
+      # A milestone starts Planned, or Done when the PR that files it delivers
+      # it. Done can be reopened; WontDo is terminal (SPEC-6).
+      initial: ["Planned", "Done"]
       transitions:
-        Planned: ["InProgress", "Blocked", "Done", "WontDo"]
-        InProgress: ["Planned", "Blocked", "Done", "WontDo"]
-        Blocked: ["Planned", "InProgress", "Done", "WontDo"]
+        Planned: ["InProgress", "Done", "WontDo"]
+        InProgress: ["Planned", "Done", "WontDo"]
         Done: ["Planned", "InProgress"]
       # Status is held to the evidence (MILE-183): the PR that delivers a
       # milestone sets Realized-by and Done together. Implemented or Verified
@@ -258,7 +256,7 @@ record_types:
       delivery:
         delivered_tiers: ["Implemented", "Verified"]
         unevidenced_tiers: ["Not started"]
-        not_done: ["Planned", "InProgress", "Blocked"]
+        not_done: ["Planned", "InProgress"]
         set_status: "Done"
     # Every milestone, open or closed, states its Done means (maintainer
     # decision of 2026-11-04): a Done milestone is judged against it and not
@@ -384,6 +382,12 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
+# The pairs that are dependencies (ADR-83): the derived blocked value reads
+# these and no other acyclic pair, so a containment pair declared acyclic would
+# not block its children.
+roadmap:
+  pairs: ["sequencing"]
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
@@ -446,7 +450,7 @@ rules:
   # names nothing.
   sequence.cycle: error
   sequence.unresolved-blocker: error
-  # The written Status agrees with the derived blocked value (MILE-144).
+  # A blocked milestone does not state a status that claims progress (MILE-144).
   sequence.status-agreement: error
   revision-log.change-class-required: error
   # Judged on a `--base` run against the merge base's copy of the record

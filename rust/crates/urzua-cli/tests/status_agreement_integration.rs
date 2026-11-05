@@ -1,6 +1,8 @@
 //! MILE-144: a written `Status` is held to the derived `blocked` value
-//! (`RFC-48`, `ADR-64`). A record is blocked when any `Depends-on` target is
-//! not in a status its own type declares `success`.
+//! (`RFC-48`, `ADR-83`, `ADR-64`). A record is blocked when any dependency over
+//! the pairs `roadmap.pairs` declares is not in a status its own type declares
+//! `success`. A blocked record that states a `progress` status is an error; a
+//! type may also opt in to a written blocked status, checked the other way.
 
 use std::path::Path;
 use std::process::Command;
@@ -8,8 +10,11 @@ use std::process::Command;
 const CONFIG: &str = "schema_version: 2
 relation_pairs:
   - {name: sequencing, forward: Depends-on, inverse: Blocks, reciprocity: none, acyclic: true, cross_type: true}
+roadmap:
+  pairs: [sequencing]
 rules:
   sequence.status-agreement: error
+  sequence.unresolved-blocker: error
 record_types:
   milestone:
     dir: docs/milestones
@@ -21,7 +26,7 @@ record_types:
       values: [Planned, InProgress, Blocked, Done, WontDo]
       success: [Done]
       failure: [WontDo]
-      implementable: [Planned, InProgress, Done]
+      progress: [InProgress, Done]
       blocked: [Blocked]
   bug:
     dir: docs/bugs
@@ -33,6 +38,17 @@ record_types:
       values: [Open, Fixed]
       success: [Fixed]
 ";
+
+/// A repository that follows RFC-48 as urzua does: `Blocked` is not a status,
+/// and the milestone type declares only `progress`.
+fn derived_only() -> String {
+    CONFIG
+        .replace(
+            "Planned, InProgress, Blocked, Done, WontDo",
+            "Planned, InProgress, Done, WontDo",
+        )
+        .replace("      blocked: [Blocked]\n", "")
+}
 
 fn repo(name: &str, config: &str, records: &[(&str, &str, &str)]) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("urzua-agree-{name}-{}", std::process::id()));
@@ -79,6 +95,19 @@ fn agreement(report: &serde_json::Value) -> Vec<&serde_json::Value> {
         .collect()
 }
 
+fn examined_and_unreadable(report: &serde_json::Value) -> (u64, u64) {
+    let rule = report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "sequence.status-agreement")
+        .expect("the rule reports its execution");
+    (
+        rule["population"]["examined"].as_u64().unwrap(),
+        rule["population"]["unreadable"].as_u64().unwrap(),
+    )
+}
+
 #[test]
 fn a_written_blocked_with_nothing_blocking_is_an_error() {
     let dir = repo(
@@ -108,7 +137,7 @@ fn a_written_blocked_with_nothing_blocking_is_an_error() {
 }
 
 #[test]
-fn a_blocked_record_that_states_an_implementable_status_is_an_error() {
+fn a_blocked_record_that_claims_progress_is_an_error_and_planned_is_not() {
     let dir = repo(
         "derived",
         CONFIG,
@@ -120,21 +149,113 @@ fn a_blocked_record_that_states_an_implementable_status_is_an_error() {
                 "Depends-on: MILE-1",
             ),
             ("docs/milestones/MILE-3-c.md", "Done", "Depends-on: MILE-1"),
+            (
+                "docs/milestones/MILE-4-d.md",
+                "InProgress",
+                "Depends-on: MILE-1",
+            ),
         ],
     );
     let (_, report) = check(&dir);
     let found = agreement(&report);
+    let files: Vec<&str> = found.iter().map(|f| f["file"].as_str().unwrap()).collect();
     assert_eq!(found.len(), 2, "{report}");
-    let first = found
+    assert!(files.iter().any(|f| f.contains("MILE-3")), "{files:?}");
+    assert!(files.iter().any(|f| f.contains("MILE-4")), "{files:?}");
+    assert!(
+        !files.iter().any(|f| f.contains("MILE-2")),
+        "Planned is not progress: {files:?}"
+    );
+    let in_progress = found
         .iter()
-        .find(|f| f["file"].as_str().unwrap().contains("MILE-2"))
+        .find(|f| f["file"].as_str().unwrap().contains("MILE-4"))
         .unwrap();
-    assert!(first["message"]
+    assert!(in_progress["message"]
         .as_str()
         .unwrap()
         .contains("MILE-1 (InProgress)"));
-    // One declared blocked status is the computed answer.
-    assert_eq!(first["suggested_action"]["value"], "Blocked");
+    // One declared blocked status, and no declared lifecycle: it is the answer.
+    assert_eq!(in_progress["suggested_action"]["value"], "Blocked");
+    // A finished record never moves back to a waiting state.
+    let done = found
+        .iter()
+        .find(|f| f["file"].as_str().unwrap().contains("MILE-3"))
+        .unwrap();
+    assert!(done["suggested_action"].get("value").is_none(), "{done}");
+}
+
+#[test]
+fn the_suggested_status_is_offered_only_when_the_lifecycle_allows_it() {
+    let allowed = CONFIG.replace(
+        "      blocked: [Blocked]\n",
+        "      blocked: [Blocked]\n      initial: [Planned]\n      transitions:\n        Planned: [InProgress]\n        InProgress: [Blocked, Done]\n        Blocked: [InProgress]\n        Done: [Planned]\n",
+    );
+    let dir = repo(
+        "lifecycle",
+        &allowed,
+        &[
+            ("docs/milestones/MILE-1-a.md", "Planned", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "InProgress",
+                "Depends-on: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    let found = agreement(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert_eq!(found[0]["suggested_action"]["value"], "Blocked");
+    // The same declaration without InProgress -> Blocked offers no value.
+    let denied = allowed.replace("InProgress: [Blocked, Done]", "InProgress: [Done]");
+    let dir = repo(
+        "lifecycle-denied",
+        &denied,
+        &[
+            ("docs/milestones/MILE-1-a.md", "Planned", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "InProgress",
+                "Depends-on: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    let found = agreement(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(
+        found[0]["suggested_action"].get("value").is_none(),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_repository_that_declares_no_written_blocked_status_still_reports_progress() {
+    let dir = repo(
+        "derived-only",
+        &derived_only(),
+        &[
+            ("docs/milestones/MILE-1-a.md", "Planned", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "InProgress",
+                "Depends-on: MILE-1",
+            ),
+            (
+                "docs/milestones/MILE-3-c.md",
+                "Planned",
+                "Depends-on: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    let found = agreement(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["file"].as_str().unwrap().contains("MILE-2"));
+    assert!(
+        found[0]["suggested_action"].get("value").is_none(),
+        "no blocked status to propose"
+    );
 }
 
 #[test]
@@ -152,10 +273,10 @@ fn blocked_and_done_agree_with_the_derived_value() {
             ("docs/milestones/MILE-3-c.md", "Done", ""),
             (
                 "docs/milestones/MILE-4-d.md",
-                "Planned",
+                "InProgress",
                 "Depends-on: MILE-3",
             ),
-            // Not examined as blocked-but-implementable: a failure status is not implementable.
+            // A failure status is not progress.
             (
                 "docs/milestones/MILE-5-e.md",
                 "WontDo",
@@ -166,14 +287,7 @@ fn blocked_and_done_agree_with_the_derived_value() {
     let (code, report) = check(&dir);
     assert!(agreement(&report).is_empty(), "{report}");
     assert_eq!(code, 0, "{report}");
-    let rule = report["rules_executed"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|r| r["rule"] == "sequence.status-agreement")
-        .expect("the rule reports its execution");
-    // The five milestones that declare `statuses.blocked` are all examined.
-    assert_eq!(rule["population"]["examined"], 5, "{rule}");
+    assert_eq!(examined_and_unreadable(&report), (5, 0), "{report}");
 }
 
 #[test]
@@ -185,7 +299,7 @@ fn a_dependency_in_a_failure_status_still_blocks() {
             ("docs/milestones/MILE-1-a.md", "WontDo", ""),
             (
                 "docs/milestones/MILE-2-b.md",
-                "Planned",
+                "InProgress",
                 "Depends-on: MILE-1",
             ),
         ],
@@ -201,8 +315,7 @@ fn a_dependency_in_a_failure_status_still_blocks() {
 
 #[test]
 fn the_dependency_is_judged_by_its_own_types_success_list() {
-    // A Fixed bug is finished; an Open one is not. The bug type declares no
-    // `blocked`, so it is a target here and is not itself examined.
+    // A Fixed bug is finished; an Open one is not.
     let dir = repo(
         "cross",
         CONFIG,
@@ -211,12 +324,12 @@ fn the_dependency_is_judged_by_its_own_types_success_list() {
             ("docs/bugs/BUG-2-b.md", "Open", ""),
             (
                 "docs/milestones/MILE-1-a.md",
-                "Planned",
+                "InProgress",
                 "Depends-on: BUG-1",
             ),
             (
                 "docs/milestones/MILE-2-b.md",
-                "Planned",
+                "InProgress",
                 "Depends-on: BUG-2",
             ),
         ],
@@ -225,6 +338,56 @@ fn the_dependency_is_judged_by_its_own_types_success_list() {
     let found = agreement(&report);
     assert_eq!(found.len(), 1, "{report}");
     assert!(found[0]["file"].as_str().unwrap().contains("MILE-2"));
+}
+
+#[test]
+fn a_dependency_whose_type_declares_no_success_list_blocks() {
+    let config = CONFIG.replace(
+        "    statuses:\n      values: [Open, Fixed]\n      success: [Fixed]\n",
+        "",
+    );
+    let dir = repo(
+        "no-success",
+        &config,
+        &[
+            ("docs/bugs/BUG-1-a.md", "Fixed", ""),
+            (
+                "docs/milestones/MILE-1-a.md",
+                "InProgress",
+                "Depends-on: BUG-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    let found = agreement(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("BUG-1 (Fixed)"));
+}
+
+#[test]
+fn a_dependency_with_no_status_blocks() {
+    let dir = repo(
+        "no-status",
+        CONFIG,
+        &[
+            ("docs/milestones/MILE-1-a.md", "", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "InProgress",
+                "Depends-on: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    let found = agreement(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("MILE-1 (no status)"));
 }
 
 #[test]
@@ -239,7 +402,7 @@ fn a_written_blocks_counts_as_the_dependency_it_states() {
                 "InProgress",
                 "Blocks: MILE-2",
             ),
-            ("docs/milestones/MILE-2-b.md", "Planned", ""),
+            ("docs/milestones/MILE-2-b.md", "InProgress", ""),
         ],
     );
     let (_, report) = check(&dir);
@@ -247,11 +410,123 @@ fn a_written_blocks_counts_as_the_dependency_it_states() {
 }
 
 #[test]
-fn enabling_the_rule_with_no_type_declaring_blocked_fails_to_load() {
-    let config = CONFIG.replace("      blocked: [Blocked]\n", "");
+fn an_acyclic_pair_the_roadmap_does_not_declare_blocks_nothing() {
+    // A containment pair is checked for cycles but a child does not wait on
+    // its parent finishing.
+    let config = CONFIG
+        .replace(
+            "relation_pairs:\n",
+            "relation_pairs:\n  - {name: containment, forward: Parent, inverse: Children, reciprocity: none, acyclic: true, cross_type: true}\n",
+        )
+        .replace("known_fields: [Depends-on, Blocks]", "known_fields: [Depends-on, Blocks, Parent, Children]")
+        .replace("pointer_fields: [Depends-on, Blocks]", "pointer_fields: [Depends-on, Blocks, Parent, Children]");
     let dir = repo(
-        "undeclared",
+        "containment",
         &config,
+        &[
+            ("docs/milestones/MILE-1-a.md", "InProgress", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "InProgress",
+                "Parent: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    assert!(agreement(&report).is_empty(), "{report}");
+}
+
+#[test]
+fn a_dangling_depends_on_with_a_written_blocked_status_is_not_called_unblocked() {
+    let dir = repo(
+        "dangling",
+        CONFIG,
+        &[(
+            "docs/milestones/MILE-2-b.md",
+            "Blocked",
+            "Depends-on: MILE-999",
+        )],
+    );
+    let (_, report) = check(&dir);
+    assert!(agreement(&report).is_empty(), "{report}");
+    assert_eq!(examined_and_unreadable(&report), (0, 1), "{report}");
+    // The reference is the one finding to fix.
+    assert!(report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f["rule"] == "sequence.unresolved-blocker"));
+}
+
+#[test]
+fn a_dependency_on_an_unreadable_record_is_not_called_unblocked() {
+    let dir = repo(
+        "unreadable-target",
+        CONFIG,
+        &[
+            ("docs/milestones/MILE-1-a.md", "[unclosed", ""),
+            (
+                "docs/milestones/MILE-2-b.md",
+                "Blocked",
+                "Depends-on: MILE-1",
+            ),
+        ],
+    );
+    let (_, report) = check(&dir);
+    assert!(agreement(&report).is_empty(), "{report}");
+    assert_eq!(examined_and_unreadable(&report), (0, 2), "{report}");
+}
+
+#[test]
+fn an_unreadable_record_that_may_write_blocks_does_not_make_a_record_unblocked() {
+    // MILE-1's header cannot be read, so a `Blocks: MILE-2` it may write is
+    // invisible; MILE-2 is not reported as blocked by nothing.
+    let dir = repo(
+        "unreadable-writer",
+        CONFIG,
+        &[
+            ("docs/milestones/MILE-1-a.md", "[unclosed", "Blocks: MILE-2"),
+            ("docs/milestones/MILE-2-b.md", "Blocked", ""),
+        ],
+    );
+    let (_, report) = check(&dir);
+    assert!(agreement(&report).is_empty(), "{report}");
+    assert_eq!(examined_and_unreadable(&report), (0, 2), "{report}");
+}
+
+#[test]
+fn enabling_the_rule_with_no_type_declaring_blocked_or_progress_fails_to_load() {
+    let config = derived_only().replace("      progress: [InProgress, Done]\n", "");
+    assert_load_error("undeclared", &config, "statuses.progress");
+}
+
+#[test]
+fn enabling_the_rule_with_no_roadmap_pairs_fails_to_load() {
+    let config = CONFIG.replace("roadmap:\n  pairs: [sequencing]\n", "");
+    assert_load_error("no-pairs", &config, "roadmap.pairs");
+}
+
+#[test]
+fn a_roadmap_pair_must_be_declared_and_acyclic() {
+    let config = CONFIG.replace("pairs: [sequencing]", "pairs: [nope]");
+    assert_load_error("unknown-pair", &config, "not a relation_pairs entry");
+    let config = CONFIG.replace("reciprocity: none, acyclic: true", "reciprocity: none");
+    assert_load_error("not-acyclic", &config, "acyclic");
+}
+
+#[test]
+fn a_blocked_status_that_is_also_a_progress_status_fails_to_load() {
+    let config = CONFIG.replace(
+        "progress: [InProgress, Done]",
+        "progress: [InProgress, Blocked]",
+    );
+    assert_load_error("overlap", &config, "both `progress` and `blocked`");
+}
+
+fn assert_load_error(name: &str, config: &str, needle: &str) {
+    let dir = repo(
+        name,
+        config,
         &[("docs/milestones/MILE-1-a.md", "Planned", "")],
     );
     let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
@@ -265,13 +540,12 @@ fn enabling_the_rule_with_no_type_declaring_blocked_fails_to_load() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(text.contains("statuses.blocked"), "{text}");
+    assert!(text.contains(needle), "{text}");
 }
 
 #[test]
 fn a_repository_that_does_not_enable_the_rule_is_unchanged() {
     let config = CONFIG.replace("  sequence.status-agreement: error\n", "");
-    let config = config.replace("rules:\n", "rules: {}\n");
     let dir = repo(
         "off",
         &config,

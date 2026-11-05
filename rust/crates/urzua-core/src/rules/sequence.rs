@@ -91,17 +91,24 @@ pub fn sequence_cycle(
 pub(super) type SequenceGraph =
     BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
 
-/// The sequencing graph of every `acyclic` pair, built from the claims of the
-/// given slots. An edge `X -> Y` reads "X depends on Y": `A.forward = B` is
-/// `A -> B` and `A.inverse = B` is `B -> A`, so a record that writes only the
-/// inverse side still takes part. A claim that resolves to no record, or to a
-/// type the pair does not carry, is no edge (`sequence.unresolved-blocker`
-/// reports the first), and neither is a claim on a record whose header cannot
-/// be read (`ADR-76`); the dependent of such a claim is disclosed in
-/// `unreadable_dependencies` so a rule that judges it can say so.
+/// The sequencing graph of every pair in the given slots. An edge `X -> Y`
+/// reads "X depends on Y": `A.forward = B` is `A -> B` and `A.inverse = B` is
+/// `B -> A`, so a record that writes only the inverse side still takes part. A
+/// claim that resolves to no record, or to a type the pair does not carry, is
+/// no edge (`sequence.unresolved-blocker` reports the first), and neither is a
+/// claim on a record whose header cannot be read (`ADR-76`). What a rule that
+/// derives a value from the graph must not guess at is disclosed:
+/// `unreadable_dependencies` (the dependent of such a claim),
+/// `unresolved_claimants` (a record whose own dependency field names something
+/// that is not a resolvable record, so fixing the reference may add an edge)
+/// and `unreadable_writers` (a record whose header cannot be read but whose
+/// type declares a pair's inverse side, so it may be a dependency of a record
+/// that cannot be seen).
 pub(super) struct SequenceGraphs<'a> {
     pub graphs: BTreeMap<&'a str, SequenceGraph>,
     pub unreadable_dependencies: BTreeSet<crate::values::RecordId>,
+    pub unresolved_claimants: BTreeSet<crate::values::RecordId>,
+    pub unreadable_writers: bool,
 }
 
 pub(super) fn sequence_graphs<'a>(
@@ -110,9 +117,18 @@ pub(super) fn sequence_graphs<'a>(
 ) -> SequenceGraphs<'a> {
     let mut graphs: BTreeMap<&'a str, SequenceGraph> = BTreeMap::new();
     let mut unreadable_dependencies = BTreeSet::new();
+    let mut unresolved_claimants = BTreeSet::new();
+    let mut unreadable_writers = false;
     for slot in slots {
-        let Ok(references) = pair_slot_claims(slot) else {
-            continue;
+        let references = match pair_slot_claims(slot) {
+            Ok(references) => references,
+            Err(Outcome::Unreadable) => {
+                if !slot.forward {
+                    unreadable_writers = true;
+                }
+                continue;
+            }
+            Err(_) => continue,
         };
         let Some(own) = record_id(slot.record) else {
             continue;
@@ -120,12 +136,29 @@ pub(super) fn sequence_graphs<'a>(
         let own = crate::values::RecordId::new(&own);
         let graph = graphs.entry(slot.pair.name.as_str()).or_default();
         graph.entry(own.clone()).or_default();
+        // A forward value that is not a record reference at all is prose.
+        if slot.forward
+            && references.is_empty()
+            && slot
+                .record
+                .header
+                .get(slot.own_field())
+                .is_some_and(|v| !crate::values::is_no_value_sentinel(v) && !v.trim().is_empty())
+        {
+            unresolved_claimants.insert(own.clone());
+        }
         for reference in references {
             let target = crate::values::RecordId::new(&reference);
             let Some(record) = index.get(&target) else {
+                if slot.forward {
+                    unresolved_claimants.insert(own.clone());
+                }
                 continue;
             };
             if !pair_carried_by(slot.pair, &record.record_type) {
+                if slot.forward {
+                    unresolved_claimants.insert(own.clone());
+                }
                 continue;
             }
             if record.header.is_unreadable() {
@@ -146,6 +179,8 @@ pub(super) fn sequence_graphs<'a>(
     SequenceGraphs {
         graphs,
         unreadable_dependencies,
+        unresolved_claimants,
+        unreadable_writers,
     }
 }
 
@@ -346,19 +381,24 @@ fn shortest_cycle(
     None
 }
 
-/// Rule (`RFC-48`, `MILE-144`, `ADR-64`): a record's written `Status` is held
-/// to the derived `blocked` value. A record is blocked when any of its
-/// dependencies, over every `acyclic` pair, is not in a status its own type
-/// declares `success`: the same edges `sequence.cycle` checks, so a written
-/// `Blocks` counts. A dependency whose type declares no `success`, or whose
-/// `Status` is absent, is not in a declared success status and so blocks.
+/// Rule (`RFC-48`, `MILE-144`, `ADR-64`, `ADR-83`): a record's written `Status`
+/// is held to the derived `blocked` value. A record is blocked when any of its
+/// dependencies, over the pairs `roadmap.pairs` declares (the pairs the
+/// roadmap reads, so the two cannot disagree), is not in a status its own type
+/// declares `success`. A dependency whose type declares no `success`, or whose
+/// `Status` is absent, is not in a declared success status and so blocks, and
+/// so does one in a `failure` status. A written `Blocks` counts, since the
+/// edges are the ones `sequence.cycle` checks.
 ///
-/// Two disagreements are reported, both on the dependent: a status the type
-/// declares in `statuses.blocked` while nothing blocks it, and a derived
-/// blocked record that states an `implementable` status (including one that
-/// says it is finished). Only a type declaring `statuses.blocked` is examined.
-/// A record with a claim on a record whose header cannot be read is counted
-/// unreadable, since its blocked value cannot be computed.
+/// Two disagreements are reported, both on the dependent: a blocked record that
+/// states a `progress` status, `Done` included when the type lists it, and a
+/// status the type declares in `blocked` while nothing blocks it. A status that
+/// does not claim progress, `Planned` for instance, is right for a blocked
+/// record. Only a type declaring `blocked` or `progress` is examined. A blocked
+/// value that cannot be computed is not guessed: a record that would be
+/// reported unblocked is counted unreadable when it names a dependency that
+/// does not resolve or whose header cannot be read, or when a record that may
+/// write an inverse claim has an unreadable header.
 pub fn sequence_status_agreement(
     records: &[Record],
     config: &Config,
@@ -367,10 +407,12 @@ pub fn sequence_status_agreement(
     const RULE_ID: &str = RULE_SEQUENCE_STATUS_AGREEMENT;
     let mut findings = Vec::new();
     let declared = statuses_by_type(config);
-    let slots = pair_slots(records, config, |p| p.acyclic);
+    let slots = pair_slots(records, config, |p| config.roadmap.pairs.contains(&p.name));
     let SequenceGraphs {
         graphs,
         unreadable_dependencies,
+        unresolved_claimants,
+        unreadable_writers,
     } = sequence_graphs(&slots, index);
 
     let candidates: Vec<&Record> = records
@@ -378,7 +420,7 @@ pub fn sequence_status_agreement(
         .filter(|r| {
             declared
                 .get(&r.record_type)
-                .is_some_and(|d| !d.blocked.is_empty())
+                .is_some_and(|d| !d.blocked.is_empty() || !d.progress.is_empty())
         })
         .collect();
 
@@ -403,10 +445,7 @@ pub fn sequence_status_agreement(
                 Ok(_) => return Outcome::Absent,
                 Err(outcome) => return outcome,
             };
-            if unreadable_dependencies.contains(&id) {
-                return Outcome::Unreadable;
-            }
-            // Every dependency over every acyclic pair that is not finished.
+            // Every dependency over every declared pair that is not finished.
             let mut open: Vec<String> = Vec::new();
             for graph in graphs.values() {
                 for dependency in graph.get(&id).into_iter().flatten() {
@@ -451,25 +490,41 @@ pub fn sequence_status_agreement(
                     message,
                 });
             };
-            if decl.is_blocked_status(status) && !blocked {
+            if blocked {
+                if decl.is_progress_status(status) {
+                    let mut source =
+                        ActionSource::new("status-blocked-derived").field(status_field);
+                    // The computed answer, only when one status is declared for it
+                    // and the lifecycle lets this record move there: a finished
+                    // record's transitions do not lead back to a waiting state.
+                    if let [only] = decl.blocked.as_slice() {
+                        if !decl.is_success(status)
+                            && (!decl.has_transitions() || decl.allows(status, only))
+                        {
+                            source = source.text(only.clone());
+                        }
+                    }
+                    push(
+                        source,
+                        format!(
+                            "{id} is blocked by {} but {status_field} is '{status}', which claims progress; state a status that does not claim progress ({})",
+                            open.join(", "),
+                            decl.progress.join(", ")
+                        ),
+                    );
+                }
+            } else if decl.is_blocked_status(status) {
+                // "Nothing blocks it" is only known when every claim was read.
+                if unreadable_dependencies.contains(&id)
+                    || unresolved_claimants.contains(&id)
+                    || unreadable_writers
+                {
+                    return Outcome::Unreadable;
+                }
                 push(
                     ActionSource::new("status-blocked-unblocked").field(status_field),
                     format!(
                         "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
-                    ),
-                );
-            } else if blocked && decl.implementable.iter().any(|s| s == status) {
-                let mut source = ActionSource::new("status-blocked-derived").field(status_field);
-                // A single declared blocked status is the computed answer.
-                if let [only] = decl.blocked.as_slice() {
-                    source = source.text(only.clone());
-                }
-                push(
-                    source,
-                    format!(
-                        "{id} is blocked by {} but {status_field} is '{status}', an implementable status; state a blocked status ({})",
-                        open.join(", "),
-                        decl.blocked.join(", ")
                     ),
                 );
             }

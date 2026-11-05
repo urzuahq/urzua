@@ -30,6 +30,10 @@ pub struct Config {
     /// `RelationPair`. Absent means none declared.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_pairs: Vec<RelationPair>,
+    /// The roadmap's declaration (`ADR-82`, `ADR-83`): the sequencing pairs the
+    /// derived `blocked` value and the roadmap command both read.
+    #[serde(default, skip_serializing_if = "RoadmapDecl::is_empty")]
+    pub roadmap: RoadmapDecl,
     /// The lowest finding severity that makes `urzua check` exit 1. Absent
     /// means `error`, so a repository that does not declare it is unchanged.
     #[serde(default, skip_serializing_if = "FailOn::is_default")]
@@ -44,6 +48,25 @@ pub struct Config {
     /// `SPEC-3`); absent means none, so only line ranges are available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
+}
+
+/// `roadmap` (`SPEC-3`): which `relation_pairs` are dependencies. A pair can be
+/// `acyclic` without being one: a containment pair (parent and children) is
+/// checked for cycles but a child does not wait on its parent finishing. The
+/// derived `blocked` value reads exactly these pairs, so `check` and the
+/// roadmap cannot disagree about what is blocked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoadmapDecl {
+    /// Names of `relation_pairs` entries that declare `acyclic: true`.
+    #[serde(default)]
+    pub pairs: Vec<String>,
+}
+
+impl RoadmapDecl {
+    fn is_empty(&self) -> bool {
+        self.pairs.is_empty()
+    }
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -2343,21 +2366,49 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
-    // A status-agreement rule with no type declaring `statuses.blocked` examines
-    // nothing (`MILE-144`, ADR-7).
+    // `roadmap.pairs` names declared, acyclic pairs, each once.
+    let mut named = std::collections::BTreeSet::new();
+    for name in &config.roadmap.pairs {
+        if !named.insert(name.as_str()) {
+            return bad(format!("roadmap.pairs lists '{name}' twice"));
+        }
+        match config.relation_pairs.iter().find(|p| p.name == *name) {
+            None => {
+                return bad(format!(
+                    "roadmap.pairs names '{name}', which is not a relation_pairs entry"
+                ))
+            }
+            Some(p) if !p.acyclic => {
+                return bad(format!(
+                    "roadmap.pairs names '{name}', which does not declare `acyclic: true`; a dependency relation must be checked for cycles"
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    // A status-agreement rule with no pair to read, or no type declaring
+    // `statuses.blocked` or `statuses.progress`, examines nothing (`MILE-144`,
+    // ADR-7).
     if config
         .rules
         .get(crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT)
         .is_some_and(|s| s.level != RuleLevel::Off)
-        && !config
-            .record_types
-            .values()
-            .any(|t| t.status_decl().is_some_and(|d| !d.blocked.is_empty()))
     {
-        return bad(format!(
-            "rule '{}' is enabled but no record type declares statuses.blocked, so it would examine nothing",
-            crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
-        ));
+        if config.roadmap.pairs.is_empty() {
+            return bad(format!(
+                "rule '{}' is enabled but roadmap.pairs declares no pair, so there is no dependency to derive blocked from",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+        if !config.record_types.values().any(|t| {
+            t.status_decl()
+                .is_some_and(|d| !d.blocked.is_empty() || !d.progress.is_empty())
+        }) {
+            return bad(format!(
+                "rule '{}' is enabled but no record type declares statuses.blocked or statuses.progress, so it would examine nothing",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
     }
     // A version-bump rule with no type declaring a bump is a check that ran on
     // nothing (`BUG-51`).

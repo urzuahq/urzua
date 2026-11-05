@@ -34,8 +34,8 @@ pub enum Declaration {
     PointerFields,
     /// `revision_log.version_bump` (`BUG-51`).
     VersionBump,
-    /// `statuses.blocked` (`MILE-144`).
-    Blocked,
+    /// `statuses.blocked` or `statuses.progress` (`MILE-144`).
+    BlockedOrProgress,
 }
 
 impl Declaration {
@@ -46,7 +46,7 @@ impl Declaration {
             Declaration::KnownFields => "known_fields",
             Declaration::PointerFields => "pointer_fields",
             Declaration::VersionBump => "revision_log.version_bump",
-            Declaration::Blocked => "statuses.blocked",
+            Declaration::BlockedOrProgress => "statuses.blocked or statuses.progress",
         }
     }
 }
@@ -370,13 +370,13 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SEQUENCE_STATUS_AGREEMENT,
-        description: "A record's written `Status` contradicts the derived `blocked` value (`MILE-144`, `RFC-48`, `ADR-64`). A record is blocked when any record it depends on, over every `acyclic` pair in either field, is not in a status its own type declares `success`; a dependency whose type declares no `success`, or that states no `Status`, is not in a declared success status and so blocks. Reports a status the type lists in `statuses.blocked` while nothing blocks the record, and a blocked record that states an `implementable` status, `Done` included when the type lists it. Opt-in per type: only a type that declares `statuses.blocked` is examined, and enabling the rule with no type declaring it, or with no `acyclic` pair, is a config load error. A record with a claim on a record whose header cannot be read is counted unreadable.",
+        description: "A record's written `Status` contradicts the derived `blocked` value (`MILE-144`, `RFC-48`, `ADR-83`). A record is blocked when any record it depends on, over the pairs `roadmap.pairs` declares and in either field, is not in a status its own type declares `success`; a dependency in a `failure` status, with no `Status`, or whose type declares no `success` blocks. Reports a blocked record that states a status its type lists in `statuses.progress` (`Done` included when listed; `Planned` is not progress), and a status the type lists in `statuses.blocked` while nothing blocks the record. Opt-in per type: only a type that declares `progress` or `blocked` is examined, and enabling the rule with no `roadmap.pairs`, or with no type declaring either, is a config load error. A value that cannot be computed is not guessed: a record that would be reported unblocked is counted unreadable when it names a dependency that resolves to nothing or to an unreadable record, or when a record that may write an inverse claim cannot be read.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
         requires_relation_pairs: true,
         requires_acyclic_pair: true,
-        reads_declaration: Some(Declaration::Blocked),
+        reads_declaration: Some(Declaration::BlockedOrProgress),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         actions: &[
@@ -1506,7 +1506,10 @@ mod tests {
             vec![
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
-                (RULE_SEQUENCE_STATUS_AGREEMENT, Declaration::Blocked),
+                (
+                    RULE_SEQUENCE_STATUS_AGREEMENT,
+                    Declaration::BlockedOrProgress
+                ),
                 (
                     RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                     Declaration::VersionBump

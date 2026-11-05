@@ -56,6 +56,14 @@ pub struct StatusDecl {
     /// `success`. A type declaring none is not examined by that rule.
     #[serde(default)]
     pub blocked: Vec<String>,
+    /// Statuses that claim the work has advanced, and so contradict being
+    /// derived-blocked (`MILE-144`, `ADR-83`). May include a `success` status
+    /// (a record cannot finish before its dependencies do); it never lists a
+    /// `failure` or `blocked` status. A status outside the list, `Planned` for
+    /// instance, is correct for a blocked record. A type declaring neither this
+    /// nor `blocked` is not examined by `sequence.status-agreement`.
+    #[serde(default)]
+    pub progress: Vec<String>,
     /// Whole field values that mean "not done yet", replacing the compiled-in
     /// substring match for this type (BUG-65). Omitted keeps that match.
     #[serde(default)]
@@ -183,6 +191,11 @@ impl StatusDecl {
     /// Whether a written status says the record is waiting (`blocked`).
     pub fn is_blocked_status(&self, status: &str) -> bool {
         self.blocked.iter().any(|v| v == status)
+    }
+
+    /// Whether a written status claims the work has advanced (`progress`).
+    pub fn is_progress_status(&self, status: &str) -> bool {
+        self.progress.iter().any(|v| v == status)
     }
 
     /// Whether `status` finishes the work: the type's `success` list.
@@ -335,6 +348,7 @@ fn validate_one(
     check_list("implementable", &d.implementable, true)?;
     check_list("claim_retained", &d.claim_retained, true)?;
     check_list("blocked", &d.blocked, true)?;
+    check_list("progress", &d.progress, true)?;
     if let Some(p) = &d.pending {
         check_pending(p)?;
     }
@@ -344,6 +358,7 @@ fn validate_one(
         ("implementable", &d.implementable),
         ("claim_retained", &d.claim_retained),
         ("blocked", &d.blocked),
+        ("progress", &d.progress),
     ] {
         if let Some(v) = list.iter().find(|v| !d.declares(v)) {
             return Err(format!("`{what}` names '{v}', which is not in `values`"));
@@ -357,6 +372,16 @@ fn validate_one(
     if let Some(v) = d.blocked.iter().find(|v| d.is_terminal(v)) {
         return Err(format!(
             "'{v}' is in `blocked` and is also terminal (`success` or `failure`); a blocked status is a waiting state"
+        ));
+    }
+    // A progress status says the work advanced; a failed record has not, and a
+    // waiting status cannot also be one (`ADR-83`).
+    if let Some(v) = d.progress.iter().find(|v| d.failure.contains(v)) {
+        return Err(format!("'{v}' is in both `progress` and `failure`"));
+    }
+    if let Some(v) = d.progress.iter().find(|v| d.blocked.contains(v)) {
+        return Err(format!(
+            "'{v}' is in both `progress` and `blocked`; a record cannot both claim progress and be waiting"
         ));
     }
     validate_transitions(d)?;
@@ -630,6 +655,27 @@ mod tests {
             "      values: [Open, Dropped]\n      failure: [Dropped]\n      blocked: [Dropped]\n"
         )
         .contains("waiting state"));
+    }
+
+    #[test]
+    fn progress_loads_and_is_validated() {
+        let c = parse(&cfg("      values: [Planned, InProgress, Done, Dropped]\n      success: [Done]\n      failure: [Dropped]\n      progress: [InProgress, Done]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert!(d.is_progress_status("InProgress") && d.is_progress_status("Done"));
+        assert!(!d.is_progress_status("Planned"));
+        assert!(err("      values: [Open]\n      progress: [Gone]\n").contains("progress"));
+        assert!(
+            err("      values: [Open, Doing]\n      progress: [Doing, Doing]\n").contains("twice")
+        );
+        assert!(err(
+            "      values: [Open, Dropped]\n      failure: [Dropped]\n      progress: [Dropped]\n"
+        )
+        .contains("both `progress` and `failure`"));
+        // A written waiting status cannot also claim progress.
+        assert!(err(
+            "      values: [Open, Blocked]\n      blocked: [Blocked]\n      progress: [Blocked]\n"
+        )
+        .contains("both `progress` and `blocked`"));
     }
 
     #[test]
