@@ -1,7 +1,9 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-09-08
 Status: Accepted
+Embodiment: Not started
+Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs
 Author: beauwilliams
 Subject: 'The `adr` record type -- schema, required fields, and lifecycle for decision records.'
 Parent: —
@@ -88,3 +90,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-09-17 | This type's `[record_types.*]` declaration re-rendered in YAML (`ADR-52`, shipped in the same change). The same declaration, same keys, same values -- only the syntax differs. | **structural** |
 > | 2026-11-04 | Bumped to `0.8`. Added `Retired` to the `Status` vocabulary, declared in `statuses.values`, `failure` and `claim_retained`, and to the `adr` template. **Why:** maintainer decision of 2026-11-04 for `ADR-38`, whose mechanism was deleted with no successor; `Superseded` needs a successor record and does not fit. `Retired` is `claim_retained` because a retired decision's `Realized-by` evidence stays true history. Setting `Retired` on a record is the maintainer's act. The allowed move `Accepted` to `Retired` is not yet declared: no type declares `transitions` in this repository's config. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. Added the optional `Non-reference-ids` field to `known_fields`: the exact ids a record names without citing as a reference (`BUG-190`, `ADR-75`). **Why:** `ADR-18` writes an example id from another corpus that a real record could otherwise capture. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `an_accepted_adr_must_name_its_deciders_and_enters_proposed`, `adr_supersession_must_be_reciprocated_and_a_retired_decision_is_a_declared_status`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |

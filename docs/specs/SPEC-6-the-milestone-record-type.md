@@ -1,7 +1,9 @@
 ---
-Version: '0.11'
+Version: '0.12'
 Date: 2026-09-07
 Status: Accepted
+Embodiment: Not started
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs
 Author: beauwilliams
 Subject: 'The `milestone` record type -- this project''s own planned-work backlog as a checkable corpus.'
 Implements: ADR-34
@@ -135,3 +137,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-04 | Phase vocabulary: the `0` row now states the single Phase 0 exit (`SPEC-1`, Exit bar) instead of only "the first adopter replacement"; `Version` `0.8` -> `0.9`. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | Bumped to `0.10`. The type declares `Realized-by` (delivery evidence) and `statuses.delivery`; the delivering PR sets `Realized-by` and `Status: Done`. **Why:** `MILE-183`. | **substantive** |
 > | 2026-11-04 | Added the "Required sections" section and bumped to `0.11`: every milestone carries `## Done means`, declared under `sections` and enforced by `section.required`, with `WontDo` exempt. **Why:** maintainer decision of 2026-11-04: "done" was being judged from the What, and the closure audit found closures that over-claimed; stating the criteria on every record lets a closure be checked against them. | **substantive** |
+> | 2026-11-05 | Bumped to `0.12`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `a_milestone_must_state_its_done_means_unless_it_is_wontdo`, `a_done_milestone_needs_delivery_evidence_and_evidence_under_planned_is_a_disagreement`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
