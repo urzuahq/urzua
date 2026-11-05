@@ -1453,6 +1453,19 @@ fn dir_escapes_repo(dir: &str) -> bool {
         })
 }
 
+/// Whether no record type needs the fallback status lists: each type either
+/// declares `statuses`, or declares no status field a rule could read (a
+/// suppression type with no `Status`). Such a type is never judged by a list.
+fn no_type_needs_the_status_fallback(config: &Config) -> bool {
+    !config.record_types.is_empty()
+        && config.record_types.values().all(|t| {
+            t.status_decl().is_some()
+                || !t.declared_fields().contains(&crate::values::FieldName::new(
+                    t.relation_field(RelationRole::Status),
+                ))
+        })
+}
+
 /// One list-valued option's name and what happens if a rule that accepts it is
 /// declared without it. Which rules accept an option is the rule table's
 /// (`RuleDef::options`), so adding an option-taking rule is a table entry plus
@@ -1463,6 +1476,11 @@ struct RuleOption {
     /// An optional option may be omitted, but a declared one is still
     /// validated (non-empty, no blanks) so it cannot be a silent no-op.
     optional: bool,
+    /// Needed only while some record type declares a status field but no
+    /// `statuses`: a type that declares them is judged by its own success and
+    /// failure sets, so this list is a fallback that is never read once no
+    /// type lacks them (`BUG-178`). A declared list is still validated.
+    fallback_for_undeclared_statuses: bool,
 }
 
 const RULE_OPTIONS: &[RuleOption] = &[
@@ -1470,21 +1488,25 @@ const RULE_OPTIONS: &[RuleOption] = &[
         name: "not_in",
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "claim_paths",
         consequence_if_missing: "scans nothing and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "closed_statuses",
         consequence_if_missing: "treats every claim as a violation, including correct ones",
         optional: false,
+        fallback_for_undeclared_statuses: true,
     },
     RuleOption {
         name: "terminal_statuses",
         consequence_if_missing: "examines every reference and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: true,
     },
     // Optional on its own: a rule declares `boundaries`, `published_paths` or
     // both, and a rule declaring neither is refused by the boundary check below.
@@ -1492,76 +1514,91 @@ const RULE_OPTIONS: &[RuleOption] = &[
         name: "published_paths",
         consequence_if_missing: "declares no boundary and can never report",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "source_paths",
         consequence_if_missing: "declares no source and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "application_paths",
         consequence_if_missing: "declares no application source and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "exclude_paths",
         consequence_if_missing: "excludes nothing from the source",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "back_pointer_paths",
         consequence_if_missing: "scans no source file and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "test_paths",
         consequence_if_missing: "reads no `Verifies:` comment as test evidence",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "sticky_states",
         consequence_if_missing: "holds every stated Embodiment to the computed value",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "locator_kinds",
         consequence_if_missing: "accepts only a file locator",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "pinnable",
         consequence_if_missing: "lets only a file locator carry a pin",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "date_fields",
         consequence_if_missing: "names no date field and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "date_order",
         consequence_if_missing: "names no date ordering and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "accepted_statuses",
         consequence_if_missing: "leaves a type with no declared success statuses (implementable statuses for the back-pointer gate) unjudged",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "reference_sections",
         consequence_if_missing: "reads no section and can never report",
         optional: false,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "external_ids",
         consequence_if_missing: "resolves every prefixed id as a record, including external standard numbers",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
     RuleOption {
         name: "fields",
         consequence_if_missing: "checks every declared field",
         optional: true,
+        fallback_for_undeclared_statuses: false,
     },
 ];
 
@@ -2391,7 +2428,10 @@ pub fn parse_with_document_models(
             // list is the harm each consequence describes, and a list of
             // blanks is the same list wearing a value.
             let value = option_field(opt.name, setting);
-            let ok = if opt.optional {
+            let ok = if opt.optional
+                || (opt.fallback_for_undeclared_statuses
+                    && no_type_needs_the_status_fallback(&config))
+            {
                 value.is_none_or(declared)
             } else {
                 value.is_some_and(declared)
@@ -3352,6 +3392,53 @@ mod tests {
         assert_eq!(declared.len(), 2);
     }
 
+    /// BUG-178: a type that declares `statuses` is judged by its own success and
+    /// failure sets, so the fallback lists are required only while some type
+    /// declares a status field and no `statuses`.
+    #[test]
+    fn the_fallback_status_lists_are_optional_once_no_type_needs_them_observed_failing() {
+        let rules = "rules:\n  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n  narrative-field.stale: warn\n";
+        let declared = "    statuses:\n      values: [Open, Done]\n      success: [Done]\n";
+        let all = format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n{declared}  bug:\n    dir: \"docs/bugs\"\n{declared}{rules}"
+        );
+        assert!(parse(&all).is_ok(), "{:?}", parse(&all).err());
+
+        // A type with no status field at all (a suppression record) is never
+        // judged by a list, so it does not bring the requirement back.
+        let with_waiver = all.replace(
+            "rules:\n",
+            "  waiver:\n    dir: \"docs/waiver\"\n    required_fields: [Rule]\nrules:\n",
+        );
+        assert!(
+            parse(&with_waiver).is_ok(),
+            "{:?}",
+            parse(&with_waiver).err()
+        );
+
+        // A type that declares `Status` but no `statuses` does, for both rules.
+        let one_missing =
+            with_waiver.replace("required_fields: [Rule]", "required_fields: [Rule, Status]");
+        let err = parse(&one_missing).unwrap_err().to_string();
+        assert!(err.contains("closed_statuses"), "{err}");
+        let only_stale = one_missing.replace(
+            "  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n",
+            "",
+        );
+        let err = parse(&only_stale).unwrap_err().to_string();
+        assert!(err.contains("terminal_statuses"), "{err}");
+
+        // A list declared anyway is still validated, never a silent no-op.
+        let blank = all.replace(
+            "narrative-field.stale: warn",
+            "narrative-field.stale:\n    level: warn\n    terminal_statuses: [\"\"]",
+        );
+        assert!(parse(&blank)
+            .unwrap_err()
+            .to_string()
+            .contains("terminal_statuses"));
+    }
+
     #[test]
     fn a_rule_level_is_written_bare_or_as_a_table() {
         let yaml = r#"
@@ -3382,7 +3469,9 @@ rules:
     /// treats every claim as a violation, including correct ones.
     #[test]
     fn a_rule_missing_an_option_it_requires_is_rejected_observed_failing() {
-        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        // The type declares a `Status` field and no `statuses`, so the fallback
+        // lists are still needed (BUG-178).
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\nrules:\n";
 
         let no_statuses = format!(
             "{base}  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n"

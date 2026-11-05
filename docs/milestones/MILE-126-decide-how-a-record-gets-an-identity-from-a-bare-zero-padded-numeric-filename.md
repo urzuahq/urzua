@@ -4,6 +4,7 @@ Status: Done
 Phase: '0'
 Track: schema-governance
 Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md
+Non-reference-ids: ADR-173, ADR-0173
 ---
 # 126 — Decide how a record gets an identity from a bare zero-padded numeric filename
 
@@ -52,3 +53,4 @@ The decision is recorded: a record whose filename is a bare zero-padded number (
 > | 2026-11-04 | `MILE-98`'s declared `identity` pattern must capture the type prefix, so a bare zero-padded filename (`0001-a.md`) still gets no identity and the decision stands: such a corpus is renamed to `TYPE-NNNN-slug.md` (`ADR-36`), where `ADR-0173` resolves against `ADR-173` numerically. A pattern without a `(?P<prefix>...)` group fails the config load. **Why:** `RFC-46` was rejected; the declaration is not a back door to the bare-number identity it declined. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: the decision is recorded in the revision log (a bare zero-padded filename gets no identity; such a corpus is renamed to `TYPE-NNNN-slug.md`) and in the accepted `ADR-36`; `RFC-46` was rejected. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `ADR-173, ADR-0173`. **Why:** the text names these ids as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |

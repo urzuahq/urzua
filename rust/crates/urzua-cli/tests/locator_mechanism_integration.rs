@@ -166,3 +166,63 @@ fn without_back_pointer_paths_the_rule_does_not_load() {
         "{v}"
     );
 }
+
+#[test]
+fn a_file_that_already_carries_the_comment_is_told_to_drop_the_locator() {
+    let dir = fixture("present", CONFIG, "code:src/a.rs, test:src/tests/t.rs");
+    std::fs::write(dir.join("src/a.rs"), "// Implements: ADR-1\nfn a() {}\n").unwrap();
+    std::fs::write(
+        dir.join("src/tests/t.rs"),
+        "// Verifies: ADR-1\nfn t() {}\n",
+    )
+    .unwrap();
+    let (_, v) = check(&dir);
+    let found = nudges(&v);
+    assert_eq!(found.len(), 2, "{v}");
+    for f in &found {
+        let msg = f["message"].as_str().unwrap();
+        assert!(msg.contains("already carries it"), "{msg}");
+        assert!(!msg.contains("add the comment first"), "{msg}");
+    }
+}
+
+#[test]
+fn a_comment_for_another_record_does_not_count_as_the_comment() {
+    let dir = fixture("other", CONFIG, "code:src/a.rs");
+    std::fs::write(dir.join("src/a.rs"), "// Implements: ADR-2\nfn a() {}\n").unwrap();
+    let (_, v) = check(&dir);
+    let found = nudges(&v);
+    assert_eq!(found.len(), 1, "{v}");
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("add the comment first"));
+}
+
+#[test]
+fn a_type_that_counts_no_back_pointer_as_evidence_is_not_nudged() {
+    // `back_pointer_evidence: false` (ADR-84): the locator is the only counted
+    // evidence, so advice to drop it would leave a Fixed record unevidenced.
+    let config = CONFIG.replace(
+        "    known_fields: [\"Embodiment\", \"Realized-by\"]\n",
+        "    known_fields: [\"Embodiment\", \"Realized-by\"]\n    statuses:\n      values: [Open, Fixed]\n      success: [Fixed]\n      delivery:\n        delivered_tiers: [Implemented, Verified]\n        unevidenced_tiers: [Not started]\n        not_done: [Open]\n        set_status: Fixed\n        back_pointer_evidence: false\n",
+    );
+    let dir = fixture("nocount", &config, "code:src/a.rs, test:src/tests/t.rs");
+    let (code, v) = check(&dir);
+    assert_ne!(code, 2, "{v}");
+    assert!(nudges(&v).is_empty(), "{v}");
+    let exec = v["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["rule"] == "embodiment.locator-on-back-pointer-path")
+        .unwrap();
+    assert_eq!(exec["status"], "ran");
+    assert_eq!(exec["population"]["examined"], 1);
+
+    // The default keeps the nudge: the same type with the option omitted.
+    let counted = config.replace("        back_pointer_evidence: false\n", "");
+    let dir = fixture("count", &counted, "code:src/a.rs");
+    let (_, v) = check(&dir);
+    assert_eq!(nudges(&v).len(), 1, "{v}");
+}

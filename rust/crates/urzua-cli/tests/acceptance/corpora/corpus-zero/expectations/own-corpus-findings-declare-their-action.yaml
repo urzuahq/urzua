@@ -2,15 +2,15 @@ id: own-corpus-findings-declare-their-action
 corpus: "@repo"
 invocation: [check]
 # This repository's own corpus over its own configuration (`ADR-73`, `MILE-44`).
-# Its only findings are the waived `citation.resolution` ones, and that variant
-# is declared exempt (a prose edit located by line, no action kind yet), so the
-# run must list them with no `suggested_action` key. The case fails the day the
-# declaration changes, which is when this record's expectation should change on
-# purpose. The shape of the action itself is proved on the planted corpora.
+# The `embodiment.locator-on-back-pointer-path` nudges used to be listed here, to
+# prove that their exempt variant carries no `suggested_action`. The rule now
+# declares `scope: changed` (`ADR-90`), so a plain `check` judges none of its
+# slots and lists no finding; the rule still runs, and its population says how
+# many it deferred. That its findings carry no action is proved on planted
+# corpora (`locator_mechanism_integration.rs`), and the table-wide coverage of
+# `ADR-73` by the action tests; corpus-g runs the nudge under `--base`.
 expect_exit: 0
 expect_json:
   - {at: /blocking, equals: false}
-expect_findings:
-  - {rule: citation.resolution, no_suggested_action: true}
 expect_rules_ran:
   - citation.resolution

@@ -149,7 +149,7 @@ revision row.
 
 ## Amendment (2026-11-05): after any Bash command the harness runs `check` on the records git shows as changed
 
-*Status of this amendment: proposed, pending maintainer acceptance (decided by the maintainer on 2026-11-05, drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
 Item 2 puts the judgement of a record at the editor. The editor hook sees three tools: its matcher is
 `Write|Edit|MultiEdit` (`.claude/settings.json:5`) and its adapter returns for any other tool
@@ -221,3 +221,4 @@ The build is `MILE-202`. Switching the post-command check off is a per-guardrail
 > | 2026-11-05 | Amendment (`block_on`) accepted, together with `MILE-191`'s restored Done means. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Amendment added: after any Bash command the harness runs `check` on the records git shows as changed, untracked included, and reports the findings to the agent without parsing the command; it reports and does not block, and pre-commit and CI stay the hard gate. **Why:** the editor hook's matcher does not cover Bash (`.claude/settings.json:5`), so a record written by a shell command is never judged at the editor; maintainer decision, 2026-11-05; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Post-command amendment corrected after review: untracked records are examined by `check PATHS` directly (`BUG-24`), so the `--stdin-path` relay is dropped and all changed paths go to one `check PATHS` call; a gated move by Bash is reported as an error and is no longer said to be stopped by the commit hook and CI. **Why:** Independent review of pull request 355 found the untracked-file claim false (`check.rs:446-470`) and the commit-hook and CI claim untrue for a single maintainer (`ADR-89` "Accepted risk"); proposed, pending maintainer acceptance, `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment (post-Bash check) accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

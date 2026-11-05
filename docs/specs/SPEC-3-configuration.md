@@ -1,5 +1,5 @@
 ---
-Version: '0.91'
+Version: '0.92'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -493,7 +493,10 @@ Two details carry weight:
   - `narrative-field.stale` and `claim.status-agreement`: when the *target's* type declares
     `statuses`, `success` and `failure` together are the finished statuses, in place of the rule's
     `terminal_statuses` / `closed_statuses` list, which stays the vocabulary for every target whose
-    type declares none (`BUG-178`). `pointer.target-status`'s `not_in` is a separate policy and is
+    type declares none (`BUG-178`). The list is therefore optional once no record type needs it, that
+    is when every type either declares `statuses` or declares no status field (a suppression type with no
+    `Status`); a declared list is still validated, and the list is required again as soon as one type
+    declares a status field and no `statuses`. `pointer.target-status`'s `not_in` is a separate policy and is
     unchanged.
   - `embodiment.back-pointer-decision-accepted`: a source back-pointer is judged against the cited
     type's `implementable` list. A type that omits it uses the rule's `accepted_statuses` option;
@@ -1612,6 +1615,11 @@ rules:
 - It does not flag what a comment cannot say: a `spec:` locator, a `test:` locator outside `test_paths`,
   a locator with a `#scope`, or a locator with an `@sha256` pin. `Realized-by` is the only option for
   those, and for any path the comment scan cannot reach, which is why this is a nudge and not an error.
+- A record whose type declares `statuses.delivery.back_pointer_evidence: false` is not flagged: a source
+  comment is not evidence for that type (`ADR-84`), so the locator is the only evidence it has, and advice to
+  drop it would leave the record unevidenced.
+- When the file already carries the comment (an `Implements:` or `Verifies:` line citing this record), the
+  message says to drop the locator, not to add the comment.
 - It offers no edit action. Removing the locator before the comment exists would delete the evidence
   and leave `Embodiment` disagreeing with what is computed, and the other half of the repair is a comment in a
   source file, which no action kind addresses (`ADR-73`: an exemption with a reason, as for
@@ -1885,4 +1893,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.88`. `roadmap.pairs` also sets what `sequence.cycle` reads as one graph: a loop that uses an edge of each of two declared pairs is reported, and an `acyclic` pair not named, or an absent `roadmap.pairs`, keeps the per-pair reading. The load-time check that each named pair declares `acyclic: true` is what guarantees every pair in that graph is cycle-checked. **Why:** `MILE-192`, following `ADR-82` (design re-check of 2026-11-05): the roadmap saw a cross-pair loop that `check` did not. | **substantive** |
 > | 2026-11-05 | Bumped to `0.89`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.90`. `urzua index --apply` replaces an artifact through a temporary file and a rename. **Why:** review of the CLI found the write truncated the file first. | **substantive** |
-> | 2026-11-05 | Bumped to `0.91`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.91`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |
+> | 2026-11-05 | Bumped to `0.92`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |

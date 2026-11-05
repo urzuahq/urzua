@@ -6,7 +6,6 @@
 > Author: name
 > Deciders: name(s)
 > Supersedes / Superseded-by: —
-> Derives-from: RFC-NNNN (optional)
 
 ## Context
 

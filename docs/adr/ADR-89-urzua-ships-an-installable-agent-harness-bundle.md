@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NWW8WX0N9Z2R86HX2E9SBM
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -393,3 +394,4 @@ the CI evidence default is `pr-author`, with the single-maintainer residual risk
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decisions, 2026-11-05 (ship an installable harness bundle in Phase 0; acceptance enforced by the harness and CI; attestation identity source a configuration option); the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Amended after independent review of the Proposed text. The acceptance guardrail now claims only what holds (edit tools refused locally, Bash reported, CI evidence is authorship) and gains an "Accepted risk" section (bypasses accepted by the maintainer); the default `evidence` is `pr-author`; the `ADR-70` question is resolved by an amendment there; actor kind joins the attestation row and `RFC-2`, `BUG-16`, `MILE-18` and `MILE-66` are cited; `harness uninstall`, settings-merge rules, the `on_unjudged: deny` escape hatch and an Open questions section are added; citation and vendor-neutrality corrections. **Why:** Maintainer decisions of 2026-11-05 on the review at pull request 355; `Status` stays Proposed. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
