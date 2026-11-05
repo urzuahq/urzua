@@ -67,3 +67,5 @@ pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
 pub const RULE_WAIVER_MATCHES_NOTHING: &str = "waiver.matches-nothing";
 
 pub const RULE_OVERRIDE_UNREVIEWED: &str = "override.unreviewed";
+pub const RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH: &str =
+    "embodiment.locator-on-back-pointer-path";

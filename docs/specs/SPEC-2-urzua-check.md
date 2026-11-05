@@ -1,5 +1,5 @@
 ---
-Version: '0.87'
+Version: '0.89'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -336,6 +336,7 @@ which stays only for what genuinely isn't built yet.
 | `diff.source-requires-record` | A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. |
 | `diff.source-and-records-mixed` | A `--base` diff changes both a governed record and a path under a declared `application_paths` entry, a prefix or a glob (less any `exclude_paths`), a prompt to split the change (`MILE-142`). One finding naming the first path of each kind, in path order. A governed record is never application source, whatever the prefixes say. Reports `not-applicable` on a run with no `--base`, never clean. |
 | `override.unreviewed` | An editor-hook override that no one has reviewed is reported, on the committed override log the repository declares as `override_log` (`ADR-78`, `MILE-188`). The log is a Markdown table of `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason` and `Reviewed-by`; the hook appends a row, with `Reviewed-by` blank, whenever a named override lets a blocked edit through, and the entry is reviewed once a person names themselves in `Reviewed-by` on its row in a later change; a blank cell, a placeholder (`TBD`, `-`) and a declared pending value are not a review. The finding names the override, the record, the rule and the reason, so it surfaces in the pull request that carries the log change. A row that is not an entry is a finding; a declared log that does not exist, or is not text, is reported and counted unreadable, never read as an empty log. Opt-in; needs the top-level `override_log` declaration. The population counts log entries. |
+| `embodiment.locator-on-back-pointer-path` | A `Realized-by` locator names a file under `back_pointer_paths`, where an `Implements:` or `Verifies:` comment would say the same thing and is read automatically (`ADR-78` item 4, `MILE-189`, `RFC-7` section 5: prefer the lighter mechanism). A warning nudging the evidence into that comment, never an error, because the two mechanisms are not interchangeable: only a `code:` locator on a file under `back_pointer_paths`, or a `test:` locator on a file under the optional `test_paths` (the only files whose `Verifies:` comment counts), has a comment of the same tier. A `spec:` locator, a `test:` locator outside `test_paths` and any locator with a `#scope` or an `@sha256` pin stay `Realized-by` and are not flagged. It offers no edit action, because the comment must exist before the locator goes (an exemption with a reason, as for the back-pointer rules). Opt-in, and needs `back_pointer_paths`; `test_paths` is optional and, as for the back-pointer rules, each entry must lie inside a `back_pointer_paths` entry. The population counts the declared `Realized-by` slots. |
 | `config.scope-matches-nothing` | Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). |
 | `waiver.matches-nothing` | A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there, so it suppresses nothing and its finding is reported again); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records. |
 <!-- rule-table:end -->
@@ -384,6 +385,7 @@ but the JSON object below, so a consumer never has to find it inside prose.
       "status": "not-enabled"
     }
   ],
+  "rules_selected": null,
   "scope": { "source": "tracked-sweep", "base": null, "record_types": ["adr", "bug", "rfc"] },
   "blocking": false,
   "findings": [
@@ -585,12 +587,37 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `override.unreviewed` | `override-unreviewed` | exempt: reviewing an override is a person's act, recorded in the log's `Reviewed-by` cell; no field of a record holds it |
 | `override.unreviewed` | `override-log-missing` | exempt: the log is not a record: creating it writes a file, which no action kind addresses (the hook creates it on the first override) |
 | `override.unreviewed` | `override-log-malformed` | exempt: the log is not a record: a malformed row is repaired by editing the log file, which no action kind addresses |
+| `embodiment.locator-on-back-pointer-path` | `locator-on-back-pointer-path` | exempt: the repair is a comment in a source file, and no action kind addresses a non-record file yet; dropping the locator first would delete the evidence before the comment exists |
+| `embodiment.locator-on-back-pointer-path` | `locator-on-back-pointer-path-sole` | exempt: the repair is a comment in a source file, and no action kind addresses a non-record file yet; dropping the only locator first would leave the record with no evidence |
 | `config.scope-matches-nothing` | `scope-matches-nothing` | `edit-config` `set` |
 | `waiver.matches-nothing` | `waiver-expired` | `edit-field` `set` |
 | `waiver.matches-nothing` | `waiver-ineffective` | `edit-field` `set` |
 | `waiver.matches-nothing` | `waiver-unknown-rule` | `edit-field` `set` |
 | `waiver.matches-nothing` | `waiver-matches-no-finding` | `edit-field` `set` |
 <!-- action-table:end -->
+
+### Rule selection: `--rules` (`ADR-79`, `MILE-190`)
+
+`urzua check --rules <id>[,<id>...]` restricts a run to the named rules of the repository's own
+declaration. Selection narrows what runs and never enables anything (`ADR-53`).
+
+- **`rules_selected`** is a top-level field of every report: the ids as given, in order and without
+  repeats, or `null` on a run that was not restricted. It is always present, so a consumer never
+  has to infer a filter from the length of `rules_executed`.
+- **An excluded rule is omitted from `rules_executed`.** It is not listed as `not-enabled`, which would
+  say the repository declined a policy it declared, and it is not run: a selection that leaves out
+  `embodiment.consistency` skips the git history that rule reads. `status`, `blocking` and the exit code
+  are computed over the rules that ran exactly as over a full run. A rule that is selected but
+  declared `off` is listed `not-enabled`, so a selection of only such rules is `not-run` (exit 2), as a
+  run with nothing enabled always is.
+- **Rules that read other rules' results see the selection.** `waiver.matches-nothing` judges a live
+  waiver only when its rule ran over the whole corpus, so under a selection that leaves the rule out the
+  waiver is eligible and not examined, never reported unmatched.
+- **A mistake in the command is exit 2, not a finding.** An empty id (`a,,b`), an id this build does not
+  ship, and an id the configuration does not declare are each `not-run` with an `error` naming the id.
+- Combines with a path argument, `--base` and `--stdin-path`; the selection applies to the rules, the
+  scope to the records.
+- `urzua audit` has no selection of its own (`SPEC-11`).
 
 ## Exit codes
 
@@ -640,8 +667,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 ## Out of scope
 
 - `--fix` in any form. See RFC-8; needs the revision log first.
-- **Writing.** `audit` shares `relation.supersession-reciprocity` with `check` (ADR-30) and adds
-  dangling-reference reporting on top, but both commands are read-only. The data-loss incident this
+- **Writing.** `audit` was a deprecated alias of `check` (ADR-79, `SPEC-11`); both commands are read-only. The data-loss incident this
   spec originally cited was about a bulk cross-reference *rewrite*, not about reading reciprocity —
   `check` running the same read-only rule `audit` does was never actually the risk.
 - Judging whether a section's *content* covers the scope it claims. SPEC-1 records this as a
@@ -768,3 +794,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.85`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule that can judge one record, without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the record. **Why:** `MILE-191`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.86`. `boundary.published-path-reference` reads declared boundaries (`SPEC-3`, "Boundaries"): a boundary's severity is the level of its findings and the rule's `level` only enables it; a back-pointer inside a `generated` boundary is a finding; an `exclude` entry, a boundary path or an ignore-marker use that matches or suppresses nothing is a finding; `published_paths` is read as a published boundary and now takes globs. Four finding variants are added to the action table, and `published-path-uncovered` keeps its valueless `edit-config` `set` targeting the entry, and `boundary-uncovered` offers the same. The rule-table rows are regenerated. **Why:** `MILE-125`, `ADR-80`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.87`. `override.unreviewed` added to the generated rule table and action table: an opt-in warning for a row of the committed override log (`override_log`, `SPEC-3`) whose `Reviewed-by` cell is blank, with a finding for a row that is not an entry and a population that counts log entries (`entry`). **Why:** `MILE-188`, `ADR-78` item 1 -- an editor-hook override must surface in the pull request that carries it. | **substantive** |
+> | 2026-11-05 | Bumped to `0.88`. `embodiment.locator-on-back-pointer-path` added to the generated rule and action tables: an opt-in warning for a `code:` or `test:` `Realized-by` locator on a file whose `Implements:` or `Verifies:` comment would be read automatically, exempt from an edit action: removing the locator before the comment exists would delete the evidence, and the comment is in a source file. **Why:** `MILE-189`, `ADR-78` item 4 (`RFC-7` section 5, prefer the lighter mechanism). | **substantive** |
+> | 2026-11-05 | Bumped to `0.89`. `check --rules <id>[,<id>...]` restricts a run to named declared rules, and every report gains a top-level `rules_selected` (the ids, or `null`); an excluded rule is omitted from `rules_executed` and not run, and an undeclared, unknown or empty id is a could-not-run (exit 2). `audit` is documented as a deprecated alias with no selection of its own. **Why:** `MILE-190`, `ADR-79`. | **substantive** |

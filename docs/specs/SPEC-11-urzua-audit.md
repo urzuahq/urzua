@@ -1,11 +1,11 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
-Subject: '`urzua audit` -- cross-record reconciliation: supersession reciprocity and dangling references.'
+Subject: '`urzua audit` -- a deprecated alias of `urzua check` over the configured rules, with no rule set of its own.'
 Implements: ADR-30
 Parent: SPEC-1
 ---
@@ -13,55 +13,54 @@ Parent: SPEC-1
 
 ## Purpose
 
-Cross-record reconciliation, kept distinct from `check`'s per-record validation: supersession
-reciprocity (if A supersedes B, B must point back) and dangling cross-references. Read-only, always
-— a bulk cross-reference rewrite is a real data-loss risk without a review step this command doesn't
-have (the same incident SPEC-2's original `--fix`-deferral cites).
+`urzua audit` was cross-record reconciliation kept apart from `check`: supersession reciprocity and
+dangling cross-references. It ran two rule functions `check` already runs, over the same corpus,
+producing the same report and exit codes (`RFC-38`). `ADR-53` made every rule a declared, opt-in
+policy, so a rule set hardcoded inside the tool overrides the adopter's declaration; that ownership was
+the root of `BUG-42`, `BUG-84` and `BUG-99`.
 
-## What it runs
+`ADR-79` folds it into `check`. Today `audit` is a **deprecated alias** and owns no rule set. It is
+removed the release after.
 
-`audit` calls the exact same `rules::pointer_resolution` and `rules::supersession_reciprocity`
-functions `check` calls — restricted to just those two — rather than re-deriving the same logic
-under a different name. `relation.supersession-reciprocity` is not `audit`-exclusive: `check` runs
-it too (see SPEC-2), and `audit`'s value is narrowing to only cross-record concerns, not owning
-supersession reciprocity outright.
+## What it does
 
-Supersession reciprocity is **status-aware**: a claim only binds once the claiming record is itself
-in a terminal-accepted state — a `Draft` ADR claiming to supersede an `Accepted` one doesn't yet
-require the older record to point back.
+`urzua audit` runs `check`'s engine over the rules the repository's configuration declares and enables,
+with no rule selection of its own, so its report **is** `check`'s: the same `status`, `findings`,
+`rules_executed`, `rules_selected` (`null`), `notices` and exit codes (`SPEC-2`). It cannot disagree with
+`check`, and it cannot exit 2 on a configuration `check` accepts. A corpus whose configuration declares
+neither of the two rules `audit` used to run, such as the one `init` writes for a corpus with no type
+prefix (`BUG-99`), is judged by whatever it does declare.
 
-## Output
+It takes no arguments beyond the global `--config`. A consumer migrating to `urzua check` changes the
+invocation and nothing in the shape of what comes back; for the narrower report `audit` used to give,
+`urzua check --rules pointer.resolution,relation.supersession-reciprocity` (a rule the configuration
+does not declare is an error there, exit 2, rather than a silent empty run).
 
-Assembled into the same `CheckReport` shape `check` already emits (ADR-23's one-report-shape
-contract) — no second shape invented for the same kind of data. `rules_executed` correctly shows two
-entries where `check` shows ten, reflecting narrower scope rather than a fabricated "ran everything"
-claim. Waivers apply identically to `check` (ADR-11/SPEC-10): a waived finding stays listed, only
-excluded from the blocking exit code.
+## The deprecation notice
 
-## Reuse, not reimplementation
-
-A future third caller of either rule function costs nothing — the function is the single source of
-truth, callable from as many command entry points as need it. If `audit` and `check` ever need
-genuinely different reciprocity semantics (e.g. `audit` scoping to a subset of paths the way `check`
-does), that is a real divergence to design deliberately, not something ruled out by sharing the
-function today, since both take `&[Record]` and neither cares where its caller runs from.
+Every report carries one `Notice` with `subject: "audit"` and severity `warning` naming the replacement,
+`urzua check`. A `Notice` never moves the exit code (`ADR-46`), so no adopter's build breaks on the
+warning. The only difference between an `audit` report and the `check` report is that notice.
 
 ## What's deliberately not built
 
-- **Writing.** Not deferred pending infrastructure (unlike `fix`, SPEC-8) — permanently out of
-  scope. The reciprocity checker must never write; a bulk rewrite is the exact incident this
-  project's own practice cites as the reason repair needed a revision log before it could exist at
-  all (`fix`, not `audit`, is where that repair path lives, gated hard).
-- **Path scoping** (`audit docs/adr/` narrowing which records are cross-checked) — `check` has this
-  (BUG-1's fix); `audit` doesn't yet, since nothing has needed it.
+- **Writing.** Permanently out of scope. The reciprocity checker must never write; repair is `fix`
+  (`SPEC-8`), gated hard.
+- **A rule set, a path scope or a flag of its own.** Anything `audit` could be asked for is a `check`
+  invocation.
+- **Removal.** The release after the deprecation release removes the command, with a clear message for a
+  caller that still invokes it. Re-adding it afterwards would cost a deprecation cycle of its own
+  (`ADR-79`).
 
 ## References
 
-- ADR-30 — the decision this spec details: reuse, not a second implementation.
-- SPEC-1 — `audit`'s scope, fully specified before ADR-30 decided the mechanism.
-- SPEC-2 — `check`, which shares `relation.supersession-reciprocity` with `audit`.
-- ADR-18/19 — the decision that moved Embodiment out of `audit` and into `check`/`fix`, leaving
-  `audit` with only these two rules.
+- ADR-79 — the decision: fold `audit` into `check`, and keep one read-only validator.
+- RFC-38 — the proposal (sections 1 to 3 are built here).
+- ADR-30 — the earlier decision that `audit` reuse `check`'s rule functions, which this supersedes in
+  effect: it no longer calls them itself.
+- ADR-53 — every rule is a declared policy.
+- BUG-42, BUG-84, BUG-99 — the bugs rooted in `audit` owning a rule set.
+- SPEC-2 — `check`, including `--rules` and `rules_selected`.
 
 > **Revision log**
 >
@@ -73,3 +72,4 @@ function today, since both take `&[Record]` and neither cares where its caller r
 > | 2026-11-05 | Bumped to `0.4`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.5`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.6`. Rewritten: `audit` is a deprecated alias of `check` over the configured rules with no rule set of its own, adding one deprecation `Notice`; removed the release after. **Why:** `MILE-190`, `ADR-79`. | **substantive** |
