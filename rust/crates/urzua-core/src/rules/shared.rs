@@ -542,13 +542,14 @@ pub(super) fn declared_field_severity(
     rule: &str,
     field: &str,
 ) -> Option<FindingSeverity> {
-    use crate::config::RuleLevel;
-    match config.rules.get(rule)?.field_levels.as_ref()?.get(field)? {
-        RuleLevel::Error => Some(FindingSeverity::Error),
-        RuleLevel::Warn => Some(FindingSeverity::Warning),
-        // Refused at load; unreachable for a loaded config.
-        RuleLevel::Off => None,
-    }
+    // `off` is refused at load, so a loaded config never maps it to `None`.
+    config
+        .rules
+        .get(rule)?
+        .field_levels
+        .as_ref()?
+        .get(field)?
+        .severity()
 }
 
 /// Record files that exist on disk in a record type's directory but that git

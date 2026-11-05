@@ -1,5 +1,5 @@
 ---
-Version: '0.85'
+Version: '0.87'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -769,7 +769,10 @@ fail_on: warning   # error (default) | warning
 
 - **`error`** (the default, and the behaviour when the key is absent): only an error finding exits 1.
 - **`warning`**: an unwaived warning also exits 1. A waived finding never does.
-- Any other value, including a different case, is refused at load, and the command exits 2.
+- An `info` finding (`level: info`, `ADR-87`) exits 0 under both values and never sets `blocking`.
+- `fail_on: info` does not exist: `info` is the level below the line `fail_on` draws, and a repository
+  that wants every finding to fail uses `warning` with rule levels `warn` or `error`.
+- Any other value, including `info` and a different case, is refused at load, and the command exits 2.
 - `urzua check --fail-on error|warning` overrides the key for one run, in either direction.
 - Only the exit code changes. The report is byte-identical under either value: `blocking` and
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
@@ -809,6 +812,29 @@ rules:
   `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
 - The hook (`SPEC-8`) is the only other reader of the key: it takes the top-level `override_log:` line
   from `.urzua/config.yaml`, and when it is absent it says the override is not recorded.
+
+## Editor hook blocking: `block_on`
+
+A top-level `block_on` sets which errors the editor hook blocks on (`ADR-78`, amendment of 2026-11-05;
+`MILE-195`), one of two values:
+
+```yaml
+block_on: introduced   # the default
+```
+
+- **`introduced`** blocks only on an unwaived error the edit introduces: one the record as it is on disk
+  does not already report with the same rule and message. An error already on disk is listed, not blocked.
+- **`all`** blocks on any unwaived error in the proposed content of the edited record, whether or not
+  the record already had it. The hook then skips its second, on-disk `check` run, and lists nothing as
+  already failing. The named override and the `override_log` work the same under both values.
+- **Absent means `introduced`.** A configuration that does not declare the key behaves exactly as it did
+  before the key existed, and `introduced` written out is byte-identical in the hook's output.
+- **Any other value is a load error** (exit 2) naming the key and the value, never a silent default. The
+  hook reads the key itself, from the top-level `block_on:` line, as it does `override_log`; a value it
+  does not recognise gives the verdict `allow-unjudged` with a message naming the value (`SPEC-8`).
+- The engine reads no other meaning from the key: `urzua check` and `check --stdin-path` report the same
+  findings under both values, and the Claude Code adapter passes the hook's verdict through unchanged.
+  This repository declares `introduced` (`ADR-78` amendment, item 3).
 
 ## Diff rule path options
 
@@ -860,11 +886,12 @@ rules:
 ```
 
 - **`paths`** (required, non-empty), **`kind`**, **`reason`** and **`severity`** are required. Any
-  other `kind`, a blank `reason`, a `severity` other than `error` or `warn`, or a path that is
+  other `kind`, a blank `reason`, a `severity` other than `error`, `warn` or `info`, or a path that is
   absolute, contains `..` or a backslash, or is an invalid glob is refused at load.
 - **A boundary's `severity` is the level of every finding it produces.** The rule's `level` only
   enables the rule: `level: warn` over a boundary declaring `error` reports errors, and
-  `level: error` over a boundary declaring `warn` reports warnings.
+  `level: error` over a boundary declaring `warn` reports warnings. A rule set to `info` caps every
+  boundary at `info`, and a boundary may declare `severity: info` under any rule level.
 - **`published`:** a record identifier inside it is a violation. Any identifier carrying a declared
   type prefix counts, in prose as well as in a marker, resolvable or not.
 - **`generated`:** a back-pointer inside it (an `Implements:` or `Verifies:` comment citing a
@@ -1227,8 +1254,16 @@ rules:
     not_in: ["Superseded"]
 ```
 
-A level is `off`, `warn` or `error`, written bare or as a table when the rule takes options. The
+A level is `off`, `info`, `warn` or `error`, written bare or as a table when the rule takes options. The
 declared level **replaces** whatever severity the rule body chose: one rule, one level.
+
+**`info`** (`ADR-87`) is an opt-in reporting level for an advisory rule: the rule runs, and its findings
+carry `severity: "info"`, with rule, file, line, population and `suggested_action` exactly as at
+`warn`. They are listed and counted in `findings` and `status`, and they never set `blocking` and never
+fail `fail_on`, under either value. A waiver covers one like any other finding. A rule set to `info`
+reports nothing above `info`: a `field_levels` entry or a boundary `severity` declared `warn` or
+`error` does not lift it. Any other level string is refused at load, and the message lists the four
+(`"off"`, `"info"`, `"warn"`, `"error"`); no value is ever read as `error` by default.
 
 Two things are load-time errors rather than silent no-ops, because a check that never runs is
 indistinguishable in the report from one that ran clean:
@@ -1239,7 +1274,7 @@ indistinguishable in the report from one that ran clean:
 ### Severity per field (`MILE-140`)
 
 `field.quality`, `field.pending` and `status.required-field-missing` report one finding per field.
-Each takes an optional `field_levels` map from a field name to `warn` or `error`. Without it, the
+Each takes an optional `field_levels` map from a field name to `info`, `warn` or `error`. Without it, the
 rule's `level` is every finding's severity, as before.
 
 ```yaml
@@ -1254,7 +1289,7 @@ rules:
   `field_levels` says.
 - A field name matches exactly. It must be a `required_fields` or `known_fields` entry of some
   record type.
-- A level is `warn` or `error`. `off` is refused (a field is switched off by not declaring it), as
+- A level is `info`, `warn` or `error`. `off` is refused (a field is switched off by not declaring it), as
   are an empty map, a field no type declares, and the option on any rule not named above.
 
 ### Evidence pins, a grace window and a claim age (`MILE-129`)
@@ -1775,4 +1810,7 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.82`. A resolver's `member` may be a list of entries, each with its own `start` and `end`, tried together (a Rust method ends `brace_balanced`, a struct field `indent`); a `container` may match a `struct` as well as an `impl`, so `Type::field` is addressable. A single mapping is read as before. Vectors 21-24 added. **Why:** `ADR-74` made the symbol the scope, but its `member` could name only an `fn`, so a decision about one struct field could pin only a line range, which shifts when anything is inserted above it; the declared resolver now reaches the field, with no language knowledge in the engine (`ADR-74` point 5: a member declares its own start pattern and end kind from the closed set). | **substantive** |
 > | 2026-11-05 | Bumped to `0.83`. Documents the `closes` and `strict` options of `claim.status-agreement`: a changeset fragment lists the records it closes in a one-line frontmatter key, each id must resolve (`claim.id-unresolved`) and be at a terminal status its own type declares, a block list or malformed value is `claim.field-malformed`, `strict` makes a fragment without the key a finding, and a file with no frontmatter is out of scope and disclosed, except that under `strict` an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed`. **Why:** `BUG-66`, decided by `ADR-85`; the fence case because the pinned release tool rejects both. | **substantive** |
 > | 2026-11-05 | Bumped to `0.84`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
-> | 2026-11-05 | Bumped to `0.85`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.84`. Documents the top-level `block_on: introduced \| all` key for the editor hook: `introduced` is the default and what an absent key means, `all` blocks on any error in the edited record, any other value is a load error. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.85`. `info` is a rule level and a `field_levels` level and a boundary `severity` (`ADR-87`, `MILE-194`): findings are reported and counted, never `blocking`, never fail `fail_on`, and a rule set to `info` caps every declared severity at `info`. `fail_on: info` and every other unrecognised level are refused at load, the level message listing `off`, `info`, `warn` and `error`. **Why:** `MILE-194` builds `ADR-87`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.86`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.87`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |

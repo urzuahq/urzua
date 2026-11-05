@@ -36,9 +36,13 @@
 #   not-governed         urzua says no record type governs the path: not a record
 #   allow                judged, nothing to report; the message counts the rules that ran
 #                        and names the enabled rules a single record cannot be judged by
-# An error finding that is also reported for the record as it is on disk (a
-# problem this edit did not introduce) does not block the edit; it is listed in
-# `message` as pre-existing.
+# By default (`block_on: introduced`, also what an absent key means) an error
+# finding that is also reported for the record as it is on disk (a problem this
+# edit did not introduce) does not block the edit; it is listed in `message` as
+# pre-existing. With the config's top-level `block_on: all` (SPEC-3, MILE-195) any
+# unwaived error in the proposed content blocks, the on-disk baseline run is
+# skipped, and nothing is listed as pre-existing. Any other value is not judged:
+# the verdict is allow-unjudged and the message names the value.
 set -u
 
 override="${URZUA_HOOK_OVERRIDE:-}"
@@ -65,6 +69,17 @@ emit() { # verdict message [findings-json]
 unjudged() { emit allow-unjudged "record-edit-hook: urzua did NOT judge this edit to $rel ($1). The edit is allowed; run 'urzua check' before committing." ; exit 0; }
 
 command -v jq >/dev/null 2>&1 || { echo "{\"verdict\":\"allow-unjudged\",\"path\":\"$rel\",\"message\":\"record-edit-hook: urzua did NOT judge this edit to $rel (jq is not installed). The edit is allowed.\",\"findings\":[]}"; exit 0; }
+
+# The config's top-level `block_on` scalar (SPEC-3), read the way `override_log` is.
+declared_block_on() {
+  awk '/^block_on:[ \t]/ { sub(/^block_on:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); sub(/[ \t]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit }' .urzua/config.yaml 2>/dev/null
+}
+block_on="$(declared_block_on)"
+case "$block_on" in
+  ""|introduced) block_on=introduced ;;
+  all) ;;
+  *) cat >/dev/null; unjudged "block_on '$block_on' in .urzua/config.yaml is not one of introduced, all" ;;
+esac
 
 bin="${URZUA_BIN:-}"
 [ -n "$bin" ] || { [ -x "$root/rust/target/release/urzua" ] && bin="$root/rust/target/release/urzua" || bin="$(command -v urzua || true)"; }
@@ -95,7 +110,7 @@ others="$(echo "$report" | jq -c "$live | map(select(.severity!=\"error\"))")"
 # Split the errors into those this edit introduced and those the record on disk
 # already has. A baseline run that cannot judge leaves every error introduced.
 introduced="$errors"; existing='[]'
-if [ "$errors" != "[]" ] && [ -f "$rel" ]; then
+if [ "$block_on" = introduced ] && [ "$errors" != "[]" ] && [ -f "$rel" ]; then
   # Only an edit with errors pays for the second run (about the first's time again).
   base="$("$bin" check --stdin-path "$rel" < "$rel" 2>/dev/null)"
   if echo "$base" | jq -e '.status == "ok" or .status == "findings-present"' >/dev/null 2>&1; then

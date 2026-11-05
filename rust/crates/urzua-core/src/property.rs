@@ -216,6 +216,7 @@ mod tests {
                 locator_resolvers: Default::default(),
                 upgraded_from: None,
                 override_log: None,
+                block_on: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -347,6 +348,7 @@ mod tests {
             roadmap: Default::default(),
             upgraded_from: None,
             override_log: None,
+            block_on: None,
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -605,6 +607,7 @@ mod tests {
                 locator_resolvers: Default::default(),
                 upgraded_from: None,
                 override_log: None,
+                block_on: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

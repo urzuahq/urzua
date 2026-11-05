@@ -51,7 +51,7 @@ jq -r --arg marker "$marker" --argjson max "$max_rows" '
   | {
       annotations: [
         $findings[] | select(.file != null)
-        | "::\(if .severity == "error" then "error" else "warning" end) file=\(.file | escp)\(if .line != null then ",line=\(.line)" else "" end),title=\(.rule | escp)::\(.message | esc)"
+        | "::\(if .severity == "error" then "error" elif .severity == "info" then "notice" else "warning" end) file=\(.file | escp)\(if .line != null then ",line=\(.line)" else "" end),title=\(.rule | escp)::\(.message | esc)"
       ][:$max],
       body: (
         [$marker, "## urzua gate", ""]

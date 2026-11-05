@@ -1,5 +1,5 @@
 ---
-Version: '0.98'
+Version: '0.99'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -360,10 +360,19 @@ Design language from this spec's original Phase B scope, with no shipped rule be
   open questions (nested-scope inheritance, glob-vs-subject width) are still unresolved.
 
 Severity per rule comes from config (SPEC-3) in principle; in practice severity is still hardcoded
-per rule at the source (`Error`/`Warning` only, no `Info`), not yet read from any config field —
+per rule at the source (`Error`, `Warning` or, at a rule set to `level: info`, `Info`), not yet read from any config field —
 tracked as MILE-80, which also names the still-open question of a richer severity taxonomy versus a
 separate log-verbosity axis. `status` reports what was found; whether that fails the build is the
 caller's choice and lives in `blocking`.
+
+A finding's `severity` is `"error"`, `"warning"` or `"info"` (`ADR-87`). `info` is opt-in: it appears
+only for a rule the repository sets to `level: info` (`SPEC-3`), or for a `field_levels` entry or a
+boundary `severity` of `info`. An info finding is a full finding (rule, file, line, message,
+population and `suggested_action` as at `warning`), is listed in `findings`, and counts toward
+`status`: a run with an unwaived info finding is `findings-present`. It never sets `blocking` and never
+trips `fail_on` (see Exit codes). A rule set to `info` reports nothing above `info`: a `field_levels`
+entry or a boundary `severity` declared higher does not lift it. A config that uses no `info` produces
+a byte-identical report.
 
 ## Output contract
 
@@ -712,7 +721,7 @@ judge the same records (`sequence.cycle`, `sequence.unresolved-blocker`) are unc
 
 | Code | When |
 |---|---|
-| 0 | no findings at or above the configured blocking severity |
+| 0 | no findings at or above the configured blocking severity; an `info` finding never counts, under either `fail_on` |
 | 1 | blocking findings; under `fail_on: warning` (or `--fail-on warning`), also any unwaived warning (`SPEC-3`) |
 | 2 | the check could not run — bad config, unreadable path, explicit paths matching zero files |
 
@@ -893,4 +902,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.95`. `diff.source-requires-record` takes the optional `decision_types`, `fix_types` and `link_fields` options and, with `decision_types` declared, is the decision gate: the diff must change a decision record at a decided status, a record linking one, or a fix record, and the finding offers the new `source-without-decision` variant (`add-record`, naming the type when one type holds decisions). Without them the rule is unchanged. **Why:** `MILE-133`, maintainer decision 2026-11-05: extend the existing diff rule instead of adding a parallel one. | **substantive** |
 > | 2026-11-05 | Bumped to `0.96`. `claim.status-agreement` reads a fragment's `closes` frontmatter key when `SPEC-3` declares it: a listed id that resolves to no record (`claim.id-unresolved`), a listed record not at a terminal status its type declares (an error naming the record, offering an `edit-field` on its `Status`), a value that is not a one-line list of record ids (`claim.field-malformed`) and, under `strict`, a fragment with a frontmatter block and without the key (`claim.field-missing`) are findings; a file with no frontmatter is counted out of scope and named in a notice (under `strict`, an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed` instead, because the release tool rejects both), and `check` prints how many closing-verb claims the deprecated prose reading still found. Four finding variants are added to the action table and the rule table is regenerated. **Why:** `BUG-66`, decided by `ADR-85`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.97`. The `waiver-ineffective` message names whichever requirement is unmet instead of always naming `effective_requires`: a missing field, a rule the type's `permanent` declaration does not list, a category outside its vocabulary, or a missing or unresolved citation (`SPEC-3`, `SPEC-10`). `check` adds an info notice, `permanent-waivers`, counting permanent waivers by category when `permanent` is declared. The `waiver.matches-nothing` rule-table row is regenerated. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
-> | 2026-11-05 | Bumped to `0.98`. `status.delivery-agreement`'s generated row now says the rule applies to any type that declares `statuses.delivery`, that `back_pointer_evidence: false` stops a back-pointer counting as evidence, and that `unevidenced_tiers` may be empty so a type never reports the second direction; the finding for a not-done record names the evidence field it was computed from. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.97`. A finding's `severity` gains `"info"` (`ADR-87`, `MILE-194`): reported, listed in `findings` and counted in `status` like a warning, never `blocking` and never an exit-1 under either `fail_on`; a rule set to `info` caps every finding at `info`. §Rules and Exit codes say so. **Why:** `MILE-194` builds `ADR-87`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.98`. The `waiver-ineffective` message names whichever requirement is unmet instead of always naming `effective_requires`: a missing field, a rule the type's `permanent` declaration does not list, a category outside its vocabulary, or a missing or unresolved citation (`SPEC-3`, `SPEC-10`). `check` adds an info notice, `permanent-waivers`, counting permanent waivers by category when `permanent` is declared. The `waiver.matches-nothing` rule-table row is regenerated. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.99`. `status.delivery-agreement`'s generated row now says the rule applies to any type that declares `statuses.delivery`, that `back_pointer_evidence: false` stops a back-pointer counting as evidence, and that `unevidenced_tiers` may be empty so a type never reports the second direction; the finding for a not-done record names the evidence field it was computed from. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
