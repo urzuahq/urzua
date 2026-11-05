@@ -287,6 +287,10 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_relation_pairs) {
             continue;
         }
+        // The override log is declared, never inferred (`MILE-188`).
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_override_log) {
+            continue;
+        }
         // A rule that reads a per-type declaration `init` leaves empty would
         // report `ran` over zero records (BUG-73). `init` infers nothing from
         // the corpus (ADR-33), so the adopter declares it and enables the rule;
@@ -406,21 +410,8 @@ pub fn run(dry_run: bool) -> ExitCode {
         .unwrap_or(&config_path)
         .to_path_buf();
 
-    // `audit`'s entire rule set (`pointer.resolution`,
-    // `relation.supersession-reciprocity`) is identity-dependent, so a
-    // corpus with no type prefix leaves it with nothing enabled and
-    // `urzua audit` exits 2 immediately after this command (`BUG-99`).
-    // Correct, not a bug in `audit`'s exit-code policy (`BUG-77`) -- but the
-    // adopter's documented first two commands should not surprise them.
     let mut notices = infer_header_shapes(&repo_root, &discovered.paths, &mut proposed);
     notices.extend(withheld_rule_notices());
-    if proposed.iter().all(|rt| rt.prefix.is_none()) {
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: NOTICE_RULE_APPLICABILITY.to_string(),
-            message: "no proposed type carries a filename prefix, so audit's rule set (pointer.resolution, relation.supersession-reciprocity) is entirely identity-dependent and none of it is declared here -- `urzua audit` will report not-run (exit 2) until at least one type adopts a prefix (see ADR-36)".to_string(),
-        });
-    }
 
     let rendered = render_config_yaml(&proposed);
 

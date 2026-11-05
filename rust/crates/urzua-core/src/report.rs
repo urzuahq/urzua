@@ -329,6 +329,8 @@ pub enum PopulationUnit {
     ChangedPath,
     /// The configuration file itself, for a rule that judges how it was read.
     ConfigFile,
+    /// One entry of a committed log a rule reads (`override.unreviewed`).
+    Entry,
 }
 
 /// What a rule decided about one candidate it was handed.
@@ -557,6 +559,9 @@ pub enum ScopeSource {
     /// Only the records changed against a base ref (`MILE-123`); the ref is
     /// reported in [`ScopeInfo::base`].
     GitDiff,
+    /// One record's proposed content read from stdin (`check --stdin-path`,
+    /// `MILE-191`); the record need not exist on disk.
+    Stdin,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -601,6 +606,12 @@ pub struct CheckReport {
     /// (`ADR-53`) -- but no reader takes `0` here for a clean corpus.
     pub records_read_by_any_rule: usize,
     pub rules_executed: Vec<RuleExecution>,
+    /// The rule ids `--rules` restricted the run to, in the order given and
+    /// without repeats; `null` on a run that was not restricted (`ADR-79`). A
+    /// rule outside the selection is omitted from `rules_executed`, never
+    /// listed as `not-enabled`, which would say the repository declined a
+    /// policy it declared.
+    pub rules_selected: Option<Vec<String>>,
     pub scope: ScopeInfo,
     pub blocking: bool,
     pub findings: Vec<Finding>,
@@ -1214,6 +1225,7 @@ mod tests {
             files_examined: 1,
             records_read_by_any_rule: 0,
             rules_executed: vec![],
+            rules_selected: None,
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
                 base: None,
@@ -1234,6 +1246,7 @@ mod tests {
             files_examined: 1,
             records_read_by_any_rule: 1,
             rules_executed: vec![],
+            rules_selected: None,
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
                 base: None,

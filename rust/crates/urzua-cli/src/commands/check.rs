@@ -38,6 +38,15 @@ struct Opened {
     session: Session,
     requested_scopes: Vec<PathBuf>,
     changed: Option<urzua_io::GitChanges>,
+    prospective: Option<Prospective>,
+}
+
+/// One record's proposed content (`--stdin-path`, `MILE-191`). It replaces the
+/// record's on-disk copy (or adds a record) in the session before any rule
+/// runs, so `urzua-core` only ever sees records and text, never a path to read.
+struct Prospective {
+    path: PathBuf,
+    content: String,
 }
 
 /// What the run reports on. The corpus a pointer resolves against stays whole
@@ -49,6 +58,7 @@ struct ReportScope {
     in_scope: HashSet<PathBuf>,
     /// How many records the diff reached before a path argument narrowed it.
     reached_before_narrowing: usize,
+    prospective: Option<Prospective>,
 }
 
 impl ReportScope {
@@ -62,8 +72,10 @@ struct Context<'a> {
     session: &'a Session,
     claims: Vec<(String, String)>,
     published_files: Vec<rules::PublishedFile>,
-    published_paths: Vec<String>,
+    boundaries: Vec<rules::ResolvedBoundary>,
+    ignore_marker: Option<String>,
     index_artifacts: Vec<rules::IndexArtifact>,
+    override_log: Option<rules::OverrideLog>,
     back_pointer_sources: Option<rules::BackPointerSources>,
     decision_gate_sources: Option<rules::BackPointerSources>,
     back_pointed: rules::BackPointerEvidence,
@@ -79,6 +91,10 @@ struct Context<'a> {
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
     templates: urzua_core::new_record::TemplateValues,
+    /// A proposed record is being judged (`--stdin-path`).
+    record_only: bool,
+    /// `--rules`: the only rules to run (`ADR-79`); `None` runs every declared rule.
+    selected: Option<HashSet<String>>,
 }
 
 /// `revision-log.version-bump-required` judges a changed record against the
@@ -87,12 +103,12 @@ struct Context<'a> {
 /// record new in the diff has no merge-base copy and gets no entry.
 fn load_base_text(
     session: &Session,
-    scope: &ReportScope,
+    changes: Option<&urzua_io::GitChanges>,
     notices: &mut Vec<Notice>,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut out = HashMap::new();
     let (Some(changes), Some(_)) = (
-        &scope.changed,
+        changes,
         enabled_setting(
             &session.config,
             rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
@@ -131,6 +147,21 @@ fn load_base_text(
         }
     }
     Ok(out)
+}
+
+/// The one change a proposed record is: its path, against HEAD's copy. A path
+/// HEAD does not have is an addition, so it has nothing to compare with.
+fn head_changes_for(repo_root: &Path, path: &Path) -> urzua_io::GitChanges {
+    let mut changes = urzua_io::GitChanges {
+        merge_base: "HEAD".to_string(),
+        changed: HashSet::from([path.to_path_buf()]),
+        deleted: HashSet::new(),
+        added: HashSet::new(),
+    };
+    if urzua_io::read_at_commit(repo_root, "HEAD", path).is_err() {
+        changes.added.insert(path.to_path_buf());
+    }
+    changes
 }
 
 /// `field.quality`'s `template_placeholders` (`BUG-22`): each declared type's
@@ -202,8 +233,10 @@ impl<'a> Context<'a> {
             untracked_records: &self.untracked_records,
             claims: &self.claims,
             published_files: &self.published_files,
-            published_paths: &self.published_paths,
+            boundaries: &self.boundaries,
+            ignore_marker: self.ignore_marker.as_deref(),
             index_artifacts: &self.index_artifacts,
+            override_log: self.override_log.as_ref(),
             back_pointer_sources: self.back_pointer_sources.as_ref(),
             decision_gate_sources: self.decision_gate_sources.as_ref(),
             back_pointed: &self.back_pointed,
@@ -229,28 +262,88 @@ fn enabled_setting<'c>(config: &'c Config, rule: &str) -> Option<&'c RuleSetting
     config.rules.get(rule).filter(|s| s.level != RuleLevel::Off)
 }
 
-pub fn run(
-    config_path: Option<PathBuf>,
-    paths: Vec<PathBuf>,
-    base: Option<String>,
-    fail_on: Option<urzua_core::config::FailOn>,
-) -> ExitCode {
-    match execute(config_path, paths, base, fail_on) {
+/// The `urzua check` command line, gathered so `run` stays one argument wide.
+#[derive(Default)]
+pub struct CheckArgs {
+    pub paths: Vec<PathBuf>,
+    pub base: Option<String>,
+    pub fail_on: Option<urzua_core::config::FailOn>,
+    pub stdin_path: Option<PathBuf>,
+    /// `--rules`: empty means every declared rule.
+    pub rules: Vec<String>,
+    /// Notices the invoking command adds to the report (`audit`'s deprecation).
+    pub extra_notices: Vec<Notice>,
+}
+
+pub fn run(config_path: Option<PathBuf>, args: CheckArgs) -> ExitCode {
+    match execute(config_path, args) {
         Ok(report) => emit(&report),
         Err(e) => emit(&CouldNotRun::from(e)),
     }
 }
 
-fn execute(
-    config_path: Option<PathBuf>,
-    paths: Vec<PathBuf>,
-    base: Option<String>,
-    fail_on: Option<urzua_core::config::FailOn>,
-) -> Result<CheckReport, Failure> {
-    let opened = open_session(&paths, config_path, base.as_deref())?;
+/// `--rules` against what the configuration declares (`ADR-79`): an id this
+/// build does not ship and an id the configuration does not declare are both
+/// mistakes in the command, not findings about the corpus. Selection narrows
+/// what runs and never enables a rule, so a declared-`off` rule is accepted
+/// and reports `not-enabled`. Returns the ids in the order given, without
+/// repeats; `None` when no selection was asked for.
+fn validate_selection(
+    config: &Config,
+    requested: &[String],
+) -> Result<Option<Vec<String>>, String> {
+    if requested.is_empty() {
+        return Ok(None);
+    }
+    let mut out: Vec<String> = Vec::new();
+    for id in requested {
+        let id = id.trim();
+        if id.is_empty() {
+            return Err("urzua check --rules: an empty rule id (a stray comma?)".to_string());
+        }
+        if !rules::ALL_RULES.contains(&id) {
+            return Err(format!(
+                "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
+            ));
+        }
+        if !config.rules.contains_key(id) {
+            return Err(format!(
+                "urzua check --rules: '{id}' is not declared in the configuration; --rules narrows the declared rules and never enables one"
+            ));
+        }
+        if !out.iter().any(|o| o == id) {
+            out.push(id.to_string());
+        }
+    }
+    Ok(Some(out))
+}
+
+fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
+    let CheckArgs {
+        paths,
+        base,
+        fail_on,
+        stdin_path,
+        rules: requested_rules,
+        extra_notices,
+    } = args;
+    if stdin_path.is_some() && (!paths.is_empty() || base.is_some()) {
+        return Err(
+            "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base"
+                .into(),
+        );
+    }
+    let opened = open_session(&paths, config_path, base.as_deref(), stdin_path.as_deref())?;
     let session = &opened.session;
-    let scope = narrow(session, opened.requested_scopes, opened.changed)?;
-    let (context, mut notices) = load_context(session, &scope)?;
+    let selection = validate_selection(&session.config, &requested_rules)?;
+    let scope = narrow(
+        session,
+        opened.requested_scopes,
+        opened.changed,
+        opened.prospective,
+    )?;
+    let (context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
     scope_findings(session, &scope, &mut findings);
     let waivers = urzua_core::waiver::load_suppressions(
@@ -289,8 +382,13 @@ fn execute(
             &scope.in_scope.iter().map(|p| p.as_path()).collect(),
         ),
         rules_executed: executions,
+        rules_selected: selection,
         scope: ScopeInfo {
-            source: crate::discovery::scope_source(session.discovered.source),
+            source: if scope.prospective.is_some() {
+                urzua_core::report::ScopeSource::Stdin
+            } else {
+                crate::discovery::scope_source(session.discovered.source)
+            },
             base,
             record_types: session.config.record_types.keys().cloned().collect(),
             diff: scope.diff,
@@ -309,7 +407,8 @@ fn open_session(
     paths: &[PathBuf],
     config_path: Option<PathBuf>,
     base: Option<&str>,
-) -> Result<Opened, Failure> {
+    stdin_path: Option<&Path>,
+) -> Result<Opened, String> {
     let mut requested_scopes = Vec::new();
     let mut changed = None;
     let session = Session::open_with(paths, config_path, |repo_root, _config, discovered| {
@@ -344,11 +443,39 @@ fn open_session(
         }
         Ok(())
     })?;
+    let mut session = session;
+    let prospective = match stdin_path {
+        Some(p) => Some(propose(&mut session, p)?),
+        None => None,
+    };
+    if let Some(p) = &prospective {
+        requested_scopes = vec![p.path.clone()];
+    }
     Ok(Opened {
         session,
         requested_scopes,
         changed,
+        prospective,
     })
+}
+
+/// Reads the proposed content from stdin and puts it in the session in place of
+/// the record's on-disk copy, adding the record (and its path) when the file
+/// does not exist yet. A path no record type governs is a could-not-run.
+fn propose(session: &mut Session, stdin_path: &Path) -> Result<Prospective, String> {
+    let rel = crate::discovery::relative_to_root(&session.repo_root, stdin_path)?;
+    let mut content = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut content)
+        .map_err(|e| format!("could not read the proposed content from stdin: {e}"))?;
+    let record = crate::discovery::parse_prospective_record(&session.config, &rel, &content)?;
+    session.records.retain(|r| r.path != rel);
+    session.records.push(record);
+    session.full_text.insert(rel.clone(), content.clone());
+    if !session.discovered.paths.contains(&rel) {
+        session.discovered.paths.push(rel.clone());
+        session.discovered.paths.sort();
+    }
+    Ok(Prospective { path: rel, content })
 }
 
 /// Stage 1b: the records the run reports on. A diff run examines the changed
@@ -358,6 +485,7 @@ fn narrow(
     session: &Session,
     requested: Vec<PathBuf>,
     changed: Option<urzua_io::GitChanges>,
+    prospective: Option<Prospective>,
 ) -> Result<ReportScope, String> {
     let mut scoped = scope_to_requested_paths(&session.discovered.paths, &requested);
     let mut diff = None;
@@ -383,6 +511,7 @@ fn narrow(
         diff,
         in_scope: scoped.into_iter().collect(),
         reached_before_narrowing,
+        prospective,
     })
 }
 
@@ -436,12 +565,32 @@ fn claim_path_notices(repo_root: &Path, opts: &rules::ClaimOpts) -> Result<Vec<N
 /// Drift and claim ages cost several `git` subprocesses per `Realized-by`
 /// record, so they are computed only when `embodiment.consistency` will read
 /// them (`BUG-115`).
-fn load_drift(session: &Session) -> (crate::discovery::DriftedRecords, HashMap<PathBuf, u64>) {
-    let (repo_root, records, config) = (&session.repo_root, &session.records, &session.config);
+///
+/// A proposed record (`--stdin-path`) is the only one reported on, so only it
+/// is computed, from its proposed content (`MILE-191`, as `fix --stdin-path`).
+fn load_drift(
+    session: &Session,
+    prospective: Option<&Prospective>,
+) -> (crate::discovery::DriftedRecords, HashMap<PathBuf, u64>) {
+    let (repo_root, config) = (&session.repo_root, &session.config);
     if enabled_setting(config, rules::RULE_EMBODIMENT_CONSISTENCY).is_none() {
         return (Default::default(), HashMap::new());
     }
-    let mut drift = compute_drifted_records(repo_root, records, config);
+    let only: Vec<urzua_core::record::Record> = prospective
+        .into_iter()
+        .flat_map(|p| session.records.iter().find(|r| r.path == p.path).cloned())
+        .collect();
+    let records = if prospective.is_some() {
+        only.as_slice()
+    } else {
+        session.records.as_slice()
+    };
+    let mut drift = match prospective {
+        Some(p) => crate::discovery::compute_drifted_records_for_content(
+            repo_root, records, config, &p.content,
+        ),
+        None => compute_drifted_records(repo_root, records, config),
+    };
     let (ages, problems) =
         crate::discovery::compute_claim_ages(repo_root, records, config, urzua_io::now_unix());
     for problem in problems {
@@ -456,6 +605,7 @@ fn load_drift(session: &Session) -> (crate::discovery::DriftedRecords, HashMap<P
 fn load_context<'a>(
     session: &'a Session,
     scope: &ReportScope,
+    selection: Option<&[String]>,
 ) -> Result<(Context<'a>, Vec<Notice>), String> {
     let (repo_root, config, discovered) =
         (&session.repo_root, &session.config, &session.discovered);
@@ -471,29 +621,42 @@ fn load_context<'a>(
         &claim_opts.map_or_else(Vec::new, |o| o.claim_paths),
     )?;
 
-    let published_paths: Vec<String> = config
-        .enabled_rule_opts::<rules::PublishedPathOpts>(
-            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
-        )
-        .map_or_else(Vec::new, |o| o.published_paths);
-    let published_files = crate::discovery::read_files_under(
+    let boundary_opts: rules::PublishedPathOpts = config
+        .enabled_rule_opts(rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE)
+        .unwrap_or_default();
+    let boundary_paths: Vec<String> = boundary_opts
+        .boundaries
+        .iter()
+        .flat_map(|b| b.paths.iter().cloned())
+        .collect();
+    let published_files = crate::discovery::read_files_matching(
         repo_root,
         discovered,
-        &published_paths,
+        &boundary_paths,
         rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
     )?;
+    let (boundaries, ignore_marker) = (boundary_opts.boundaries, boundary_opts.ignore_marker);
 
     let index_specs: Vec<urzua_core::config::IndexSpec> = config
         .enabled_rule_opts::<rules::IndexOpts>(rules::RULE_INDEX_FRESHNESS)
         .map_or_else(Vec::new, |o| o.indexes);
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
+    let override_log = crate::discovery::read_override_log(repo_root, config)?;
 
     let back_pointer_sources =
         crate::discovery::read_back_pointer_sources(repo_root, discovered, config)?;
     let decision_gate_sources =
         crate::discovery::read_decision_gate_sources(repo_root, discovered, config)?;
 
-    let (drift, claim_ages) = load_drift(session);
+    // Drift is read only by `embodiment.consistency`, so a selection that leaves
+    // it out skips the git history it would cost.
+    let drift_wanted =
+        selection.is_none_or(|s| s.iter().any(|r| r == rules::RULE_EMBODIMENT_CONSISTENCY));
+    let (drift, claim_ages) = if drift_wanted {
+        load_drift(session, scope.prospective.as_ref())
+    } else {
+        (Default::default(), HashMap::new())
+    };
     notices.extend(crate::discovery::drift_notices(
         drift.shallow,
         &drift.git_problems,
@@ -526,7 +689,16 @@ fn load_context<'a>(
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
-    let base_text = load_base_text(session, scope, &mut notices)?;
+    // The diff rules judge a changed record against a committed copy. A
+    // proposed record is the one changed record, and its committed copy is
+    // HEAD's (`MILE-191`): status transitions and version bumps are then
+    // judged on a single-record edit instead of reported not-applicable.
+    let head_changes = scope
+        .prospective
+        .as_ref()
+        .map(|p| head_changes_for(repo_root, &p.path));
+    let changes = scope.changed.as_ref().or(head_changes.as_ref());
+    let base_text = load_base_text(session, changes, &mut notices)?;
     let templates = load_templates(repo_root, config, &mut notices)?;
 
     Ok((
@@ -534,8 +706,10 @@ fn load_context<'a>(
             session,
             claims,
             published_files,
-            published_paths,
+            boundaries,
+            ignore_marker,
             index_artifacts,
+            override_log,
             back_pointer_sources,
             decision_gate_sources,
             back_pointed,
@@ -556,11 +730,8 @@ fn load_context<'a>(
                 .cloned()
                 .collect(),
             // The diff rules judge the changed set itself; `None` without `--base`.
-            changed_paths: scope
-                .changed
-                .as_ref()
-                .map(|c| c.changed.iter().cloned().collect()),
-            committed_statuses: scope.changed.as_ref().map(|c| {
+            changed_paths: changes.map(|c| c.changed.iter().cloned().collect()),
+            committed_statuses: changes.map(|c| {
                 crate::diff_scope::committed_statuses(
                     repo_root,
                     &session.config,
@@ -571,6 +742,8 @@ fn load_context<'a>(
             repo_root: repo_root.clone(),
             base_text,
             templates,
+            record_only: scope.prospective.is_some(),
+            selected: selection.map(|s| s.iter().cloned().collect()),
         },
         notices,
     ))
@@ -639,7 +812,7 @@ fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
         &read_text,
         rules::RunState::empty(),
     );
-    for (exec, rule_findings) in rules::run_phase(rules::Phase::Main, &main) {
+    for (exec, rule_findings) in run_phase(context, rules::Phase::Main, &main) {
         executions.push(exec);
         findings.extend(rule_findings);
     }
@@ -652,12 +825,29 @@ fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
             ..rules::RunState::empty()
         },
     );
-    let results = rules::run_phase(rules::Phase::AfterRules, &after_rules);
+    let results = run_phase(context, rules::Phase::AfterRules, &after_rules);
     for (exec, rule_findings) in results {
         executions.push(exec);
         findings.extend(rule_findings);
     }
     (executions, findings)
+}
+
+/// One phase of rules. A proposed record (`--stdin-path`) runs only the rules
+/// that can report on a record (`MILE-191`).
+fn run_phase(
+    context: &Context,
+    phase: rules::Phase,
+    ctx: &rules::RuleCtx<'_>,
+) -> Vec<(RuleExecution, Vec<Finding>)> {
+    rules::run_phase_with(
+        phase,
+        ctx,
+        &rules::PhasePlan {
+            record_only: context.record_only,
+            selected: context.selected.as_ref(),
+        },
+    )
 }
 
 /// The two filesystem probes a rule may make.
@@ -685,6 +875,11 @@ fn scope_findings(session: &Session, scope: &ReportScope, findings: &mut Vec<Fin
             changed: &changes.changed,
         };
         findings.retain(|f| rules::finding_in_scope(config, f, &narrowing));
+    }
+    // A proposed record reports the findings on that record alone: a finding
+    // anchored to another file concerns something this edit does not touch.
+    if let Some(p) = &scope.prospective {
+        findings.retain(|f| f.file == p.path);
     }
     // The config rules were handed the loaded (absolute) path, so the same
     // finding differed by checkout (BUG-185). Relativized after the filters
@@ -737,7 +932,7 @@ fn run_after_scoping(
             today,
         },
     );
-    let results = rules::run_phase(rules::Phase::AfterScoping, &ctx);
+    let results = run_phase(context, rules::Phase::AfterScoping, &ctx);
     for (exec, rule_findings) in results {
         executions.push(exec);
         findings.extend(rule_findings);

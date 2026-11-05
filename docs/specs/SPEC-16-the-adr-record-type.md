@@ -1,7 +1,7 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-08
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs
 Author: beauwilliams
@@ -92,3 +92,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-11-04 | Bumped to `0.9`. Added the optional `Non-reference-ids` field to `known_fields`: the exact ids a record names without citing as a reference (`BUG-190`, `ADR-75`). **Why:** `ADR-18` writes an example id from another corpus that a real record could otherwise capture. | **substantive** |
 > | 2026-11-05 | Bumped to `0.10`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `an_accepted_adr_must_name_its_deciders_and_enters_proposed`, `adr_supersession_must_be_reciprocated_and_a_retired_decision_is_a_declared_status`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.11`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |

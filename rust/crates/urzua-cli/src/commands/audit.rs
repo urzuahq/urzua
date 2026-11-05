@@ -1,92 +1,35 @@
-//! `urzua audit` (SPEC-11): cross-record reconciliation, supersession
-//! reciprocity and dangling cross-references, reusing the same rule
-//! functions `check` calls rather than a second implementation (ADR-0030).
-//! Never writes -- a bulk cross-reference rewrite is a real data-loss risk
-//! without a review step this command doesn't have.
+//! `urzua audit` (SPEC-11, ADR-79): a deprecated alias of `urzua check`.
+//!
+//! `audit` once owned a rule set of its own (supersession reciprocity and
+//! dangling references), which `ADR-53` made wrong: every rule is a declared,
+//! opt-in policy, and a hardcoded subset inside the tool overrides the
+//! adopter's declaration (`BUG-42`, `BUG-84`, `BUG-99`). It now owns none. It
+//! runs `check`'s engine over the rules the configuration declares, with no
+//! selection of its own, so its report is `check`'s and it cannot disagree with
+//! `check` or exit 2 on a configuration `check` accepts. The one addition is a
+//! `Notice` naming the replacement; a `Notice` never moves the exit code
+//! (`ADR-46`). The command is removed the release after.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use urzua_core::report::{CheckReport, ReportStatus, ScopeInfo};
-use urzua_core::rules;
+use urzua_core::report::{Notice, NoticeSeverity};
 
-use crate::emit;
-use crate::session::{emit_or_not_run, Session};
-use urzua_core::report::Failure;
+use crate::commands::check::{self, CheckArgs};
+
+/// Notice subject, so a consumer can find (and drop) the deprecation notice.
+pub const NOTICE_SUBJECT: &str = "audit";
 
 pub fn run(config_path: Option<PathBuf>) -> ExitCode {
-    emit_or_not_run(run_inner(config_path))
-}
-
-fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
-    let Session {
-        repo_root,
-        config,
-        discovered,
-        records,
-        ..
-    } = Session::open(config_path)?;
-
-    let (record_index, identity_collisions) = rules::build_index_reporting_collisions(&records);
-    let untracked = crate::discovery::untracked_records(&repo_root, &config, &discovered.paths);
-    let notices = rules::identity_collision_notices(&identity_collisions);
-
-    let (exec1, findings1) = crate::gate::gated(&config, rules::RULE_POINTER_RESOLUTION, || {
-        rules::pointer_resolution(&records, &config, &record_index, &untracked)
-    });
-    let (exec2, findings2) = crate::gate::gated(
-        &config,
-        rules::RULE_RELATION_SUPERSESSION_RECIPROCITY,
-        || rules::supersession_reciprocity(&records, &config, &record_index, &untracked),
-    );
-    let (exec3, findings3) = crate::gate::gated(&config, rules::RULE_IDENTITY_COLLISION, || {
-        rules::identity_collision(&records, &identity_collisions)
-    });
-    let (exec4, findings4) =
-        crate::gate::gated(&config, rules::RULE_FILENAME_IDENTITY_PATTERN, || {
-            rules::filename_identity_pattern(&records, &config)
-        });
-    let mut findings = findings1;
-    findings.extend(findings2);
-    findings.extend(findings3);
-    findings.extend(findings4);
-
-    let waivers = urzua_core::waiver::load_suppressions(
-        &records,
-        &urzua_core::waiver::SuppressionType::from_config(&config),
-    );
-    urzua_core::waiver::apply_suppressions(&mut findings, &waivers, &urzua_io::today());
-
-    let active_findings = || findings.iter().filter(|f| f.waived.is_none());
-    let blocking =
-        active_findings().any(|f| f.severity == urzua_core::report::FindingSeverity::Error);
-
-    let executed = [exec1.clone(), exec2.clone(), exec3.clone(), exec4.clone()];
-    let status = if records.is_empty() || !crate::gate::any_rule_looked(&executed) {
-        ReportStatus::NotRun
-    } else if active_findings().count() == 0 {
-        ReportStatus::Ok
-    } else {
-        ReportStatus::FindingsPresent
-    };
-
-    let rules_executed = vec![exec1, exec2, exec3, exec4];
-    let report = CheckReport {
-        status,
-        files_examined: records.len(),
-        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule(&rules_executed),
-        rules_executed,
-        scope: ScopeInfo {
-            source: crate::discovery::scope_source(discovered.source),
-            base: None,
-            diff: None,
-            record_types: config.record_types.keys().cloned().collect(),
+    check::run(
+        config_path,
+        CheckArgs {
+            extra_notices: vec![Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_SUBJECT.to_string(),
+                message: "`urzua audit` is deprecated and now runs exactly `urzua check` over the configured rules; call `urzua check` instead (`urzua check --rules pointer.resolution,relation.supersession-reciprocity` for the narrower report `audit` used to give). It is removed in the next release.".to_string(),
+            }],
+            ..Default::default()
         },
-        blocking,
-        findings,
-        notices,
-        fail_on: config.fail_on,
-    };
-
-    Ok(emit(&report))
+    )
 }

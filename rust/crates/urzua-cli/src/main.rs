@@ -119,6 +119,18 @@ enum Command {
         /// overriding the configuration's `fail_on`. The JSON is unchanged.
         #[arg(long, value_enum)]
         fail_on: Option<FailOnArg>,
+        /// Read proposed content for this one record path from stdin and judge it
+        /// against every enabled rule without writing; the path need not exist
+        /// yet. Reports on that record only (`scope.source` is `stdin`). For an
+        /// editor hook. Cannot be combined with PATHS or --base.
+        #[arg(long, value_name = "PATH")]
+        stdin_path: Option<PathBuf>,
+        /// Run only these declared rules (comma-separated ids). Narrows what
+        /// runs and never enables a rule; an id the configuration does not
+        /// declare is an error (exit 2). The report names the filter in
+        /// `rules_selected` and omits the other rules from `rules_executed`.
+        #[arg(long, value_delimiter = ',', value_name = "ID")]
+        rules: Vec<String>,
         paths: Vec<PathBuf>,
     },
 
@@ -130,13 +142,12 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
-    /// Cross-record reconciliation: supersession reciprocity, dangling
-    /// references. Embodiment consistency lives in `check` and `fix`
-    /// instead -- it turned out to be per-record, not cross-record
-    /// (ADR-0018/0019).
+    /// Deprecated alias of `check`: runs every rule the configuration
+    /// declares and prints `check`'s report, plus a deprecation notice that
+    /// never changes the exit code. Use `check` instead, or `check --rules
+    /// <id>[,<id>...]` for a narrower run. Removed in the next release.
     ///
-    /// Reports only. Never writes -- bulk cross-reference rewriting is a
-    /// real data-loss risk without one.
+    /// Reports only. Never writes.
     Audit,
 
     /// Migrate the corpus itself: identifiers, or field-schema rollout.
@@ -324,8 +335,20 @@ fn main() -> ExitCode {
         Command::Check {
             base,
             fail_on,
+            stdin_path,
+            rules,
             paths,
-        } => commands::check::run(cli.config, paths, base, fail_on.map(Into::into)),
+        } => commands::check::run(
+            cli.config,
+            commands::check::CheckArgs {
+                paths,
+                base,
+                fail_on: fail_on.map(Into::into),
+                stdin_path,
+                rules,
+                ..Default::default()
+            },
+        ),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
         Command::New {

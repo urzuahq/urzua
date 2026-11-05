@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6N3D1YNWMGXWRY89XHY1XPJ
-Status: Proposed
+Status: Rejected
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -110,3 +110,4 @@ it, which is why it is not made here.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 to accept `RFC-36`, which `BUG-66` is blocked on; building part of an RFC needs its own decision record, and the maintainer approves before it is Accepted. | **substantive** |
+> | 2026-11-05 | Rejected by the maintainer. Measured over this repository: of the 19 bare references to an open bug or milestone in the fragment history, 0 were claims to close, and at HEAD the rule gives 6 false findings under `fail_on: warning`, which would turn CI red. The original incident (`BUG-66`) was caught in review in about 70 minutes and never released. The recurring failure the rule was meant for is a fixed bug left `Open` (`ADR-84`), and a claim should be a declared field, not a reading of prose (`ADR-85`). **Why:** maintainer decision of 2026-11-05 on that evidence; a rule that reads prose to infer intent has no precision to build on. | **substantive** |

@@ -252,6 +252,36 @@ pub(crate) fn parse_prospective_record(
     ))
 }
 
+/// `p` (absolute, or relative to the working directory) as a repo-relative
+/// path, without requiring that it exist.
+pub(crate) fn relative_to_root(
+    repo_root: &std::path::Path,
+    p: &std::path::Path,
+) -> Result<PathBuf, String> {
+    let cwd = std::env::current_dir()
+        .and_then(|c| c.canonicalize())
+        .unwrap_or_default();
+    let joined = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    };
+    let mut normal = PathBuf::new();
+    for c in joined.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                normal.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => normal.push(other),
+        }
+    }
+    normal
+        .strip_prefix(repo_root)
+        .map(PathBuf::from)
+        .map_err(|_| format!("{} is outside the repository", p.display()))
+}
+
 /// Restrict discovered files to those under any of the requested paths,
 /// relative to `repo_root`. Empty `requested` means no restriction -- the
 /// existing "check everything" behavior when no path argument is given.
@@ -752,13 +782,37 @@ pub(crate) fn read_files_under(
     prefixes: &[String],
     rule: &str,
 ) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        prefixes
+            .iter()
+            .any(|entry| rules::path_is_published(path, entry))
+    })
+}
+
+/// [`read_files_under`] for entries that are a prefix or a glob (`MILE-158`):
+/// the boundary rule's paths.
+pub(crate) fn read_files_matching(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    entries: &[String],
+    rule: &str,
+) -> Result<Vec<rules::PublishedFile>, String> {
+    read_files_where(repo_root, discovered, rule, |path| {
+        entries
+            .iter()
+            .any(|entry| rules::path_matches_entry(path, entry))
+    })
+}
+
+fn read_files_where(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    rule: &str,
+    wanted: impl Fn(&std::path::Path) -> bool,
+) -> Result<Vec<rules::PublishedFile>, String> {
     let mut out = Vec::new();
     for path in &discovered.paths {
-        if discovered.staged_deletions.contains(path)
-            || !prefixes
-                .iter()
-                .any(|entry| rules::path_is_published(path, entry))
-        {
+        if discovered.staged_deletions.contains(path) || !wanted(path) {
             continue;
         }
         let full = repo_root.join(path);
@@ -1060,4 +1114,50 @@ pub(crate) fn read_index_artifacts(
         });
     }
     Ok(out)
+}
+
+/// Reads the declared override log for `override.unreviewed` (`MILE-188`), in
+/// the CLI because `urzua-core` is pure (`ADR-5`). Only read when the rule is
+/// enabled. A missing file and one that is not text are handed over as such,
+/// never as empty; a path resolving outside the repository, or any other I/O
+/// failure, aborts, since a log the rule could not read is one it did not judge.
+pub(crate) fn read_override_log(
+    repo_root: &std::path::Path,
+    config: &Config,
+) -> Result<Option<rules::OverrideLog>, String> {
+    let enabled = config
+        .rules
+        .get(rules::RULE_OVERRIDE_UNREVIEWED)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off);
+    let (true, Some(path)) = (enabled, &config.override_log) else {
+        return Ok(None);
+    };
+    let repo_canonical = repo_root
+        .canonicalize()
+        .map_err(|e| format!("override.unreviewed: could not resolve the repository root: {e}"))?;
+    let content = match repo_root.join(path).canonicalize() {
+        Ok(resolved) if !path_is_inside_repo(&repo_canonical, &resolved) => {
+            return Err(format!(
+                "override.unreviewed: {path} resolves outside the repository"
+            ))
+        }
+        Ok(resolved) => match urzua_io::read_to_string(&resolved) {
+            Ok(text) => rules::OverrideLogContent::Text(text),
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                rules::OverrideLogContent::NotText
+            }
+            Err(_) if resolved.is_dir() => rules::OverrideLogContent::NotText,
+            Err(e) => return Err(format!("override.unreviewed: could not read {path}: {e}")),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => rules::OverrideLogContent::Missing,
+        Err(e) => {
+            return Err(format!(
+                "override.unreviewed: could not resolve {path}: {e}"
+            ))
+        }
+    };
+    Ok(Some(rules::OverrideLog {
+        path: path.clone(),
+        content,
+    }))
 }

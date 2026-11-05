@@ -1,5 +1,5 @@
 ---
-Version: '0.73'
+Version: '0.77'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -644,7 +644,7 @@ see and correct; a default applied silently at read time is a fact nobody review
 ## Exit threshold: `fail_on`
 
 A top-level `fail_on` sets the lowest unwaived finding severity that makes `urzua check` and
-`urzua audit` exit 1 (`MILE-145`):
+`urzua audit` (an alias of `check`, `ADR-79`) exit 1 (`MILE-145`):
 
 ```yaml
 fail_on: warning   # error (default) | warning
@@ -657,6 +657,41 @@ fail_on: warning   # error (default) | warning
 - Only the exit code changes. The report is byte-identical under either value: `blocking` and
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
+
+## Override log: `override_log`
+
+A top-level `override_log` declares the committed log of editor-hook overrides (`ADR-78` item 1,
+`MILE-188`), a repository-relative file path:
+
+```yaml
+override_log: .urzua/override-log.md
+rules:
+  override.unreviewed: warn
+```
+
+- **Format.** A Markdown table with the columns `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason`
+  and `Reviewed-by`, in that order, the same table shape as a record's revision log. Prose and
+  headings around the table are free. The hook writes the file's introduction and header when the
+  file does not exist, and appends one row for each finding it lets through, `Reviewed-by` blank.
+- **Reviewed means a person has named themselves.** An entry is reviewed once its `Reviewed-by` cell
+  names a person: a blank cell, a placeholder (`TBD`, `todo`, `name`, or a cell of only dashes) and a
+  value the repository's record types declare as pending (their `statuses.pending` vocabulary, the
+  one `field.pending` uses) are not a review, and neither is the word `pending` where no type declares
+  a vocabulary. Setting it is an edit to the committed file, so the change is visible in the pull request
+  that makes it. It is the smallest form that needs no git history, no record type and no second
+  file: an alternative that asks whether a later commit acknowledged the entry would make the verdict
+  depend on history a shallow checkout cannot see (the failure `ADR-69` names).
+- **`override.unreviewed`** (`SPEC-2`) reads the file and reports each entry not reviewed in that
+  sense as a warning on the log, naming the override, the record, the rule and the reason. A
+  row with the wrong number of cells is a finding, never skipped. A declared log that does not
+  exist, or that is not text, is reported and counted unreadable: it is never read as an empty log.
+  The hook creates the file on the first override, so a repository that declares `override_log`
+  commits the file with its header.
+- **Declared, never defaulted.** Enabling `override.unreviewed` without `override_log` is a load
+  error (exit 2), as is a value that is blank, absolute, ends in `/` or has a `..` component. Declaring
+  `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
+- The hook (`SPEC-8`) is the only other reader of the key: it takes the top-level `override_log:` line
+  from `.urzua/config.yaml`, and when it is absent it says the override is not recorded.
 
 ## Diff rule path options
 
@@ -683,8 +718,60 @@ rules:
     exclude_paths: ["rust/crates/*/tests", "**/*.test.*"]
 ```
 
-A glob that cannot compile (an unclosed `[`) is refused at load. `published_paths` and
-`back_pointer_paths` stay prefixes: a `*` in them is a literal character.
+A glob that cannot compile (an unclosed `[`) is refused at load. `back_pointer_paths` stays a
+prefix list: a `*` in it is a literal character. `published_paths` and a boundary's `paths` and
+`exclude` take the same prefix-or-glob entries (see "Boundaries").
+
+## Boundaries
+
+`boundary.published-path-reference` reads **declared boundaries** (`RFC-11` sections 1 to 3,
+`ADR-80`, `MILE-125`): paths that publish beyond the corpus, each with a kind, a reason and a
+severity. A boundary is a declared fact, and the prohibitions follow from its kind.
+
+```yaml
+rules:
+  boundary.published-path-reference:
+    level: error                # enables the rule; each boundary's severity sets its findings' level
+    ignore_marker: "record-id-ok"   # optional; declared, never compiled in
+    boundaries:
+      - paths: ["packages/*/src"]     # prefixes or globs (MILE-158)
+        kind: published               # published | vendored | generated
+        reason: "Published to the registry."   # required, non-blank
+        severity: error               # error | warn
+        exclude: ["packages/*/src/fixtures"]   # optional, the violation check only
+    published_paths: ["pkg/sdk"]      # the compatible form, still supported
+```
+
+- **`paths`** (required, non-empty), **`kind`**, **`reason`** and **`severity`** are required. Any
+  other `kind`, a blank `reason`, a `severity` other than `error` or `warn`, or a path that is
+  absolute, contains `..` or a backslash, or is an invalid glob is refused at load.
+- **A boundary's `severity` is the level of every finding it produces.** The rule's `level` only
+  enables the rule: `level: warn` over a boundary declaring `error` reports errors, and
+  `level: error` over a boundary declaring `warn` reports warnings.
+- **`published`:** a record identifier inside it is a violation. Any identifier carrying a declared
+  type prefix counts, in prose as well as in a marker, resolvable or not.
+- **`generated`:** a back-pointer inside it (an `Implements:` or `Verifies:` comment citing a
+  record) is reported, because a human-authored marker there is overwritten. A plain record
+  identifier is not reported.
+- **`vendored`:** declared, with no prohibition. A file only a vendored boundary covers is counted
+  eligible and unexamined.
+- **`published_paths` is read as a published boundary** with no reason required and the rule's
+  `level` as its severity. It is not deprecated; when both forms are declared both apply. The rule
+  needs at least one boundary or one `published_paths` entry to load.
+- **Violation and evidence are separate matchers.** The boundary check reads any record
+  identifier; the evidence collector keeps its narrow `Implements:` / `Verifies:` reader and skips
+  every file under a `published` boundary's `paths`, whether or not the file is also excluded. A
+  marker inside a published path is therefore never evidence, and prose citing a record is never
+  evidence anywhere. The skip applies only while the boundary rule is enabled.
+- **Exceptions are declared, at the width of the thing excused.** A boundary's `exclude` entries
+  (prefixes or globs) remove paths from that boundary's violation check only; the excluded files
+  stay in the population as eligible and unexamined, not out of scope, so
+  `config.scope-matches-nothing` does not read a deliberate exclusion as an unreachable boundary. The declared `ignore_marker` text excuses the single line it appears
+  on and no other. The engine compiles in no marker.
+- **Nothing declared may match nothing silently.** Each of these is a finding at the boundary's
+  severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
+  matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
+  it suppresses nothing. The uncovered `paths` entry carries an `edit-config` `set` action with no value, naming the entry, so a person picks the corrected path and coverage is never shrunk; the unused `exclude` entry carries an `edit-config` `remove` action naming it.
 
 ## Relation pairs
 
@@ -1196,8 +1283,34 @@ rules:
   `Not started`. A record stating any other value there is not judged and stays unexamined in the
   census. `urzua fix` repairs the cited records only.
 
-The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
-option-on-a-rule-that-does-not-take-it load error.
+`test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
+(below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
+
+### Preferring the lighter mechanism: `embodiment.locator-on-back-pointer-path` (`ADR-78` item 4, `MILE-189`)
+
+An opt-in warning for a `Realized-by` locator on a file the back-pointer scan already reads, where an
+`Implements:` or `Verifies:` comment would say the same thing. It declares its own paths, as
+`embodiment.back-pointer-decision-accepted` does, so it does not depend on the other rule being on.
+
+```yaml
+rules:
+  embodiment.locator-on-back-pointer-path:
+    level: warn
+    back_pointer_paths: ["src", "tests"]
+    test_paths: ["tests"]      # optional, each entry inside a back_pointer_paths entry
+```
+
+- It flags a `code:` locator on a file under `back_pointer_paths` (an `Implements:` comment is code tier
+  anywhere) and a `test:` locator on a file under `test_paths` (a `Verifies:` comment counts only there).
+- It does not flag what a comment cannot say: a `spec:` locator, a `test:` locator outside `test_paths`,
+  a locator with a `#scope`, or a locator with an `@sha256` pin. `Realized-by` is the only option for
+  those, and for any path the comment scan cannot reach, which is why this is a nudge and not an error.
+- It offers no edit action. Removing the locator before the comment exists would delete the evidence
+  and leave `Embodiment` disagreeing with what is computed, and the other half of the repair is a comment in a
+  source file, which no action kind addresses (`ADR-73`: an exemption with a reason, as for
+  `embodiment.back-pointer-*`). The author adds the `Implements:` or `Verifies:` comment first, then
+  removes the locator from `Realized-by`.
+- `back_pointer_paths` is required (a load error without it); `test_paths` is optional.
 
 ### Sticky Embodiment states (`MILE-148`)
 
@@ -1401,4 +1514,8 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
-> | 2026-11-05 | Bumped to `0.73`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
+> | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
+> | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
+> | 2026-11-05 | Bumped to `0.77`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
