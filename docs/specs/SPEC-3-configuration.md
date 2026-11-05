@@ -1,5 +1,5 @@
 ---
-Version: '0.67'
+Version: '0.68'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -347,7 +347,7 @@ Two details carry weight:
   and reports an edge the graph does not list, or a new record outside `initial`; it needs `--base`
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
-  committed status is no longer declared is counted unreadable by the first rule, not judged. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
+  committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
   derived `blocked` value is not part of this declaration (`MILE-27`).
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
@@ -1286,4 +1286,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.65`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.66`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
-> | 2026-11-05 | Bumped to `0.67`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
+> | 2026-11-05 | Bumped to `0.67`. Documented that `status.transition-allowed` matches a renamed record to its merge-base copy by `Stable-Id`. **Why:** `BUG-191` -- a rename read as a deletion plus an addition, so the record was judged as new. | **substantive** |
+> | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
