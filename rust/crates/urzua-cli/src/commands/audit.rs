@@ -48,7 +48,10 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, String> {
     findings.extend(findings3);
     findings.extend(findings4);
 
-    let waivers = urzua_core::waiver::load_suppressions(&records, config.suppression_type());
+    let waivers = urzua_core::waiver::load_suppressions(
+        &records,
+        &urzua_core::waiver::SuppressionType::from_config(&config),
+    );
     urzua_core::waiver::apply_suppressions(&mut findings, &waivers, &urzua_io::today());
 
     let active_findings = || findings.iter().filter(|f| f.waived.is_none());

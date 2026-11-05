@@ -250,8 +250,10 @@ fn execute(
     let (context, mut notices) = load_context(session, &scope)?;
     let (mut executions, mut findings) = run_rules(&context);
     scope_findings(session, &scope, &mut findings);
-    let waivers =
-        urzua_core::waiver::load_suppressions(&session.records, session.config.suppression_type());
+    let waivers = urzua_core::waiver::load_suppressions(
+        &session.records,
+        &urzua_core::waiver::SuppressionType::from_config(&session.config),
+    );
     let today = urzua_io::today();
     run_after_scoping(
         &context,

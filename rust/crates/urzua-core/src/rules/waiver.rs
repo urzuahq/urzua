@@ -73,6 +73,21 @@ pub fn waiver_matches_nothing(
                 ),
                 );
             }
+            if !w.is_effective() {
+                if !reached(&path) {
+                    return Outcome::Absent;
+                }
+                let missing = w.unmet.join(", ");
+                return report(
+                    "waiver-ineffective",
+                    &w.unmet[0],
+                    format!(
+                        "waiver ({claimed}) is not in effect: it lacks {missing}, which its type \
+                     requires (`effective_requires`) before it suppresses anything; its finding \
+                     is reported again until the field holds a real value"
+                    ),
+                );
+            }
             if !ALL_RULES.contains(&w.rule.as_str()) {
                 if !reached(&path) {
                     return Outcome::Absent;
@@ -129,6 +144,7 @@ mod tests {
             rule: rule.into(),
             scope: scope.into(),
             expires: expires.map(str::to_string),
+            unmet: Vec::new(),
         }
     }
 
@@ -262,5 +278,19 @@ mod tests {
         let (_, f) = run(&[w], &[], &[], true);
         assert_eq!(f.len(), 1);
         assert!(f[0].message.contains("no.such-rule"));
+    }
+
+    /// `BUG-177`: a suppression missing a field its type requires is reported
+    /// on the record, naming the field, instead of being counted as live.
+    #[test]
+    fn an_ineffective_waiver_is_reported_naming_the_missing_field_observed_failing() {
+        let mut w = waiver("docs/waiver/W-1.md", "field.quality", "docs/a.md", None);
+        w.unmet = vec!["Reason".into()];
+        let fs = [finding("field.quality", "docs/a.md")];
+        let (_, f) = run(&[w], &fs, &[exec_with("field.quality", 1, 1, 0)], true);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!(f[0].file, PathBuf::from("docs/waiver/W-1.md"));
+        assert!(f[0].message.contains("Reason"), "{}", f[0].message);
+        assert_eq!(f[0].action_source.variant, "waiver-ineffective");
     }
 }
