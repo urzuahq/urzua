@@ -3335,6 +3335,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
+            "override.unreviewed" => format!("{id}: error"),
             "date.field-order" => {
                 format!("{id}: {{level: error, date_order: [{{earlier: Date, later: Accepted-on}}]}}")
             }
@@ -3352,7 +3353,7 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false, acyclic: true}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    revision_log: {{version_bump: {{field: Version, classes: [substantive]}}}}\n    statuses: {{values: [Open, Done], success: [Done], initial: [Open], transitions: {{Open: [Done]}}, delivery: {{delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}}, require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
+            "schema_version: 2\noverride_log: .urzua/override-log.md\nrules: {{{}}}\n\nrelation_pairs:\n  - {{name: follow, forward: Follows, inverse: Followed-by, reciprocity: required, cross_type: false, acyclic: true}}\n\nrecord_types:\n  note:\n    dir: \"docs/note\"\n    prefix: \"NOTE\"\n    header_shape: none\n    required_fields: [\"Status\"]\n    known_fields: [\"Parent\", \"Ref\", \"Date\", \"Accepted-on\", \"Embodiment\", \"Realized-by\", \"Supersedes / Superseded-by\", \"Follows\", \"Followed-by\"]\n    pointer_fields: [\"Parent\"]\n    narrative_fields: [\"Ref\"]\n    revision_log: {{version_bump: {{field: Version, classes: [substantive]}}}}\n    statuses: {{values: [Open, Done], success: [Done], initial: [Open], transitions: {{Open: [Done]}}, delivery: {{delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}}, require: [{{when: [Done], fields: [Ref]}}], forbid: [{{when: [Open], fields: [Parent]}}]}}\n",
             rules.join(", ")
         ),
     )

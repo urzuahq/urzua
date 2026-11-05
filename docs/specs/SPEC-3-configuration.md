@@ -1,5 +1,5 @@
 ---
-Version: '0.72'
+Version: '0.73'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -658,6 +658,36 @@ fail_on: warning   # error (default) | warning
   `status` keep meaning "an error", so a run that exits 1 on a warning shows `"blocking": false`.
   Read the exit code, not `blocking`, to know whether the threshold was crossed.
 
+## Override log: `override_log`
+
+A top-level `override_log` declares the committed log of editor-hook overrides (`ADR-78` item 1,
+`MILE-188`), a repository-relative file path:
+
+```yaml
+override_log: .urzua/override-log.md
+rules:
+  override.unreviewed: warn
+```
+
+- **Format.** A Markdown table with the columns `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason`
+  and `Reviewed-by`, in that order, the same table shape as a record's revision log. Prose and
+  headings around the table are free. The hook writes the file's introduction and header when the
+  file does not exist, and appends one row for each finding it lets through, `Reviewed-by` blank.
+- **Reviewed means a person has named themselves.** An entry is reviewed once its `Reviewed-by` cell is
+  not blank; setting it is an edit to the committed file, so the change is visible in the pull request
+  that makes it. It is the smallest form that needs no git history, no record type and no second
+  file: an alternative that asks whether a later commit acknowledged the entry would make the verdict
+  depend on history a shallow checkout cannot see (the failure `ADR-69` names).
+- **`override.unreviewed`** (`SPEC-2`) reads the file and reports each entry with a blank
+  `Reviewed-by` as a warning on the log, naming the override, the record, the rule and the reason. A
+  row with the wrong number of cells is a finding, never skipped. A log that does not exist yet has
+  nothing overridden and is counted eligible and not examined; one that is not text is unreadable.
+- **Declared, never defaulted.** Enabling `override.unreviewed` without `override_log` is a load
+  error (exit 2), as is a value that is blank, absolute, ends in `/` or has a `..` component. Declaring
+  `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
+- The hook (`SPEC-8`) is the only other reader of the key: it takes the top-level `override_log:` line
+  from `.urzua/config.yaml`, and when it is absent it says the override is not recorded.
+
 ## Diff rule path options
 
 `diff.source-requires-record` (`source_paths`, `exclude_paths`) and `diff.source-and-records-mixed`
@@ -1313,3 +1343,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |

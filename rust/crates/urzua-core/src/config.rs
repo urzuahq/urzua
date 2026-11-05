@@ -44,6 +44,11 @@ pub struct Config {
     /// `SPEC-3`); absent means none, so only line ranges are available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locator_resolvers: Vec<crate::locator::LocatorResolver>,
+    /// The committed log of editor-hook overrides (`ADR-78`, `MILE-188`): a
+    /// repository-relative path. The hook appends to it and
+    /// `override.unreviewed` reads it. Absent means no log is declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_log: Option<String>,
 }
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
@@ -2341,6 +2346,27 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
                     "rule '{rule}' is enabled but no relation_pairs are declared, so it would examine nothing"
                 ));
             }
+        }
+    }
+    // The override log is declared, never defaulted: a path that names nothing or
+    // leaves the repository could be neither written nor read (`MILE-188`).
+    if let Some(path) = &config.override_log {
+        if dir_names_nothing(path) || dir_escapes_repo(path) || path.trim().ends_with('/') {
+            return bad(format!(
+                "override_log '{path}' is not a repository-relative file path"
+            ));
+        }
+    }
+    for rule in crate::rules::rule_ids_where(|d| d.requires_override_log) {
+        if config.override_log.is_none()
+            && config
+                .rules
+                .get(rule)
+                .is_some_and(|s| s.level != RuleLevel::Off)
+        {
+            return bad(format!(
+                "rule '{rule}' is enabled but no `override_log` is declared, so it would read no log"
+            ));
         }
     }
     // A version-bump rule with no type declaring a bump is a check that ran on

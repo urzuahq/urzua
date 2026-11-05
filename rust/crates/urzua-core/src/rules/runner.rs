@@ -60,6 +60,9 @@ pub struct RuleCtx<'a> {
     pub published_files: &'a [PublishedFile],
     pub published_paths: &'a [String],
     pub index_artifacts: &'a [IndexArtifact],
+    /// The declared override log, read by the caller; `None` when `override_log`
+    /// is not declared (`MILE-188`).
+    pub override_log: Option<&'a OverrideLog>,
     /// `None` when the rule is absent or off.
     pub back_pointer_sources: Option<&'a BackPointerSources>,
     pub decision_gate_sources: Option<&'a BackPointerSources>,

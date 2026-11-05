@@ -73,6 +73,7 @@ struct Context<'a> {
     published_files: Vec<rules::PublishedFile>,
     published_paths: Vec<String>,
     index_artifacts: Vec<rules::IndexArtifact>,
+    override_log: Option<rules::OverrideLog>,
     back_pointer_sources: Option<rules::BackPointerSources>,
     decision_gate_sources: Option<rules::BackPointerSources>,
     back_pointed: rules::BackPointerEvidence,
@@ -230,6 +231,7 @@ impl<'a> Context<'a> {
             published_files: &self.published_files,
             published_paths: &self.published_paths,
             index_artifacts: &self.index_artifacts,
+            override_log: self.override_log.as_ref(),
             back_pointer_sources: self.back_pointer_sources.as_ref(),
             decision_gate_sources: self.decision_gate_sources.as_ref(),
             back_pointed: &self.back_pointed,
@@ -581,6 +583,7 @@ fn load_context<'a>(
         .enabled_rule_opts::<rules::IndexOpts>(rules::RULE_INDEX_FRESHNESS)
         .map_or_else(Vec::new, |o| o.indexes);
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
+    let override_log = crate::discovery::read_override_log(repo_root, config)?;
 
     let back_pointer_sources =
         crate::discovery::read_back_pointer_sources(repo_root, discovered, config)?;
@@ -639,6 +642,7 @@ fn load_context<'a>(
             published_files,
             published_paths,
             index_artifacts,
+            override_log,
             back_pointer_sources,
             decision_gate_sources,
             back_pointed,
