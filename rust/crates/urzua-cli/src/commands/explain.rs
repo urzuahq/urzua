@@ -18,11 +18,13 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Str
         config, records, ..
     } = Session::open(config_path)?;
     let governing_records = urzua_core::graph::explain(&records, &path, &config);
+    let (population, notice) = urzua_core::graph::read_population(&records, &config, "explain");
 
     Ok(emit(&ExplainReport {
         status: ReportStatus::Ok,
         path,
         governing_records,
-        notices: Vec::new(),
+        population,
+        notices: notice.into_iter().collect(),
     }))
 }

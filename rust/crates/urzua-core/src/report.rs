@@ -715,6 +715,10 @@ pub struct ExplainReport {
     pub status: ReportStatus,
     pub path: String,
     pub governing_records: Vec<crate::graph::GoverningRecord>,
+    /// The records read to answer, as `check` reports a rule's population
+    /// (`BUG-169`): an empty answer from an unread corpus is not the same as
+    /// an empty answer from a read one.
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
@@ -734,6 +738,8 @@ impl Report for ExplainReport {
 pub struct GraphReport {
     pub status: ReportStatus,
     pub edges: Vec<crate::graph::GraphEdge>,
+    /// See [`ExplainReport::population`].
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
