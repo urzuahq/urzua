@@ -384,6 +384,48 @@ pub fn template_header_fields(template: &str) -> Vec<String> {
     names
 }
 
+/// Each record type's template header as `field -> value`, keyed by the
+/// type's name. Read by the caller from `.urzua/templates/<type>.md`, so
+/// `urzua-core` never opens a file (`BUG-22`).
+pub type TemplateValues =
+    std::collections::HashMap<String, std::collections::HashMap<String, String>>;
+
+/// The `field -> value` pairs a template's header carries: the same lines
+/// [`template_header_fields`] reads, with the value after the first colon,
+/// trimmed and with one pair of matching quotes removed. A template that
+/// repeats a field keeps its first value.
+pub fn template_header_values(template: &str) -> std::collections::HashMap<String, String> {
+    let head = match template.find("\n## ") {
+        Some(idx) => &template[..idx],
+        None => template,
+    };
+    let mut values = std::collections::HashMap::new();
+    for line in head.lines() {
+        let line = line.trim_start_matches('>').trim_start();
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let name = name.trim();
+        let plausible = !name.is_empty()
+            && !name.starts_with('#')
+            && name
+                .chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '/'));
+        if !plausible {
+            continue;
+        }
+        let value = value.trim();
+        let unquoted = ['"', '\'']
+            .iter()
+            .find_map(|q| value.strip_prefix(*q).and_then(|v| v.strip_suffix(*q)))
+            .unwrap_or(value);
+        values
+            .entry(name.to_string())
+            .or_insert_with(|| unquoted.trim().to_string());
+    }
+    values
+}
+
 /// A template's body -- everything from its first `## ` section heading
 /// onward -- so a type declaring `yaml-frontmatter` (BUG-0003) still gets
 /// its template's scaffolding (`## What`, `## Why`, the revision log)
@@ -643,6 +685,23 @@ mod tests {
         let header =
             crate::header::parse_with_shape(&result, crate::header::HeaderShape::YamlFrontmatter);
         assert_eq!(header.get("Author"), Some("0.2"));
+    }
+
+    #[test]
+    fn template_header_values_read_blockquote_and_frontmatter_values() {
+        let t = "# N — T\n\n> Status: Open | Fixed\n> Found-in: how/where: it was found\n> Empty:\n\n## What\nDate: nope\n";
+        let v = template_header_values(t);
+        assert_eq!(v.get("Status").map(String::as_str), Some("Open | Fixed"));
+        assert_eq!(
+            v.get("Found-in").map(String::as_str),
+            Some("how/where: it was found")
+        );
+        assert_eq!(v.get("Empty").map(String::as_str), Some(""));
+        assert!(!v.contains_key("Date"), "the body is not the header");
+        let y = "---\nPhase: '0'\nTrack: \"t\"\n---\n# N\n";
+        let v = template_header_values(y);
+        assert_eq!(v.get("Phase").map(String::as_str), Some("0"));
+        assert_eq!(v.get("Track").map(String::as_str), Some("t"));
     }
 
     #[test]

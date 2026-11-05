@@ -185,20 +185,20 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_FIELD_QUALITY,
-        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
+        description: "Field presence with real semantics: `blank`, `placeholder`, and `pending` are three distinct states, not one — the single most-repeated bug class in hand-written record linters. An absent field is never silently readable as any of the three. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`. The optional `template_placeholders` option (`BUG-22`), off unless declared `true`, reads a field whose value is identical after trimming to its type's template text for that field (`.urzua/templates/<type>.md`) as a placeholder, and stops applying the compiled-in placeholder tokens; a type with no template is judged by its declared `pending` vocabulary alone, and declaring the option when no type has a template is disclosed as a warning notice.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
         requires_relation_pairs: false,
         reads_declaration: Some(Declaration::RequiredFields),
         header_none: HeaderNone::OutOfScope,
-        options: &["field_levels"],
+        options: &["field_levels", "template_placeholders"],
         actions: &[
             VariantAction::new("field-quality", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
         run: |c| {
-            field_quality(c.records, c.config)
+            field_quality(c.records, c.config, c.templates)
         },
     },
     RuleDef {
