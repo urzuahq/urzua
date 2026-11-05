@@ -62,7 +62,16 @@ pub struct Config {
     /// `override.unreviewed` reads it. Absent means no log is declared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub override_log: Option<String>,
+    /// Which errors the editor hook blocks on (`ADR-78` amendment, `MILE-195`,
+    /// `SPEC-3`): `introduced` (the default, and what an absent key means) or
+    /// `all`. The engine does not read it; the hook does, from the
+    /// committed file, and any other value is a load error here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block_on: Option<String>,
 }
+
+/// The values `block_on` accepts (`SPEC-3`).
+pub const BLOCK_ON_VALUES: [&str; 2] = ["introduced", "all"];
 
 /// `roadmap` (`SPEC-3`, `ADR-82`): which `relation_pairs` are dependencies, and
 /// how `urzua roadmap` groups its records. A pair can be `acyclic` without
@@ -488,6 +497,8 @@ impl BoundaryKind {
 pub enum BoundarySeverity {
     Error,
     Warn,
+    /// `ADR-87` point 10: a declared severity may be `info` too.
+    Info,
 }
 
 /// One declared boundary (`ADR-80`, `MILE-125`): path globs with a kind, a
@@ -509,10 +520,13 @@ pub struct Boundary {
     pub exclude: Option<Vec<String>>,
 }
 
+// Implements: ADR-87 (the `info` rule level)
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum RuleLevel {
     #[default]
     Off,
+    /// `ADR-87`: findings are reported and counted but never trip `fail_on`.
+    Info,
     Warn,
     Error,
 }
@@ -521,8 +535,33 @@ impl RuleLevel {
     pub fn as_str(self) -> &'static str {
         match self {
             RuleLevel::Off => "off",
+            RuleLevel::Info => "info",
             RuleLevel::Warn => "warn",
             RuleLevel::Error => "error",
+        }
+    }
+
+    /// The severity this level gives a finding, or `None` for `off`, which
+    /// runs nothing. Exhaustive on purpose: a new level cannot reach a
+    /// severity without being decided here (`ADR-87` point 10).
+    pub fn severity(self) -> Option<crate::report::FindingSeverity> {
+        use crate::report::FindingSeverity;
+        match self {
+            RuleLevel::Off => None,
+            RuleLevel::Info => Some(FindingSeverity::Info),
+            RuleLevel::Warn => Some(FindingSeverity::Warning),
+            RuleLevel::Error => Some(FindingSeverity::Error),
+        }
+    }
+}
+
+impl BoundarySeverity {
+    pub fn severity(self) -> crate::report::FindingSeverity {
+        use crate::report::FindingSeverity;
+        match self {
+            BoundarySeverity::Info => FindingSeverity::Info,
+            BoundarySeverity::Warn => FindingSeverity::Warning,
+            BoundarySeverity::Error => FindingSeverity::Error,
         }
     }
 }
@@ -541,10 +580,11 @@ impl<'de> Deserialize<'de> for RuleLevel {
         let s = String::deserialize(deserializer)?;
         match s.as_str() {
             "off" => Ok(RuleLevel::Off),
+            "info" => Ok(RuleLevel::Info),
             "warn" => Ok(RuleLevel::Warn),
             "error" => Ok(RuleLevel::Error),
             other => Err(serde::de::Error::custom(format!(
-                "unrecognized rule level '{other}' -- expected \"off\", \"warn\", or \"error\""
+                "unrecognized rule level '{other}' -- expected \"off\", \"info\", \"warn\", or \"error\""
             ))),
         }
     }
@@ -2160,7 +2200,7 @@ pub fn parse_with_document_models(
                     return Err(ConfigError::InvalidFieldLevels {
                         rule: name.clone(),
                         reason: format!(
-                            "gives '{field}' the level 'off'; use 'warn' or 'error' (a field is switched off by not declaring it)"
+                            "gives '{field}' the level 'off'; use 'info', 'warn' or 'error' (a field is switched off by not declaring it)"
                         ),
                     });
                 }
@@ -2973,6 +3013,16 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
         if dir_names_nothing(path) || dir_escapes_repo(path) || path.trim().ends_with('/') {
             return bad(format!(
                 "override_log '{path}' is not a repository-relative file path"
+            ));
+        }
+    }
+    // The hook reads `block_on` from the file; a value it would not recognise
+    // is refused here too, never defaulted (`MILE-195`).
+    if let Some(value) = &config.block_on {
+        if !BLOCK_ON_VALUES.contains(&value.as_str()) {
+            return bad(format!(
+                "block_on '{value}' is not one of {}",
+                BLOCK_ON_VALUES.join(", ")
             ));
         }
     }
@@ -4284,6 +4334,43 @@ record_types:
         assert_eq!(c.fail_on, FailOn::Error);
     }
 
+    /// `ADR-87`: `info` is a rule level and a `field_levels` level; every
+    /// other value is refused with a message listing the four; `fail_on: info`
+    /// does not exist.
+    #[test]
+    fn info_is_a_rule_level_and_a_field_level_and_not_a_fail_on_observed_failing() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Deciders\", \"Reviewers\"]\nrules:\n";
+        let c = parse(&format!("{base}  field.quality: info\n")).expect("info loads");
+        assert_eq!(c.rules["field.quality"].level, RuleLevel::Info);
+        assert_eq!(RuleLevel::Info.as_str(), "info");
+        let c = parse(&format!(
+            "{base}  field.quality:\n    level: warn\n    field_levels: {{Deciders: info}}\n"
+        ))
+        .expect("field_levels accepts info");
+        assert_eq!(
+            c.rules["field.quality"].field_levels.as_ref().unwrap()["Deciders"],
+            RuleLevel::Info
+        );
+        let err = parse(&format!("{base}  field.quality: fatal\n"))
+            .unwrap_err()
+            .to_string();
+        for v in ["off", "warn", "error", "info"] {
+            assert!(err.contains(&format!("\"{v}\"")), "{err}");
+        }
+        let err = parse(&pair_cfg("", "fail_on: info\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("error") && err.contains("warning"), "{err}");
+    }
+
+    #[test]
+    fn a_boundary_severity_accepts_info() {
+        assert_eq!(
+            yaml_serde::from_str::<BoundarySeverity>("info").unwrap(),
+            BoundarySeverity::Info
+        );
+    }
+
     #[test]
     fn fail_on_rejects_any_other_value() {
         assert!(parse(&pair_cfg("", "fail_on: info\n")).is_err());
@@ -4587,12 +4674,14 @@ record_types:
         .unwrap_err();
         assert!(matches!(err, ConfigError::InvalidBoundary { .. }), "{err}");
         assert!(err.to_string().contains("reason"), "{err}");
-        for sev in ["off", "info"] {
+        for sev in ["off", "fatal"] {
             assert!(
                 parse(&boundary_config(&GOOD_BOUNDARY.replace("warn", sev))).is_err(),
                 "{sev}"
             );
         }
+        // `info` is a declared severity too (`ADR-87` point 10).
+        assert!(parse(&boundary_config(&GOOD_BOUNDARY.replace("warn", "info"))).is_ok());
     }
 
     #[test]

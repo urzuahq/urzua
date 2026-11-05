@@ -1,5 +1,5 @@
 ---
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -117,11 +117,15 @@ computed fields `fix` repairs. Its contract: stdin is the proposed full content,
 (absolute or repo-relative); stdout is one JSON object `{verdict, path, message, findings, override?}`;
 exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findings` from `check`.
 
-- `block`: an unwaived error finding the edit introduced. An error is introduced when the record as it
+- `block`: by default (`block_on: introduced`, `SPEC-3`), an unwaived error finding the edit introduced. An error is introduced when the record as it
   is on disk, judged the same way, does not already report it (same rule and message). The message
   lists each as `file:line: [rule] message`, with the command a `run-command` suggested action offers.
   An error already on disk is listed as "Already failing on disk", not blocked, so the edit that fixes
-  something else is not refused. A baseline that cannot be judged leaves every error introduced.
+  something else is not refused. A baseline that cannot be judged leaves every error introduced. With
+  the configuration's top-level `block_on: all` (`MILE-195`), `block` is any unwaived error in the
+  proposed content, including one the record on disk already has; the baseline run is skipped and nothing
+  is listed as already failing. The named override and its log behave the same under both values. A
+  `block_on` value other than `introduced` or `all` is `allow-unjudged`, and the message names it.
 - `allow-with-warnings`: judged; the warnings (and any error already on disk) are in `message` and the
   Claude Code adapter shows them to the agent. Nothing blocks.
 - `allow`: judged, no findings. The message counts the rules that ran and names each enabled rule
@@ -140,7 +144,8 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
   for a person to fill in. `override.unreviewed` (`SPEC-2`) then reports the row until they do. A log
   that cannot be written blocks the edit, since an override that is not recorded is not allowed. With no
   `override_log` declared the override is let through and the message says it was NOT recorded. The hook
-  reads one line of the configuration, the top-level `override_log:` scalar, and nothing else.
+  reads two lines of the configuration, the top-level `override_log:` and `block_on:` scalars, and nothing
+  else.
 
 The Claude Code adapter `scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
 `Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
@@ -317,3 +322,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.20`. The record-edit hook relays `check --stdin-path` and judges every enabled rule that can judge one record, and its `allow` message counts the rules that ran and names the ones it could not judge instead of claiming every rule, with a new `allow-with-warnings` verdict and `findings` replacing `repairs` in its output; `fix --stdin-path` is unchanged and no longer the hook's call. **Why:** `MILE-191`, `ADR-78` item 2. | **substantive** |
 > | 2026-11-05 | Bumped to `0.21`. The record-edit hook records a named override in the declared `override_log` (a reason is then required) and blocks an override it cannot record. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
 > | 2026-11-05 | Bumped to `0.22`. `--rebaseline` lists and re-pins a directory or glob pin of a kind the repository declares pinnable, each listed pin carrying the `files` it covers. **Why:** `BUG-176` -- a pin on a tree is attested over the files it covers, which the reviewer must be able to read. | **substantive** |
+> | 2026-11-05 | Bumped to `0.23`. The record-edit hook reads `block_on: introduced \| all`: `all` blocks on any unwaived error in the proposed content and skips the baseline run; the default and an absent key keep today's verdicts and messages; an unrecognised value is `allow-unjudged` naming the value; the Claude Code adapter passes the verdict through unchanged. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |

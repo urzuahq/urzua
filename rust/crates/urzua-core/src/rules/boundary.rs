@@ -248,9 +248,7 @@ pub fn published_path_reference(
             let mut keep = |key: String, f: Finding| match here.iter_mut().find(|(k, _)| *k == key)
             {
                 Some((_, kept)) => {
-                    if f.severity == FindingSeverity::Error
-                        && kept.severity == FindingSeverity::Warning
-                    {
+                    if f.severity.rank() > kept.severity.rank() {
                         *kept = f;
                     }
                 }

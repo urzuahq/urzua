@@ -407,6 +407,10 @@ relation_pairs:
 # whenever a named override lets a blocked edit through, and override.unreviewed
 # reports a row no person has reviewed, so it surfaces in the pull request.
 override_log: .urzua/override-log.md
+# Which errors the editor hook blocks on (ADR-78 amendment, MILE-195, SPEC-3): only an
+# error the edit introduces. CI holds the repository at zero findings, so a record on
+# disk with an error does not reach main; `all` is for a repository without that gate.
+block_on: introduced
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
 # (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic
@@ -541,6 +545,13 @@ rules:
   # it rather than from a restated `test:` locator.
   embodiment.back-pointer-resolution:
     level: error
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # Advisory (MILE-189, ADR-87): a `Realized-by` locator on a file under these paths
+  # could be an `Implements:` or `Verifies:` comment in that file. At `info` the
+  # findings are reported and counted but never fail `fail_on: warning`.
+  embodiment.locator-on-back-pointer-path:
+    level: info
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with

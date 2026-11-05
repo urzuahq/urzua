@@ -5,7 +5,7 @@ Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Verified
 Supersedes / Superseded-by: null
 Derives-from: ADR-73
 ---
@@ -143,3 +143,5 @@ contains `info` unless the repository chose it.
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. Added point 10 from the independent review: a declared severity never overrides `info`, and a level string never maps silently to `error`. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Records edit: the Consequences bullet "Boundary severity ... not extended here" is superseded by point 10 for the `info` value: a boundary `severity` accepts `info` and a rule set to `info` caps it. The provisional level (`ProvisionalLevel`) stays `warn`/`error`; the cap in point 10 keeps it from lifting an `info` rule. Status stays Accepted. **Why:** point 10 was added at acceptance and the Consequences section was not updated; `MILE-194` follows point 10. | **structural** |
