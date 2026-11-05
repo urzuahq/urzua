@@ -3,6 +3,7 @@ Stable-Id: 01M6DG4C3EHVQ8HP0832YET5Q9
 Status: Planned
 Phase: '3'
 Track: roadmap-tracking
+Depends-on: MILE-182
 ---
 # 135 — Show open changes that implement a record as progress evidence in the roadmap
 
@@ -33,3 +34,4 @@ A tool separate from the engine's record checks reads open changes on a forge (p
 > |---|---|---|
 > | 2026-11-02 | Filed. **Why:** Author asked to keep forge-based progress evidence as a future roadmap idea. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: MILE-182` added. **Why:** Why states it needs the `RFC-48` roadmap first, which `MILE-182` builds. Proposed for maintainer review; `Status` unchanged. | **structural** |

@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: roadmap-tracking
 Implements: RFC-48
-Depends-on: MILE-27, MILE-144
+Depends-on: MILE-27, MILE-144, MILE-115
 Blocked-on: MILE-144 (the derived blocked value)
 ---
 # 182 — urzua roadmap computes waves, the ready set and the critical path from records
@@ -38,3 +38,4 @@ In this repository, `urzua roadmap` run against `.urzua/config.yaml` and the com
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** Maintainer decision, 2026-11-04: the computed roadmap (`RFC-48`, Accepted) is part of the Phase 0 tooling, so urzua generates its own roadmap from its records. | **substantive** |
 > | 2026-11-04 | `Depends-on: MILE-27, MILE-144` added; `MILE-27` removed from `Blocked-on`. **Why:** `MILE-27` is built, so the sequencing relation exists and this record is the first to carry it; `Blocked-on` keeps the note on `MILE-144`, which is still open. `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: MILE-115` added. **Why:** Done means puts the roadmap data in `export --format json`, the feed `MILE-115` built (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |

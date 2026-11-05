@@ -52,6 +52,9 @@ pub struct RuleCtx<'a> {
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
+    /// Record files on disk that git does not track, by id (`BUG-13`); read by
+    /// the rules that report an unresolved reference.
+    pub untracked_records: &'a UntrackedRecords,
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
