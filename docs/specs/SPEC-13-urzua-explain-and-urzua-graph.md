@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -33,7 +33,15 @@ route for a scoped pin, and it shows the resolved span because an early end (a `
 cannot be detected by the engine. A scope that does not resolve, a file that is not UTF-8 and a
 locator carrying an anchor are `not-run` with the reason.
 
-Exact-match only: no glob, no directory prefix, no fuzzy match. A corpus citing a file by a
+Given a directory or glob (`urzua explain src` or `urzua explain 'src/**/*.rs'`, `BUG-176`) the
+report carries `coverage`: `kind`, `files` (the tracked files it covers, sorted), `sha256` (the hash
+of the sorted path and file-hash list, `SPEC-3`) and `pin`, the locator to paste after `code:`,
+present only when `pinnable` lets that kind carry a pin. When `embodiment.locator-exists` does not
+declare the kind in `locator_kinds` there is no `coverage` and a notice names the option; a glob
+that matches no tracked file is `not-run` with the reason.
+
+Exact-match only for `governing_records`: no glob, no directory prefix, no fuzzy match, so a record
+citing `src` is found by querying `src` and not by querying a file below it. A corpus citing a file by a
 different relative path than the one queried finds nothing. Coverage is only as complete as
 `Realized-by` adoption — a record that genuinely governs a file but never had a `Realized-by` field
 added is invisible to `explain`, the same limitation `embodiment.consistency` already has.
@@ -109,3 +117,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs, code:rust/crates/urzua-cli/src/commands/graph.rs, code:rust/crates/urzua-core/src/graph.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.7`. `graph` and `explain` report the `check` population block (`eligible`, `examined`, `out_of_scope`, `unreadable`) and a warning notice listing the records left out for an unreadable header; status stays `ok`. **Why:** `BUG-169`, maintainer decision 2026-11-05; an unreadable header used to drop its edges with no disclosure. | **substantive** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.8`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.9`. `explain <directory-or-glob>` prints `coverage`: the kind, the covered files, the hash and the pin to paste, when the repository declares that locator kind; otherwise a notice names `locator_kinds`. **Why:** `BUG-176` -- a pin on a directory or glob needs the reviewer to see which files it covers. | **substantive** |

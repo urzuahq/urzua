@@ -9,7 +9,9 @@
 //! declared field).
 
 use super::{BoundaryOrigin, ResolvedBoundary};
-use crate::config::{BoundaryKind, BoundarySeverity, IndexSpec, RuleLevel, RuleOpts, RuleSetting};
+use crate::config::{
+    BoundaryKind, BoundarySeverity, IndexSpec, LocatorKind, RuleLevel, RuleOpts, RuleSetting,
+};
 use crate::report::FindingSeverity;
 
 /// `claim.status-agreement`: the paths scanned and the statuses that count as
@@ -18,6 +20,11 @@ use crate::report::FindingSeverity;
 pub struct ClaimOpts {
     pub claim_paths: Vec<String>,
     pub closed_statuses: Vec<String>,
+    /// The frontmatter key a claim file lists the records it closes under
+    /// (`ADR-85`); `None` leaves the rule reading closing verbs alone.
+    pub closes: Option<String>,
+    /// A claim file with frontmatter and without that key is a finding.
+    pub strict: bool,
 }
 
 impl RuleOpts for ClaimOpts {
@@ -25,6 +32,8 @@ impl RuleOpts for ClaimOpts {
         ClaimOpts {
             claim_paths: s.claim_paths.clone().unwrap_or_default(),
             closed_statuses: s.closed_statuses.clone().unwrap_or_default(),
+            closes: s.closes.clone(),
+            strict: s.strict.unwrap_or(false),
         }
     }
 }
@@ -139,6 +148,34 @@ impl RuleOpts for DecisionAcceptedOpts {
     }
 }
 
+/// `embodiment.locator-exists`: the locator kinds accepted and the kinds that
+/// may carry a pin (`BUG-176`). Both default to `[file]`, so a repository that
+/// declares neither accepts exactly what it always did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatorExistsOpts {
+    pub locator_kinds: Vec<LocatorKind>,
+    pub pinnable: Vec<LocatorKind>,
+}
+
+impl Default for LocatorExistsOpts {
+    fn default() -> Self {
+        LocatorExistsOpts {
+            locator_kinds: vec![LocatorKind::File],
+            pinnable: vec![LocatorKind::File],
+        }
+    }
+}
+
+impl RuleOpts for LocatorExistsOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        let default = LocatorExistsOpts::default();
+        LocatorExistsOpts {
+            locator_kinds: s.locator_kinds.clone().unwrap_or(default.locator_kinds),
+            pinnable: s.pinnable.clone().unwrap_or(default.pinnable),
+        }
+    }
+}
+
 /// `narrative-field.stale`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NarrativeStaleOpts {
@@ -159,6 +196,10 @@ impl RuleOpts for NarrativeStaleOpts {
 pub struct SourceRequiresRecordOpts {
     pub source_paths: Vec<String>,
     pub exclude_paths: Vec<String>,
+    /// The decision gate (`MILE-133`); empty means the gate is not declared.
+    pub decision_types: std::collections::BTreeMap<String, Vec<String>>,
+    pub fix_types: Vec<String>,
+    pub link_fields: Vec<String>,
 }
 
 impl RuleOpts for SourceRequiresRecordOpts {
@@ -166,6 +207,9 @@ impl RuleOpts for SourceRequiresRecordOpts {
         SourceRequiresRecordOpts {
             source_paths: s.source_paths.clone().unwrap_or_default(),
             exclude_paths: s.exclude_paths.clone().unwrap_or_default(),
+            decision_types: s.decision_types.clone().unwrap_or_default(),
+            fix_types: s.fix_types.clone().unwrap_or_default(),
+            link_fields: s.link_fields.clone().unwrap_or_default(),
         }
     }
 }
@@ -204,6 +248,15 @@ mod tests {
         let o: ClaimOpts = c.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
         assert_eq!(o.claim_paths, ["a", "b"]);
         assert_eq!(o.closed_statuses, ["Done"]);
+        assert_eq!((o.closes, o.strict), (None, false));
+    }
+
+    #[test]
+    fn the_claim_field_options_are_read_through_the_typed_accessor_observed_failing() {
+        let c = config("  claim.status-agreement:\n    level: error\n    claim_paths: [a]\n    closed_statuses: [Done]\n    closes: closes\n    strict: true\n");
+        let o: ClaimOpts = c.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
+        assert_eq!(o.closes.as_deref(), Some("closes"));
+        assert!(o.strict);
     }
 
     #[test]
@@ -215,6 +268,34 @@ mod tests {
         assert!(c
             .enabled_rule_opts::<IndexOpts>(RULE_INDEX_FRESHNESS)
             .is_none());
+    }
+
+    #[test]
+    fn locator_kinds_and_pinnable_default_to_file_and_are_checked_at_load() {
+        use crate::config::LocatorKind::{Directory, File, Glob};
+        let rules = |body: &str| {
+            crate::config::parse(&format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.locator-exists:\n    level: error\n{body}"
+            ))
+        };
+        let o: LocatorExistsOpts = rules("").unwrap().rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
+        assert_eq!((o.locator_kinds, o.pinnable), (vec![File], vec![File]));
+        let o: LocatorExistsOpts =
+            rules("    locator_kinds: [file, directory, glob]\n    pinnable: [glob]\n")
+                .unwrap()
+                .rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
+        assert_eq!(o.locator_kinds, [File, Directory, Glob]);
+        assert_eq!(o.pinnable, [Glob]);
+        // A kind that can be pinned but not named is a rule that always reports.
+        let err = rules("    pinnable: [directory]\n")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("pinnable") && err.contains("locator_kinds"),
+            "{err}"
+        );
+        assert!(rules("    locator_kinds: []\n").is_err());
+        assert!(rules("    locator_kinds: [tree]\n").is_err());
     }
 
     #[test]

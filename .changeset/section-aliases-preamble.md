@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A required section can declare `aliases`, other headings that satisfy it, and `preamble: true`, which

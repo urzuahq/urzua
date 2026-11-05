@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Add the opt-in `citation.path-exists` rule. A path cited in backticks inside a declared reference

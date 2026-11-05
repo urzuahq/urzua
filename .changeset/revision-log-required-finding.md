@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-50]
 ---
 
 A record of a type that declares `revision_log: {required: true}`, with no revision-log section, is now a finding of

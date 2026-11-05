@@ -32,6 +32,11 @@ pub struct Config {
     /// `RelationPair`. Absent means none declared.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_pairs: Vec<RelationPair>,
+    /// The roadmap's declaration (`ADR-82`, `ADR-83`): the sequencing pairs the
+    /// roadmap command and the derived `blocked` value both read, and how the
+    /// roadmap groups its records.
+    #[serde(default, skip_serializing_if = "RoadmapDecl::is_empty")]
+    pub roadmap: RoadmapDecl,
     /// The lowest finding severity that makes `urzua check` exit 1. Absent
     /// means `error`, so a repository that does not declare it is unchanged.
     #[serde(default, skip_serializing_if = "FailOn::is_default")]
@@ -59,6 +64,31 @@ pub struct Config {
     pub override_log: Option<String>,
 }
 
+/// `roadmap` (`SPEC-3`, `ADR-82`): which `relation_pairs` are dependencies, and
+/// how `urzua roadmap` groups its records. A pair can be `acyclic` without
+/// being a dependency: a containment pair (parent and children) is checked for
+/// cycles but a child does not wait on its parent finishing. Absent means no
+/// roadmap, which the command states instead of printing an empty one.
+/// The derived `blocked` value reads exactly these pairs, so `check` and the
+/// roadmap cannot disagree about what is blocked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoadmapDecl {
+    /// Names of `relation_pairs` entries that declare `acyclic: true`.
+    #[serde(default)]
+    pub pairs: Vec<String>,
+    /// Header field names the roadmap groups by, outermost first. The engine
+    /// names none; each must be declared by some record type.
+    #[serde(default)]
+    pub group_by: Vec<String>,
+}
+
+impl RoadmapDecl {
+    fn is_empty(&self) -> bool {
+        self.pairs.is_empty() && self.group_by.is_empty()
+    }
+}
+
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
 /// it: the report's `blocking` and `status` keep meaning "an error".
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -72,6 +102,31 @@ pub enum FailOn {
 impl FailOn {
     fn is_default(&self) -> bool {
         *self == FailOn::Error
+    }
+}
+
+/// What a `Realized-by` locator may name (`BUG-176`): one tracked file, a
+/// directory (every tracked file below it) or a glob (every tracked file it
+/// matches). Which kinds a repository accepts, and which of those may carry a
+/// `@sha256:` pin, are the `locator_kinds` and `pinnable` options of
+/// `embodiment.locator-exists`; both default to `[file]`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatorKind {
+    File,
+    Directory,
+    Glob,
+}
+
+impl std::fmt::Display for LocatorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            LocatorKind::File => "file",
+            LocatorKind::Directory => "directory",
+            LocatorKind::Glob => "glob",
+        })
     }
 }
 
@@ -148,6 +203,17 @@ pub struct RuleSetting {
     /// never inferred: a built-in list is how a rule silently stops applying.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_statuses: Option<Vec<String>>,
+    /// The frontmatter key in which a claim file lists, on one line, the
+    /// records it closes (`ADR-85`). Declared, never known: the engine names
+    /// no field. Only meaningful to `claim.status-agreement`; optional, and
+    /// declaring none leaves the rule exactly as it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closes: Option<String>,
+    /// When `true`, a claim file with frontmatter but without the `closes` key
+    /// is a finding (`ADR-85`). Only meaningful to `claim.status-agreement`,
+    /// needs `closes`, and `false` by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
     /// Statuses that mean a referenced record's work is over. Only meaningful
     /// to `narrative-field.stale`. Declared per repository rather than compiled
     /// in: a built-in table keyed on this repository's own type names is how the
@@ -195,6 +261,28 @@ pub struct RuleSetting {
     /// (`MILE-142`, `MILE-158`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_paths: Option<Vec<String>>,
+    /// The decision gate (`MILE-133`): each record type that holds decisions,
+    /// with the statuses at which one counts as decided. Declaring it turns
+    /// `diff.source-requires-record` from "some governed record changed" into
+    /// "a decision at a decided status changed, or a record linking one
+    /// (`link_fields`), or a fix record (`fix_types`)". Only meaningful to
+    /// `diff.source-requires-record`; omitted means the rule asks only for
+    /// any governed record, and `fix_types` and `link_fields` are then refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_types: Option<BTreeMap<String, Vec<String>>>,
+    /// Record types whose records exempt a change from the decision gate
+    /// (`MILE-133`), such as `bug`: a mechanical fix needs a bug record and no
+    /// decision. Only meaningful to `diff.source-requires-record`, and only
+    /// with `decision_types`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix_types: Option<Vec<String>>,
+    /// Pointer or narrative fields (such as a milestone's `Implements`) through
+    /// which a changed record links a decision for the decision gate
+    /// (`MILE-133`): a changed record whose field names a decision at a
+    /// decided status satisfies it. Only meaningful to
+    /// `diff.source-requires-record`, and only with `decision_types`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_fields: Option<Vec<String>>,
     /// Admit header keys beginning `x-` (case-insensitive) as extension keys
     /// (`MILE-141`). Only meaningful to `header.field-set-consistency`, where
     /// omitted means `false`: every undeclared key is a finding. A declared
@@ -248,6 +336,16 @@ pub struct RuleSetting {
     /// omitted means every stated value must match the computed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sticky_states: Option<Vec<String>>,
+    /// The kinds of locator a `Realized-by` may name: `file`, `directory`,
+    /// `glob` (`BUG-176`). Only meaningful to `embodiment.locator-exists`;
+    /// omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator_kinds: Option<Vec<LocatorKind>>,
+    /// The kinds of locator that may carry a `@sha256:` pin (`BUG-176`); each
+    /// must also be in `locator_kinds`. Only meaningful to
+    /// `embodiment.locator-exists`; omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinnable: Option<Vec<LocatorKind>>,
     /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -663,6 +761,51 @@ pub struct RecordTypeConfig {
     /// declares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effective_requires: Option<Vec<String>>,
+    /// Where a suppression may be permanent, and on which reasons
+    /// (`ADR-86`), on the type declaring `role: suppression`. Once declared,
+    /// a suppression without `Expires` takes effect only for a rule listed
+    /// here, with a category from that entry's vocabulary. Omitted means a
+    /// suppression without `Expires` is allowed for any rule, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permanent: Option<Vec<PermanentDecl>>,
+}
+
+// Implements: ADR-86 (the declared vocabulary of permanent suppressions)
+/// One rule a suppression may be permanent for (`RecordTypeConfig::permanent`).
+/// The engine names no category, rule or field: the vocabulary is the
+/// repository's.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermanentDecl {
+    /// A rule id this build ships.
+    pub rule: String,
+    /// The suppression field that holds the category.
+    pub reason_field: String,
+    /// The categories that allow permanence for this rule. Non-empty and
+    /// duplicate-free.
+    pub categories: Vec<PermanentCategory>,
+    /// The pointer field that holds a citation, for a category that requires
+    /// one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cite_field: Option<String>,
+}
+
+/// A category in a `permanent` entry's vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermanentCategory {
+    pub name: String,
+    /// `required` means a suppression in this category must cite a record
+    /// that resolves. Omitted means no citation is needed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cite: Option<CiteRequirement>,
+}
+
+/// Whether a category needs a citation (`PermanentCategory::cite`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CiteRequirement {
+    Required,
 }
 
 /// A role a record type can declare (`RecordTypeConfig::role`).
@@ -1053,6 +1196,8 @@ pub enum ConfigError {
     UndeclaredRuleField { rule: String, field: String },
     #[error("rule '{rule}' option 'field_levels' {reason}")]
     InvalidFieldLevels { rule: String, reason: String },
+    #[error("rule '{rule}' decision gate (`decision_types`, `fix_types`, `link_fields`) {reason}")]
+    InvalidDecisionGate { rule: String, reason: String },
     #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
     OptionRequired {
         rule: String,
@@ -1063,6 +1208,12 @@ pub enum ConfigError {
     TestPathOutsideBackPointerPaths { rule: String, entry: String },
     #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
     StickyStateIsComputed { rule: String, state: String },
+    #[error("rule '{rule}' option 'pinnable' names '{kind}', which 'locator_kinds' does not declare; a locator of a kind the rule rejects can never be pinned (declared kinds: {declared})")]
+    PinnableKindNotDeclared {
+        rule: String,
+        kind: String,
+        declared: String,
+    },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
@@ -1073,6 +1224,8 @@ pub enum ConfigError {
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
+    #[error("roadmap: {reason}")]
+    InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
     InvalidPrefix {
         record_type: String,
@@ -1111,6 +1264,8 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares effective_requires {reason}")]
     InvalidEffectiveRequires { record_type: String, reason: String },
+    #[error("record type '{record_type}' declares permanent {reason}")]
+    InvalidPermanent { record_type: String, reason: String },
     #[error("record type '{record_type}' declares revision_log {reason}")]
     InvalidRevisionLog {
         record_type: String,
@@ -1145,6 +1300,12 @@ pub enum ConfigError {
     },
     #[error("rule '{rule}' option 'non_reference_field' {reason}")]
     InvalidNonReferenceField { rule: String, reason: String },
+    #[error("rule '{rule}' option '{option}' {reason}")]
+    InvalidClaimField {
+        rule: String,
+        option: &'static str,
+        reason: String,
+    },
     #[error("rule '{rule}' option 'external_ids' entry '{entry}' {reason}")]
     InvalidExternalId {
         rule: String,
@@ -1282,6 +1443,16 @@ const RULE_OPTIONS: &[RuleOption] = &[
         optional: true,
     },
     RuleOption {
+        name: "locator_kinds",
+        consequence_if_missing: "accepts only a file locator",
+        optional: true,
+    },
+    RuleOption {
+        name: "pinnable",
+        consequence_if_missing: "lets only a file locator carry a pin",
+        optional: true,
+    },
+    RuleOption {
         name: "date_fields",
         consequence_if_missing: "names no date field and can never report",
         optional: false,
@@ -1349,6 +1520,80 @@ pub fn rule_requires_options(rule: &str) -> bool {
             .iter()
             .any(|o| *o == "indexes" || RULE_OPTIONS.iter().any(|r| r.name == *o))
     })
+}
+
+/// Why a decision-gate declaration (`MILE-133`) cannot work, or `None` when it
+/// can. Each declaration names records or fields the configuration must have,
+/// because one that names nothing real would leave the gate silently open.
+fn decision_gate_problem(setting: &RuleSetting, config: &Config) -> Option<String> {
+    let Some(decisions) = &setting.decision_types else {
+        let orphan = if setting.fix_types.is_some() {
+            Some("fix_types")
+        } else if setting.link_fields.is_some() {
+            Some("link_fields")
+        } else {
+            None
+        };
+        return orphan.map(|o| {
+            format!("declares '{o}' without 'decision_types': there is no decision to exempt a change from or to link, so it would never apply")
+        });
+    };
+    if decisions.is_empty() {
+        return Some(
+            "declares an empty 'decision_types'; name a type or omit the option".to_string(),
+        );
+    }
+    for (type_name, statuses) in decisions {
+        let Some(record_type) = config.record_types.get(type_name) else {
+            return Some(format!(
+                "'decision_types' names '{type_name}', which is not a declared record type"
+            ));
+        };
+        if statuses.is_empty() || statuses.iter().any(|s| s.trim().is_empty()) {
+            return Some(format!(
+                "'decision_types' gives '{type_name}' an empty or blank status list; name the statuses at which one counts as decided"
+            ));
+        }
+        if let Some(decl) = record_type.status_decl() {
+            if let Some(unknown) = statuses.iter().find(|s| !decl.values.contains(s)) {
+                return Some(format!(
+                    "'decision_types' names status '{unknown}' for '{type_name}', which that type's `statuses.values` does not list, so it could never match"
+                ));
+            }
+        }
+    }
+    for type_name in setting.fix_types.iter().flatten() {
+        if !config.record_types.contains_key(type_name) {
+            return Some(format!(
+                "'fix_types' names '{type_name}', which is not a declared record type"
+            ));
+        }
+        if decisions.contains_key(type_name) {
+            return Some(format!(
+                "names '{type_name}' in both 'decision_types' and 'fix_types'; a record cannot be both a decision and a fix"
+            ));
+        }
+    }
+    if setting.fix_types.as_ref().is_some_and(Vec::is_empty) {
+        return Some("declares an empty 'fix_types'; name a type or omit the option".to_string());
+    }
+    if setting.link_fields.as_ref().is_some_and(Vec::is_empty) {
+        return Some(
+            "declares an empty 'link_fields'; name a field or omit the option".to_string(),
+        );
+    }
+    for field in setting.link_fields.iter().flatten() {
+        let relational = config.record_types.values().any(|t| {
+            t.pointer_fields.iter().flatten().any(|f| f == field)
+                || t.narrative_fields.iter().flatten().any(|f| f == field)
+        });
+        if !relational {
+            return Some(format!(
+                "'link_fields' names '{field}', which is not a declared pointer_fields or narrative_fields entry of any record type"
+            ));
+        }
+    }
+    None
 }
 
 /// Why an `issue_refs` declaration cannot work, or `None` when it can.
@@ -1553,6 +1798,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
     crate::status_model::validate(&config.record_types, &config.embodiment)?;
     validate_relation_pairs(&config)?;
+    validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
@@ -1620,6 +1866,14 @@ pub fn parse_with_document_models(
             };
             if let Some(reason) = reason {
                 return Err(ConfigError::InvalidEffectiveRequires {
+                    record_type: name.clone(),
+                    reason,
+                });
+            }
+        }
+        if let Some(entries) = &rt.permanent {
+            if let Some(reason) = permanent_problem(rt, entries) {
+                return Err(ConfigError::InvalidPermanent {
                     record_type: name.clone(),
                     reason,
                 });
@@ -1806,6 +2060,17 @@ pub fn parse_with_document_models(
                 option: "non_reference_field".to_string(),
             });
         }
+        for (option, present) in [
+            ("closes", setting.closes.is_some()),
+            ("strict", setting.strict.is_some()),
+        ] {
+            if present && !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
         if setting.skip_revision_log.is_some()
             && !crate::rules::rule_accepts_option(name, "skip_revision_log")
         {
@@ -1909,6 +2174,49 @@ pub fn parse_with_document_models(
                         reason: format!(
                             "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
                         ),
+                    });
+                }
+            }
+        }
+
+        for (option, present) in [
+            ("decision_types", setting.decision_types.is_some()),
+            ("fix_types", setting.fix_types.is_some()),
+            ("link_fields", setting.link_fields.is_some()),
+        ] {
+            if present && !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
+        if setting.level != RuleLevel::Off {
+            if let Some(reason) = decision_gate_problem(setting, &config) {
+                return Err(ConfigError::InvalidDecisionGate {
+                    rule: name.clone(),
+                    reason,
+                });
+            }
+        }
+
+        // A pin on a kind the rule rejects is a locator that is always
+        // reported, so `pinnable` may only narrow `locator_kinds` (`BUG-176`).
+        if setting.level != RuleLevel::Off {
+            let declared = setting
+                .locator_kinds
+                .clone()
+                .unwrap_or_else(|| vec![LocatorKind::File]);
+            for kind in setting.pinnable.iter().flatten() {
+                if !declared.contains(kind) {
+                    return Err(ConfigError::PinnableKindNotDeclared {
+                        rule: name.clone(),
+                        kind: kind.to_string(),
+                        declared: declared
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", "),
                     });
                 }
             }
@@ -2173,6 +2481,37 @@ pub fn parse_with_document_models(
             }
         }
     }
+    // `closes` names a frontmatter key, so it must be one the one-line reader
+    // can find; `strict` judges the presence of that key, so it needs one. An
+    // option that could never apply is refused, not ignored (`ADR-85`).
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let bad = |option: &'static str, reason: &str| ConfigError::InvalidClaimField {
+            rule: name.clone(),
+            option,
+            reason: reason.to_string(),
+        };
+        if let Some(key) = setting.closes.as_deref() {
+            if key.is_empty()
+                || key
+                    .chars()
+                    .any(|c| c.is_whitespace() || c == ':' || c == '#')
+            {
+                return Err(bad(
+                    "closes",
+                    "must be one frontmatter key: not empty, with no whitespace, ':' or '#'",
+                ));
+            }
+        }
+        if setting.strict.is_some() && setting.closes.is_none() {
+            return Err(bad(
+                "strict",
+                "needs `closes`: it judges whether a claim file carries that key",
+            ));
+        }
+    }
     // `non_reference_field` must name a field some type declares (the header is
     // a closed structure) that no rule resolves or stale-checks: a pointer,
     // narrative or relation-role field would read the ids as references, the
@@ -2381,6 +2720,53 @@ fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Load-time checks for `roadmap` (`ADR-82`): `pairs` names declared, acyclic
+/// pairs, each once, and `group_by` names fields some record type declares,
+/// each once. A declaration that can never apply reads as a clean roadmap, so
+/// it is refused (`ADR-7`, `ADR-64` clause 5).
+fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
+    let bad = |reason: String| Err(ConfigError::InvalidRoadmap { reason });
+    let mut named = std::collections::BTreeSet::new();
+    for name in &config.roadmap.pairs {
+        if !named.insert(name.as_str()) {
+            return bad(format!("pairs lists '{name}' twice"));
+        }
+        match config.relation_pairs.iter().find(|p| p.name == *name) {
+            None => {
+                return bad(format!(
+                    "pairs names '{name}', which is not a relation_pairs entry"
+                ))
+            }
+            Some(p) if !p.acyclic => {
+                return bad(format!(
+                    "pairs names '{name}', which does not declare `acyclic: true`; a dependency relation must be checked for cycles"
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    let mut grouped = std::collections::BTreeSet::new();
+    for field in &config.roadmap.group_by {
+        if field.trim().is_empty() || *field != field.trim() {
+            return bad(format!(
+                "group_by field '{field}' is blank or has surrounding whitespace"
+            ));
+        }
+        if !grouped.insert(field.as_str()) {
+            return bad(format!("group_by lists '{field}' twice"));
+        }
+        if !config.record_types.values().any(|t| {
+            t.declared_fields()
+                .contains(&crate::values::FieldName::new(field))
+        }) {
+            return bad(format!(
+                "group_by names '{field}', which is not in the required_fields or known_fields of any record type, so no record could carry it"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
 /// because a pair that cannot run reads as a clean corpus.
 fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
@@ -2557,6 +2943,30 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    // A status-agreement rule with no pair to read, or no type declaring
+    // `statuses.blocked` or `statuses.progress`, examines nothing (`MILE-144`,
+    // ADR-7).
+    if config
+        .rules
+        .get(crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+    {
+        if config.roadmap.pairs.is_empty() {
+            return bad(format!(
+                "rule '{}' is enabled but roadmap.pairs declares no pair, so there is no dependency to derive blocked from",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+        if !config.record_types.values().any(|t| {
+            t.status_decl()
+                .is_some_and(|d| !d.blocked.is_empty() || !d.progress.is_empty())
+        }) {
+            return bad(format!(
+                "rule '{}' is enabled but no record type declares statuses.blocked or statuses.progress, so it would examine nothing",
+                crate::rules::RULE_SEQUENCE_STATUS_AGREEMENT
+            ));
+        }
+    }
     // The override log is declared, never defaulted: a path that names nothing or
     // leaves the repository could be neither written nor read (`MILE-188`).
     if let Some(path) = &config.override_log {
@@ -2595,6 +3005,82 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
         ));
     }
     Ok(())
+}
+
+// Implements: ADR-86 (load-time validation of `permanent`)
+/// Why a type's `permanent` declaration is refused at load (`ADR-86`), or
+/// `None` when it is well formed. A declaration that names a rule this build
+/// lacks, a field the type does not declare or a vocabulary that cannot match
+/// would otherwise be a governance setting that silently governs nothing.
+fn permanent_problem(rt: &RecordTypeConfig, entries: &[PermanentDecl]) -> Option<String> {
+    if rt.role != Some(TypeRole::Suppression) {
+        return Some(
+            "but not `role: suppression` -- only the suppression type has permanent suppressions"
+                .to_string(),
+        );
+    }
+    if entries.is_empty() {
+        return Some("as an empty list -- it would allow nothing; omit it".to_string());
+    }
+    let declared = rt.declared_fields();
+    let declares = |f: &str| declared.iter().any(|d| d.as_str() == f);
+    for (i, entry) in entries.iter().enumerate() {
+        let rule = &entry.rule;
+        if !crate::rules::ALL_RULES.contains(&rule.as_str()) {
+            return Some(format!("for rule '{rule}', which this build does not ship"));
+        }
+        if entries[..i].iter().any(|e| e.rule == *rule) {
+            return Some(format!("for rule '{rule}' twice"));
+        }
+        if !declares(&entry.reason_field) {
+            return Some(format!(
+                "for rule '{rule}' with reason_field '{}', which is in neither `required_fields` nor `known_fields`",
+                entry.reason_field
+            ));
+        }
+        if entry.categories.is_empty() {
+            return Some(format!(
+                "for rule '{rule}' with an empty `categories` list -- it would allow nothing"
+            ));
+        }
+        for (j, category) in entry.categories.iter().enumerate() {
+            if category.name.trim().is_empty() {
+                return Some(format!("for rule '{rule}' with a blank category name"));
+            }
+            if entry.categories[..j]
+                .iter()
+                .any(|c| c.name == category.name)
+            {
+                return Some(format!(
+                    "for rule '{rule}' naming category '{}' twice",
+                    category.name
+                ));
+            }
+        }
+        match &entry.cite_field {
+            Some(cite) => {
+                if !declares(cite) {
+                    return Some(format!(
+                        "for rule '{rule}' with cite_field '{cite}', which is in neither `required_fields` nor `known_fields`"
+                    ));
+                }
+                if !rt.pointer_fields.iter().flatten().any(|f| f == cite) {
+                    return Some(format!(
+                        "for rule '{rule}' with cite_field '{cite}', which is not one of the type's `pointer_fields`"
+                    ));
+                }
+            }
+            None => {
+                if let Some(category) = entry.categories.iter().find(|c| c.cite.is_some()) {
+                    return Some(format!(
+                        "for rule '{rule}' with category '{}' requiring a citation, but no `cite_field`",
+                        category.name
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -2758,6 +3244,7 @@ mod tests {
             revision_log: None,
             role: None,
             effective_requires: None,
+            permanent: None,
         };
         let declared = t.declared_fields();
         assert!(declared.contains("Status"));
@@ -3016,6 +3503,45 @@ rules:
         .unwrap_err()
         .to_string()
         .contains("does not take the option 'reference_sections'"));
+    }
+
+    /// `ADR-85`: `closes` and `strict` are options of `claim.status-agreement`
+    /// alone, optional, and `strict` needs `closes`.
+    #[test]
+    fn closes_and_strict_belong_to_the_claim_rule_and_strict_needs_closes_observed_failing() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let claim = "  claim.status-agreement:\n    level: error\n    claim_paths: [\".changeset\"]\n    closed_statuses: [\"Fixed\"]\n";
+        let ok = parse(&format!(
+            "{base}{claim}    closes: closes\n    strict: true\n"
+        ))
+        .unwrap();
+        let s = &ok.rules["claim.status-agreement"];
+        assert_eq!(s.closes.as_deref(), Some("closes"));
+        assert_eq!(s.strict, Some(true));
+        // Declaring neither is the rule as it was.
+        let none = parse(&format!("{base}{claim}")).unwrap();
+        assert_eq!(none.rules["claim.status-agreement"].closes, None);
+        // Another rule refuses both.
+        for option in ["closes: closes", "strict: true"] {
+            let err = parse(&format!(
+                "{base}  field.quality:\n    level: error\n    {option}\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("does not take the option"), "{option}: {err}");
+        }
+        // `strict` judges the key, so it needs one.
+        let err = parse(&format!("{base}{claim}    strict: false\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("strict") && err.contains("closes"), "{err}");
+        // A key the one-line reader could not find is refused.
+        for bad in ["\"\"", "\"a b\"", "\"a:b\"", "\"a#b\""] {
+            let err = parse(&format!("{base}{claim}    closes: {bad}\n"))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("closes"), "{bad}: {err}");
+        }
     }
 
     #[test]
@@ -3622,6 +4148,60 @@ record_types:
                 "{bad}"
             );
         }
+    }
+
+    /// `ADR-86`: `permanent` belongs to the suppression type, names a rule this
+    /// build ships, fields the type declares and a usable vocabulary.
+    #[test]
+    fn permanent_is_validated_at_load() {
+        let head = "  w:\n    dir: docs/w\n    role: suppression\n    required_fields: [Rule]\n    known_fields: [Category, Cite]\n    pointer_fields: [Cite]\n    narrative_fields: []\n";
+        let entry = |body: &str| format!("{head}    permanent:\n      - {body}\n");
+        let good = "{rule: field.quality, reason_field: Category, categories: [{name: a}, {name: b, cite: required}], cite_field: Cite}";
+        let ok = parse(&rt_config(&entry(good))).unwrap();
+        let decl = &ok.record_types["w"].permanent.as_ref().unwrap()[0];
+        assert_eq!(decl.categories.len(), 2);
+        assert_eq!(decl.categories[1].cite, Some(CiteRequirement::Required));
+        for (case, bad) in [
+            ("unknown rule", good.replace("field.quality", "no.such")),
+            ("undeclared field", good.replace("Category,", "Nope,")),
+            (
+                "empty categories",
+                "{rule: field.quality, reason_field: Category, categories: []}".to_string(),
+            ),
+            ("duplicate", good.replace("name: b", "name: a")),
+            ("blank", good.replace("name: a", "name: ' '")),
+            (
+                "cite not pointer",
+                good.replace("cite_field: Cite", "cite_field: Category"),
+            ),
+            (
+                "cite required, no field",
+                good.replace(", cite_field: Cite", ""),
+            ),
+        ] {
+            assert!(
+                matches!(
+                    parse(&rt_config(&entry(&bad))),
+                    Err(ConfigError::InvalidPermanent { .. })
+                ),
+                "{case}"
+            );
+        }
+        let twice = format!("{head}    permanent:\n      - {good}\n      - {good}\n");
+        assert!(matches!(
+            parse(&rt_config(&twice)),
+            Err(ConfigError::InvalidPermanent { .. })
+        ));
+        let empty = format!("{head}    permanent: []\n");
+        assert!(matches!(
+            parse(&rt_config(&empty)),
+            Err(ConfigError::InvalidPermanent { .. })
+        ));
+        let no_role = "  w:\n    dir: docs/w\n    required_fields: [Category]\n    permanent:\n      - {rule: field.quality, reason_field: Category, categories: [{name: a}]}\n";
+        assert!(matches!(
+            parse(&rt_config(no_role)),
+            Err(ConfigError::InvalidPermanent { .. })
+        ));
     }
 
     /// `MILE-130`: a type may own several directories; each is validated like
@@ -4311,9 +4891,13 @@ mod exclude_files_tests {
 mod option_table_tests {
     use super::*;
 
-    /// Options that are not list-valued, so `RULE_OPTIONS` (which carries the
+    /// Options that are not plain lists, or are validated together by their own
+    /// check (`decision_gate_problem`), so `RULE_OPTIONS` (which carries the
     /// "required list" consequence text) does not describe them.
     const OTHER_OPTIONS: &[&str] = &[
+        "decision_types",
+        "fix_types",
+        "link_fields",
         "indexes",
         "issue_refs",
         "allow_extension_prefix",
@@ -4321,6 +4905,8 @@ mod option_table_tests {
         "template_placeholders",
         "skip_revision_log",
         "non_reference_field",
+        "closes",
+        "strict",
         "field_levels",
         "drift_grace_days",
         "drift_audit_field",

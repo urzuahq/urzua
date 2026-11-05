@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 New opt-in rule `index.freshness`: a committed index of one record type, either a whole file or a list

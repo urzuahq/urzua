@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-92]
 ---
 
 Fixes BUG-92: resets the in-tree version to `0.3.0` and removes a generated CHANGELOG section that

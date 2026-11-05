@@ -3,6 +3,8 @@
 //! a finding, at the severity the declaration gives it, and a run that examined
 //! nothing says so.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -15,10 +17,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-boundary-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-boundary-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
@@ -41,7 +41,7 @@ fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
 
 /// A repository with one ADR record (so the run has a corpus to examine) and
 /// the boundary rule declared at `level` over `published`.
-fn repo_with_boundary(name: &str, level: &str, published: &str) -> std::path::PathBuf {
+fn repo_with_boundary(name: &str, level: &str, published: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
@@ -108,8 +108,6 @@ fn a_citation_inside_a_published_path_blocks_and_names_file_and_line() {
     assert_eq!(findings[0]["severity"], "error");
     assert_eq!(parsed["blocking"], true, "{parsed}");
     assert_eq!(out.status.code(), Some(1), "{parsed}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -127,8 +125,6 @@ fn the_same_citation_outside_every_published_path_is_not_reported() {
     let parsed = report(&out);
     assert!(boundary_findings(&parsed).is_empty(), "{parsed}");
     assert_eq!(out.status.code(), Some(0), "{parsed}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -147,8 +143,6 @@ fn a_clean_run_reports_how_many_files_it_looked_at() {
     assert_eq!(exec["population"]["eligible"], 2, "{parsed}");
     assert_eq!(exec["population"]["examined"], 2, "{parsed}");
     assert_eq!(out.status.code(), Some(0), "{parsed}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -165,8 +159,6 @@ fn the_declared_level_is_the_boundary_severity() {
     assert_eq!(findings[0]["severity"], "warning");
     assert_eq!(parsed["blocking"], false, "{parsed}");
     assert_eq!(out.status.code(), Some(0), "{parsed}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -187,8 +179,6 @@ fn a_published_path_covering_no_tracked_file_fails_closed() {
         .contains("no tracked file"));
     assert_eq!(out.status.code(), Some(1), "{parsed}");
     assert_eq!(boundary_execution(&parsed)["population"]["examined"], 0);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -210,8 +200,6 @@ fn a_binary_file_is_counted_unreadable_not_clean() {
     assert_eq!(pop["examined"], 1, "{parsed}");
     assert_eq!(pop["unreadable"], 1, "{parsed}");
     assert_eq!(out.status.code(), Some(0), "{parsed}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -227,8 +215,6 @@ fn a_tracked_file_deleted_from_disk_is_not_a_crash_and_not_examined() {
     let parsed = report(&out);
     assert!(boundary_findings(&parsed).is_empty(), "{parsed}");
     assert_eq!(boundary_execution(&parsed)["population"]["examined"], 1);
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -247,8 +233,6 @@ fn the_rule_does_not_load_without_published_paths() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_ne!(out.status.code(), Some(0), "{stdout}");
     assert!(stdout.contains("published_paths"), "{stdout}");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -271,8 +255,6 @@ fn an_undeclared_rule_is_reported_not_enabled() {
     let out = run_urzua(&dir, &["check"]);
     let parsed = report(&out);
     assert_eq!(boundary_execution(&parsed)["status"], "not-enabled");
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -293,13 +275,11 @@ fn a_dot_slash_entry_covers_its_files_and_names_the_normalised_path() {
             .contains("'pkg/sdk'"),
         "{parsed}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A repository declaring `rule_body` (the boundary rule's options, indented
 /// four spaces) at rule `level`.
-fn repo_with_rule(name: &str, level: &str, rule_body: &str) -> std::path::PathBuf {
+fn repo_with_rule(name: &str, level: &str, rule_body: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
@@ -343,7 +323,6 @@ fn a_boundarys_severity_sets_its_findings_level_and_the_rules_level_only_enables
         "{parsed}"
     );
     assert_eq!(parsed["blocking"], true, "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 
     // The rule is at `error`; the boundary says `warn`: the finding is a warning.
     let dir = repo_with_rule(
@@ -362,7 +341,6 @@ fn a_boundarys_severity_sets_its_findings_level_and_the_rules_level_only_enables
         "{parsed}"
     );
     assert_eq!(parsed["blocking"], false, "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -391,7 +369,6 @@ fn a_generated_boundary_reports_a_back_pointer_and_not_a_plain_record_id() {
         "{parsed}"
     );
     assert!(findings[0].get("suggested_action").is_none(), "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -408,7 +385,6 @@ fn a_vendored_boundary_is_declared_and_prohibits_nothing() {
     let parsed = report(&out);
     assert!(boundary_findings(&parsed).is_empty(), "{parsed}");
     assert_eq!(out.status.code(), Some(0), "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -451,7 +427,6 @@ fn an_exclude_excuses_a_fixture_directory_and_an_unused_one_is_reported() {
         findings[0]["suggested_action"]["target"]["file"], ".urzua/config.yaml",
         "{parsed}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -478,7 +453,6 @@ fn the_declared_marker_excuses_its_line_and_a_stale_marker_is_reported() {
         .collect();
     lines.sort();
     assert_eq!(lines, [2, 3], "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -517,7 +491,6 @@ fn a_glob_boundary_and_the_compatible_key_apply_together() {
         ],
         "{parsed}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -532,7 +505,6 @@ fn a_boundary_without_a_reason_does_not_load() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_ne!(out.status.code(), Some(0), "{stdout}");
     assert!(stdout.contains("reason"), "{stdout}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -567,6 +539,5 @@ fn an_uncovered_path_offers_a_valueless_set_never_a_remove() {
                 .is_none_or(|v| v.is_null()),
             "{parsed}"
         );
-        std::fs::remove_dir_all(&dir).ok();
     }
 }

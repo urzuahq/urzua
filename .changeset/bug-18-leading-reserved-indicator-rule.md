@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-18]
 ---
 
 New opt-in rule `field.leading-reserved-indicator`: flags any declared field whose value starts with a

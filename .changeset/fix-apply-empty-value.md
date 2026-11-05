@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-192]
 ---
 
 `urzua fix --apply` no longer corrupts a record whose `Embodiment` is `null`, `~` or empty. It used to

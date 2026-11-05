@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 New opt-in rule `citation.resolution`: a decision ID cited anywhere in a record's prose (for example

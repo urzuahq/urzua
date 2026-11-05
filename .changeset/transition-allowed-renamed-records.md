@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-191]
 ---
 
 `status.transition-allowed` now follows a renamed record. A record renamed or moved in the change under

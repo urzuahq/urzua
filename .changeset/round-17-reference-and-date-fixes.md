@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-111, BUG-112, BUG-113]
 ---
 
 Fixes `BUG-111`: `parse_record_filename` supports a hyphenated type prefix (`DOC-ADR-2-x.md`), but the

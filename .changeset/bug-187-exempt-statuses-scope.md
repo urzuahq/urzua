@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-187]
 ---
 
 `config.scope-matches-nothing` no longer warns about records a `sections.exempt_statuses` declaration sets aside:

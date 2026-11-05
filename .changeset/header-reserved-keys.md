@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 Fixes two silent-corruption risks from ADR-57's exact-match `Header::get`. `waiver`'s `Rule`/`Scope`/

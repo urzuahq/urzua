@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Adds `field.untrimmed-value`, reporting a declared field whose value carries leading or trailing

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-131]
 ---
 
 `urzua check` and `urzua audit` build a shared record-identity index that silently keeps one of several

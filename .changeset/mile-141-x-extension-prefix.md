@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Adds an opt-in `allow_extension_prefix` option to `header.field-set-consistency`. A repository that

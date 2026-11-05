@@ -1,5 +1,6 @@
 ---
 default: major
+closes: [BUG-40, BUG-88]
 ---
 
 **Breaking: `rules_executed` entries no longer carry `records_examined` or `scope`.** Every rule now

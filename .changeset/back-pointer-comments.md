@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A source comment of the form `Implements: ADR-12` now counts as realization evidence for the record

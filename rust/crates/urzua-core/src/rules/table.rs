@@ -34,6 +34,8 @@ pub enum Declaration {
     PointerFields,
     /// `revision_log.version_bump` (`BUG-51`).
     VersionBump,
+    /// `statuses.blocked` or `statuses.progress` (`MILE-144`).
+    BlockedOrProgress,
 }
 
 impl Declaration {
@@ -44,6 +46,7 @@ impl Declaration {
             Declaration::KnownFields => "known_fields",
             Declaration::PointerFields => "pointer_fields",
             Declaration::VersionBump => "revision_log.version_bump",
+            Declaration::BlockedOrProgress => "statuses.blocked or statuses.progress",
         }
     }
 }
@@ -257,7 +260,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_CLAIM_STATUS_AGREEMENT,
-        description: "A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared.",
+        description: "A file outside the corpus claims to close a record whose own `Status` disagrees. Scans `claim_paths`; `closed_statuses` declared. A claim is a closing verb followed by a record reference in prose (`Fixes BUG-60`), which is a deprecated convenience: a claim written without the verb is not seen. The optional `closes` option (`ADR-85`) names a frontmatter key in which a claim file lists, on one line, the records it closes (`closes: [BUG-60, BUG-61]`, a single id, or `[]` for none), and that data is checked instead of a sentence: a listed id that resolves to no record is `claim.id-unresolved`; a listed record not at a terminal status its own type declares (the type's `statuses` success and failure, not `closed_statuses`) is an error naming the record, and offers an `edit-field` on its `Status`; a value that is a block list, a list continued over several lines or not a list of record ids is `claim.field-malformed`, never guessed at. Only the frontmatter block is read for it and every other key is ignored, so a release tool's own keys are untouched. The optional `strict` option (default `false`, needs `closes`) makes a claim file that has a frontmatter block and lacks the key a finding (`claim.field-missing`); `closes: []` declares that it closes nothing. A file with no frontmatter block is not a fragment: counted out of scope in the population and named in a notice, never given a finding; the exception is a file whose `---` fence is never closed or has a blank line before it, which the release tool refuses to read, and which under `strict` is `claim.field-malformed`. With `closes` declared the closing-verb reading still runs over the body, and `check` prints how many claims it found. Without `closes` nothing changes.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         needs_identity_index: false,
@@ -266,15 +269,19 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_override_log: false,
         reads_declaration: None,
         header_none: HeaderNone::Exempt("population is claims, not records"),
-        options: &["claim_paths", "closed_statuses"],
+        options: &["claim_paths", "closed_statuses", "closes", "strict"],
         actions: &[
             VariantAction::new("claim-status-disagrees", ActionDecl::Exempt("the rule catches a claim that may be false, so the right fix is often the claim file, a non-record file with no action kind yet, and editing the record Status would be the mechanical answer and possibly the wrong one")),
+            VariantAction::new("claim-closes-open", ActionDecl::FIELD_SET),
+            VariantAction::new("claim-id-unresolved", ActionDecl::Exempt("the id names no record, so there is no record to edit; the fix is to correct the id in the claim file, a non-record file with no action kind yet, or to file the record")),
+            VariantAction::new("claim-field-malformed", ActionDecl::Exempt("the edit is to the claim file, a non-record file with no action kind yet")),
+            VariantAction::new("claim-field-missing", ActionDecl::Exempt("the edit is to the claim file, a non-record file with no action kind yet, and which records the change closes is the author's to say")),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
             let opts: ClaimOpts = c.config.rule_opts(RULE_CLAIM_STATUS_AGREEMENT);
-            claim_status_agreement(c.claims, &opts.closed_statuses, c.config, c.index)
+            claim_status_agreement(c.claims, &opts, c.config, c.index)
         },
     },
     RuleDef {
@@ -402,6 +409,26 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         companion: None,
         run: |c| sequence_unresolved_blocker(c.records, c.config, c.index, c.untracked_records),
+    },
+    RuleDef {
+        id: RULE_SEQUENCE_STATUS_AGREEMENT,
+        description: "A record's written `Status` contradicts the derived `blocked` value (`MILE-144`, `RFC-48`, `ADR-83`). A record is blocked when any record it depends on, over the pairs `roadmap.pairs` declares and in either field, is not in a status its own type declares `success`; a dependency in a `failure` status, with no `Status`, or whose type declares no `success` blocks. Reports a blocked record that states a status its type lists in `statuses.progress` (`Done` included when listed; `Planned` is not progress), and a status the type lists in `statuses.blocked` while nothing blocks the record. Opt-in per type: only a type that declares `progress` or `blocked` is examined, and enabling the rule with no `roadmap.pairs`, or with no type declaring either, is a config load error. A value that cannot be computed is not guessed: a record in a `blocked` or a `progress` status that would be reported unblocked is counted unreadable when it names a dependency that resolves to nothing or to an unreadable record, or when a record that may write an inverse claim cannot be read, whether or not the type writes a `blocked` status at all (`ADR-83`).",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        needs_identity_index: true,
+        requires_relation_pairs: true,
+        requires_acyclic_pair: true,
+        requires_override_log: false,
+        reads_declaration: Some(Declaration::BlockedOrProgress),
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        actions: &[
+            VariantAction::new("status-blocked-unblocked", ActionDecl::FIELD_SET),
+            VariantAction::new("status-blocked-derived", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| sequence_status_agreement(c.records, c.config, c.index),
     },
     RuleDef {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
@@ -584,7 +611,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
-        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries.",
+        description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries. The `locator_kinds` option (`file`, `directory`, `glob`; default `[file]`) declares which kinds a locator may be: a directory or glob is legal when it matches at least one tracked file present on disk, and one of a kind not declared is reported naming the option. The `pinnable` option (default `[file]`, each kind also in `locator_kinds`) declares which kinds may carry a `@sha256:` pin (`BUG-176`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -593,7 +620,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_override_log: false,
         reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
-        options: &[],
+        options: &["locator_kinds", "pinnable"],
         actions: &[
             VariantAction::new("locator-empty", ActionDecl::FIELD_SET),
             VariantAction::new("locator-missing", ActionDecl::FIELD_SET),
@@ -602,6 +629,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
             VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-kind-undeclared", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-kind-unpinnable", ActionDecl::FIELD_SET),
         ],
         phase: Phase::Main,
         companion: None,
@@ -628,7 +657,14 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 let path = std::path::Path::new(p);
                 !tracked.contains(path) && (c.may_exist)(path)
             };
-            embodiment_locator_exists(c.records, c.config, &present, c.read_text, &untracked_on_disk)
+            embodiment_locator_exists(
+                c.records,
+                c.config,
+                c.tracked_paths,
+                &present,
+                c.read_text,
+                &untracked_on_disk,
+            )
         },
     },
     RuleDef {
@@ -1431,7 +1467,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_DIFF_SOURCE_REQUIRES_RECORD,
-        description: "A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed.",
+        description: "A `--base` diff changes a path under a declared `source_paths` entry (a prefix or a glob) but changes no governed record (a `.md` file directly in a record type's `dir`) (`MILE-124`, `MILE-158`). A changed path matching `exclude_paths` is not source and stays in the population unexamined, so a diff touching only such files (tests beside the code) is not a trigger. One finding per changed source path, so a waiver can scope to one. It asks only that a record changed, never that it is the right one. Judges the changed set, so it reports `not-applicable` on a run with no `--base`, never clean. Deleted paths count as changed. Declaring `decision_types` (each record type that holds decisions, with the statuses at which one counts as decided) turns it into the decision gate (`MILE-133`): the diff must change a decision record at a decided status, a record whose `link_fields` entry (a pointer or narrative field such as `Implements`) names one, or a record of a `fix_types` type (a mechanical fix needs a bug record and no decision); a changed decision still at an undecided status does not release it and is named in the finding. A deleted record satisfies nothing. `fix_types` and `link_fields` need `decision_types`, and every type, status and field a declaration names must exist, or the config does not load. Off unless declared: without `decision_types`, any governed record releases the rule.",
         scope: Scope::Diff,
         anchor: Anchor::Outside,
         needs_identity_index: false,
@@ -1440,16 +1476,17 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_override_log: false,
         reads_declaration: None,
         header_none: HeaderNone::Exempt("population is changed paths, and only on a --base run"),
-        options: &["source_paths", "exclude_paths"],
+        options: &["source_paths", "exclude_paths", "decision_types", "fix_types", "link_fields"],
         actions: &[
             VariantAction::new("source-without-record", ActionDecl::ADD_RECORD),
+            VariantAction::new("source-without-decision", ActionDecl::ADD_RECORD),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
             let opts: SourceRequiresRecordOpts =
                 c.config.rule_opts(RULE_DIFF_SOURCE_REQUIRES_RECORD);
-            source_requires_record(c.changed_paths, &opts.source_paths, &opts.exclude_paths, c.config)
+            source_requires_record(c.changed_paths, &opts, c.config, c.records, c.index)
         },
     },
     RuleDef {
@@ -1553,7 +1590,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_WAIVER_MATCHES_NOTHING,
-        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there, so it suppresses nothing and its finding is reported again); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
+        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there; or, when the type declares `permanent`, it has no `Expires` and its rule has no `permanent` entry, its category is absent or outside the entry's vocabulary, or a category that requires a citation has none that resolves; either way it suppresses nothing and its finding is reported again, naming the unmet requirement); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
         scope: Scope::Run,
         anchor: Anchor::Record,
         needs_identity_index: false,
@@ -1700,6 +1737,10 @@ mod tests {
             vec![
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (
+                    RULE_SEQUENCE_STATUS_AGREEMENT,
+                    Declaration::BlockedOrProgress
+                ),
                 (
                     RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                     Declaration::VersionBump

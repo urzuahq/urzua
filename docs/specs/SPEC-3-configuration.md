@@ -1,5 +1,5 @@
 ---
-Version: '0.78'
+Version: '0.85'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -155,6 +155,34 @@ Two details carry weight:
   (`waiver-ineffective`, naming the field). Omitted, a suppression needs only `Rule` and `Scope`, as
   before. An empty list, a blank or repeated name, a name the type does not declare, or the key on a
   type without the role is a load error.
+- **The suppression type may declare where a suppression can be permanent: `permanent`**
+  (`ADR-86`). A list with one entry per rule; only on the type with `role: suppression`:
+
+  ```yaml
+  record_types:
+    waiver:
+      role: suppression
+      permanent:
+        - rule: status.delivery-agreement
+          reason_field: Category        # a field the type declares
+          categories:
+            - {name: docs-or-workflow-only}
+            - {name: test-removed-by-decision, cite: required}
+          cite_field: Justified-by      # a pointer field the type declares
+  ```
+
+  Declared, a suppression without `Expires` takes effect only if its `Rule` has an entry, its
+  `reason_field` holds one of that entry's categories, and, for a category with `cite: required`, its
+  `cite_field` names a record that resolves. Otherwise it suppresses nothing, its finding is reported
+  again, and with `waiver.matches-nothing` enabled the waiver is reported (`waiver-ineffective`,
+  naming the unmet requirement). **Declaring the key closes permanence for every rule it does not
+  list.** A suppression with an `Expires` is unaffected, and `check` adds an info notice
+  (`permanent-waivers`) counting the permanent suppressions in effect by category. Omitted, a
+  suppression without `Expires` is allowed for any rule, as before. The engine names no category, rule
+  or field. A load error: the key on a type without the role, an empty list, a rule this build does
+  not ship or one listed twice, a `reason_field` or `cite_field` the type does not declare, a
+  `cite_field` that is not one of its `pointer_fields`, an empty, blank or duplicated category list,
+  or a category with `cite: required` and no `cite_field`.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -369,7 +397,33 @@ Two details carry weight:
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
   committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
-  derived `blocked` value is not part of this declaration (`MILE-27`).
+  The derived `blocked` value is the next declaration.
+
+  `progress` (optional, `MILE-144`, `RFC-48`, `ADR-83`) names the statuses that claim the work has
+  advanced, for example `InProgress` and `Done`; it must be a subset of `values`, deduplicated, and
+  disjoint from `failure` and `blocked`. It may include a `success` status, because a record cannot
+  finish before its dependencies do. `implementable` is not read for this: it means "code may cite
+  it". `blocked` (optional) names the non-terminal statuses a person writes to say a record is
+  waiting, for example `Blocked`; it must be a subset of `values` and disjoint from `success`,
+  `failure` and `progress`. `RFC-48` computes `blocked` and never writes it, so a repository that
+  follows it declares `progress` and no `blocked`, and no record states a waiting status; a type that
+  still writes one declares `blocked` to have it checked both ways.
+
+  With a sequencing relation declared in `roadmap.pairs` (below), a record is blocked when any record it
+  depends on, in either field of a declared pair (a written `Blocks` counts), is not in a status its own
+  type declares `success`. `success` is the one list of done statuses. A dependency in a `failure`
+  status, with no `Status`, or whose type declares no `success` therefore blocks. The opt-in rule
+  `sequence.status-agreement` reports a blocked record that states a `progress` status, and a status
+  listed in `blocked` while nothing blocks the record; a blocked record in a status that claims no
+  progress, `Planned` for instance, is correct. Only a type that declares `progress` or `blocked` is
+  examined. The finding offers `edit-field` `set` on `Status`, carrying the declared blocked status as
+  the value only when the type declares exactly one, the record is not in a `success` status, and the
+  declared `transitions` (when any) allow the move. A value that cannot be computed is not guessed: a
+  record in a `blocked` or `progress` status that would be reported unblocked is counted unreadable when
+  it names a `Depends-on` value that resolves to nothing or to a record whose header cannot be read, or
+  when a record that may write an inverse claim has an unreadable header; a type that declares only
+  `progress` is guarded the same way. Enabling the rule with no `roadmap.pairs`, or with no type
+  declaring `progress` or `blocked`, is a load error.
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
   stem and differs in a tail (`MILE-162`): the structured form `{pattern: "^\\(pending"}`, an ordinary
@@ -394,27 +448,16 @@ Two details carry weight:
           unevidenced_tiers: ["Not started"]         # computed tiers that say nothing was delivered
           not_done: [Planned, InProgress, Blocked]   # statuses that say it is not done
           set_status: Done                           # what `urzua fix --apply` writes
-          back_pointer_evidence: true                # optional; false: only the evidence field counts
   ```
 
   The tier is computed as `Embodiment` is, from the record's evidence field (the type's
   `Realized-by`, or its declared name for that role) and from source back-pointers, with drift
-  ignored: drift says the evidence is stale, not that nothing was delivered. The declaration applies
-  to any record type, whatever it is called (`ADR-84`): a bug's `Realized-by` with `test:` locators
-  computes to `Verified` exactly as a milestone's does, and a type that keeps its evidence in a
-  separate test field moves the values into `Realized-by` as `test:path#name@sha256:<pin>` entries.
-  `back_pointer_evidence` (optional, default `true`) says whether a source or test back-pointer that
-  cites the record counts as evidence beside the evidence field; `false` holds the type to its
-  declared field alone, and a type that declares nothing keeps today's reading. The other four keys are
-  required; `unevidenced_tiers` may be an empty list, which declares that the type never reports a
-  `success` status for lack of evidence (a done record may legitimately have none) and keeps the other
-  direction. A deliberately open record with evidence is waived, not given a status: a `waiver` record
-  whose `Scope` is the record's path and whose `Rule` is `status.delivery-agreement`, with a `Reason`
-  and an `Expires` (`SPEC-10`). A tier must be one of `Verified`, `Implemented`, `Specified`, `Not started` and may not
+  ignored: drift says the evidence is stale, not that nothing was delivered. All four keys are
+  required. A tier must be one of `Verified`, `Implemented`, `Specified`, `Not started` and may not
   be in both tier lists; `not_done` must be declared `values` and none of them a `success` or
   `failure` status; `set_status` must be a `success` status; the evidence field must be in the
   type's `required_fields` or `known_fields`. Any breach is a load-time error naming the type and
-  `statuses`. A type declaring no `delivery` is not examined by `status.delivery-agreement`. The type must carry its evidence field, `Realized-by` unless `relation_fields.embodiment_locator` names another, in `required_fields` or `known_fields`; a type that does not is refused at load, not left with an inert rule.
+  `statuses`. A type declaring no `delivery` is not examined by `status.delivery-agreement`.
 
   A type that declares no `statuses` behaves exactly as before. A declaration is read by:
 
@@ -519,6 +562,69 @@ Non-reference-ids: ADR-72
 - When a declared id resolves to a real record, `check` prints one aggregated `Info` notice naming
   the records and ids. A notice never changes the exit code.
 - Adding the field to an Accepted record is a `structural` revision-log row, not an amendment.
+
+## Declared, not parsed: `claim.status-agreement`'s `closes` and `strict`
+
+A changeset fragment says which records it closes as data, in a frontmatter key, and
+`claim.status-agreement` checks the data instead of a sentence (`BUG-66`, `ADR-85`):
+
+```yaml
+rules:
+  claim.status-agreement:
+    level: error
+    claim_paths: [".changeset"]
+    closed_statuses: ["Fixed", "Done"]   # the verb reading's list; see below
+    closes: closes                       # optional: the frontmatter key; none declared, nothing below applies
+    strict: true                         # optional, default false, needs closes
+```
+
+```yaml
+---
+default: minor
+closes: [BUG-60, BUG-61]
+---
+```
+
+- **`closes`** names the key. The engine knows no field name, record type or status: the listed ids
+  resolve against whatever types the repository declares. It must be one key, not empty, with no
+  whitespace, `:` or `#`. Declaring neither option leaves the rule exactly as it was.
+- **`strict`** (`false` by default) makes a claim file that has a frontmatter block and lacks the
+  key a finding (`claim.field-missing`), so a fragment that names a record without saying whether it
+  closes it is caught. `closes: []` is the declaration that it closes nothing. `strict` without
+  `closes` is a load-time error, and so is either option on any other rule.
+- **The value is one line:** a flow list `[A-1, B-2]`, a single id, or `[]`. Single or double
+  quotes around an id are read as the id. The parser is deliberately small: it reads the `---`
+  block the file begins with, reads only the declared key, and ignores every other key, including the
+  release tool's own bump keys. A block list (`closes:` then `- ` lines), a list continued over
+  several lines, a key written twice, an empty entry or a value that is not a record id is
+  `claim.field-malformed`, naming the file and the key's line; it is never guessed at.
+- **A listed id that resolves to no record** is `claim.id-unresolved`, an error. It applies only to
+  ids from this field: a reference the closing-verb reading finds that matches no record is still
+  skipped and counted as eligible and unexamined.
+- **A listed record must be closed.** Closed is the type's declared `statuses` terminals (`success`
+  and `failure`), never `closed_statuses`: a type declaring none has no declared close, so a record
+  of it listed here is reported. An open record, or one whose status cannot be read, is an error
+  naming the record and its status, with a suggested `edit-field` on that record's `Status`
+  (`ADR-73`); the finding does not choose between closing the record and taking it off the list.
+  Every claim file under `claim_paths` is read, with or without `--base`.
+- **A file with no frontmatter block** (it does not begin with a closed `---` block) is not a
+  fragment: it is counted out of scope in the rule's population and named in an `Info` notice, and
+  never given a finding. That is how a `README.md` in the directory is excluded without the engine
+  knowing its name. The exception is a file that tries to be a fragment and the release tool cannot
+  read: one whose `---` fence is never closed, or with a blank line before the opening `---`. Under
+  `strict` it is `claim.field-malformed` (the release tool rejects both with
+  `could_not_read_changeset`); without `strict` it is read as no frontmatter, as before.
+- **Prose is not read for this claim.** The frontmatter block is skipped by the closing-verb
+  reading once `closes` is declared, so the key is not read again as the verb "closes". That reading
+  still runs over the body, unchanged, as a deprecated convenience; `check` prints an `Info` notice
+  with how many closing-verb claims it found, so a repository can see when it is safe to stop. Removing
+  it is a separate decision.
+- **The release tool must tolerate the key.** The pinned knope accepts a one-line list, a scalar
+  and `[]`, ignores the key and gives the same bump and changelog, and rejects a block list and a
+  list continued over two lines. `.github/scripts/knope-closes-compat.test.sh` runs the pinned knope
+  over a fragment carrying the key (`make knope-closes-compat`; CI installs the pinned release) and
+  fails if the installed version is not the pin. A workspace of several named packages was not
+  tested; an adopter with one should run the same test before declaring the field.
 
 ## Cited issues and pull requests: `citation.issue-exists`
 
@@ -784,6 +890,45 @@ rules:
   matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
   it suppresses nothing. The uncovered `paths` entry carries an `edit-config` `set` action with no value, naming the entry, so a person picks the corrected path and coverage is never shrunk; the unused `exclude` entry carries an `edit-config` `remove` action naming it.
 
+## The decision gate
+
+`diff.source-requires-record` is opt-in, and by default asks only that some governed record changed
+beside the source. Three further options (`MILE-133`) make it the decision gate: a change to
+declared source paths must also change a decision at a decided status, a record linking one, or a
+fix record. The gate is off unless `decision_types` is declared.
+
+```yaml
+rules:
+  diff.source-requires-record:
+    level: error
+    source_paths: ["rust/crates"]
+    decision_types:            # type -> the statuses at which one counts as decided
+      adr: ["Accepted"]
+      spec: ["Accepted", "Shipped"]
+    fix_types: ["bug"]         # a record of one of these types exempts the change
+    link_fields: ["Implements"]  # a changed record whose field names a decided decision
+```
+
+- `decision_types` maps a declared record type to a non-empty list of its statuses. The diff is
+  released by a changed record of that type at one of them, judged by the record's own `Status`
+  (the type's `Status` role field) in the working tree.
+- `link_fields` names pointer or narrative fields. A changed record, of any type, whose field names a
+  record of a `decision_types` type at a decided status releases the diff, so a milestone that
+  `Implements` an Accepted ADR does. A reference that resolves to no record, or to a decision still at
+  an undecided status, releases nothing.
+- `fix_types` names record types whose changed records release the diff, so a mechanical fix lands
+  with only a bug record (`AGENTS.md`).
+- A changed decision still at an undecided status does not release the diff and is named in the
+  finding. A deleted record, which has no status to read, satisfies nothing.
+- With the gate declared, a changed record that is none of the three no longer releases the rule.
+  The population and `exclude_paths` behave as without it.
+
+A declaration that could never apply is refused at load (exit 2) rather than leaving the gate quietly
+open: `fix_types` or `link_fields` without `decision_types`; a type that is not declared; a status
+a type's `statuses.values` does not list; an empty list; a type named in both `decision_types` and
+`fix_types`; a `link_fields` entry that is not a pointer or narrative field of any type; and any of
+the three on a rule that does not take them.
+
 ## Relation pairs
 
 A top-level `relation_pairs` list declares pairs of inverse relation fields (`RFC-47`, `MILE-122`).
@@ -894,12 +1039,45 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   enabled, and a prose entry when `header.pointer-field-clean` is enabled. In a repository that follows
   `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
   guard for the roadmap: the graph is only computed when no claim was dropped.
+- **Which pairs are dependencies: `roadmap.pairs`** (`ADR-83`). A pair can be `acyclic` without being a
+  dependency: a containment pair (`Parent`/`Children`) is checked for cycles, but a child does not wait
+  on its parent finishing. The top-level `roadmap: {pairs: [name, ...]}` names the `relation_pairs`
+  entries that are dependencies, and the derived `blocked` value reads exactly those, so `check` and
+  the roadmap command cannot disagree. Each name must be a declared pair that sets `acyclic: true`,
+  listed once; anything else is a load error. `sequence.cycle` and `sequence.unresolved-blocker` still
+  read every `acyclic` pair.
+- **The derived `blocked` value** is read from these edges by `sequence.status-agreement` (see
+  `statuses.progress` and `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
-  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
-  `MILE-182`).
+  `sequence.terminal-parent-open-child` and the `condition` record type are `RFC-48`'s other parts and
+  belong to other milestones. `urzua roadmap` is built (`MILE-182`, `ADR-82`) and reads the same
+  `roadmap.pairs` as the derived `blocked` value, below.
 
-Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
+### `roadmap` (`ADR-82`, `MILE-182`)
+
+```yaml
+roadmap:
+  pairs: ["sequencing"]          # relation_pairs entries that are dependencies
+  group_by: ["Phase", "Track"]   # header fields to group by, outermost first
+```
+
+`urzua roadmap` (output in `SPEC-2`) computes one graph over the pairs `pairs` names. A pair can be
+`acyclic` without being a dependency: a containment pair (`Parent`/`Children`) is checked for cycles,
+but a child does not wait on its parent finishing, so only the pairs named here order work. Both keys
+are optional and default to empty. Absent `pairs` means no roadmap: the command says so in a note and
+`export --format json` carries no `roadmap` key.
+
+- `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
+- `group_by`: each name must be a field some record type declares (`required_fields` or
+  `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
+  A field no open record carries is not an error; the roadmap notes it.
+
+Load-time errors, reported as `roadmap: ...`: a `pairs` name that is not a declared pair, one that does
+not declare `acyclic: true`, a repeated `pairs` or `group_by` entry, a blank or padded `group_by` name,
+and a `group_by` name no type declares. A declaration that can never apply would read as a clean
+roadmap, so it is refused (`ADR-7`).
+
+Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
 
 Load-time errors: a blank or duplicated pair name, a blank or whitespace-padded field name, a field
@@ -1161,12 +1339,15 @@ locator_resolvers:
     end: brace_balanced
     leading: '^\s*(#\[|///)'    # optional: contiguous lines above that are part of the item
     container:                  # optional: `Type::member` is found inside these spans
-      start: '^\s*impl(<.*?>)?\s+{symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      start: '^\s*(impl(<.*?>)?\s+|(pub\s+)?struct\s+){symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
       end: brace_balanced       # brace_balanced, indent or heading
       spans: all                # `all`: every match is a candidate span; default `one`: exactly one
-    member:                     # the item inside a container span, with its own start and end kind
-      start: '^\s*(pub\s+)?fn\s+{symbol}\b'
-      end: brace_balanced
+    member:                     # the item inside a container span, with its own start and end kind;
+                                # one mapping, or a list when members end differently
+      - start: '^\s*(pub\s+)?fn\s+{symbol}\b'
+        end: brace_balanced
+      - start: '^\s*(pub\s+)?{symbol}\s*:([^:]|$)'   # a struct field, up to the next field
+        end: indent
     trait_container:            # `Type::<Trait>` and `Type::<Trait>::member`
       start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
       end: brace_balanced
@@ -1175,8 +1356,8 @@ locator_resolvers:
 
 Patterns are regular expressions matched against one line. `{symbol}` (and `{trait}`) are replaced by
 the regular-expression-escaped text from the record, so a `.` in a symbol is a literal dot. A
-`start`, `container.start` and `member.start` must contain `{symbol}`, a `trait_container.start`
-also `{trait}`; a malformed pattern or glob, a missing placeholder, a `member` with no `container`
+`start`, `container.start` and every `member.start` must contain `{symbol}`, a `trait_container.start`
+also `{trait}`; a malformed pattern or glob, a missing placeholder, a `member` (any entry of a list) with no `container`
 or `trait_container` or the reverse for `container`, a `container` end kind other than
 `brace_balanced`, `indent` or `heading`, an unknown key, a repeated name and two resolvers with the
 same glob are config-load errors. A file covered by two different globs is reported where a scope
@@ -1203,8 +1384,15 @@ as a `semicolon`-ended `member` of its container (vector 18).
 none is not found, more than one is ambiguous and reported with the line of each candidate, exactly
 one is the item (extended upward over `leading`). `Type::member` finds the container spans of
 `Type` (none: container not found; several without `spans: all`: ambiguous), then the lines
-matching `member.start` that are direct children of any of those spans, counted together: none is
-not found, more than one is ambiguous, one is the item. A direct child of a `brace_balanced`
+matching a `member.start` (every entry of a `member` list is tried) that are direct children of any
+of those spans, counted together across spans and across entries: none is not found, more than one
+is ambiguous (a line two entries both match counts twice, so is ambiguous), one is the item, ended
+by the end kind of the entry that matched it. A `member` list is how one resolver addresses items
+that end differently, such as a Rust method (`brace_balanced`) and a struct field (`indent`, up to
+the next field or the closing brace: the closing `>,` of a field whose type spans lines is level
+with the field and is not part of the span). The container may match a `struct` as well as an
+`impl`, so `Type::field` is found in the struct's span and `Type::method` in the impls'; a name used
+by both is ambiguous. A direct child of a `brace_balanced`
 container is a line that starts at brace depth one; of an `indent` container, a line at the
 indentation of the container's first non-blank body line; of a `heading` container, a heading one
 level deeper. A match deeper inside another member (a nested `fn`) is not a candidate. A member's
@@ -1258,8 +1446,58 @@ inclusive) or the failure. Rows 1 to 12 use the `rust` resolver above with the `
 | 16 | `# T` / `## One` / `text` / `### Sub` / `more` / `## Two` (`heading`, start `^#+\s+{symbol}$`) | `One` | 2-5 |
 | 17 | `k1:` / `  v` / `` / `k2:` (`blank_line`) | `k1` | 1-2 |
 | 18 | `impl A {` / `  const X: Foo = Foo {` / `    a: 1;` / `  };` / `  const Y: u8 = 3;` / `}` (member `end: semicolon`, start `^\s*const\s+{symbol}\b`) | `A::X` | 2-4 |
+| 21 | `struct A {` / `    /// d` / `    a: u8,` / `    b: u8,` / `}` (the `rust` resolver, its container also matching `struct`, and a second `member` entry `^\s*{symbol}\s*:([^:]|$)` with `end: indent`) | `A::a` | 2-3 (doc line included, `b` excluded) |
+| 22 | as 21, with `impl A {` / `    fn a(&self) {}` / `}` appended | `A::a` | ambiguous: lines 3, 7 (a field and a method) |
+| 23 | as 21 | `A::z` | not found |
+| 24 | `struct A {` / `    b: Vec<` / `        u8,` / `    >,` / `    c: u8,` / `}` (resolver of 21) | `A::b` | 2-3 (the closing `>,` is level with the field and is not included) |
 | 19 | the bytes `a\r\nb\r\r\nc\n`, lines 1-3 | | pinned bytes `a\nb\r\nc` |
 | 20 | the bytes `\uFEFFfn a() {\n}\n`, lines 1-2 | | pinned bytes `fn a() {\n}` |
+
+### Locator kinds: files, directories and globs (`BUG-176`)
+
+Which kinds of path a `Realized-by` locator may name, and which of those may carry a `@sha256:`
+pin, are options of `embodiment.locator-exists`. Maintainer decision, 2026-11-05: this is
+repository configuration, not engine policy.
+
+```yaml
+rules:
+  embodiment.locator-exists:
+    level: error
+    locator_kinds: [file, directory, glob]   # default [file]
+    pinnable: [file, directory]              # default [file]; each kind must also be in locator_kinds
+```
+
+- `locator_kinds` (optional, non-empty when given): `file`, `directory` and `glob`. A **file** is a
+  git-tracked path present on disk, as always. A **glob** is a path holding `*`, `?` or `[`, matched
+  with the diff rules' matcher (`Diff rule path options`: `*` within one component, `**` across
+  components, `?` one character, `[abc]` a class); it covers the tracked files it matches, and a
+  glob that names a directory covers the files below it. A **directory** is any other path with a
+  tracked file below it, compared by path component. A path that is itself a tracked file is a file
+  whatever characters its name holds. The default `[file]` is the behaviour before this option.
+- A directory or glob locator is legal when it covers at least one tracked file that is present on
+  disk: an untracked directory, a path with no tracked file below it, and a glob matching nothing
+  are reported as missing, and a staged deletion of every covered file leaves nothing covered.
+- A locator of a kind that `locator_kinds` does not declare is reported (`locator-kind-undeclared`),
+  naming the option. A pin (`@sha256:`) on a directory or glob whose kind `pinnable` does not
+  declare is reported (`locator-kind-unpinnable`), naming that option. A scope (`#...`) applies to
+  one file and is reported unresolved on a directory; on a glob it is a malformed locator.
+- A `pinnable` kind not in `locator_kinds`, an empty list, an unknown kind, and either option on any
+  other rule are load errors: each would be a silent no-op or a locator that is always reported.
+
+**Drift.** An unpinned directory or glob drifts on the newest commit among the files it covers now:
+the record is behind when that commit is strictly after the commit that last touched the
+`Realized-by` line, exactly as for one file, including `drift_grace_days`. A pinned one drifts when
+its pin differs from the current one, with no file-based grace window (as for a scoped pin; only a
+declared audit date holds it back).
+
+**The pin.** The pin of a directory or glob is the lowercase hex SHA-256 of one line per covered
+file, sorted by path, each `<path>` then a tab then the lowercase hex SHA-256 of the file's raw
+bytes then `\n`. It moves when a covered file's content changes, a file is added, removed or moved
+into or out of the set, and not when any other file changes. `urzua explain <directory-or-glob>`
+prints `coverage`: the kind, the covered files, the hash and, when `pinnable` allows the kind, the
+`pin` to paste; `urzua fix --rebaseline` lists the covered files of a stale pin and re-pins it
+(`SPEC-8`, `SPEC-13`). A kind that is not declared in `locator_kinds` is not judged here: `explain`
+says so in a notice, and drift reads the path's git history as it did before the option.
 
 ### Source back-pointers as evidence (`MILE-128`, `MILE-146`, `MILE-149`)
 
@@ -1530,4 +1768,11 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
 > | 2026-11-05 | Bumped to `0.76`. `fail_on` names `urzua audit` as an alias of `check`. **Why:** `MILE-190`, `ADR-79`. | **structural** |
 > | 2026-11-05 | Bumped to `0.77`. Added "Supported schema versions": the window of `N` and `N-1`, the table of releases, the in-memory upgrade and `config.schema-version-outdated`, the structured out-of-window error, `urzua migrate config`, what version 1 was and what its upgrade does (a type that omits `header_shape` is refused, not silently moved from `blockquote` to `yaml-frontmatter`), and the rule for when a bump is required. The open question about a version field is answered. **Why:** `ADR-77` / `MILE-34` -- a config on an older schema version was rejected with a bare equality error and no path forward. | **substantive** |
-> | 2026-11-05 | Bumped to `0.78`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.78`. A type's `statuses` declaration gains `progress` (statuses that claim work advanced) and `blocked` (written waiting statuses, opt-in), and a top-level `roadmap.pairs` names the sequencing pairs the derived `blocked` value reads. The opt-in rule `sequence.status-agreement` reports a blocked record that states a `progress` status, and a written blocked status while nothing blocks the record; a progress-status record with an unresolved or unreadable dependency is counted unreadable even when the type writes no blocked status. **Why:** `MILE-144`, decided in `ADR-83` (maintainer decision, 2026-11-05: `Blocked` is derived only, per `RFC-48`). | **substantive** |
+> | 2026-11-05 | Bumped to `0.79`. A top-level `roadmap: {pairs, group_by}` names the `relation_pairs` entries that are dependencies and the header fields `urzua roadmap` groups by, validated at load. **Why:** `MILE-182`, decided in `ADR-82`: one graph over the declared sequencing pairs, with the pairs declared because an `acyclic` containment pair is not a dependency. | **substantive** |
+> | 2026-11-05 | Bumped to `0.80`. Documented the `locator_kinds` and `pinnable` options of `embodiment.locator-exists`: a `Realized-by` locator may name a directory or glob when the repository declares that kind, a directory or glob is legal when it covers a tracked file, its drift uses the newest commit among the files it covers, its pin hashes the sorted (path, file content hash) list, `explain` shows the files, and an undeclared kind is a finding naming the option. Both options default to `[file]`. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration. | **substantive** |
+> | 2026-11-05 | Bumped to `0.81`. Documented the decision gate options of `diff.source-requires-record` (`decision_types`, `fix_types`, `link_fields`) and their load-time validation. **Why:** `MILE-133`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.82`. A resolver's `member` may be a list of entries, each with its own `start` and `end`, tried together (a Rust method ends `brace_balanced`, a struct field `indent`); a `container` may match a `struct` as well as an `impl`, so `Type::field` is addressable. A single mapping is read as before. Vectors 21-24 added. **Why:** `ADR-74` made the symbol the scope, but its `member` could name only an `fn`, so a decision about one struct field could pin only a line range, which shifts when anything is inserted above it; the declared resolver now reaches the field, with no language knowledge in the engine (`ADR-74` point 5: a member declares its own start pattern and end kind from the closed set). | **substantive** |
+> | 2026-11-05 | Bumped to `0.83`. Documents the `closes` and `strict` options of `claim.status-agreement`: a changeset fragment lists the records it closes in a one-line frontmatter key, each id must resolve (`claim.id-unresolved`) and be at a terminal status its own type declares, a block list or malformed value is `claim.field-malformed`, `strict` makes a fragment without the key a finding, and a file with no frontmatter is out of scope and disclosed, except that under `strict` an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed`. **Why:** `BUG-66`, decided by `ADR-85`; the fence case because the pinned release tool rejects both. | **substantive** |
+> | 2026-11-05 | Bumped to `0.84`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.85`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |

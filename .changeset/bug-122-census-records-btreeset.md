@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-122]
 ---
 
 `census_records` collected every examined candidate's path into a `Vec`, then sorted and deduped the

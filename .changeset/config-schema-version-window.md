@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-34]
 ---
 
 Introduce a support window for the config `schema_version`, and `urzua migrate config` to bring a config from the previous version up to date.

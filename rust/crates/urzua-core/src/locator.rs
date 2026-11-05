@@ -273,6 +273,77 @@ pub fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
     out
 }
 
+/// What a locator path names among the tracked files (`BUG-176`): its kind and
+/// the files it covers, sorted. `kind` is `None` when the path names nothing
+/// (no tracked file, no tracked file below it, and not a glob).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatorFiles {
+    pub kind: Option<crate::config::LocatorKind>,
+    pub files: Vec<String>,
+}
+
+// BUG-176: a directory or glob locator is the tracked files it matches
+/// Classifies `path` and lists the tracked files it covers. A path that is
+/// itself a file (`exists` holds for it) is a file, whatever characters it holds; otherwise a
+/// path with a glob character is a glob (matched with the `MILE-158` matcher),
+/// and any other is a directory when a tracked file sits below it. Only files
+/// for which `exists` holds count, so a staged deletion matches nothing (`exists`
+/// must itself require the path be tracked). An
+/// `Err` is a glob that cannot compile. Pure.
+pub fn match_locator_files(
+    path: &str,
+    tracked: &[std::path::PathBuf],
+    exists: &dyn Fn(&str) -> bool,
+) -> Result<LocatorFiles, String> {
+    use crate::config::LocatorKind;
+    let live = |p: &std::path::PathBuf| p.to_str().filter(|s| exists(s)).map(str::to_string);
+    if exists(path) {
+        return Ok(LocatorFiles {
+            kind: Some(LocatorKind::File),
+            files: vec![path.to_string()],
+        });
+    }
+    let (kind, mut files): (LocatorKind, Vec<String>) = if crate::rules::is_path_glob(path) {
+        let re = crate::rules::path_glob_regex(path)?;
+        (
+            LocatorKind::Glob,
+            tracked
+                .iter()
+                .filter(|p| re.is_match(&p.to_string_lossy()))
+                .filter_map(live)
+                .collect(),
+        )
+    } else {
+        (
+            LocatorKind::Directory,
+            tracked
+                .iter()
+                .filter(|p| crate::rules::path_is_published(p, path))
+                .filter_map(live)
+                .collect(),
+        )
+    };
+    files.sort();
+    files.dedup();
+    // A directory with nothing below it is not a directory; a glob is a glob
+    // whether or not it matches.
+    let kind = (kind == LocatorKind::Glob || !files.is_empty()).then_some(kind);
+    Ok(LocatorFiles { kind, files })
+}
+
+/// The text a directory or glob pin hashes (`BUG-176`): one line per covered
+/// file, `<path>\t<sha256 of the file>`, sorted by path. `pairs` is the files
+/// with their content hashes. The pin is the hash of this text, so it moves
+/// when a file's content changes, a file is added or removed, or a file moves.
+pub fn files_pin_text(pairs: &[(String, String)]) -> String {
+    let mut sorted: Vec<&(String, String)> = pairs.iter().collect();
+    sorted.sort();
+    sorted
+        .iter()
+        .map(|(path, hash)| format!("{path}\t{hash}\n"))
+        .collect()
+}
+
 /// 1-based inclusive lines of a file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct Span {
@@ -379,12 +450,37 @@ pub struct LocatorResolver {
     pub leading: Option<String>,
     #[serde(default)]
     pub container: Option<ContainerDecl>,
-    #[serde(default)]
-    pub member: Option<MemberDecl>,
+    /// The item inside a container span. One mapping, or a list of mappings
+    /// when members end differently (a Rust `fn` is `brace_balanced`, a struct
+    /// field is `indent`): a name is looked for with every pattern, and the
+    /// matches are counted together.
+    #[serde(
+        default,
+        rename = "member",
+        deserialize_with = "one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub members: Vec<MemberDecl>,
     /// Like `container`, with `{trait}` and `{symbol}` placeholders, for
     /// `Type::<Trait>` and `Type::<Trait>::member`.
     #[serde(default)]
     pub trait_container: Option<ContainerDecl>,
+}
+
+fn one_or_many<'de, D>(d: D) -> Result<Vec<MemberDecl>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(MemberDecl),
+        Many(Vec<MemberDecl>),
+    }
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(m) => vec![m],
+        OneOrMany::Many(v) => v,
+    })
 }
 
 const SYMBOL: &str = "{symbol}";
@@ -455,7 +551,7 @@ pub fn validate_resolvers(resolvers: &[LocatorResolver]) -> Result<(), String> {
                 true,
             )?;
         }
-        if let Some(m) = &r.member {
+        for m in &r.members {
             check(&format!("resolver '{n}' member start"), &m.start, false)?;
         }
         for (what, c) in [
@@ -473,12 +569,12 @@ pub fn validate_resolvers(resolvers: &[LocatorResolver]) -> Result<(), String> {
                 }
             }
         }
-        if r.member.is_some() && r.container.is_none() && r.trait_container.is_none() {
+        if !r.members.is_empty() && r.container.is_none() && r.trait_container.is_none() {
             return Err(format!(
                 "resolver '{n}' declares a member but no container or trait_container to find it in"
             ));
         }
-        if r.member.is_none() && r.container.is_some() {
+        if r.members.is_empty() && r.container.is_some() {
             return Err(format!(
                 "resolver '{n}' declares a container but no member to find in it"
             ));
@@ -732,28 +828,38 @@ impl Resolution<'_> {
         spans: &[Raw],
         name: &str,
     ) -> Result<Span, ScopeError> {
-        let Some(member) = &resolver.member else {
+        if resolver.members.is_empty() {
             return Err(ScopeError::Unsupported(format!(
                 "resolver '{}' declares no member pattern",
                 resolver.name
             )));
-        };
-        let re = compile(&member.start, name, None)?;
-        let mut found: Vec<(usize, Raw)> = Vec::new();
+        }
+        let patterns: Vec<regex::Regex> = resolver
+            .members
+            .iter()
+            .map(|m| compile(&m.start, name, None))
+            .collect::<Result<_, _>>()?;
+        // (line, container span, which member pattern matched it). A line two
+        // patterns both match is two candidates, never first-pattern-wins.
+        let mut found: Vec<(usize, Raw, usize)> = Vec::new();
         for span in spans {
             for line in self.direct_children(container_kind, *span) {
-                if re.is_match(self.lines[line]) {
-                    found.push((line, *span));
+                for (k, re) in patterns.iter().enumerate() {
+                    if re.is_match(self.lines[line]) {
+                        found.push((line, *span, k));
+                    }
                 }
             }
         }
         match found.as_slice() {
             [] => Err(ScopeError::NotFound(format!("member '{name}' not found"))),
-            [(line, container)] => end_of(member.end, self.lines, *line, container.1)
-                .map(|e| self.finish((*line, e)))
-                .ok_or(ScopeError::EndNotFound),
+            [(line, container, k)] => {
+                end_of(resolver.members[*k].end, self.lines, *line, container.1)
+                    .map(|e| self.finish((*line, e)))
+                    .ok_or(ScopeError::EndNotFound)
+            }
             many => Err(ScopeError::Ambiguous {
-                lines: many.iter().map(|(l, _)| l + 1).collect(),
+                lines: many.iter().map(|(l, _, _)| l + 1).collect(),
             }),
         }
     }

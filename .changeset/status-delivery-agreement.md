@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-183]
 ---
 
 A record type can hold its `Status` to delivery evidence. `statuses.delivery` declares which computed

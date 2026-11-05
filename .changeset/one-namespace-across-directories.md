@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-130]
 ---
 
 A record type can own more than one directory. Declare `extra_dirs` beside `dir` and every listed

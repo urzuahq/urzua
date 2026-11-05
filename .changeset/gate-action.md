@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-180]
 ---
 
 Add `urzuahq/urzua/.github/actions/urzua-gate`, a reusable GitHub Action that installs a pinned

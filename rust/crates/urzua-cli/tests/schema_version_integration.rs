@@ -3,6 +3,8 @@
 //! the acceptance corpus's own (`acceptance/corpora/corpus-k`), one per
 //! supported schema version.
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -32,9 +34,8 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 /// A git repository holding corpus-k's records and configs.
-fn repo(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-schema-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-schema-{name}"));
     copy_dir(&corpus().join("records"), &dir.join("records"));
     copy_dir(&corpus().join(".urzua"), &dir.join(".urzua"));
     git(&dir, &["init", "-q"]);
@@ -89,7 +90,6 @@ fn the_rewritten_file_loads_to_the_same_effective_config_as_the_upgrade() {
         serde_json::to_value(&from_file).unwrap(),
         serde_json::to_value(load("config-v1.yaml")).unwrap()
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 fn findings_without_the_outdated_rule(report: &serde_json::Value) -> Vec<serde_json::Value> {
@@ -136,7 +136,6 @@ fn a_previous_version_config_gives_the_findings_the_current_one_does_plus_one_wa
         outdated[0]["suggested_action"]["target"]["argv"],
         serde_json::json!(["urzua", "migrate", "config"])
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -148,7 +147,6 @@ fn check_never_rewrites_the_config() {
         before,
         std::fs::read_to_string(dir.join(".urzua/config-v1.yaml")).unwrap()
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -179,7 +177,6 @@ fn migrate_config_keeps_comments_and_a_second_run_changes_nothing() {
         text,
         std::fs::read_to_string(dir.join(".urzua/config-v1.yaml")).unwrap()
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -200,7 +197,6 @@ fn migrate_config_never_reads_a_version_outside_the_window() {
         assert!(report["schema_version_error"]["migration"]["note"].is_string());
         assert_eq!(before, std::fs::read_to_string(dir.join(&path)).unwrap());
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -223,7 +219,6 @@ fn migrate_config_leaves_a_file_it_cannot_make_valid_exactly_as_it_was() {
         text,
         std::fs::read_to_string(dir.join(".urzua/config-bad.yaml")).unwrap()
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -256,7 +251,6 @@ fn a_version_one_config_that_omits_header_shape_is_refused_and_left_as_it_was() 
     let (code, report) = urzua(&dir, &["--config", ".urzua/config-omitted.yaml", "check"]);
     assert_eq!(code, 2, "{report}");
     assert!(report.to_string().contains("header_shape"), "{report}");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

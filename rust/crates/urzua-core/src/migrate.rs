@@ -90,6 +90,7 @@ mod tests {
     ) -> crate::config::Config {
         crate::config::Config {
             schema_version: 2,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
@@ -119,6 +120,7 @@ mod tests {
                     revision_log: None,
                     role: None,
                     effective_requires: None,
+                    permanent: None,
                 },
             )]
             .into_iter()

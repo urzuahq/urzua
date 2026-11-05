@@ -1,0 +1,13 @@
+id: gate-source-beside-a-fix-record-is-released
+corpus: corpus-h
+# A mechanical fix lands with only a bug record (AGENTS.md): the fix type
+# exempts the change from the decision requirement.
+commits:
+  - write:
+      src/lib.rs: "fn a() { 3; }\n"
+      records/bugs/BUG-0001-fix.md: "---\nStatus: Fixed\n---\n# BUG-0001 — A fix\n"
+invocation: [--config, .urzua/gate.yaml, check, --base, base]
+expect_exit: 0
+expect_rules_ran: [diff.source-requires-record]
+expect_no_findings:
+  - {rule: diff.source-requires-record}

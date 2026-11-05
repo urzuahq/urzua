@@ -2,7 +2,9 @@
 //! and reporting on only the records that changed against the base, while
 //! reference resolution still indexes the whole corpus (SPEC-2, Discovery).
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, pointer.resolution: error}\n\n\
@@ -26,7 +28,7 @@ fn git(dir: &Path, args: &[&str]) {
 /// A repo with one base commit holding three ADRs: 0001 is a valid target,
 /// 0002 is clean, 0003 carries a dangling pointer (an error). The base is
 /// tagged `base`; nothing has changed since.
-fn fixture(name: &str) -> PathBuf {
+fn fixture(name: &str) -> common::TempDir {
     let dir = empty_repo(name, CONFIG);
     write_adr(&dir, "0001-target", "Accepted", None);
     write_adr(&dir, "0002-clean", "Accepted", None);
@@ -35,9 +37,8 @@ fn fixture(name: &str) -> PathBuf {
     dir
 }
 
-fn empty_repo(name: &str, config: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-diff-scope-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn empty_repo(name: &str, config: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-diff-scope-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -151,7 +152,6 @@ fn only_the_changed_record_is_examined_and_the_base_is_reported() {
     assert_eq!(report["scope"]["source"], "git-diff", "{report}");
     assert_eq!(report["scope"]["base"], "base", "{report}");
     assert_eq!(report["files_examined"], 1, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -168,7 +168,6 @@ fn an_error_in_an_unchanged_record_is_not_reported() {
     let (code, report) = check(&dir, &["--base", "base"]);
     assert!(finding_files(&report).is_empty(), "{report}");
     assert_eq!(code, Some(0), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -182,7 +181,6 @@ fn a_changed_record_is_still_judged_and_blocks() {
     assert_eq!(report["files_examined"], 1, "{report}");
     assert!(!finding_files(&report).is_empty(), "{report}");
     assert!(finding_files(&report).iter().all(|f| f.contains("ADR-3")));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -200,7 +198,6 @@ fn a_pointer_to_an_unchanged_record_still_resolves() {
         "an unchanged target must not be reported missing: {report}"
     );
     assert_eq!(code, Some(0), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -212,7 +209,6 @@ fn uncommitted_and_staged_edits_count_as_changed() {
 
     let (_, report) = check(&dir, &["--base", "base"]);
     assert_eq!(report["files_examined"], 2, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -242,7 +238,6 @@ fn an_empty_diff_is_ok_with_nothing_examined_and_says_so() {
             .contains("no governed record changed"),
         "an empty diff must carry a notice: {report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -259,7 +254,6 @@ fn a_change_to_a_non_record_file_is_an_empty_diff_not_a_whole_corpus_run() {
         serde_json::json!(["README.md"]),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -278,7 +272,6 @@ fn the_comparison_starts_at_the_merge_base_not_the_moving_tip() {
     // feature branch changed 0002 alone.
     let (_, report) = check(&dir, &["--base", "tip"]);
     assert_eq!(report["files_examined"], 1, "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -291,7 +284,6 @@ fn a_path_argument_narrows_the_diff_further() {
     let (_, report) = check(&dir, &["--base", "base", "docs/adr/ADR-1-target.md"]);
     assert_eq!(report["files_examined"], 1, "{report}");
     assert_eq!(report["scope"]["source"], "git-diff", "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -300,7 +292,6 @@ fn an_unknown_ref_could_not_run_rather_than_examining_nothing() {
     let (code, report) = check(&dir, &["--base", "no-such-ref"]);
     assert_eq!(code, Some(2), "{report}");
     assert!(report.to_string().contains("no-such-ref"), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -310,7 +301,6 @@ fn an_untracked_file_argument_cannot_combine_with_a_base() {
     let (code, report) = check(&dir, &["--base", "base", "docs/scratch.md"]);
     assert_eq!(code, Some(2), "{report}");
     assert!(report.to_string().contains("does not track"), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -320,7 +310,6 @@ fn a_default_run_reports_a_null_base() {
     assert_eq!(report["scope"]["source"], "tracked-sweep", "{report}");
     assert!(report["scope"].as_object().unwrap().contains_key("base"));
     assert!(report["scope"]["base"].is_null(), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -349,7 +338,6 @@ fn a_deleted_target_still_reports_the_surviving_referrer() {
         serde_json::json!(["docs/adr/ADR-1-target.md"]),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -370,7 +358,6 @@ fn a_target_renamed_to_a_different_id_still_reports_the_referrer() {
     commit(&dir, "renumber");
 
     assert_full_and_diff_agree(&dir, "pointer.resolution", "ADR-2-referrer.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -395,7 +382,6 @@ fn a_target_status_change_reports_the_unchanged_referrers() {
 
     assert_full_and_diff_agree(&dir, "pointer.target-status", "ADR-2-implementer.md");
     assert_full_and_diff_agree(&dir, "narrative-field.stale", "ADR-3-blocked.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -423,11 +409,10 @@ fn supersession_reciprocity_is_reported_on_the_unchanged_peer() {
     commit(&dir, "drop the back reference");
 
     assert_full_and_diff_agree(&dir, "relation.supersession-reciprocity", "ADR-1-old.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A repo whose `ADR-1` realizes `src/lib.rs`; the base commit holds both.
-fn evidence_fixture(name: &str) -> PathBuf {
+fn evidence_fixture(name: &str) -> common::TempDir {
     let dir = empty_repo(name, RICH_CONFIG);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("src/lib.rs"), "fn a() {}\n").unwrap();
@@ -457,7 +442,6 @@ fn an_evidence_only_change_reports_drift_on_the_unchanged_record() {
         report["files_examined"], 1,
         "ADR-2 is not a dependent: {report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -466,7 +450,6 @@ fn deleted_evidence_reports_the_unchanged_record() {
     git(&dir, &["rm", "-q", "src/lib.rs"]);
 
     assert_full_and_diff_agree(&dir, "embodiment.locator-exists", "ADR-1-realized.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -495,7 +478,6 @@ fn a_config_change_puts_the_whole_corpus_in_scope() {
             .is_some_and(|r| r.contains("config")),
         "scope must say why: {report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -511,7 +493,6 @@ fn a_newly_added_record_is_examined() {
         finding_files(&report).iter().all(|f| f.contains("ADR-4")),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -533,7 +514,6 @@ fn a_changed_path_with_spaces_is_examined() {
             .any(|f| f == "docs/adr/ADR-4-has a space.md"),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -545,7 +525,6 @@ fn an_option_like_ref_is_rejected_not_passed_to_git() {
         report.to_string().contains("may not begin with"),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -557,7 +536,6 @@ fn unrelated_histories_say_there_is_no_merge_base() {
     let (code, report) = check(&dir, &["--base", "base"]);
     assert_eq!(code, Some(2), "{report}");
     assert!(report.to_string().contains("no merge base"), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -601,7 +579,6 @@ fn a_shared_locator_pulls_in_the_unchanged_record_citing_it() {
         serde_json::json!(["docs/adr/ADR-1-first.md"]),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -627,7 +604,6 @@ fn a_path_argument_that_excludes_the_changed_records_says_so() {
         "the notice should name the path argument: {report}"
     );
     assert_eq!(code, Some(0), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const BARE_CONFIG: &str = "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n\x20   known_fields: [\"Status\"]\n    pointer_fields: []\n    narrative_fields: []\n";
@@ -644,7 +620,6 @@ fn an_empty_diff_with_no_rule_enabled_is_not_run_like_a_full_run() {
     let (code, report) = check(&dir, &["--base", "base"]);
     assert_eq!(report["status"], "not-run", "{report}");
     assert_eq!(code, Some(2), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const WAIVER_CONFIG: &str = "schema_version: 2
@@ -664,7 +639,7 @@ record_types:
     narrative_fields: []
 ";
 
-fn waiver_repo(name: &str) -> PathBuf {
+fn waiver_repo(name: &str) -> common::TempDir {
     let dir = empty_repo(name, WAIVER_CONFIG);
     std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
     adr(
@@ -700,7 +675,6 @@ fn a_deleted_waiver_reports_the_finding_it_stopped_waiving() {
         finding_files(&report).iter().any(|f| f.contains("ADR-1")),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -715,7 +689,6 @@ fn a_waiver_whose_scope_changed_reports_the_finding_it_stopped_waiving() {
         finding_files(&report).iter().any(|f| f.contains("ADR-1")),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -733,7 +706,6 @@ fn a_comma_joined_pointer_value_traces_each_reference() {
     git(&dir, &["rm", "-q", "docs/adr/ADR-3-b.md"]);
 
     assert_full_and_diff_agree(&dir, "pointer.resolution", "ADR-5-ref.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -767,7 +739,6 @@ fn a_changed_file_outside_its_declared_dir_keeps_its_finding() {
             .any(|f| f.ends_with("ADR-2-nested.md")),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[cfg(unix)]
@@ -791,7 +762,6 @@ fn retargeting_a_symlinked_config_puts_the_whole_corpus_in_scope() {
         "{report}"
     );
     assert_eq!(code, Some(1), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -808,5 +778,4 @@ fn an_unstaged_deletion_cannot_be_loaded_so_the_run_could_not_run() {
     let (code, report) = check(&dir, &["--base", "base"]);
     assert_eq!(full_code, Some(2));
     assert_eq!(code, Some(2), "{report}");
-    std::fs::remove_dir_all(&dir).ok();
 }

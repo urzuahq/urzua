@@ -2,7 +2,9 @@
 //! review, re-pins the chosen records with an attributed revision row.
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -68,9 +70,8 @@ fn record(n: u32) -> String {
 }
 
 /// Two records pin `src/a.rs`; the file then changes.
-fn fixture(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-rebase-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-rebase-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();

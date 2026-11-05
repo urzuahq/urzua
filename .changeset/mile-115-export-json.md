@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-115]
 ---
 
 # Add `urzua export --format json`

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [MILE-173]
 ---
 
 The commands that read the corpus now share one startup path (repository root, config, tracked-file

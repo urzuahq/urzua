@@ -592,7 +592,7 @@ function renderMsFilters() {
 
   const sf = document.getElementById('ms-status-filters'); sf.innerHTML = '';
   sf.appendChild(chip('all statuses', msActiveStatus===null, () => { msActiveStatus=null; msFilterChanged(); }));
-  ['Planned','InProgress','Blocked','Done','WontDo'].forEach(s => sf.appendChild(chip(s, msActiveStatus===s, () => { msActiveStatus = msActiveStatus===s?null:s; msFilterChanged(); })));
+  ['Planned','InProgress','Done','WontDo'].forEach(s => sf.appendChild(chip(s, msActiveStatus===s, () => { msActiveStatus = msActiveStatus===s?null:s; msFilterChanged(); })));
 }
 
 function renderMs() {

@@ -3,6 +3,8 @@
 //! it is built while its `Status` says it is not, and a success `Status` with no
 //! evidence, are both reported; `fix` writes only the first.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -54,9 +56,8 @@ fn milestone(status: &str, realized_by: Option<&str>) -> String {
     )
 }
 
-fn repo(name: &str, config: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-delivery-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, config: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-delivery-{name}"));
     for d in ["docs/milestones", "src", "tests", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -137,7 +138,6 @@ fn both_directions_are_reported_and_the_rest_are_clean() {
         .find(|r| r["rule"] == "status.delivery-agreement")
         .unwrap();
     assert_eq!(rule["population"]["examined"], 8, "{rule}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -154,7 +154,6 @@ fn a_source_back_pointer_is_delivery_evidence_for_a_record_with_no_realized_by()
         ["MILE-1", "MILE-2", "MILE-4", "MILE-6"],
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -174,7 +173,6 @@ fn fix_proposes_the_success_status_for_delivered_records_and_never_downgrades() 
         notices.contains("MILE-4-") && notices.contains("no delivery evidence"),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -206,7 +204,6 @@ fn fix_apply_writes_the_status_and_a_structural_revision_row() {
         ["MILE-4"],
         "{again}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -235,7 +232,6 @@ fn a_delivery_declaration_naming_a_status_outside_the_type_is_refused_at_load() 
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains(what), "{what}: {text}");
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
@@ -251,7 +247,6 @@ fn the_rule_enabled_on_a_corpus_with_no_declaration_examines_nothing_and_says_so
         .find(|r| r["rule"] == "status.delivery-agreement")
         .unwrap();
     assert_eq!(rule["population"]["examined"], 0, "{rule}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

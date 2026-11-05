@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `header_pointer_field_clean` and `narrative_field_stale` were missed by an earlier pass consolidating

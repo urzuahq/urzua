@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `citation.resolution` accepts the optional `skip_revision_log` flag that `citation.path-exists`

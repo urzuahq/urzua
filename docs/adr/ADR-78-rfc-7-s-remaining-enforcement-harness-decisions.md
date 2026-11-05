@@ -104,6 +104,49 @@ much, which is overridden often (and recorded as such by item 1), or a log nobod
 - `RFC-7` stays a Draft whose parts are now each decided in `ADR-69` to `ADR-71` or here.
 - The milestones that build items 1, 2 and 4 are not filed by this decision.
 
+## Amendment (2026-11-05): the editor hook blocks on errors the edit introduces, and `block_on` may widen that to every error
+
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted 2026-11-05 at the maintainer's request). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Item 2 says "an error blocks the edit; a warning is shown and does not". It does not say whose error. The
+merged hook (`MILE-191`, #308) reads it as an error the edit introduces: it runs `urzua check --stdin-path` on
+the proposed content, runs it again on the record as it is on disk, and blocks only on an unwaived error whose
+rule and message the on-disk record does not already report (`scripts/hooks/record-edit-hook.sh:95-107`, the
+`introduced` and `existing` sets, and the exit at `:125-130` when `introduced` is empty). An error already on
+disk is listed under "Already failing on disk before this edit (not blocked)" (`:122`). A baseline that cannot
+be judged leaves every error introduced (`:96`, `SPEC-8`). `MILE-191`'s Done means was trimmed in #305 to say
+"an unwaived error finding on the edited record", with the pre-existing allowance removed on the ground that no
+ADR sets it, so the record and the code disagree. This amendment is that ADR text, and it adds one option.
+
+**1. The default is `introduced`, which is what the hook does today.** An edit to a record that already has an
+error is not refused for that error, so the edit that fixes something else, or adds a revision row, goes
+through. The error is still shown. This is item 2's "an error blocks the edit" read as "an error the edit
+introduces blocks it".
+
+**2. A hook option, `block_on: introduced | all`.** `all` blocks on any unwaived error in the proposed content
+of the edited record, whether or not the record already had it; the existing-error set is then empty and the
+second `check` run is skipped, which makes a blocked edit faster. Any other value is refused. The named override
+(item 2) and its log (item 1) work the same under both values. The option is read by the hook from the
+configuration the way `override_log` is (a top-level scalar, `record-edit-hook.sh:136-139`), so `introduced`
+is also what a repository gets when the key is absent. Its exact key name and placement are for the build
+(`MILE-195`) and `SPEC-3`; `block_on` is the working name.
+
+| | `introduced` (default) | `all` |
+|---|---|---|
+| Pros | An edit is judged on what it did: an agent is not blocked by an error it did not write and may not be able to fix in this edit; a record with a legacy error can still be amended; fewer overrides, so the override log stays meaningful | A record is never written in a failing state; the error cannot sit unnoticed behind unrelated edits; one `check` run per edit, no baseline comparison, no same-rule-and-message matching to get wrong (two errors with one message count as one existing) |
+| Cons | A failing record can be edited indefinitely and is caught only at the commit and in CI (`ADR-71`); the "introduced" test is by rule and message, so a changed line number or a second identical finding is invisible; two `check` runs on an edit that has errors (about 0.4s more) | An edit that does not touch a failing section is refused until the error is fixed, so a large record with one error cannot take a revision row; an agent must fix unrelated errors first or use a named override, and overrides pile up in the log; adopting the hook on an existing corpus with errors blocks every edit to them |
+
+**3. This repository stays on `introduced`.** CI runs `urzua check` with `fail_on: warning` and holds the
+repository at zero findings, so a record on disk with an error does not reach `main`; the case `all` guards
+(an error already present when an edit begins) is rare here and is caught at the commit. `all` is for a
+repository that has no such gate or wants the stricter editor layer.
+
+**4. Nothing else in the decision changes.** Items 1 and 3 to 6 are untouched, the "not judged" behaviour of
+item 2 is unchanged, and a hook-blocked edit still leaves no revision record (item 6).
+
+The build is `MILE-195`. `MILE-191`'s Done means states the allowance again as the default behaviour, with a
+revision row.
+
 ## References
 
 - `RFC-7` -- the enforcement harness; sections 2 to 6 and its open questions.
@@ -120,3 +163,5 @@ much, which is overridden often (and recorded as such by item 1), or a log nobod
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Amendment added: the editor hook blocks on errors the edit introduces by default, and a `block_on: introduced \| all` option widens it to every error in the edited record. **Why:** `MILE-191` (#308) merged with the introduced-only behaviour, #305 trimmed `MILE-191`'s Done means, and no ADR sets either; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment (`block_on`) accepted, together with `MILE-191`'s restored Done means. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

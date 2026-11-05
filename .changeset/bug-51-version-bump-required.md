@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-51]
 ---
 
 Add the `revision-log.version-bump-required` rule and the `revision_log.version_bump` declaration. A record type declares

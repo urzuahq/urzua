@@ -2,7 +2,9 @@
 //! locator on a file the back-pointer scan already reads toward an
 //! `Implements:` / `Verifies:` comment. Real git-repo fixtures, real binary.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -16,9 +18,8 @@ fn git(dir: &Path, args: &[&str]) {
 
 const CONFIG: &str = "schema_version: 2\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\nrules:\n  embodiment.locator-on-back-pointer-path:\n    level: warn\n    back_pointer_paths: [src]\n    test_paths: [src/tests]\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - [embodiment_state, embodiment_locator]\n";
 
-fn fixture(name: &str, config: &str, realized_by: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-mechanism-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, config: &str, realized_by: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-mechanism-{name}"));
     for d in ["docs/adr", "src/tests", "docs/guide", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }

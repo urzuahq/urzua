@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-132]
 ---
 
 `urzua init` disambiguates a proposed type name when two directories share the same last path

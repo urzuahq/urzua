@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A record type can declare its lifecycle: `statuses.initial` names where a new record may start and

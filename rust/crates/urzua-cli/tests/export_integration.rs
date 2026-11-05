@@ -1,6 +1,8 @@
 //! `urzua export --format json` (SPEC-1): run the real binary against a small
 //! git-repo fixture holding two record types in two header shapes.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -13,12 +15,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "urzua-cli-export-test-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-export-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("docs/notes")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -169,7 +167,7 @@ fn export_json_treats_a_headerless_type_as_readable() {
 #[test]
 fn export_json_refuses_a_record_symlinked_outside_the_repository() {
     let dir = fixture_repo("symlink-escape");
-    let outside = std::env::temp_dir().join(format!("urzua-export-secret-{}", std::process::id()));
+    let outside = common::TempFile::new("urzua-export-secret");
     std::fs::write(
         &outside,
         "---\nStatus: Accepted\n---\n# 9 — secret contents\n",
@@ -186,10 +184,9 @@ fn export_json_refuses_a_record_symlinked_outside_the_repository() {
         stdout.contains("resolves outside the repository"),
         "{stdout}"
     );
-    std::fs::remove_file(&outside).ok();
 }
 
-fn sections_repo(name: &str) -> std::path::PathBuf {
+fn sections_repo(name: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::write(
         dir.join(".urzua/config.yaml"),

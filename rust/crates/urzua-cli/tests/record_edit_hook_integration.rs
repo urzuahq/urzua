@@ -3,6 +3,8 @@
 //! harness-neutral core against the real urzua binary in a git fixture. Needs
 //! `bash`, `jq` and `python3`; a missing tool fails the test, never skips it.
 
+mod common;
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -25,13 +27,12 @@ const RECORD: &str =
     "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\nprose\n";
 
 /// A clean git repo; `Realized-by: code:src/a.rs` computes `Implemented`.
-fn fixture(name: &str, record: &str) -> PathBuf {
+fn fixture(name: &str, record: &str) -> common::TempDir {
     fixture_with(name, record, CONFIG)
 }
 
-fn fixture_with(name: &str, record: &str, config: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-hook-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_with(name: &str, record: &str, config: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-hook-{name}"));
     for d in ["docs/adr", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -221,8 +222,7 @@ fn an_unreadable_history_is_cannot_judge() {
     let src = fixture("shallow-src", RECORD);
     std::fs::write(src.join("src/a.rs"), "fn a() { }\n").unwrap();
     git(&src, &["commit", "-q", "-am", "second"]);
-    let dst = std::env::temp_dir().join(format!("urzua-hook-shallow-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dst);
+    let dst = common::TempDir::new("urzua-hook-shallow");
     assert!(Command::new("git")
         .args(["clone", "-q", "--depth", "1"])
         .arg(format!("file://{}", src.display()))
