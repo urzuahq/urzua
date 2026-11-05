@@ -690,8 +690,6 @@ fn a_reference_to_an_untracked_file_is_told_apart_from_a_missing_one_observed_fa
     assert!(after
         .iter()
         .any(|f| f["message"].as_str().unwrap().contains("ADR-8")));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-169`: `graph` and `explain` answered `ok` whatever the records
@@ -741,8 +739,6 @@ fn graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_
             "{args:?}: {stdout}"
         );
     }
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -766,8 +762,6 @@ fn graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice(
         assert_eq!(parsed["population"]["examined"], 0, "{args:?}: {stdout}");
         assert!(parsed.get("notices").is_none(), "{args:?}: {stdout}");
     }
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A found-in-review gap: `graph` used to build its index with the lossy
