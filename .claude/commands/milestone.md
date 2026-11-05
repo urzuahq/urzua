@@ -43,5 +43,17 @@ repository's own configuration and records where that fits. Step 4 refuses a rec
 5. If `check` reports findings, fix the record's content (not the config, not a waiver) and run
    step 4 again. Do not report success on a record `check` did not examine (zero examined is a
    failure) or on one with unwaived findings.
-6. Report to the user: the path written, the record's status as scaffolded and that it is theirs
+6. Marking a milestone Done is a separate act from drafting it, and `/milestone` never does it.
+   When the change in front of you fully delivers an existing milestone, set `Realized-by` in that
+   same PR to the locators that deliver it (`code:path`, `test:path#name@sha256:<pin>`; `urzua explain
+   path#name` prints the pin), then run `urzua fix --apply --ids <MILE-N>`, which writes `Status:
+   Done` and `Embodiment` when the evidence is there, and add a revision row citing the PR. A
+   milestone the change delivers only in part keeps its `Status` and gets a revision row saying what
+   remains, with no `Realized-by` locator until it is delivered. `status.delivery-agreement` fails
+   when `Status` and `Realized-by` disagree.
+7. Changeset. If the change touches what someone installing `urzua` would care about, add
+   `.changeset/<slug>.md` with `default: patch|minor` and `closes: [MILE-N]`, listing only records
+   the same PR leaves closed (a milestone that is `Done`), or `closes: []` for none. A milestone the
+   change only mentions is not listed.
+8. Report to the user: the path written, the record's status as scaffolded and that it is theirs
    to change, the indexes regenerated, and the `check` result with its examined count.
