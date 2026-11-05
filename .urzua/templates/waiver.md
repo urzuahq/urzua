@@ -5,7 +5,6 @@
 > Reason: why this exception is reviewed and accepted, not left to drift
 > Expires: YYYY-MM-DD (optional -- omitted means permanent/structural, not "nobody got to it")
 > Category: why a waiver without Expires is permanent, from the vocabulary this repository declares under `permanent` (required when Expires is omitted)
-> Justified-by: the record that justifies it, e.g. RFC-35 (required by a category declared `cite: required`)
 
 ## What this covers
 

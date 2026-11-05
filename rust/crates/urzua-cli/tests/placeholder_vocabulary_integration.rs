@@ -41,7 +41,7 @@ fn run_with_own_config(name: &str, adr: &str) -> serde_json::Value {
 
 fn adr(deciders: &str) -> String {
     format!(
-        "---\nStatus: Accepted\nDate: 2026-11-04\nAuthor: Ana\nDeciders: {deciders}\n---\n# 1 - First\n"
+        "---\nStatus: Accepted\nDate: 2026-11-04\nAccepted-on: 2026-11-04\nAuthor: Ana\nDeciders: {deciders}\n---\n# 1 - First\n"
     )
 }
 
