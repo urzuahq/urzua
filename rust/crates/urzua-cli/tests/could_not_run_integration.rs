@@ -147,3 +147,38 @@ fn every_corpus_command_reports_an_unreadable_tracked_record() {
         assert_not_run(&run(&dir, args), error, &args.join(" "));
     }
 }
+
+#[test]
+fn every_corpus_command_refuses_a_non_canonical_dir_and_names_the_canonical_form() {
+    // BUG-168: `dir: ./docs/adr` parsed, matched nothing and ran as `not-run`
+    // with no reason. It is a load error that names the spelling to write.
+    for bad in ["./docs/adr", "docs/adr/", "docs//adr"] {
+        let dir = repo("non-canonical-dir");
+        std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+        std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            CONFIG.replace("\"docs/adr\"", &format!("\"{bad}\"")),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("docs/adr/ADR-1-x.md"),
+            "---\nStatus: Accepted\n---\n# ADR-1 — x\n",
+        )
+        .unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "fixture"]);
+        for args in CORPUS_COMMANDS {
+            let out = run(&dir, args);
+            assert_eq!(out.status.code(), Some(2), "{bad} {args:?}: {out:?}");
+            let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            assert_eq!(json["status"], "not-run", "{bad} {args:?}");
+            let error = json["error"].as_str().unwrap_or_default();
+            assert!(
+                error.contains(&format!("declares dir '{bad}'"))
+                    && error.contains("write 'docs/adr'"),
+                "{bad} {args:?}: {error}"
+            );
+        }
+    }
+}

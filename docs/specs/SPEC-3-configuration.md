@@ -1,5 +1,5 @@
 ---
-Version: '0.66'
+Version: '0.72'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -109,6 +109,10 @@ Two details carry weight:
   `required: true|false` (`MILE-159`; `true` when omitted, so behaviour is unchanged): whether
   `urzua fix --apply` needs the section. Required, a record with no section fails that write with a
   message naming the identity looked for; `required: false` writes the field without a log row.
+  `revision-log.change-class-required` reads the same flag (`BUG-50`): a record of a type that
+  declares `required: true` and has no such section is a finding, with the `edit-section` `add` action naming
+  the identity to add; a type that does not declare `required: true` (omitted, or `false`) is not held to a log by that
+  rule, and its records without one are eligible and unexamined.
   `required` may stand alone (`revision_log: {required: false}`), leaving the identity at its
   default; an empty `{}` is still an error. `revision-log.change-class-required`,
   `urzua fix`'s revision row and the `skip_revision_log` option of `citation.path-exists` and `citation.resolution` all read it.
@@ -118,6 +122,39 @@ Two details carry weight:
   of one of those classes while its field equals the merge base's. `field` must be non-blank and
   `classes` a non-empty list of non-blank names, else the config fails to load; `version_bump` may
   stand alone like `required`. Enabling the rule when no type declares one is a load error.
+- **A record type may declare that it is the suppression type: `role: suppression`** (`BUG-74`).
+  The records of that type suppress the findings they name (`SPEC-10`); the engine reads this
+  declaration and knows no type name:
+
+  ```yaml
+  record_types:
+    exception:            # any name
+      dir: docs/exceptions
+      role: suppression
+  ```
+
+  At most one type declares it (two are a load error naming both), and `suppression` is the only
+  value; any other is refused at load. **Fallback:** when no type declares a role, the type named
+  `waiver` is the suppression type, so a config written before the declaration existed keeps its
+  suppression unchanged. Once a type declares the role, a type merely named `waiver` suppresses
+  nothing. A config with neither a declaring type nor a type named `waiver` has no suppression.
+- **The suppression type may declare the fields a suppression needs to take effect:
+  `effective_requires`** (`BUG-177`). A list of field names the type declares (`required_fields` or
+  `known_fields`); only on the type with `role: suppression`:
+
+  ```yaml
+  record_types:
+    waiver:
+      role: suppression
+      effective_requires: [Reason]
+  ```
+
+  A suppression whose listed field is absent, blank, a placeholder or pending (the type's
+  `statuses.pending` vocabulary when it declares one) takes no effect: the finding it targets is
+  reported again, and with `waiver.matches-nothing` enabled the waiver itself is reported
+  (`waiver-ineffective`, naming the field). Omitted, a suppression needs only `Rule` and `Scope`, as
+  before. An empty list, a blank or repeated name, a name the type does not declare, or the key on a
+  type without the role is a load error.
 - **A record type may declare the files in its directory that are not its records:
   `exclude_files`** (`MILE-150`). A list of bare file names, matched exactly against the files
   directly in the type's `dir`, for a file that lives beside the records without being one (an index
@@ -156,7 +193,7 @@ Two details carry weight:
   population, so `ADR-7` in `docs/adr-archive` resolves from a pointer in `docs/adr` and collides with an
   `ADR-7` in `docs/adr`. `urzua new` writes to `dir` and numbers past the highest id in any of the
   directories, and past a number claimed in any of them on another local or remote-tracking ref. An
-  entry is validated like `dir` (it names a directory below the repository root); a directory listed
+  entry is validated like `dir` (it names a directory below the repository root, written in canonical form: no `./` or empty component and no trailing `/`, so `./docs/adr`, `docs/adr/` and `docs//adr` are load errors that name `docs/adr`); a directory listed
   twice, and a directory owned by two types, are load errors; an `extra_dirs` entry that does not
   exist is reported by `type.dir-matches-nothing`, and `urzua new` numbers without it and says so on
   stderr. `exclude_files` names files in any of the directories. Two types sharing a prefix remain
@@ -193,7 +230,7 @@ Two details carry weight:
     pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
     The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
-    finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
+    finding. The H1's id is read the way the file name's is (`BUG-32`): the declared `prefix`, a hyphen and an ASCII number, padded or not; any other leading token carries no id and is never reduced to digits. A type with no pattern keeps a strict read, a leading `PREFIX-N` or a bare `N`. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
     zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
   - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`
     and `none` are the existing shapes (`blockquote` and `bold-list` were removed and fail the load,
@@ -331,7 +368,7 @@ Two details carry weight:
   and reports an edge the graph does not list, or a new record outside `initial`; it needs `--base`
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
-  committed status is no longer declared is counted unreadable by the first rule, not judged. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
+  committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
   derived `blocked` value is not part of this declaration (`MILE-27`).
 
   A `pending` entry is a whole value (a string) or a pattern for a placeholder family that shares a
@@ -1270,3 +1307,9 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.65`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.66`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.67`. Documented that `status.transition-allowed` matches a renamed record to its merge-base copy by `Stable-Id`. **Why:** `BUG-191` -- a rename read as a deletion plus an addition, so the record was judged as new. | **substantive** |
+> | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
+> | 2026-11-05 | Bumped to `0.69`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
+> | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |

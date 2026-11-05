@@ -76,7 +76,7 @@ fn check_exits_0_on_a_clean_corpus() {
     .unwrap();
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "---\nStatus: Accepted\n---\n# 0001 — X\n",
+        "---\nStatus: Accepted\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -178,7 +178,7 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
     // standing between this fixture and a clean exit.
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
-        "---\nStatus: Accepted\nImplements: RFC-9999\n---\n# 0001 — X\n",
+        "---\nStatus: Accepted\nImplements: RFC-9999\n---\n# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
     )
     .unwrap();
     std::fs::write(
@@ -188,7 +188,8 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
          Scope: docs/adr/0001-x.md\n\
          Reason: RFC-9999 is tracked externally, not yet in this corpus\n\
          ---\n\
-         # 0001 — Waive the dangling RFC-9999 reference on ADR-0001\n",
+         # 0001 — Waive the dangling RFC-9999 reference on ADR-0001\n\
+         \n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
     )
     .unwrap();
     commit_all(&dir);
@@ -2097,15 +2098,22 @@ fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
 }
 
 #[test]
-fn a_record_with_no_revision_log_is_absent_not_outside_the_population() {
+fn a_record_with_no_revision_log_is_a_finding_when_its_type_declares_one_required() {
     // BUG-50: "absence is indistinguishable from compliance". SPEC-1 lost 18
-    // revision rows by losing one marker line and the rule stayed green. The
-    // report performs the subtraction the rule alone could not.
+    // revision rows by losing one marker line and the rule stayed green. A type
+    // declaring `revision_log: {required: true}` now reports a record
+    // with no log, and the finding offers the ADR-73 `edit-section` `add` action.
     let dir = one_adr_repo(
         "revision-log-absent",
         "{revision-log.change-class-required: error}",
         "---\nStatus: Accepted\n---\n# 1 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
     );
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{config}    revision_log: {{required: true}}\n"),
+    )
+    .unwrap();
     // A second record with no revision log at all.
     std::fs::write(
         dir.join("docs/adr/ADR-2-y.md"),
@@ -2125,8 +2133,58 @@ fn a_record_with_no_revision_log_is_absent_not_outside_the_population() {
         .expect("the rule must carry a population");
     assert_eq!(pop["eligible"], 2, "both records are in scope: {stdout}");
     assert_eq!(
-        pop["examined"], 1,
-        "only one carries a log, and the other's absence must be visible: {stdout}"
+        pop["examined"], 2,
+        "the record with no log is judged: {stdout}"
+    );
+    let findings: Vec<&serde_json::Value> = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "revision-log.change-class-required")
+        .collect();
+    assert_eq!(findings.len(), 1, "{stdout}");
+    assert!(findings[0]["file"]
+        .as_str()
+        .unwrap()
+        .ends_with("ADR-2-y.md"));
+    let action = &findings[0]["suggested_action"];
+    assert_eq!(action["kind"], "edit-section", "{stdout}");
+    assert_eq!(action["op"], "add", "{stdout}");
+    assert_eq!(action["target"]["section"], "**Revision log**", "{stdout}");
+}
+
+#[test]
+fn a_record_with_no_revision_log_stays_unexamined_when_its_type_declares_required_false() {
+    let dir = one_adr_repo(
+        "revision-log-not-required",
+        "{revision-log.change-class-required: error}",
+        "---\nStatus: Accepted\n---\n# 1 — X\n\nNo log here.\n",
+    );
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{config}    revision_log: {{required: false}}\n"),
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let stdout = String::from_utf8_lossy(&run_urzua(&dir, &["check"]).stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let rule = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["rule"] == "revision-log.change-class-required")
+        .unwrap();
+    assert_eq!(rule["population"]["eligible"], 1, "{stdout}");
+    assert_eq!(rule["population"]["examined"], 0, "{stdout}");
+    assert!(
+        parsed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f["rule"] != "revision-log.change-class-required"),
+        "{stdout}"
     );
 }
 

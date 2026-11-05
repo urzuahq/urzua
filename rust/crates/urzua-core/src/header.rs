@@ -76,7 +76,7 @@ impl Header {
     /// spelling it `stable-id` has made a typo, not declared a different
     /// field. Reading it exactly here does not honour a declaration -- it
     /// silently accepts a second, conflicting write (`migrate ids`) or drops
-    /// a waiver that should apply (`waiver::load_waivers`), which is the
+    /// a waiver that should apply (`waiver::load_suppressions`), which is the
     /// defect class `ADR-57` was written to close, reopened for a case
     /// `ADR-57`'s own reasoning never covered.
     pub fn get_reserved(&self, key: &str) -> Option<&str> {
