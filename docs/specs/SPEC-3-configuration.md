@@ -1,5 +1,5 @@
 ---
-Version: '0.70'
+Version: '0.72'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -193,7 +193,7 @@ Two details carry weight:
   population, so `ADR-7` in `docs/adr-archive` resolves from a pointer in `docs/adr` and collides with an
   `ADR-7` in `docs/adr`. `urzua new` writes to `dir` and numbers past the highest id in any of the
   directories, and past a number claimed in any of them on another local or remote-tracking ref. An
-  entry is validated like `dir` (it names a directory below the repository root); a directory listed
+  entry is validated like `dir` (it names a directory below the repository root, written in canonical form: no `./` or empty component and no trailing `/`, so `./docs/adr`, `docs/adr/` and `docs//adr` are load errors that name `docs/adr`); a directory listed
   twice, and a directory owned by two types, are load errors; an `extra_dirs` entry that does not
   exist is reported by `type.dir-matches-nothing`, and `urzua new` numbers without it and says so on
   stderr. `exclude_files` names files in any of the directories. Two types sharing a prefix remain
@@ -230,7 +230,7 @@ Two details carry weight:
     pattern does not match, or whose `number` is not ASCII digits within a `u64`, has no identifier.
     The `prefix` capture also declares the type's H1 title form (`RFC-44`): the title opens
     `PREFIX-N`. A declaring type that breaks its own title form is a `filename.title-consistency`
-    finding. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
+    finding. The H1's id is read the way the file name's is (`BUG-32`): the declared `prefix`, a hyphen and an ASCII number, padded or not; any other leading token carries no id and is never reduced to digits. A type with no pattern keeps a strict read, a leading `PREFIX-N` or a bare `N`. `urzua new` reads the declaration too: it numbers by the pattern, fits the file name's
     zero-padding to it and opens the H1 with `PREFIX-N` (`SPEC-12`, `MILE-151`).
   - **`fields.from`.** Decides how header fields are read, overriding `header_shape`: `yaml-frontmatter`
     and `none` are the existing shapes (`blockquote` and `bold-list` were removed and fail the load,
@@ -1311,3 +1311,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.68`. Documented the per-type `role: suppression` declaration: the engine reads which type suppresses findings from it instead of the type name `waiver`; at most one type declares it; the type named `waiver` is the suppression type only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05 -- the literal made suppression silently absent for a corpus that named its exception record anything else. | **substantive** |
 > | 2026-11-05 | Bumped to `0.69`. Documented `effective_requires` on the suppression type: the fields a suppression must carry before it takes effect. A waiver missing one, or holding a blank, placeholder or pending value (the type's `statuses.pending` vocabulary when declared), suppresses nothing; its target finding is reported again and `waiver.matches-nothing` reports the waiver as `waiver-ineffective`. Omitted, behaviour is unchanged. Refused at load on a type without `role: suppression`, when empty, blank or repeated, or naming a field the type does not declare. **Why:** `BUG-177`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
+> | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |

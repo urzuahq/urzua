@@ -253,15 +253,25 @@ fn a_status_edge_the_type_does_not_allow_is_judged_against_the_committed_copy() 
         &["check", "--stdin-path", SPEC_PATH],
         &proposed,
     ));
-    assert_eq!(execution(&v, "status.transition-allowed")["status"], "ran", "{v}");
+    assert_eq!(
+        execution(&v, "status.transition-allowed")["status"],
+        "ran",
+        "{v}"
+    );
     assert!(
-        rules_of(&v).iter().any(|r| r == "status.transition-allowed"),
+        rules_of(&v)
+            .iter()
+            .any(|r| r == "status.transition-allowed"),
         "{v}"
     );
     // An allowed edge is judged and clean.
     let ok = spec("Shipped", "0.1", &[ROW1]);
     let v = json(&run_stdin(&dir, &["check", "--stdin-path", SPEC_PATH], &ok));
-    assert_eq!(execution(&v, "status.transition-allowed")["status"], "ran", "{v}");
+    assert_eq!(
+        execution(&v, "status.transition-allowed")["status"],
+        "ran",
+        "{v}"
+    );
     assert!(rules_of(&v).is_empty(), "{v}");
 }
 
