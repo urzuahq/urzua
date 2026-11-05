@@ -68,10 +68,7 @@ left undeclared is not detected by this ADR alone.
   that is not a list or an id is a new finding, `claim.field-malformed`, naming the file and line; it is never
   guessed at. A file in a claim path with no frontmatter block is not a fragment: it is counted out of scope
   and disclosed, never given a finding, which is how a non-fragment such as a `README.md` in the directory is
-  excluded without the engine knowing its name. The exception is a file that tries to be a fragment and the release tool cannot read: an unterminated
-  `---` fence, or a blank line before the opening `---`. Under `strict` that is `claim.field-malformed`,
-  because knope 0.23.0 rejects both with `could_not_read_changeset`; without `strict` it is read as no
-  frontmatter, as before.
+  excluded without the engine knowing its name. (Amended 2026-11-05: see the Amendment below for a file the release tool cannot read.)
 - **An id that resolves to nothing is a new, reported finding.** Today a claimed reference that matches no
   record is eligible and skipped silently (`Outcome::Absent` in `rules/claim.rs`). With the field declared,
   a listed id that resolves to no record is an error (`claim.id-unresolved`), gated by the same opt-in
@@ -146,6 +143,19 @@ decision.
    head, so a record closed in a later commit of the same PR passes, and a merge-queue run reads the merged
    tree.
 
+## Amendment (2026-11-05): a fragment the release tool cannot read is malformed under `strict`
+
+*Status of this amendment: accepted by the maintainer on 2026-11-05. `Status` stays `Accepted`.*
+
+The Decision counts a file in a claim path with no frontmatter block as out of scope. One shape needs a
+different answer: a file that tries to be a fragment and the release tool cannot read, meaning an unterminated
+`---` fence or a blank line before the opening `---`. Under `strict` such a file is `claim.field-malformed`,
+naming the file and line, because the pinned knope 0.23.0 rejects both with `could_not_read_changeset`;
+reading them as "not a fragment" let a file through `check` that breaks the release. Without `strict` the
+file is read as having no frontmatter, as before, so a repository that has not enabled `strict` sees no
+change. Found by the independent review of the implementing change (`#337`), which probed knope 0.23.0 with
+both shapes.
+
 ## References
 
 - `ADR-81` -- the prose-based rule this replaces, rejected on measurement; `RFC-36` -- the proposal behind it.
@@ -163,3 +173,4 @@ decision.
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Amended after Accepted: under `strict`, an unterminated `---` fence or a blank line before the opening fence is `claim.field-malformed` instead of an out-of-scope file. **Why:** an independent review of the build found that the pinned knope 0.23.0 rejects both shapes with `could_not_read_changeset`, so reading them as "not a fragment" let a fragment through `check` that breaks the release; maintainer decision of 2026-11-05. Status unchanged. | **substantive** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | The 2026-11-05 change about unreadable fragments, first written into the Decision text, is moved into a dated Amendment section, and the amendment is accepted. **Why:** Maintainer decision, 2026-11-05; an Accepted decision is changed by amendment, not by editing its text. | **substantive** |
