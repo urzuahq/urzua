@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -133,4 +133,5 @@ path of a rename or a move; `value` is what an added or changed key now holds; `
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs, code:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-core/src/migrate.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.6`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.7`. Added `urzua migrate config` and its output contract. **Why:** `ADR-77` / `MILE-34` -- a config on the previous schema version needs a command that rewrites it. | **substantive** |
-> | 2026-11-05 | Bumped to `0.8`. `migrate ids --apply` reports `status: partial-failure` when a write failed, takes the `fix` lock, re-reads before writing, and writes atomically; `migrate config` writes atomically. **Why:** review of the CLI found `status: ok` printed beside exit 1, and a write from the text read at session start with no lock overwriting a record edited in between. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. `migrate schema --report` classifies the candidate field with the same classifier `field.quality` uses, including a type's `template_placeholders` vocabulary and declared `pending` values, and reads `.urzua/templates/` to do so. **Why:** Phase 0 hardening of the core model: the preview disagreed with the rule for template-vocabulary types. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. `migrate ids --apply` reports `status: partial-failure` when a write failed, takes the `fix` lock, re-reads before writing, and writes atomically; `migrate config` writes atomically. **Why:** review of the CLI found `status: ok` printed beside exit 1, and a write from the text read at session start with no lock overwriting a record edited in between. | **substantive** |

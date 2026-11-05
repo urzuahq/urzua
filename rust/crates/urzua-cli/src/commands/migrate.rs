@@ -226,14 +226,20 @@ fn run_schema_report_inner(
     field: String,
 ) -> Result<ExitCode, Failure> {
     let Session {
-        config, records, ..
+        config,
+        records,
+        repo_root,
+        ..
     } = Session::open(config_path)?;
     if records.is_empty() {
         return Err("no records discovered -- nothing to check".into());
     }
 
-    let (population, would_fail, notices) =
-        urzua_core::migrate::schema_report(&records, &field, &config);
+    let mut notices = Vec::new();
+    let templates = super::check::load_templates(&repo_root, &config, &mut notices)?;
+    let (population, would_fail, report_notices) =
+        urzua_core::migrate::schema_report(&records, &field, &config, &templates);
+    notices.extend(report_notices);
 
     Ok(emit(&MigrateSchemaReport {
         status: ReportStatus::Ok,

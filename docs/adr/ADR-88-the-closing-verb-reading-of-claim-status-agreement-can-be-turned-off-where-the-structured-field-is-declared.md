@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NVYQ2ZVXST5R4NSQHBE5BR
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -76,7 +77,9 @@ prose reading by choice.
 - **Independent of `strict`.** `strict` governs whether every fragment must carry the key; `verb_claims`
   governs whether prose is read. They compose. Without `strict`, a fragment that lacks the key has no
   claim at all, which is the `BUG-66` shape `ADR-85` already said stays undetected there; a repository
-  that turns prose off should keep `strict` on, and the specs say so.
+  that turns prose off should keep `strict` on, and the specs say so. When `verb_claims: false` is set
+  without `strict: true`, the run carries a notice saying that fragments without the key carry no claim, so
+  the gap is disclosed rather than silent.
 - **This repository sets it.** `.urzua/config.yaml` gets `verb_claims: false`, since `strict` is on and
   all 184 fragments carry `closes:` (measured above).
 - **Not decided here: removing the reading from the engine.** `claimed_closed` and the verb vocabulary
@@ -115,3 +118,4 @@ key in one rule's options.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05 ("we want strict mode on, and we want to use structured data in and out"); the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. Added, from the independent review: a notice when `verb_claims: false` is set without `strict`. `MILE-197` moves to Phase 0. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
