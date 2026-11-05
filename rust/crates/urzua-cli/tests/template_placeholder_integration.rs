@@ -197,3 +197,51 @@ fn the_option_is_refused_on_a_rule_that_does_not_read_it() {
     );
     assert_ne!(code, 0, "{v}");
 }
+
+#[test]
+fn migrate_schema_report_judges_a_field_as_field_quality_does() {
+    // `tbd` is Present once the template is the vocabulary (the rule agrees);
+    // a value equal to the template's text is a Placeholder.
+    let cfg = config("    template_placeholders: true\n");
+    let dir = common::TempDir::new("urzua-tplph-migrate");
+    std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
+    std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
+    assert!(Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    std::fs::write(dir.join(".urzua/templates/bug.md"), BUG_TEMPLATE).unwrap();
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-first.md"),
+        bug("Open", "tbd", "path/name of the test proving this is fixed"),
+    )
+    .unwrap();
+    assert!(Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    let report = |field: &str| -> serde_json::Value {
+        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+            .args(["migrate", "schema", "--report", "--field", field])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("not JSON ({e}): {out:?}"))
+    };
+    assert!(report("Found-in")["would_fail"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        report("Regression-test")["would_fail"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

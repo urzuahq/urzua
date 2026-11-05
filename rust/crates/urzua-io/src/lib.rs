@@ -349,11 +349,15 @@ impl FixLock {
             .write(true)
             .create_new(true)
             .open(&path)
-            .map_err(|_| {
-                format!(
-                    "{} already exists -- another `urzua fix --apply` may be running; remove it if that's not the case",
-                    path.display()
-                )
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    format!(
+                        "{} already exists -- another `urzua fix --apply` may be running; remove it if that's not the case",
+                        path.display()
+                    )
+                } else {
+                    format!("could not create {}: {e}", path.display())
+                }
             })?;
         Ok(FixLock { path })
     }

@@ -110,7 +110,7 @@ pub(crate) fn is_prefix_segment(s: &str) -> bool {
 /// found nothing to count, and `urzua new` wrote a second record numbered 1
 /// (BUG-37). Miscounting from a stale legacy file is recoverable; writing a
 /// duplicate number into someone else's corpus is not.
-pub fn next_display_number(filenames: &[String]) -> u32 {
+pub fn next_display_number(filenames: &[String]) -> Result<u32, String> {
     next_display_number_by(filenames, &|name| {
         parse_record_filename(name).map(|(_, number)| number)
     })
@@ -124,12 +124,13 @@ pub fn next_display_number(filenames: &[String]) -> u32 {
 pub fn next_display_number_by(
     filenames: &[String],
     number_of: &dyn Fn(&str) -> Option<u32>,
-) -> u32 {
-    filenames
-        .iter()
-        .filter_map(|name| number_of(name))
-        .max()
-        .map_or(1, |highest| highest + 1)
+) -> Result<u32, String> {
+    match filenames.iter().filter_map(|name| number_of(name)).max() {
+        None => Ok(1),
+        Some(highest) => highest.checked_add(1).ok_or_else(|| {
+            format!("record number {highest} is the largest this tool can issue; no number is left to assign")
+        }),
+    }
 }
 
 /// The record number a declared identity pattern reads from a file name, when
@@ -193,7 +194,7 @@ pub struct NumberAssignment {
 pub fn next_display_number_with_claims(
     local: &[String],
     claims: &[(String, Vec<String>)],
-) -> NumberAssignment {
+) -> Result<NumberAssignment, String> {
     next_display_number_with_claims_by(local, claims, &|name| {
         parse_record_filename(name).map(|(_, number)| number)
     })
@@ -205,8 +206,8 @@ pub fn next_display_number_with_claims_by(
     local: &[String],
     claims: &[(String, Vec<String>)],
     number_of: &dyn Fn(&str) -> Option<u32>,
-) -> NumberAssignment {
-    let local_next = next_display_number_by(local, number_of);
+) -> Result<NumberAssignment, String> {
+    let local_next = next_display_number_by(local, number_of)?;
     let mut by_number: std::collections::BTreeMap<u32, Vec<String>> = Default::default();
     for (ref_name, names) in claims {
         for name in names {
@@ -220,11 +221,18 @@ pub fn next_display_number_with_claims_by(
             }
         }
     }
-    let number = by_number.keys().next_back().map_or(local_next, |m| m + 1);
-    NumberAssignment {
+    let number = match by_number.keys().next_back() {
+        None => local_next,
+        Some(m) => m.checked_add(1).ok_or_else(|| {
+            format!(
+                "record number {m} is the largest this tool can issue; no number is left to assign"
+            )
+        })?,
+    };
+    Ok(NumberAssignment {
         number,
         skipped: by_number.into_iter().collect(),
-    }
+    })
 }
 
 /// Lowercase, hyphen-separated, ASCII-alphanumeric only -- matches this
@@ -453,7 +461,7 @@ mod tests {
                 vec!["BUG-2-z.md".into(), "BUG-4-w.md".into()],
             ),
         ];
-        let got = next_display_number_with_claims(&local, &claims);
+        let got = next_display_number_with_claims(&local, &claims).unwrap();
         assert_eq!(got.number, 5);
         assert_eq!(
             got.skipped,
@@ -462,7 +470,10 @@ mod tests {
                 (4, vec!["origin/feat-b".to_string()]),
             ]
         );
-        assert_eq!(next_display_number_with_claims(&local, &[]).number, 2);
+        assert_eq!(
+            next_display_number_with_claims(&local, &[]).unwrap().number,
+            2
+        );
     }
 
     #[test]
@@ -472,7 +483,7 @@ mod tests {
             "ADR-16-a-bold-list-header-shape.md".to_string(),
             "ADR-9-ninth.md".to_string(),
         ];
-        assert_eq!(next_display_number(&filenames), 17);
+        assert_eq!(next_display_number(&filenames).unwrap(), 17);
     }
 
     #[test]
@@ -486,13 +497,13 @@ mod tests {
         // adopted from a Nygard-style repository is `NNNN-slug.md`, so ignoring
         // them found nothing to count and `urzua new` wrote a duplicate.
         let mixed = vec!["0012-legacy.md".to_string(), "ADR-9-ninth.md".to_string()];
-        assert_eq!(next_display_number(&mixed), 13);
+        assert_eq!(next_display_number(&mixed).unwrap(), 13);
 
         let nygard_only = vec![
             "0001-record-architecture-decisions.md".to_string(),
             "0009-help-scripts.md".to_string(),
         ];
-        assert_eq!(next_display_number(&nygard_only), 10);
+        assert_eq!(next_display_number(&nygard_only).unwrap(), 10);
     }
 
     /// BUG-53: `2026-09-19-notes.md` parsed as record 2026, and since numbers
@@ -523,7 +534,7 @@ mod tests {
         );
 
         let names = vec!["DOC-ADR-1-a.md".to_string(), "DOC-ADR-7-b.md".to_string()];
-        assert_eq!(next_display_number(&names), 8);
+        assert_eq!(next_display_number(&names).unwrap(), 8);
     }
 
     #[test]
@@ -563,7 +574,7 @@ mod tests {
             "ADR-1-x.md".to_string(),
             "2026-09-19-meeting-notes.md".to_string(),
         ];
-        assert_eq!(next_display_number(&mixed), 2);
+        assert_eq!(next_display_number(&mixed).unwrap(), 2);
     }
 
     #[test]
@@ -592,12 +603,19 @@ mod tests {
             "-999-slug.md".to_string(), // empty type prefix
             "ADR-8-real.md".to_string(),
         ];
-        assert_eq!(next_display_number(&filenames), 9);
+        assert_eq!(next_display_number(&filenames).unwrap(), 9);
+    }
+
+    #[test]
+    fn next_display_number_fails_instead_of_overflowing() {
+        let names = vec!["ADR-4294967295-x.md".to_string()];
+        assert!(next_display_number(&names).is_err());
+        assert!(next_display_number_with_claims(&names, &[]).is_err());
     }
 
     #[test]
     fn next_display_number_starts_at_one_for_an_empty_directory() {
-        assert_eq!(next_display_number(&[]), 1);
+        assert_eq!(next_display_number(&[]).unwrap(), 1);
     }
 
     #[test]
@@ -760,7 +778,7 @@ mod tests {
         let names: Vec<String> = ["ADR-0007-a.md", "README.md", "ADR-9-short.md"]
             .map(String::from)
             .to_vec();
-        let n = next_display_number_by(&names, &|name| declared_number(&four, name));
+        let n = next_display_number_by(&names, &|name| declared_number(&four, name)).unwrap();
         assert_eq!(n, 8, "ADR-9-short.md is off-pattern and takes no number");
     }
 
