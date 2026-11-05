@@ -2,7 +2,7 @@
 Stable-Id: 01M6D2KG0CMY0NH1R0P6HQA120
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 29"
-Regression-test: "fix_apply_preserves_crlf_and_the_absent_trailing_newline, migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline (rust/crates/urzua-cli/tests/check_integration.rs); apply_repair_on_a_crlf_file_changes_only_the_intended_lines_observed_failing (rust/crates/urzua-core/src/fix.rs)"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#fix_apply_preserves_crlf_and_the_absent_trailing_newline@sha256:d501ed6a1a5f9cf20429f3c616709552356bbcf57fa83f8ead8b640068a40eb1, test:rust/crates/urzua-cli/tests/check_integration.rs#migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline@sha256:f1dee1534f958c4090c87f453fe8beceb7f81095c0c4562898ecfcbb063f371b, test:rust/crates/urzua-core/src/fix.rs#apply_repair_on_a_crlf_file_changes_only_the_intended_lines_observed_failing@sha256:c50c1bfc8bd78d56d95e2376508a29faf8eef9bab4bcfe2388f947cea6247477
 ---
 # 164 — fix --apply and migrate ids --apply rewrite the whole file with LF endings and a forced trailing newline
 
@@ -49,3 +49,4 @@ is fixed through the same helper.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed in the same change. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture; the regression test was observed failing before the fix and passing after. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

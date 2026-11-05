@@ -2,7 +2,7 @@
 Stable-Id: 01M34MM5FGK8TZ7FDD8Y1EYGRX
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_hyphenated_type_prefix_is_a_recognized_reference_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/claim.rs#a_hyphenated_type_prefix_is_a_recognized_reference_observed_failing@sha256:1cba69ba64b02fb0124b32648af32dbf5e4af3b2ad8614ac3ec7f1757355f7bf
 ---
 # 111 — a hyphenated type prefix reference is rejected by the reference recognizer
 
@@ -43,3 +43,4 @@ All three call sites use it.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test observed failing against the single-hyphen-split predicate before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

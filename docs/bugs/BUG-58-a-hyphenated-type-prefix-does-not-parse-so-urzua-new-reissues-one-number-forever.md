@@ -2,7 +2,7 @@
 Stable-Id: 01M2WA9W3CBVRXXBCH2VTFTS6T
 Status: Fixed
 Found-in: 'The fifth cumulative review of the 0.4.0 release diff, reproduced end to end against the built binary'
-Regression-test: 'rust/crates/urzua-core/src/new_record.rs::a_hyphenated_type_prefix_parses_observed_failing -- DOC-ADR-2-slug parses, a lower-case segment does not, a number with nothing after it does not, and next_display_number advances'
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_hyphenated_type_prefix_parses_observed_failing@sha256:7fb83ce7673050b5f61a75d0566ffb29f6aa1dd0544e3f8f935314302e65d932
 Blocked-on: —
 ---
 # 58 — A hyphenated type prefix does not parse, so `urzua new` reissues one number forever
@@ -47,3 +47,4 @@ year with a month of 1-12 and a day of 1-31 is a date.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed and fixed. **Why:** found by the fifth cumulative review of the release diff. Two functions agreed about the filename shape the author had in mind and disagreed about the one the tool generates, with nothing exercising the round trip between them. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN6A58D8YEKHM7YWP8A08C
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-core/src/rules.rs::header_field_set_consistency_does_not_count_an_unparsed_header"
+Realized-by: test:rust/crates/urzua-core/src/rules/header.rs#header_field_set_consistency_does_not_count_an_unparsed_header@sha256:7fdcc2b41f2a0064367235acfc7eeff4e3e7f4f38927c5391771195ba9b72014
 ---
 # 78 — header.field-set-consistency counts a record whose header never parsed as examined
 
@@ -38,3 +38,4 @@ assertion `ADR-55` now requires.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

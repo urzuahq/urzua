@@ -2,7 +2,7 @@
 Stable-Id: 01M21GZ8KZEZHKHS9WWNW2YNS5
 Status: Fixed
 Found-in: researched live, in response to a question about whether other backward-compatibility shims exist in urzua-core for imagined future adopters rather than real ones (raised alongside RFC-23/ADR-44)
-Regression-test: urzua-core::rules::tests::a_legacy_pre_type_prefix_filename_no_longer_resolves, urzua-core::rules::tests::filename_title_consistency_skips_a_legacy_shaped_filename, urzua-core::new_record::tests::next_display_number_ignores_a_legacy_pre_type_prefix_filename
+Realized-by: test:rust/crates/urzua-core/src/rules/identity.rs#a_legacy_pre_type_prefix_filename_no_longer_resolves@sha256:a4b1ee4a4f8d20acdd9ed89e2fd6f117632d308c7d853026699cbe2071ebfce2, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_skips_a_legacy_shaped_filename@sha256:fcc933b49ab9893dec737244c2cfb1d39b1fefd85463a1e70d512f5769b3b825
 ---
 # 9 — Legacy pre-ADR-36 filename support is unexercised dead weight in this repo's own corpus
 
@@ -53,9 +53,14 @@ amendment, not restated here.
 - ADR-33/MILE-85 -- the comparable, but stronger-justified, case (header-shape parsing) this bug
   distinguishes itself from.
 
+## Regression test
+
+urzua-core::rules::tests::a_legacy_pre_type_prefix_filename_no_longer_resolves, urzua-core::rules::tests::filename_title_consistency_skips_a_legacy_shaped_filename, urzua-core::new_record::tests::next_display_number_ignores_a_legacy_pre_type_prefix_filename
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial bug record, `Status: Open`. Not yet fixed -- whether to remove the legacy-shape support or keep it (and if kept, why, given the corpus that justified it no longer exists) is not yet decided. | **structural** |
 > | 2026-09-09 | `Status: Fixed`. Legacy filename-shape acceptance removed from `record_id`/`filename_number`/`next_display_number`, per ADR-36's own amendment. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

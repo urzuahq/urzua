@@ -2,7 +2,7 @@
 Stable-Id: 01M6N3YAVAVBXWJXACN8G1NS6B
 Status: Fixed
 Found-in: 'the disk filling after tens of thousands of test runs; every urzua-* fixture directory (urzua-pins-*, urzua-cli-test-*, urzua-types-* and others) was still in the temp dir (2026-11-05)'
-Regression-test: '.github/scripts/test-no-leak.test.sh (the guard, both directions) and .github/scripts/test-no-leak.sh (run by checks.yml and make ci: the whole suite under a fresh TMPDIR, failing on any urzua-* entry left behind)'
+Realized-by: code:rust/crates/urzua-cli/tests/common/mod.rs, test:.github/scripts/test-no-leak.test.sh, code:.github/scripts/test-no-leak.sh
 ---
 # 193 — Integration tests leave fixture directories in the temp dir on every run
 
@@ -25,3 +25,4 @@ Fixed with a `TempDir` guard (`rust/crates/urzua-cli/tests/common/mod.rs`; a sma
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed and fixed. **Why:** the maintainer reported the temp dir filling with fixture directories; a fixture's cleanup must not depend on its test passing. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); the guard's own test and the script that runs the suite under a fresh `TMPDIR` are cited in `Realized-by`, and the field is removed. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

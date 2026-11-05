@@ -2,7 +2,7 @@
 Stable-Id: 01M35T9RD87NMRK2Z64QK9C743
 Status: Fixed
 Found-in: "A /code-review 108 pass, reviewing RFC-42/ADR-61's implementation"
-Regression-test: "drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_failing, check_integration.rs"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_failing@sha256:1b9c2a38468a65cc524c8b93f9d593c78e927fba042bd2c1e5979c89c96c71bb
 ---
 # 120 — compute_drifted_records matches the pre-RFC-42 Realized-by literal instead of the declared embodiment_locator field
 
@@ -40,3 +40,4 @@ header read and the field-line lookup used to find the reference commit.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-PR code review of `RFC-42`'s implementation; a new git-backed integration test (drift detection had none before) observed failing against the hardcoded literal before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

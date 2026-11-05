@@ -2,8 +2,7 @@
 Stable-Id: 01M2MF5T28P4GAQRK2VYBDFZRE
 Status: Fixed
 Found-in: 'a review pass over urzua-core while fixing BUG-23 -- `is_active` compares `Expires` lexically without ever checking it is a date'
-Regression-test: 'rust/crates/urzua-core/src/waiver.rs :: an_unparseable_expiry_does_not_suppress_observed_failing'
-Realized-by: code:rust/crates/urzua-core/src/waiver.rs
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs, test:rust/crates/urzua-core/src/waiver.rs#an_unparseable_expiry_does_not_suppress_observed_failing@sha256:7db66c82a4fa4ba246eb09bd567f6cc6a84d9d909f712452a27546b22471ce18
 ---
 # 31 — A waiver with an unparseable Expires value never expires
 
@@ -57,3 +56,4 @@ it was malformed either. Surfacing it needs a `waiver.*` rule, which would mean 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change, minus the reporting half. **Why:** latent -- there are no waiver records in this corpus, so this has never fired and the original framing of it as urgent was wrong. It is still the only place in the tool where failing open removes findings rather than adding them, which is why it was worth fixing before anyone writes the first waiver. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

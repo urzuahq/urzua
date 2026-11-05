@@ -2,7 +2,7 @@
 Stable-Id: 01M373DY8GRKTBHPMVVDJAFGSE
 Status: Fixed
 Found-in: "MILE-112's duplication sweep"
-Regression-test: "filename_title_consistency_reads_the_number_past_a_hyphenated_prefix, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_reads_the_number_past_a_hyphenated_prefix@sha256:ab7f01795a5e9c58b97c17250d0df01b032be00acad0439251f2a68c37585434
 ---
 # 139 — record_id and filename_number independently re-implement the same filename-id extraction
 
@@ -43,3 +43,4 @@ new regression test locks in the hyphenated-prefix case explicitly, since nothin
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by MILE-112's duplication sweep. **Why:** two independently hand-written copies of the same filename-id extraction, one level over the exact pattern `BUG-133` already fixed. No live divergence yet, but past `SPEC-22`'s second-occurrence threshold. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

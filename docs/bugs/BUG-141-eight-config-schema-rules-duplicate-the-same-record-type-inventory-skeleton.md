@@ -2,7 +2,7 @@
 Stable-Id: 01M373DZ7A16RH97KE4VCPHT66
 Status: Fixed
 Found-in: "MILE-112's duplication sweep"
-Regression-test: "none -- pure extraction, no behavior change; each of the 8 rules' own existing tests are unchanged and pass"
+Realized-by: test:rust/crates/urzua-core/src/rules/declaration.rs#a_type_with_no_known_fields_declared_is_a_missing_declaration_observed_failing@sha256:377acaa022cf93d5c34474568f74c2a750978863a6380c414dbda2dafb69dde6, test:rust/crates/urzua-core/src/rules/declaration.rs#a_field_present_in_both_pointer_and_narrative_lists_is_an_overlap_observed_failing@sha256:ef4528aac3ad033cfa4bff01e0c9e4a21c09086b94e4bc9e222c88f4b730c51e, test:rust/crates/urzua-core/src/rules/companion.rs#a_type_declaring_one_half_of_a_declared_pair_is_reported_observed_failing@sha256:8c8d2528633801b49d66113f022d8840268ad34c694a3ffdfaf9ca567b8abf84, test:rust/crates/urzua-core/src/rules/type_scope.rs#a_type_with_no_declared_spec_is_a_finding_observed_failing@sha256:3d8105ac192c7cf7b5deb76efb3bb37166491d204f6a29892c203305c92e02a8
 ---
 # 141 — eight config-schema rules duplicate the same record-type inventory skeleton
 
@@ -57,3 +57,4 @@ findings.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, found by MILE-112's duplication sweep. **Why:** eight config-schema rules shared one skeleton, self-acknowledged as "the same shape" in six of their own doc comments but never extracted. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); the 4 existing tests that cover the change are now cited as `test:` locators in `Realized-by`, and the prose text is removed. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

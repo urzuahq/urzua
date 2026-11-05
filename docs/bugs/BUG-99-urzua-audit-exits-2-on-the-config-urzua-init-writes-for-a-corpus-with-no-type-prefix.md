@@ -2,7 +2,7 @@
 Stable-Id: 01M30VE5PPB5TVTF85WW5BRH8H
 Status: Fixed
 Found-in: "Reviewing what the 0.4.0 population work did and did not fix; reproduced against a scratch repository built to the prefixless shape"
-Regression-test: 'rust/crates/urzua-cli/tests/audit_fold_integration.rs::audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check, rust/crates/urzua-cli/tests/check_integration.rs::init_does_not_warn_about_audit_and_audit_runs_what_the_config_declares'
+Realized-by: test:rust/crates/urzua-cli/tests/audit_fold_integration.rs#audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check@sha256:def396dd82be220ff20161bd6b95a3d6286baedb5343af298a580411b47fa3bb, test:rust/crates/urzua-cli/tests/check_integration.rs#init_does_not_warn_about_audit_and_audit_runs_what_the_config_declares@sha256:448bc69b976d535ba17d1aa7a4b30cd70c45a3a172bbbc2acdb422f7014873fd
 ---
 # 99 — urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
 
@@ -97,3 +97,4 @@ Fixed in `audit` and `check` (`ADR-79`, `MILE-190`): `audit` owns no rule set. I
 > | 2026-09-21 | Filed, with a reproduction. **Why:** named during the 0.4.0 population planning as a live `BUG-84` variant "under investigation, to be filed separately" and then not filed, so it existed only in a plan document no rule reads. Reproduced before filing rather than carried forward on the original assertion. | **substantive** |
 > | 2026-11-04 | Triage: reproduction closed, root cause still open; `Status` stays `Open`. On main, `urzua init` on a prefixless two-record corpus followed by `urzua audit` reports `findings-present`, exit 0, with `pointer.resolution` and `relation.supersession-reciprocity` `not-enabled` (`audit` runs `identity.collision` too, per the 2026-09-23 row). `audit` still owns a hardcoded rule set (`urzua --help` lists it as its own command), so `RFC-38`'s implementation, which folds it into `check`, is not built. **Why:** the record stays open until `audit` is a preset of `check`. | **substantive** |
 > | 2026-11-05 | Fixed in #311 and closed. `audit` runs `check`'s engine over the configured rules with no rule set of its own (`ADR-79`), and the regression test shows it matching `check` on the config `init` writes for a prefixless corpus. **Why:** `ADR-79` (amended while Proposed): the alias closes the bug when it ships, not at removal. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

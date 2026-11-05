@@ -7,6 +7,6 @@ expect_json:
   - {at: /files_examined, gt: 0}
   - {at: /records_read_by_any_rule, gt: 0}
 expect_no_findings:
-  - {severity: error}
+  - {severity: error, unwaived: true}
 expect_rules_ran:
   - header.required-fields

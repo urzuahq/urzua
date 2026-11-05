@@ -2,7 +2,7 @@
 Stable-Id: 01M37DNSJAGG0031AJKFXAFCM2
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Regression-test: "a_placeholder_entry_mixed_with_a_real_reference_is_not_flagged_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#a_placeholder_entry_mixed_with_a_real_reference_is_not_flagged_observed_failing@sha256:18333959388ee7c8a9ccb8c4003c1e740723ca98149bfb254299fa53ab40f3fd
 ---
 # 148 — header.pointer-field-clean rejects the no-value placeholder mixed with a real reference
 
@@ -38,3 +38,4 @@ comment's own stated contract.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-24 | Filed and fixed in one pass, found by a full-release code review. **Why:** the rule's own doc comment already specified per-entry placeholder acceptance; the implementation only checked the whole value. Planted-violation test observed failing before the fix, passing after. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

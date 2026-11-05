@@ -2,7 +2,6 @@
 Stable-Id: 01M36PD8JJ4SF9KQ53EYYET1V2
 Status: Not a bug
 Found-in: "A /code-review v0.3.0...main pass, round 23"
-Regression-test: "none -- see Amendment"
 ---
 # 130 — duplicate_keys exact-match extends ADR-57's declared-vocabulary decision to a type declaring no vocabulary at all
 
@@ -48,9 +47,14 @@ correction, since it's new work, not a fix to a misdiagnosed bug.
   diagnosed, re-graded rather than silently deleted.
 - `MILE-113` -- the new, separate rule idea this investigation surfaced.
 
+## Regression test
+
+none -- see Amendment
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed, `Status: Open`. **Why:** found by a full-release code review; verified the gap is real for a type declaring neither `known_fields` nor `required_fields`. | **substantive** |
 > | 2026-09-23 | Amended same day: re-read `ADR-57`'s own Decision section in full while working through this bug with the user, found it explicitly names `duplicate_keys` as one of the three comparisons the decision was written to fix -- directly contradicting this record's own "ADR-57 itself... doesn't mention `duplicate_keys()`" claim. Re-graded `Status: Not a bug`. **Why:** this project's own "never silently rewrite" rule -- correcting the record in place, in the open, rather than deleting it. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

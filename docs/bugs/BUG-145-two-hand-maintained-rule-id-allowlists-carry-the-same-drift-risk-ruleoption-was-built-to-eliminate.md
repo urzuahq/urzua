@@ -2,7 +2,7 @@
 Stable-Id: 01M376A4R1WWWNH1SG401X1RHH
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 26"
-Regression-test: 'rust/crates/urzua-core/src/rules/table.rs::every_rule_id_constant_has_a_table_entry, rust/crates/urzua-core/src/rules/table.rs::a_rule_anchor_agrees_with_its_scope'
+Realized-by: test:rust/crates/urzua-core/src/rules/table.rs#every_rule_id_constant_has_a_table_entry@sha256:d8805b858389e7ccda9bd33e1d8227c020c617761ed0d44a86632b39ef89f9e7, test:rust/crates/urzua-core/src/rules/table.rs#a_rule_anchor_agrees_with_its_scope@sha256:231d6acfb4b51a4ae6312a1871b4beb234156929b54a99a90daf34fc897d6981
 ---
 # 145 — two hand-maintained rule-id allowlists carry the same drift risk RuleOption was built to eliminate
 
@@ -39,3 +39,4 @@ in one place versus staying as its own constant, not a drop-in reuse of the exis
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified both are genuinely hand-maintained rule-id lists with no mechanism forcing a new rule to be added to either. Left `Status: Open` -- unifying them into `RuleOption` needs deciding that type's schema, not a quick edit. | **substantive** |
 > | 2026-11-04 | `Status` set to `Fixed`; `Regression-test` filled. Fixed in #243 (`MILE-171` step 1: one `RULE_TABLE` of `RuleDef`s replaces the parallel rule lists, with `needs_identity_index` declared per rule) and #246 (step 3: each rule declares the `Anchor` its findings sit on, replacing the outside-the-corpus list); `IDENTITY_DEPENDENT_RULES` and `RULES_REPORTING_OUTSIDE_THE_CORPUS` no longer exist (`grep -rn` finds neither). **Why:** the fix this record asked for, a per-rule fact declared once beside the rule, is what the table is. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,6 @@
 Stable-Id: 01M34QAQEH8KSDNVKXY5R7MW1V
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "not applicable -- an efficiency fix with no observable behavior change; verified by a real-corpus check run reporting identical findings"
 ---
 # 116 — identity.collision rebuilds the shared record index independently
 
@@ -33,8 +32,13 @@ instead of rebuilding it internally). `identity_collision` and `build_index_repo
 
 - `round-14-duplication`'s own shared-index consolidation — the fix this bug's site was missed by.
 
+## Regression test
+
+not applicable -- an efficiency fix with no observable behavior change; verified by a real-corpus check run reporting identical findings
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; verified as a no-op via a real-corpus `check` run reporting identical findings before and after. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,6 @@
 Stable-Id: 01M2MMFX94TCYK8M5H9KQ2VEMW
 Status: Fixed
 Found-in: 'checking why the prepare-release run that followed PR #37 was red -- knope exited 1 with `releases::no_release`, and #37 was a `no-changeset` PR with nothing to release'
-Regression-test: 'the branch logic was exercised against a stubbed knope for all four cases -- success, no_release, a real failure, and a non-1 exit -- confirming only no_release is tolerated and other exit codes propagate unchanged; end to end, the merge of this fix is itself a no-changeset merge and must leave prepare-release green'
 Realized-by: code:.github/workflows/prepare-release.yml
 ---
 # 33 — prepare-release fails on every no-changeset merge, because knope treats nothing-to-release as an error
@@ -83,9 +82,14 @@ notice, a real failure exits 1, and a non-1 exit code propagates as itself rathe
 - SPEC-20 -- carries the false claim quoted above; needs correcting alongside the fix.
 - ADR-45 -- the two-step release flow this step belongs to.
 
+## Regression test
+
+the branch logic was exercised against a stubbed knope for all four cases -- success, no_release, a real failure, and a non-1 exit -- confirming only no_release is tolerated and other exit codes propagate unchanged; end to end, the merge of this fix is itself a no-changeset merge and must leave prepare-release green
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Fixed. **Why:** both options this record originally proposed were wrong on inspection -- `allow_empty` moves the failure to the next step, and a fragment-count guard would skip a release genuinely due from Conventional Commits. Tolerating one error by name keeps `BUG-27`'s lesson (never swallow every failure) while removing the false alarm that trains a reader to ignore this workflow. | **substantive** |
 > | 2026-09-16 | Initial record, `Status: Open`. **Why:** found by reading the run history while shipping `v0.2.1`, not by any alert -- the red run sat unexamined because nothing distinguishes "failed for a real reason" from "correctly had nothing to do" in this workflow's output. | **structural** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

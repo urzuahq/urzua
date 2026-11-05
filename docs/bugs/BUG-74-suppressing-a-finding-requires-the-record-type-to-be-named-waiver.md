@@ -2,7 +2,7 @@
 Stable-Id: 01M2WGK3J9WW6NCJAYGZPE8FW4
 Status: Fixed
 Found-in: "Splitting BUG-59 once its status-vocabulary half was fixed"
-Regression-test: 'rust/crates/urzua-cli/tests/suppression_type_integration.rs::a_type_declaring_the_suppression_role_suppresses_whatever_it_is_named_observed_failing, rust/crates/urzua-cli/tests/suppression_type_integration.rs::a_declared_role_displaces_the_literal_name_observed_failing, rust/crates/urzua-core/src/config.rs::the_suppression_type_is_declared_by_role_with_the_literal_as_fallback'
+Realized-by: test:rust/crates/urzua-cli/tests/suppression_type_integration.rs#a_type_declaring_the_suppression_role_suppresses_whatever_it_is_named_observed_failing@sha256:464566abda5767c6af0355da1af33e7d06d3024549e72f737a4eca43541159d4, test:rust/crates/urzua-cli/tests/suppression_type_integration.rs#a_declared_role_displaces_the_literal_name_observed_failing@sha256:071836dfccb891d272f8af1dc81d41cbbbda18a76d6e8aec58c17124962600a0, test:rust/crates/urzua-core/src/config.rs#the_suppression_type_is_declared_by_role_with_the_literal_as_fallback@sha256:ec4f3c0b08a4aa5cad1e1d0fbeb170ab4020ff7cba81f0b5e5bb6c0b8a59c8bf
 ---
 # 74 — Suppressing a finding requires the record type to be named waiver
 
@@ -65,3 +65,4 @@ suppression.
 > |---|---|---|
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `load_waivers` (`waiver.rs`) still filters on `r.record_type == "waiver"`, and `diff_scope.rs` reads `record_types.get("waiver")`. **Why:** `RFC-37`, which decides how a type declares what it does, is still Draft. | **substantive** |
 > | 2026-11-05 | Fixed; `Status` is `Fixed` and `Blocked-on` is dropped. A record type declares `role: suppression` (`SPEC-3`); the engine reads the declaration and the literal type name `waiver` is the fallback only when no type declares the role (`SPEC-10`). The struct and functions lost the corpus word (`Suppression`, `load_suppressions`; the file stays `waiver.rs`, which earlier records cite as evidence). This repository's `waiver` type declares the role. **Why:** the maintainer decided on 2026-11-05 that this does not wait for `RFC-37`; a single `role` value is the minimal declaration, and `RFC-37`'s `capabilities` axis can absorb it later. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 3 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M36S8ZRSNACZH1K3JKRPY02P
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 24"
-Regression-test: a_recognized_reference_parses_as_the_same_filename_prefix (rust/crates/urzua-core/src/rules.rs)
+Realized-by: test:rust/crates/urzua-core/src/rules/claim.rs#a_recognized_reference_parses_as_the_same_filename_prefix@sha256:932869fc458db8c43cb5b4d3f54c1c3c1cc9ddcaee69413d50c26986f47b85d0
 ---
 # 133 — is_record_reference and parse_record_filename independently re-implement the same record-identifier grammar
 
@@ -52,3 +52,4 @@ call sites.
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review, immediately after fixing a live instance of the exact drift this duplication produces (`BUG-114`). Left `Status: Open` -- extracting a shared grammar needs deciding its shape, not a quick copy-paste fix. | **substantive** |
 > | 2026-09-23 | Fixed. Narrower than the filing anticipated: only the two boolean segment predicates were byte-for-byte duplicated, not the surrounding filename/token-specific logic each function keeps. Extracted `is_digit_segment`/`is_prefix_segment` into `new_record.rs`; `is_record_reference` now calls them. Regression test pins the two recognizers' agreement. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

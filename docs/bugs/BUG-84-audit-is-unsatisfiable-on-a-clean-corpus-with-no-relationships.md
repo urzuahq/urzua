@@ -2,7 +2,7 @@
 Stable-Id: 01M2YPPRWS5FHNE404A3GN7NCK
 Status: Fixed
 Found-in: "Round 9 of the 0.4.0 review, reproduced against a scratch repository"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::audit_is_ok_on_a_clean_corpus_with_no_relationships"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#audit_is_ok_on_a_clean_corpus_with_no_relationships@sha256:6ea12ee652a6d7c9e02a31b73cfd2b77cd90ebdf094caac1642299693ce6cece
 ---
 # 84 — audit is unsatisfiable on a clean corpus with no relationships
 
@@ -56,3 +56,4 @@ were not separated.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

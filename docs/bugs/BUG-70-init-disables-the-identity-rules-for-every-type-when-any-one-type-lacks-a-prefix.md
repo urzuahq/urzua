@@ -2,7 +2,7 @@
 Stable-Id: 01M2WG82N3NNCD0QBCPWH6QZEB
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/src/commands/init.rs::one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix"
+Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix@sha256:144327feeb35f6df644958c21046b5053f0f852dfd0ad49f06a03aaffea3d404
 ---
 # 70 — init disables the identity rules for every type when any one type lacks a prefix
 
@@ -39,3 +39,4 @@ unfixed code because its fixture omitted `header_shape`.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

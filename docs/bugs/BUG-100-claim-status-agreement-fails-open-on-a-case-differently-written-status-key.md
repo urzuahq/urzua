@@ -2,7 +2,7 @@
 Stable-Id: 01M33QPB6WTPP7DJEJR1DVRBHP
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/claim.rs#a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing@sha256:f1f2582d4f053073f59bd4670bc1a91378aa00f5b3feb17cefdfb9fc057b9ac9
 ---
 # 100 — claim status agreement fails open on a case differently written Status key
 
@@ -59,3 +59,4 @@ dropped silently in the embodiment rules (`BUG-101`).
 > |---|---|---|
 > | 2026-09-22 | Filed, with a reproduction and a diagnosis of the shared root cause with `BUG-101`. **Why:** found by a full-release code review. | **substantive** |
 > | 2026-09-22 | `Status: Open` → `Fixed`, by `ADR-58`'s decision on `RFC-40`. **Why:** the shared contract closed both this bug and `BUG-101` in one pass, so both were fixed together rather than staying blocked separately. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

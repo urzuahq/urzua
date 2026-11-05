@@ -2,7 +2,6 @@
 Stable-Id: 01M2M7H44YC7BG9X06VNK35K6N
 Status: Fixed
 Found-in: 'testing the ADR-0045 release flow end to end for the first time -- v0.2.0 published with a correct changelog and zero attached archives, while v0.1.0 has three'
-Regression-test: 'the upload job now asserts the release carries three archives and fails the publish if it does not -- the assertion is the test, and it runs on every release rather than once'
 Realized-by: code:.github/workflows/publish-release.yml
 ---
 # 28 — The release published with no binaries, because a bot-pushed tag triggers nothing
@@ -77,8 +76,13 @@ to retro-attach archives to it is a separate call, not made here.
 - BUG-0027 — the same "reported success, did nothing" shape one layer earlier in the same pipeline.
 - SPEC-0020 — the CI/CD feature area; its workflow inventory no longer lists `release.yml`.
 
+## Regression test
+
+the upload job now asserts the release carries three archives and fails the publish if it does not -- the assertion is the test, and it runs on every release rather than once
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** found by running the ADR-0045 flow end to end for the first time -- every part worked in isolation and the coupling between two of them was false, which is exactly the class a parts-level test cannot reach. The assertion added to the upload job is the durable half: it converts "we believe binaries ship" into something that fails loudly when they do not. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

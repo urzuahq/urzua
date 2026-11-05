@@ -2,7 +2,6 @@
 Stable-Id: 01M34QAQ218SAHK6Z8Z2DXYQPR
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "not applicable -- an efficiency fix with no observable behavior change; verified by a real-corpus check run reporting identical findings"
 ---
 # 115 — compute_drifted_records runs unconditionally even when embodiment.consistency is off
 
@@ -32,8 +31,13 @@ reads it).
 - The `claim_paths`/`read_claim_files` gate immediately above this call site — the pattern this fix
   now matches.
 
+## Regression test
+
+not applicable -- an efficiency fix with no observable behavior change; verified by a real-corpus check run reporting identical findings
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; verified as a no-op via a real-corpus `check` run reporting identical findings before and after. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

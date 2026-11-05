@@ -2,7 +2,7 @@
 Stable-Id: 01M6D2KH7Y2XCM5ZSFDH0VDWNQ
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 29"
-Regression-test: "new_refuses_a_title_with_no_slug_and_writes_nothing (rust/crates/urzua-cli/tests/new_integration.rs)"
+Realized-by: test:rust/crates/urzua-cli/tests/new_integration.rs#new_refuses_a_title_with_no_slug_and_writes_nothing@sha256:58ae8420b3e79615626f409f3820fc5a1fc1b7f8c0344f0a49a8c5d16e0e1b75
 ---
 # 167 — urzua new with a title that slugifies to nothing creates a slug-less filename and the next new reissues the same number
 
@@ -47,3 +47,4 @@ slug grammar shared with `parse_record_filename` and `record_id` -- a decision t
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed in the same change. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture; the regression test was observed failing before the fix and passing after. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

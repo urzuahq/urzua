@@ -2,7 +2,7 @@
 Stable-Id: 01M2VJYJPSGXWM7YB2E0T53DEN
 Status: Fixed
 Found-in: 'Cutting 0.4.0 -- the release branch was three days stale while `prepare release` reported success on every push'
-Regression-test: '.github/scripts/release-guard.test.sh -- plants an unmatched-package fragment and asserts a nonzero exit, with the empty and successful cases asserted alongside it. Observed failing: neutering the guard makes the planted case report `want exit 1, got 0`.'
+Realized-by: test:.github/scripts/release-guard.test.sh
 ---
 # 48 — Seven changesets named a package that does not exist, and the release guard reported it as nothing to release
 
@@ -66,3 +66,4 @@ misspelled name.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed and fixed. **Why:** found while cutting 0.4.0, when the release PR that should have existed did not. The fragments were the typo; the guard treating seven inert fragments as "nothing to release" is the defect, and it is why three green runs hid it. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

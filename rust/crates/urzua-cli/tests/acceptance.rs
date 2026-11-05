@@ -143,6 +143,10 @@ struct Matcher {
     /// exempt, asserted so the exemption cannot quietly become an action.
     #[serde(default)]
     no_suggested_action: bool,
+    /// Match only a finding no waiver suppresses: a declared exception that
+    /// still lists its finding (`ADR-84`) is not an unexpected one.
+    #[serde(default)]
+    unwaived: bool,
 }
 
 #[derive(Deserialize)]
@@ -269,6 +273,7 @@ fn matches(f: &serde_json::Value, m: &Matcher) -> bool {
                 .is_some_and(|got| contains(got, want))
         })
         && (!m.no_suggested_action || f.get("suggested_action").is_none())
+        && (!m.unwaived || f.get("waived").is_none_or(|w| w.is_null()))
 }
 
 /// Whether `got` holds everything `want` names: objects by key, recursively;

@@ -2,7 +2,7 @@
 Stable-Id: 01M34MYQXW4DDFCM9S6ZNTMG08
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "the existing #[should_panic(expected = \"exceeds eligible\")] test in report.rs, now exercising a real assert! rather than a debug-only one"
+Realized-by: test:rust/crates/urzua-core/src/report.rs#a_population_cannot_examine_more_than_it_was_eligible_for@sha256:c43bd0d3e473d8a3961955e3a64a609c0eca7e4ca9d757091931acd837fbb16f
 ---
 # 113 — the population invariant check compiles out in release builds
 
@@ -35,3 +35,4 @@ worth trading the invariant away for.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; a one-line change, verified by confirming the existing regression test's message and by a full release-profile build. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -2,7 +2,6 @@
 Stable-Id: 01M36E3SNAFFEVE01GZS54K4EY
 Status: Not a bug
 Found-in: "A /code-review v0.3.0...main pass, round 21"
-Regression-test: "none -- see Amendment"
 ---
 # 127 — resolve_argv_overrides silently drops a symlink to a real file since it never follows the link
 
@@ -40,9 +39,14 @@ say why the symlink/no-symlink distinction is moot at this call site instead of 
 - `BUG-24` -- the function this bug's (non-)diagnosis is about.
 - `BUG-85` -- the real prior instance of this shape, for `claim_paths`; not the same function.
 
+## Regression test
+
+none -- see Amendment
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass, `Status: Fixed`. **Why:** found by a full-release code review of `BUG-24`'s own fix, the same day it shipped. | **substantive** |
 > | 2026-09-23 | Amended same day: the revert-and-observe check that verified every other round-21 fix was run against this one late, and it failed -- the "fix" made no test fail when undone. Re-diagnosed as unreachable via the real call chain (`relative_scopes` already canonicalizes every argv path first) and re-graded `Status: Not a bug`. Vacuous test removed rather than left passing for the wrong reason. **Why:** this project's own "never silently rewrite" rule -- correcting the record in place, in the open, rather than deleting it. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

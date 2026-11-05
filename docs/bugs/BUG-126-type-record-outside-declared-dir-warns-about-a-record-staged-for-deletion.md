@@ -2,7 +2,7 @@
 Stable-Id: 01M36E3S45BC7849EPXGJEC940
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 21"
-Regression-test: "a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed_failing, check_integration.rs"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed_failing@sha256:a78c6ba56aa487e3e79d7096c834ec923f45db402ec5346e65ade3c8b0f4035d
 ---
 # 126 — type.record-outside-declared-dir warns about a record staged for deletion
 
@@ -42,3 +42,4 @@ absent rather than examined.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test (`git rm` staged, not committed, on a record below-but-not-in a declared dir) observed failing before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
