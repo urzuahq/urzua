@@ -8,11 +8,27 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+// Implements: ADR-87 (a finding at `info` is reported and counted, never blocking)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FindingSeverity {
     Error,
     Warning,
+    /// A finding at `level: info` (`ADR-87`): reported and counted, never
+    /// trips `fail_on` and never sets `blocking`.
+    Info,
+}
+
+impl FindingSeverity {
+    /// Strictness, for choosing the higher of two: `Info` below `Warning`
+    /// below `Error`.
+    pub fn rank(self) -> u8 {
+        match self {
+            FindingSeverity::Info => 0,
+            FindingSeverity::Warning => 1,
+            FindingSeverity::Error => 2,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -1442,6 +1458,17 @@ mod tests {
         assert_eq!(CheckReport::exit_code(&default), 0);
         let strict = report_with_warning(FailOn::Warning, None);
         assert_eq!(CheckReport::exit_code(&strict), 1);
+    }
+
+    #[test]
+    fn an_info_finding_never_trips_fail_on_and_serializes_as_info() {
+        use crate::config::FailOn;
+        for fail_on in [FailOn::Error, FailOn::Warning] {
+            let mut r = report_with_warning(fail_on, None);
+            r.findings[0].severity = FindingSeverity::Info;
+            assert_eq!(CheckReport::exit_code(&r), 0, "{fail_on:?}");
+        }
+        assert_eq!(serde_json::to_value(FindingSeverity::Info).unwrap(), "info");
     }
 
     #[test]

@@ -5,7 +5,7 @@ Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Verified
 Supersedes / Superseded-by: null
 Derives-from: ADR-73
 ---
@@ -143,3 +143,4 @@ contains `info` unless the repository chose it.
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. Added point 10 from the independent review: a declared severity never overrides `info`, and a level string never maps silently to `error`. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
