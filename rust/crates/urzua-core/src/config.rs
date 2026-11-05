@@ -513,8 +513,10 @@ pub struct RecordTypeConfig {
     /// `header_pointer_field_clean`. Declared, not voted, same "undeclared
     /// means skip, no implicit default" principle as `known_fields`: this
     /// tool has no real external adopters yet whose behavior a hardcoded
-    /// fallback would need to preserve. Every field named here must also
-    /// appear in this type's `required_fields`/`known_fields`
+    /// fallback would need to preserve. (Note, 2026-11-05: that holds through
+    /// Phase 0 and expires at the Phase 1 switchover, MILE-102, when RFC-49's
+    /// compatibility contract takes over; MILE-118.) Every field named here
+    /// must also appear in this type's `required_fields`/`known_fields`
     /// (`config.pointer-field-not-known`) and must not also appear in
     /// `narrative_fields` (`config.pointer-narrative-overlap`).
     #[serde(default)]
