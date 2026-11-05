@@ -7,7 +7,7 @@
 //! Implements: MILE-182
 
 use super::relation::{pair_carried_by, pair_slot_claims, pair_slots};
-use super::sequence::{sequence_graphs, strongly_connected, SequenceGraphs};
+use super::sequence::{merged_graph, sequence_graphs, strongly_connected, SequenceGraphs};
 use super::*;
 use crate::values::RecordId;
 use serde::ser::SerializeMap;
@@ -240,19 +240,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     let mut notes: Vec<RoadmapNote> = Vec::new();
 
     // One graph: X -> {Y} reads "X depends on Y" over every declared pair.
-    let mut depends: BTreeMap<RecordId, BTreeSet<RecordId>> = BTreeMap::new();
-    for graph in graphs.values() {
-        for (from, tos) in graph {
-            depends.entry(from.clone()).or_default();
-            for to in tos {
-                depends.entry(to.clone()).or_default();
-                depends
-                    .get_mut(from)
-                    .expect("just inserted")
-                    .insert(to.clone());
-            }
-        }
-    }
+    let mut depends = merged_graph(graphs.values());
     // Every record a declared pair can say something about is in scope, linked
     // or not: a record whose type declares a side of a pair, and every record
     // an edge reaches.

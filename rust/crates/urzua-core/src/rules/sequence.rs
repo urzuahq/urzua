@@ -2,14 +2,20 @@ use super::relation::{pair_carried_by, pair_slot_claims, pair_slots};
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Rule (`RFC-48`, `MILE-27`): a cycle in an `acyclic` relation pair. The
-/// graph has one edge per resolved claim, drawn in the direction its field
-/// declares: `A.forward = B` is `A -> B`, and `A.inverse = B` is `B -> A`, so
-/// a record that writes only the inverse side still takes part. A claim that
-/// resolves to no record, or to a type the pair does not carry, is no edge
-/// (`sequence.unresolved-blocker` reports the first). Every record on a cycle
-/// is reported with a shortest cycle through it, so a diff-scoped run that
-/// examines only one of them still sees the finding.
+/// Rule (`RFC-48`, `MILE-27`, `MILE-192`, `ADR-82`): a cycle in an `acyclic`
+/// relation pair. The graph has one edge per resolved claim, drawn in the
+/// direction its field declares: `A.forward = B` is `A -> B`, and
+/// `A.inverse = B` is `B -> A`, so a record that writes only the inverse side
+/// still takes part. A claim that resolves to no record, or to a type the pair
+/// does not carry, is no edge (`sequence.unresolved-blocker` reports the
+/// first). Every record on a cycle is reported with a shortest cycle through
+/// it, so a diff-scoped run that examines only one of them still sees the
+/// finding.
+///
+/// The pairs `roadmap.pairs` names are read as one graph (`merged_graph`, the
+/// graph `urzua roadmap` reads), so a loop that uses an edge of each of two
+/// pairs is found and says which pairs it crosses. Any other acyclic pair is
+/// read on its own, as every pair is when `roadmap.pairs` is absent.
 pub fn sequence_cycle(
     records: &[Record],
     config: &Config,
@@ -18,12 +24,28 @@ pub fn sequence_cycle(
     const RULE_ID: &str = RULE_SEQUENCE_CYCLE;
     let mut findings = Vec::new();
     let slots = pair_slots(records, config, |p| p.acyclic);
+    let declared = &config.roadmap.pairs;
+    // `None` is the merged roadmap graph; `Some(name)` a pair read alone.
+    fn group_of<'n>(declared: &[String], name: &'n str) -> Option<&'n str> {
+        (!declared.iter().any(|p| p == name)).then_some(name)
+    }
 
     let graphs = sequence_graphs(&slots, index).graphs;
 
-    // The records on a cycle, per pair, each with its cycle path.
-    let mut on_cycle: BTreeMap<(&str, crate::values::RecordId), String> = BTreeMap::new();
+    let mut grouped: BTreeMap<Option<&str>, SequenceGraph> = BTreeMap::new();
     for (pair, graph) in &graphs {
+        match group_of(declared, pair) {
+            Some(name) => {
+                grouped.insert(Some(name), graph.clone());
+            }
+            None => merge_into(grouped.entry(None).or_default(), graph),
+        }
+    }
+
+    // The records on a cycle, per group, each with the rest of its message.
+    let mut on_cycle: BTreeMap<(Option<&str>, crate::values::RecordId), CycleReport> =
+        BTreeMap::new();
+    for (group, graph) in &grouped {
         for component in strongly_connected(graph) {
             let looped = component.len() > 1
                 || graph
@@ -33,14 +55,37 @@ pub fn sequence_cycle(
                 continue;
             }
             for member in &component {
-                if let Some(path) = shortest_cycle(graph, member) {
-                    on_cycle.insert((pair, member.clone()), path);
-                }
+                let Some(path) = shortest_cycle(graph, member) else {
+                    continue;
+                };
+                let text = path
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" -> ");
+                let report = match group {
+                    Some(name) => {
+                        let (forward, inverse) = config
+                            .relation_pairs
+                            .iter()
+                            .find(|p| p.name == *name)
+                            .map(|p| (p.forward.as_str(), p.inverse.as_str()))
+                            .unwrap_or_default();
+                        CycleReport {
+                            variant: "sequence-cycle",
+                            message: format!(
+                                "is on a cycle in acyclic pair '{name}' ({forward} -> {inverse}): {text}"
+                            ),
+                        }
+                    }
+                    None => cycle_over_roadmap_pairs(&graphs, declared, &path, &text),
+                };
+                on_cycle.insert((*group, member.clone()), report);
             }
         }
     }
 
-    let mut reported: BTreeSet<(&str, crate::values::RecordId)> = BTreeSet::new();
+    let mut reported: BTreeSet<(Option<&str>, crate::values::RecordId)> = BTreeSet::new();
     let (population, examined_records) = scoped_census_records(
         config,
         PopulationUnit::Field,
@@ -50,8 +95,11 @@ pub fn sequence_cycle(
             // A record can sit on a cycle that only other records wrote, so
             // the report does not wait for a claim of its own.
             if let Some(id) = record_id(slot.record) {
-                let key = (slot.pair.name.as_str(), crate::values::RecordId::new(&id));
-                if let Some(path) = on_cycle.get(&key) {
+                let key = (
+                    group_of(declared, slot.pair.name.as_str()),
+                    crate::values::RecordId::new(&id),
+                );
+                if let Some(report) = on_cycle.get(&key) {
                     if reported.insert(key) {
                         findings.push(Finding {
                             rule: RULE_ID.to_string(),
@@ -61,11 +109,8 @@ pub fn sequence_cycle(
                             waived: None,
                             declared_severity: None,
                             suggested_action: None,
-                            action_source: ActionSource::new("sequence-cycle"),
-                            message: format!(
-                                "{id} is on a cycle in acyclic pair '{}' ({} -> {}): {path}",
-                                slot.pair.name, slot.pair.forward, slot.pair.inverse
-                            ),
+                            action_source: ActionSource::new(report.variant),
+                            message: format!("{id} {}", report.message),
                         });
                     }
                 }
@@ -86,6 +131,77 @@ pub fn sequence_cycle(
         },
         findings,
     )
+}
+
+struct CycleReport {
+    variant: &'static str,
+    message: String,
+}
+
+/// The report for a cycle in the merged roadmap graph. A loop whose edges all
+/// belong to one declared pair reads as a one-pair loop always did; one that
+/// needs edges of more than one pair names every pair it uses and takes the
+/// cross-pair action variant.
+fn cycle_over_roadmap_pairs(
+    graphs: &BTreeMap<&str, SequenceGraph>,
+    declared: &[String],
+    path: &[crate::values::RecordId],
+    text: &str,
+) -> CycleReport {
+    type Edge<'a> = (&'a crate::values::RecordId, &'a crate::values::RecordId);
+    let edges: Vec<Edge> = path.windows(2).map(|w| (&w[0], &w[1])).collect();
+    let has_edge = |pair: &str, (from, to): Edge| {
+        graphs
+            .get(pair)
+            .and_then(|g| g.get(from))
+            .is_some_and(|next| next.contains(to))
+    };
+    if let Some(single) = declared
+        .iter()
+        .find(|pair| edges.iter().all(|e| has_edge(pair, *e)))
+    {
+        return CycleReport {
+            variant: "sequence-cycle",
+            message: format!("is on a cycle in acyclic pair '{single}': {text}"),
+        };
+    }
+    let quoted: Vec<String> = declared
+        .iter()
+        .filter(|pair| edges.iter().any(|e| has_edge(pair, *e)))
+        .map(|pair| format!("'{pair}'"))
+        .collect();
+    CycleReport {
+        variant: "sequence-cycle-cross-pair",
+        message: format!(
+            "is on a cycle that crosses acyclic pairs {} (roadmap.pairs), each acyclic on its own: {text}",
+            quoted.join(" and ")
+        ),
+    }
+}
+
+/// Adds every edge of `from` to `into`. `X -> {Y}` reads "X depends on Y".
+pub(super) fn merge_into(into: &mut SequenceGraph, from: &SequenceGraph) {
+    for (node, targets) in from {
+        into.entry(node.clone()).or_default();
+        for target in targets {
+            into.entry(target.clone()).or_default();
+            into.get_mut(node)
+                .expect("just inserted")
+                .insert(target.clone());
+        }
+    }
+}
+
+/// The one graph over several pairs' graphs, which `urzua roadmap` reads and
+/// `sequence.cycle` reads for the pairs `roadmap.pairs` names.
+pub(super) fn merged_graph<'g>(
+    graphs: impl IntoIterator<Item = &'g SequenceGraph>,
+) -> SequenceGraph {
+    let mut merged = SequenceGraph::new();
+    for graph in graphs {
+        merge_into(&mut merged, graph);
+    }
+    merged
 }
 
 pub(super) type SequenceGraph =
@@ -347,30 +463,27 @@ pub(super) fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>
     components
 }
 
-/// A shortest cycle through `start`, rendered `A -> B -> A`; ties break on
-/// `RecordId` order, so the text is the same on every run.
+/// A shortest cycle through `start`, as the ids `A, B, A`; ties break on
+/// `RecordId` order, so the path is the same on every run.
 fn shortest_cycle(
-    graph: &BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>,
+    graph: &SequenceGraph,
     start: &crate::values::RecordId,
-) -> Option<String> {
+) -> Option<Vec<crate::values::RecordId>> {
     let mut previous: BTreeMap<&crate::values::RecordId, &crate::values::RecordId> =
         BTreeMap::new();
     let mut queue = std::collections::VecDeque::from([start]);
     while let Some(node) = queue.pop_front() {
         for next in graph.get(node)? {
             if next == start {
-                let mut path = vec![start.as_str()];
                 let mut at = node;
-                let mut reversed = vec![at.as_str()];
+                let mut reversed = vec![at.clone()];
                 while at != start {
                     at = previous[at];
-                    reversed.push(at.as_str());
+                    reversed.push(at.clone());
                 }
                 reversed.reverse();
-                path.clear();
-                path.extend(reversed);
-                path.push(start.as_str());
-                return Some(path.join(" -> "));
+                reversed.push(start.clone());
+                return Some(reversed);
             }
             if !previous.contains_key(next) {
                 previous.insert(next, node);

@@ -278,7 +278,7 @@ fn a_cycle_is_listed_once_in_ascending_order_and_never_looped_on() {
 }
 
 #[test]
-fn a_loop_across_two_declared_pairs_is_a_cycle_that_check_cannot_see() {
+fn a_loop_across_two_declared_pairs_is_a_cycle_that_check_and_the_roadmap_both_report() {
     let cfg = "schema_version: 2
 roadmap:
   pairs: [sequencing, gating]
@@ -304,19 +304,23 @@ rules:
         ],
         &[],
     );
+    // `check` reads the same one graph (MILE-192), so the two agree: it
+    // reports the loop on each member the roadmap lists.
     let (_, check) = run(&dir, &["check", "docs/"]);
     let check: serde_json::Value = serde_json::from_str(&check).unwrap();
-    assert_eq!(check["findings"], serde_json::json!([]), "{check}");
-    let ran = check["rules_executed"]
+    let found: Vec<&serde_json::Value> = check["findings"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|r| r["rule"] == "sequence.cycle")
-        .unwrap();
-    assert_eq!(
-        ran["status"], "ran",
-        "check ran the rule and saw no cycle: {check}"
-    );
+        .filter(|f| f["rule"] == "sequence.cycle")
+        .collect();
+    assert_eq!(found.len(), 2, "{check}");
+    for f in found {
+        assert!(
+            f["message"].as_str().unwrap().contains("crosses"),
+            "{check}"
+        );
+    }
     let r = roadmap(&dir);
     assert_eq!(r["cycles"], serde_json::json!([["MILE-2", "MILE-3"]]));
     assert_eq!(strings(&r["pairs"]), ["sequencing", "gating"]);
