@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M2W0QA0YMGXD5V5XBXN80PKB
-Status: Open
+Status: Fixed
 Found-in: 'A code review of PR #74 -- SPEC-1 was rewritten by roughly 60%% with two substantive entries and its Version left at 0.3'
-Regression-test: 'not yet written -- a spec gaining a `substantive` revision entry without a `Version` change must be a finding; a `structural` entry, or an unchanged spec, must not'
-Blocked-on: —
+Regression-test: 'rust/crates/urzua-cli/tests/version_bump_integration.rs::a_substantive_row_without_a_version_bump_is_reported_observed_failing, rust/crates/urzua-cli/tests/version_bump_integration.rs::a_structural_row_without_a_version_bump_is_reported'
 ---
 # 51 — A substantive revision-log entry does not require the `Version` bump `SPEC-18` mandates
 
@@ -35,6 +34,12 @@ Needs the git-history access `embodiment.consistency` already has (`ADR-32`), si
 in this change" is a diff question, not a document question. That is the same precomputed-by-the-caller
 shape, not new I/O in `urzua-core`.
 
+## Fixed
+
+Maintainer decision of 2026-11-04. `revision-log.version-bump-required` is a `--base` rule: for each changed record of a type that declares `revision_log: {version_bump: {field, classes}}`, a revision-log row present now and absent from the merge base's copy, whose class is one of `classes`, requires the record's `field` to differ from the merge base's. The merge base's text is read by the CLI through `urzua-io` (`read_at_commit`) and handed to the rules as data, so `urzua-core` stays pure. No type declares it by default; this repository declares it on `spec` for `substantive` and `structural`, and `urzua check --base origin/main` is clean. A record new in the diff has nothing to bump from and is left unexamined, a whole-repo run reports `not-applicable`, and enabling the rule with no declaring type fails the config load. `SPEC-2`, `SPEC-3` and `SPEC-18` are updated.
+
+`MILE-44`'s suggested actions (`ADR-73`) have not landed, so the finding carries none yet; it is the rule's message that says to bump the field.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -44,3 +49,4 @@ shape, not new I/O in `urzua-core`.
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
 > | 2026-09-19 | Scope corrected to include `structural` entries. **Why:** `SPEC-18` reads *"a substantive **or structural** change is a `Version` bump plus a Why-bearing revision-log entry"*, and this record named only the substantive half -- which would have built a rule enforcing half a decision, the same shape as `MILE-7` being filed as an exemption when the requirement runs both ways. | **substantive** |
 > | 2026-11-04 | `Blocked-on` cleared (`MILE-98` is Done); `Status` stays Open, and the fix needs a design decision. **Why:** the declared model supplies the fields (`Version`) and the revision log's identity (`revision_log`, `MILE-167`), but the rule is a diff question: it must compare a record's revision rows and `Version` against the base, and `check --base` hands rules only the changed paths (`diff_gate.rs`), not the base text. Building it means a new diff-content input from the caller, as `embodiment.consistency` has for history, and a choice of which change classes require the bump and how that is declared. That is a rule-vocabulary decision (`ADR-53` left the function set open) for the maintainer. | **substantive** |
+> | 2026-11-04 | `Status: Open` -> `Fixed`; `Blocked-on` removed; `Regression-test` filled. **Why:** maintainer decision of 2026-11-04 chose a config-driven, diff-aware rule over a hardcoded comparison; it is built, declared on `spec` in this repository's config and exercised by `check --base origin/main`. | **substantive** |

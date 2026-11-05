@@ -73,7 +73,137 @@ pub fn revision_log_change_class(
     )
 }
 
+/// `BUG-51`: a changed record that adds a revision-log row of a class its
+/// type declares in `revision_log.version_bump` must change the declared
+/// version field. "Adds" is a diff question, so the caller passes the changed
+/// paths and the merge base's text of each changed record as data; the core
+/// stays pure. A run with no diff reports `not-applicable`. A record with no
+/// base text is new at this change and has nothing to bump from, so it is
+/// eligible and unexamined; a renamed record is the same (a rename reads as a
+/// deletion plus an addition).
+pub fn revision_log_version_bump(
+    records: &[Record],
+    config: &Config,
+    full_text: &HashMap<std::path::PathBuf, String>,
+    changed: Option<&[std::path::PathBuf]>,
+    base_text: &HashMap<std::path::PathBuf, String>,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_REVISION_LOG_VERSION_BUMP_REQUIRED;
+    let Some(changed) = changed else {
+        return (
+            RuleExecution {
+                rule: RULE_ID.to_string(),
+                population: None,
+                status: RuleStatus::NotApplicable,
+                examined_records: Vec::new(),
+            },
+            Vec::new(),
+        );
+    };
+    let changed: std::collections::HashSet<&std::path::PathBuf> = changed.iter().collect();
+    // The changed records of a type that declares a bump, in path order.
+    let mut candidates: Vec<&Record> = records
+        .iter()
+        .filter(|r| changed.contains(&r.path))
+        .filter(|r| {
+            config
+                .record_types
+                .get(&r.record_type)
+                .is_some_and(|t| t.version_bump().is_some())
+        })
+        .collect();
+    candidates.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut findings = Vec::new();
+
+    let (population, examined_records) = census_records(
+        PopulationUnit::Record,
+        candidates,
+        |record| record.path.clone(),
+        |record| {
+            let Some(type_config) = config.record_types.get(&record.record_type) else {
+                return Outcome::Absent;
+            };
+            let Some(bump) = type_config.version_bump() else {
+                return Outcome::Absent;
+            };
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
+            let (Some(now_text), Some(then_text)) =
+                (full_text.get(&record.path), base_text.get(&record.path))
+            else {
+                return Outcome::Absent;
+            };
+            let id = config.revision_log_id(&record.record_type);
+            let now = find_revision_log_entries(now_text, &id).unwrap_or_default();
+            let mut then: Vec<String> = find_revision_log_entries(then_text, &id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|e| e.row)
+                .collect();
+            // A multiset difference: a row present before is consumed once.
+            let added: Vec<&RevisionLogEntry> = now
+                .iter()
+                .filter(|e| match then.iter().position(|r| *r == e.row) {
+                    Some(i) => {
+                        then.swap_remove(i);
+                        false
+                    }
+                    None => true,
+                })
+                .filter(|e| {
+                    let class = e.change_class.trim_matches('*').trim();
+                    bump.classes.iter().any(|c| c.trim() == class)
+                })
+                .collect();
+            let Some(first) = added.first() else {
+                return Outcome::Examined;
+            };
+            let before = crate::record::Record::parse_with_shape_and_prefix(
+                record.path.clone(),
+                record.record_type.clone(),
+                then_text,
+                type_config.header_shape,
+                record.type_prefix.clone(),
+            );
+            let field = bump.field.trim();
+            let norm = |v: Option<&str>| v.map(|v| v.trim().to_string());
+            if norm(before.header.get(field)) == norm(record.header.get(field)) {
+                findings.push(Finding {
+                    rule: RULE_ID.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: Some(first.line),
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("version-bump").field(field),
+                    message: format!(
+                        "revision log entry dated {} adds a {} change but '{field}' is unchanged from the merge base ({}) -- bump it",
+                        first.date,
+                        first.change_class.trim_matches('*').trim(),
+                        norm(record.header.get(field)).unwrap_or_else(|| "absent".to_string()),
+                    ),
+                });
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution {
+            rule: RULE_ID.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        },
+        findings,
+    )
+}
+
 pub(crate) struct RevisionLogEntry {
+    /// The row's cells, trimmed and joined, so a row is the same row at the
+    /// merge base and now whatever the table's padding.
+    pub(crate) row: String,
     pub(crate) date: String,
     pub(crate) change_class: String,
     pub(crate) line: usize,
@@ -146,6 +276,7 @@ pub(crate) fn find_revision_log_entries(
             continue;
         };
         entries.push(RevisionLogEntry {
+            row: cells.join("|"),
             date: date.to_string(),
             change_class: class.to_string(),
             line: idx + 1,
@@ -234,6 +365,7 @@ mod tests {
             marker: None,
             heading: Some("History".into()),
             required: None,
+            version_bump: None,
         });
         let config = config_with_types(vec![("spec", t)]);
         let content = format!("# 1\n\n## History\n\n{LOG}");

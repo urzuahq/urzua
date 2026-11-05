@@ -75,6 +75,109 @@ struct Context<'a> {
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     repo_root: PathBuf,
+    base_text: HashMap<PathBuf, String>,
+    templates: urzua_core::new_record::TemplateValues,
+}
+
+/// `revision-log.version-bump-required` judges a changed record against the
+/// merge base's copy, so that copy is read here (`BUG-51`) and handed over as
+/// data. Only the changed records of a type declaring a bump are read; a
+/// record new in the diff has no merge-base copy and gets no entry.
+fn load_base_text(
+    session: &Session,
+    scope: &ReportScope,
+    notices: &mut Vec<Notice>,
+) -> Result<HashMap<PathBuf, String>, String> {
+    let mut out = HashMap::new();
+    let (Some(changes), Some(_)) = (
+        &scope.changed,
+        enabled_setting(
+            &session.config,
+            rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+        ),
+    ) else {
+        return Ok(out);
+    };
+    for record in &session.records {
+        let declares = session
+            .config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.version_bump().is_some());
+        if !declares || !changes.changed.contains(&record.path) {
+            continue;
+        }
+        // A path added since the merge base (a rename's new name too) has no
+        // copy there: not an error, and not examined. Any other failure to read
+        // the merge base's copy is disclosed, since the record then goes
+        // unexamined.
+        if changes.added.contains(&record.path) {
+            continue;
+        }
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path) {
+            Ok(text) => {
+                out.insert(record.path.clone(), text);
+            }
+            Err(e) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
+                message: format!(
+                    "{}: could not read the merge base's copy, so the record is not examined: {e}",
+                    record.path.display()
+                ),
+            }),
+        }
+    }
+    Ok(out)
+}
+
+/// `field.quality`'s `template_placeholders` (`BUG-22`): each declared type's
+/// template header, read from `.urzua/templates/<type>.md`. A type with no
+/// template is simply absent. Declaring the option when no type has one is a
+/// warning notice rather than a rule that quietly does nothing (the same
+/// treatment as an absent `claim_paths` entry).
+fn load_templates(
+    repo_root: &Path,
+    config: &Config,
+    notices: &mut Vec<Notice>,
+) -> Result<urzua_core::new_record::TemplateValues, String> {
+    let declared = config
+        .enabled_rule_opts::<rules::FieldQualityOpts>(rules::RULE_FIELD_QUALITY)
+        .is_some_and(|o| o.template_placeholders);
+    let mut templates = urzua_core::new_record::TemplateValues::new();
+    if !declared {
+        return Ok(templates);
+    }
+    for record_type in config.record_types.keys() {
+        let path = repo_root
+            .join(".urzua/templates")
+            .join(format!("{record_type}.md"));
+        match urzua_io::read_to_string(&path) {
+            Ok(text) => {
+                templates.insert(
+                    record_type.clone(),
+                    urzua_core::new_record::template_header_values(&text),
+                );
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(format!(
+                    "field.quality: template '{}' could not be read: {e}",
+                    path.display()
+                ))
+            }
+        }
+    }
+    if templates.is_empty() {
+        notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: rules::RULE_FIELD_QUALITY.to_string(),
+            message: "field.quality: template_placeholders is declared but no \
+                      .urzua/templates/<type>.md exists for any record type -- the option reads nothing"
+                .to_string(),
+        });
+    }
+    Ok(templates)
 }
 
 impl<'a> Context<'a> {
@@ -91,6 +194,7 @@ impl<'a> Context<'a> {
             config_path: &s.config_path,
             records: &s.records,
             full_text: &s.full_text,
+            templates: &self.templates,
             index: &self.record_index,
             collisions: &self.collisions,
             claims: &self.claims,
@@ -103,6 +207,7 @@ impl<'a> Context<'a> {
             drifted: &self.drift.drifted,
             fresh: &self.drift.fresh,
             claim_ages: &self.claim_ages,
+            base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
             committed_statuses: self.committed_statuses.as_ref(),
             refs_snapshot: &self.refs_snapshot,
@@ -415,6 +520,8 @@ fn load_context<'a>(
     let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
 
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
+    let base_text = load_base_text(session, scope, &mut notices)?;
+    let templates = load_templates(repo_root, config, &mut notices)?;
 
     Ok((
         Context {
@@ -451,6 +558,8 @@ fn load_context<'a>(
                 )
             }),
             repo_root: repo_root.clone(),
+            base_text,
+            templates,
         },
         notices,
     ))
