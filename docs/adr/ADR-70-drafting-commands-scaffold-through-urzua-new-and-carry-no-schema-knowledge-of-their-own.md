@@ -51,7 +51,7 @@ Easy. The commands are markdown files; deleting them returns to `AGENTS.md` pros
 
 ## Amendment (2026-11-05): a lifecycle command may set a status only when the engine computes it from evidence
 
-*Status of this amendment: proposed, pending maintainer acceptance (decided by the maintainer on 2026-11-05, drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
 The Decision says a drafting command "refuses to write `Accepted`, `Done`, `Fixed` or an acceptance date", and the Context says a record's `Status` is a human decision. `ADR-89` adds lifecycle commands, among them `/done`, which finishes a milestone or a bug, and a reading of that command as outside this decision would leave a standing tension between the two. This amendment resolves it.
 
@@ -76,3 +76,4 @@ The Decision says a drafting command "refuses to write `Accepted`, `Done`, `Fixe
 > |---|---|---|
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-05 | Amendment added: a lifecycle command may set a status only when the engine computes it from the record's evidence (`urzua fix --apply`), never by an agent's choice; drafting commands are unchanged and gated statuses stay out of reach. **Why:** `ADR-89` adds `/done`, which writes `Done` and `Fixed`, and the Decision forbids a command to write them; maintainer decision, 2026-11-05; proposed, pending maintainer acceptance, `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment (lifecycle commands set a status only from evidence) accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

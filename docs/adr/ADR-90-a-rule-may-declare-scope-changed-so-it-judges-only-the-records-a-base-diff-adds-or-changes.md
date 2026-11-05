@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6PYD2NGM8E41XYRCM7S22Q7
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -208,3 +209,4 @@ later is not. `out_of_scope` is untouched. `scope` accepts one value now: a seco
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after independent review: a separate additive `deferred_by_scope` counter replaces reuse of `out_of_scope` (which `config.scope-matches-nothing` would have warned on); dedicated scalar validation for `scope`; units are `field` slots (494 eligible); cross-record rules named; ADR-78 added. **Why:** Review of PR #360 found that reuse would warn on every plain `check`. Status stays Proposed. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

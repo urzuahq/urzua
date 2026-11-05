@@ -6,7 +6,7 @@ Track: schema-governance
 Implements: ADR-91
 Blocked-on: null
 ---
-# 204 — Build urzua waive --from-report: draft pending waivers from the current findings
+# 205 — Build urzua waive --from-report: draft pending waivers from the current findings
 
 ## What
 
@@ -53,3 +53,4 @@ engine, so it belongs in Phase 1.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** Maintainer decision, 2026-11-05, recorded in `ADR-91` (Proposed). | **substantive** |
+> | 2026-11-05 | Renumbered from `MILE-204` to `MILE-205`: two parallel PRs (#362, #364) both took 204, and the harness cutover milestone keeps it. **Why:** an id is unique per type. | **structural** |
