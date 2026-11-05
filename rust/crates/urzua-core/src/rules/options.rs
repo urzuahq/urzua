@@ -228,3 +228,20 @@ mod tests {
         assert_eq!(o.fields, Some(vec!["Implements".to_string()]));
     }
 }
+
+/// `embodiment.locator-on-back-pointer-path`: the scanned paths and, optionally,
+/// the test-class subset (`MILE-189`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LocatorMechanismOpts {
+    pub back_pointer_paths: Vec<String>,
+    pub test_paths: Vec<String>,
+}
+
+impl RuleOpts for LocatorMechanismOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        LocatorMechanismOpts {
+            back_pointer_paths: s.back_pointer_paths.clone().unwrap_or_default(),
+            test_paths: s.test_paths.clone().unwrap_or_default(),
+        }
+    }
+}

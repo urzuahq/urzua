@@ -3331,7 +3331,8 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
                 format!("{id}: {{level: error, application_paths: [\"src\"]}}")
             }
             "embodiment.back-pointer-resolution"
-            | "embodiment.back-pointer-decision-accepted" => {
+            | "embodiment.back-pointer-decision-accepted"
+            | "embodiment.locator-on-back-pointer-path" => {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),

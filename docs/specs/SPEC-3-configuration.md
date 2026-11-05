@@ -1,5 +1,5 @@
 ---
-Version: '0.75'
+Version: '0.76'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1206,8 +1206,34 @@ rules:
   `Not started`. A record stating any other value there is not judged and stays unexamined in the
   census. `urzua fix` repairs the cited records only.
 
-The option belongs to `embodiment.back-pointer-resolution` alone; on any other rule it is the usual
-option-on-a-rule-that-does-not-take-it load error.
+`test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
+(below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
+
+### Preferring the lighter mechanism: `embodiment.locator-on-back-pointer-path` (`ADR-78` item 4, `MILE-189`)
+
+An opt-in warning for a `Realized-by` locator on a file the back-pointer scan already reads, where an
+`Implements:` or `Verifies:` comment would say the same thing. It declares its own paths, as
+`embodiment.back-pointer-decision-accepted` does, so it does not depend on the other rule being on.
+
+```yaml
+rules:
+  embodiment.locator-on-back-pointer-path:
+    level: warn
+    back_pointer_paths: ["src", "tests"]
+    test_paths: ["tests"]      # optional, each entry inside a back_pointer_paths entry
+```
+
+- It flags a `code:` locator on a file under `back_pointer_paths` (an `Implements:` comment is code tier
+  anywhere) and a `test:` locator on a file under `test_paths` (a `Verifies:` comment counts only there).
+- It does not flag what a comment cannot say: a `spec:` locator, a `test:` locator outside `test_paths`,
+  a locator with a `#scope`, or a locator with an `@sha256` pin. `Realized-by` is the only option for
+  those, and for any path the comment scan cannot reach, which is why this is a nudge and not an error.
+- It offers no edit action. Removing the locator before the comment exists would delete the evidence
+  and leave `Embodiment` disagreeing with what is computed, and the other half of the repair is a comment in a
+  source file, which no action kind addresses (`ADR-73`: an exemption with a reason, as for
+  `embodiment.back-pointer-*`). The author adds the `Implements:` or `Verifies:` comment first, then
+  removes the locator from `Realized-by`.
+- `back_pointer_paths` is required (a load error without it); `test_paths` is optional.
 
 ### Sticky Embodiment states (`MILE-148`)
 
@@ -1413,4 +1439,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.73`. Documented declared boundaries for `boundary.published-path-reference`: the `boundaries` option (`paths`, `kind`, `reason`, `severity`, `exclude`) and `ignore_marker`, the prohibitions each kind carries, the boundary's severity as the level of its findings, `published_paths` read as a published boundary (not deprecated, and now a prefix-or-glob list), the published skip in the evidence collector, and the three reported states (an unused `exclude`, an unused marker, an uncovered path). **Why:** `MILE-125`, `ADR-80`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.74`. Documents the top-level `override_log` declaration and `override.unreviewed`: the log's table format, what "reviewed" means (a named person, not a blank, placeholder or declared pending value), that a declared log which does not exist is reported, and the load errors. **Why:** `MILE-188`, `ADR-78` item 1. | **substantive** |
-> | 2026-11-05 | Bumped to `0.75`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.75`. Documents `embodiment.locator-on-back-pointer-path` and its `back_pointer_paths` and `test_paths` options: what it flags, what a comment cannot say and it therefore leaves, and that it offers no edit action (an exemption, as for the back-pointer rules). **Why:** `MILE-189`, `ADR-78` item 4. | **substantive** |
+> | 2026-11-05 | Bumped to `0.76`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
