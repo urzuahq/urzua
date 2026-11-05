@@ -397,3 +397,154 @@ fn a_rule_anchored_outside_the_record_is_listed_as_not_judged() {
     let msg = v["message"].as_str().unwrap();
     assert!(msg.contains("type.no-declared-spec"), "{msg}");
 }
+
+const LOGGED: &str = "schema_version: 2\noverride_log: .urzua/override-log.md\nrules: {header.required-fields: error, override.unreviewed: warn}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n";
+
+fn urzua_check(dir: &Path) -> serde_json::Value {
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .arg("check")
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+#[test]
+fn an_override_is_recorded_in_the_declared_log_and_check_then_reports_it_unreviewed() {
+    let root = fixture_with("logged", GOOD, LOGGED);
+    let no_date = GOOD.replace("Date: 2026-01-01\n", "");
+    let (code, v) = core(
+        &root,
+        &[
+            "--override",
+            "dana",
+            "--reason",
+            "importing a legacy record",
+            "docs/adr/ADR-1-a.md",
+        ],
+        &[],
+        &no_date,
+    );
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-override")),
+        "{v}"
+    );
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("Recorded in .urzua/override-log.md"),
+        "{v}"
+    );
+    let log = std::fs::read_to_string(root.join(".urzua/override-log.md")).unwrap();
+    let row = log
+        .lines()
+        .find(|l| l.contains("dana"))
+        .unwrap_or_else(|| panic!("a row for the override: {log}"));
+    for cell in [
+        "docs/adr/ADR-1-a.md",
+        "header.required-fields",
+        "importing a legacy record",
+    ] {
+        assert!(row.contains(cell), "{cell} in {row}");
+    }
+    assert!(
+        row.trim_end().ends_with("| |"),
+        "Reviewed-by is blank: {row}"
+    );
+
+    // The log is a committed file; check reports the entry until it is reviewed.
+    let report = urzua_check(&root);
+    let findings = report["findings"].as_array().unwrap();
+    let unreviewed: Vec<_> = findings
+        .iter()
+        .filter(|f| f["rule"] == "override.unreviewed")
+        .collect();
+    assert_eq!(unreviewed.len(), 1, "{report}");
+    assert!(unreviewed[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("'dana'"));
+
+    // A person reviews it by naming themselves in the last cell.
+    let reviewed = log.replace("| |\n", "| erin |\n");
+    std::fs::write(root.join(".urzua/override-log.md"), reviewed).unwrap();
+    let report = urzua_check(&root);
+    assert!(
+        !report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"] == "override.unreviewed"),
+        "{report}"
+    );
+}
+
+#[test]
+fn with_a_log_declared_an_override_needs_a_reason_and_nothing_is_written_without_one() {
+    let root = fixture_with("logged-noreason", GOOD, LOGGED);
+    let no_date = GOOD.replace("Date: 2026-01-01\n", "");
+    let (code, v) = core(
+        &root,
+        &["--override", "dana", "docs/adr/ADR-1-a.md"],
+        &[],
+        &no_date,
+    );
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("needs a reason"),
+        "{v}"
+    );
+    assert!(!root.join(".urzua/override-log.md").exists());
+}
+
+#[test]
+fn without_a_declared_log_the_override_says_it_is_not_recorded() {
+    let root = fixture("unlogged", RECORD);
+    let wrong = RECORD.replace("Not started", "Verified");
+    let (code, v) = core(
+        &root,
+        &["--override", "bob", "docs/adr/ADR-1-a.md"],
+        &[],
+        &wrong,
+    );
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-override")),
+        "{v}"
+    );
+    assert!(
+        v["message"].as_str().unwrap().contains("NOT recorded"),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_override_that_cannot_be_recorded_is_not_allowed() {
+    // The declared log is a directory, so no row can be appended.
+    let root = fixture_with("logged-unwritable", GOOD, LOGGED);
+    std::fs::create_dir_all(root.join(".urzua/override-log.md")).unwrap();
+    std::fs::write(root.join(".urzua/override-log.md/keep"), "x").unwrap();
+    let no_date = GOOD.replace("Date: 2026-01-01\n", "");
+    let (code, v) = core(
+        &root,
+        &[
+            "--override",
+            "dana",
+            "--reason",
+            "why",
+            "docs/adr/ADR-1-a.md",
+        ],
+        &[],
+        &no_date,
+    );
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("could not be recorded"),
+        "{v}"
+    );
+}
