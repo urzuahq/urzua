@@ -30,3 +30,4 @@ A committed log of editor-hook overrides, declared in `.urzua/config.yaml`, with
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-78` Accepted 2026-11-05 decides a committed override log read by `check` and notes that no milestone exists for it. | **substantive** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-05 | Built in #309: top-level `override_log` and the opt-in `override.unreviewed` rule (`SPEC-2`, `SPEC-3`), the hook recording a named override and requiring a reason (`SPEC-8`), and both enabled in this repository's configuration with an empty log. `Realized-by` added and `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's configuration. | **substantive** |
