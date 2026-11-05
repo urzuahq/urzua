@@ -8,6 +8,7 @@ Deciders: beauwilliams
 Embodiment: Verified
 Supersedes / Superseded-by: —
 Derives-from: —
+Non-reference-ids: WAIVER-0022
 ---
 # 86 — A waiver may be permanent when the repository declares which reasons allow it
 
@@ -193,3 +194,4 @@ report as ineffective.
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Corrected the Honesty clause on citations: `pointer.resolution` reports a cited record that does not resolve, and `pointer.target-status` (with `Justified-by` in its `fields`) reports one that is `Superseded`. The decision is unchanged; `MILE-193` lists `Justified-by` under `pointer.target-status`. **Why:** independent review of #345 found `pointer.resolution` never reads a target's status, and `pointer.target-status` is the rule that does. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `WAIVER-0022`. **Why:** the text names this waiver as it was when the decision was made; the waiver has since been removed (its ids are declared on the records that name them), and the field states that the id is history and not a citation. The field carries no decision; the Decision is unchanged. | **structural** |
