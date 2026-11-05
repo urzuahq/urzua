@@ -49,8 +49,14 @@ verifiable without reading a sentence, accepting that the author has to write th
 left undeclared is not detected by this ADR alone.
 
 - **The field is declared, not known.** Config names the field (this repository: `closes`) on the existing
-  claim-reading rule, as an option beside `claim_paths`. The engine knows no field name. Declaring none
-  changes nothing; the rule is opt-in like every other (`ADR-53`).
+  claim-reading rule, as an option beside `claim_paths`. The engine knows no field name, record type or
+  status: the listed ids are checked against whatever types the repository declares, and "closed" is each
+  type's declared terminal statuses. Declaring none changes nothing; the rule is opt-in like every other
+  (`ADR-53`).
+- **Strictness is a config option.** `strict: true|false`, default `false`: with `false`, the field is
+  checked when present. With `true`, a fragment in a declared claim path that lacks the field is a finding,
+  so a fragment that names a record without declaring whether it closes it is caught; `closes: []` is the
+  declaration that it closes nothing. This repository enables `strict`.
 - **Its value is a list of record ids,** on one line: `closes: [BUG-60, BUG-61]`, or a single id. Each id
   must resolve; one that resolves to nothing is reported, never skipped. An empty list is a valid
   declaration that the change closes nothing.
@@ -103,18 +109,20 @@ decision.
 - This repository declares `closes` and the changeset convention in `CONTRIBUTING.md` and the changelog
   guidance gains one sentence.
 - `BUG-66` closes once this is built, with a regression test that a fragment listing a still-open record in
-  `closes` is an error. That is the honest limit: the incident's own shape, a fragment naming a record
-  with **no** `closes` entry, is still not detected. What changes is that a declared claim is exact and a
-  citation is never mistaken for one.
+  `closes` is an error. With `strict` on, as here, the incident's own shape, a fragment that
+  names a record and declares nothing, is caught because the fragment lacks the field; with it off, that
+  shape is still not detected. Either way a declared claim is exact and a citation is never mistaken for one.
 - The records a release closes are not in the user-facing changelog, because knope ignores the key. A
   release note that wants them still writes them in prose.
-- A fragment that closes nothing and declares nothing is indistinguishable from one that forgot to.
+- Under `strict`, every fragment carries the field (`closes: []` when it closes nothing), an edit on each
+  one. The fragments already unreleased in this repository lack it, so enabling `strict` needs them migrated
+  in the same change, or the check scoped to fragments a PR adds (`--base`); that choice belongs to the
+  implementing change.
 
 ## Open questions
 
-1. **Should the field be required on every fragment** (an empty list meaning "closes nothing")? That is the
-   only way to detect the `BUG-66` omission, at the cost of an edit on every fragment. This ADR leaves it
-   optional and does not decide the requirement.
+1. **How are the fragments that already exist handled when `strict` is enabled** here: migrated, or only
+   fragments a PR adds or changes examined?
 2. **Is a closed status "by the time the PR merges" checkable without `--base`?** On a branch run the
    record is read at the PR head; a record closed in a later commit of the same PR passes, which is the
    intent. A merge-queue run reads the merged tree. Nothing further is needed unless a reviewer disagrees.
@@ -133,3 +141,4 @@ decision.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 to reject `ADR-81` and make a changeset's claim a structured field; the maintainer approves before it is Accepted. | **substantive** |
+> | 2026-11-05 | Amended while Proposed: whether the field is required on every fragment is a `strict: true|false` config option, default false (checked when present); under `strict` a fragment without the field is a finding, and this repository enables it. The single-line flow-list constraint from the knope test stays. Phrased over declared records and statuses, with no type named. **Why:** maintainer answers of 2026-11-05 to the open questions. | **substantive** |

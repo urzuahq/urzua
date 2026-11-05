@@ -1,5 +1,5 @@
 ---
-Version: '0.84'
+Version: '0.85'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -157,6 +157,7 @@ resolution, `identity.collision` and `filename.identity-pattern`.
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
 | `git-diff` | changed against a base ref | the ref | **yes** (`MILE-123`) |
 | `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
+| `stdin` | one record's proposed content read from stdin | `null` | **yes** (`MILE-191`) |
 | `none` | nothing selected | `null` | no |
 
 The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of whichever internal
@@ -166,6 +167,35 @@ misled into branching on a value no run produces.
 
 `base` is always present in `scope`: the ref as the caller gave it for a `git-diff` run, `null` for
 every other source.
+
+**`stdin` scope** (`MILE-191`, `ADR-78`) is selected by `urzua check --stdin-path <path>`, the
+prospective-content form of `check` that `fix --stdin-path` is for `fix` (`SPEC-8`). It reads the
+proposed content of one record from stdin and judges it against every enabled rule that can judge one
+record, writing nothing; it is the call the editor hook relays.
+
+- **The proposal replaces the on-disk record** (or adds one: the path need not exist yet) before any
+  rule runs, in the records and their text. `urzua-core` is handed that data like any other; the stdin
+  read, the path and the git calls stay in the CLI. References still resolve against the rest of the
+  corpus as it is on disk.
+- **Only that record is reported on.** `files_examined` is `1`, and a finding is kept only when it is
+  about the proposed record's file. A finding anchored to the configuration, a source file or another
+  record is about something the edit does not touch and is left to `check`.
+- **A rule that cannot report on a record is not run.** An enabled rule whose findings are anchored
+  outside the records (`Config`, `Outside`, `Directory` or `ChangedPath` in the rule table) is listed
+  in `rules_executed` as `not-applicable`, never `ran` with nothing found. This is also what keeps a
+  single-record run to about half a second on this corpus.
+- **A rule that compares with a committed copy is judged against HEAD's.** The proposed record is
+  the one changed record, and its committed copy is the record at `HEAD`: `status.transition-allowed`
+  judges the proposed `Status` against HEAD's, and `revision-log.version-bump-required` judges a row the
+  proposal adds against HEAD's revision log and version. A record `HEAD` does not have is new: it has
+  nothing to compare with, so the transition rule starts it at an initial status and the bump rule leaves
+  it unexamined. `filename.identity-pattern` and `type.record-outside-declared-dir` are not judged here
+  (they are about a directory or a path, not the content), and are left to `check`.
+- **Drift is computed for that record only**, from the proposed text, as `fix --stdin-path` does.
+- **A path no record type governs** is `not-run` (exit 2) with an `error` naming it, as is a run with
+  no enabled rule that can look at the record. Combining `--stdin-path` with `PATHS` or `--base` is
+  `not-run` (exit 2) too, not a flag ignored in silence.
+- Severity, waivers, `fail_on` and the exit codes are those of a full run: an unwaived error exits 1.
 
 **`git-diff` scope** (`MILE-123`) is selected by `urzua check --base <ref>`. It is a reporting scope,
 not a reading scope, exactly as a path argument is (`BUG-60`):
@@ -218,7 +248,7 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   failure `BUG-24` fixed.
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
-run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
+run" on a missing base is reading the wrong field, and the sources exist so it does not have to.
 
 **No git repository**: there is no fallback. A directory walk has the failure mode above, so discovery is
 the tracked set or nothing. Outside a git repository, every command that reads one (`check`, `audit`,
@@ -727,3 +757,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.82`. Removed the no-git directory-walk fallback from Discovery: outside a git repository every command that reads one exits 2 with a "needs a git repository" error, as the binary already did. **Why:** `BUG-170`, maintainer decision 2026-11-05; the spec promised behavior that never existed. | **substantive** |
 > | 2026-11-05 | Bumped to `0.83`. A reference to a record, or a `Realized-by` locator, whose file exists on disk but is not tracked by git is its own finding variant (`pointer-untracked`, `supersession-untracked`, `pair-untracked`, `blocker-untracked`, `locator-untracked`), distinct from the `-unresolved` and `locator-missing` variants for a target that exists nowhere. Each declares an `ADR-73` action: the missing variants keep `edit-field` `set`; the untracked ones are exempt, since the repair is `git add` and no action kind addresses git. The action table is regenerated. **Why:** `BUG-13`, maintainer decision 2026-11-05; the on-disk fact is supplied by the CLI so the rule layer stays pure. | **substantive** |
 > | 2026-11-05 | Bumped to `0.84`. A `Realized-by` comma separates entries only when a category prefix follows it; otherwise it belongs to the locator path. **Why:** `BUG-129`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.85`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule that can judge one record, without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the record. **Why:** `MILE-191`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |

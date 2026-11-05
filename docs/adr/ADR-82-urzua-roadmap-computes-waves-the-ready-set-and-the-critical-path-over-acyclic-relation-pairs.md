@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N33XTAZBF07CBH3RPDB75W
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -152,3 +153,4 @@ note kind, a `reason` or a key is additive.
 > | 2026-11-05 | Drafted as Proposed. **Why:** `MILE-182` builds `RFC-48`'s `urzua roadmap`, no accepted record decides its waves, ready set, critical path or output shape, and an agent may not accept it; the maintainer decides. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after design review: one graph over the pairs `roadmap.pairs` declares (a cross-pair loop is detected); ready means open and not derived-blocked; natural id ordering, the critical-path tie-break and the cycle listing fixed; `needs_replan` reasons and `via` defined; output always an object with `schema`, a per-record map and structured notes from a closed set including `unstructured-wait`; groups nest as arrays with `value: null` last; a type with no status vocabulary is open and noted; the departures from `RFC-48`'s sketch are named; `export` carries the roadmap only when opted in. **Why:** maintainer decision, 2026-11-05, on the review of this record. | **substantive** |
 > | 2026-11-05 | Re-check amendments: edge direction fixed (blocker to dependent); `records` and `groups` include `needs_replan` records; a null `pair` sorts first in `notes`; a transitive `blocks` example; Consequences no longer says acceptance moves `MILE-182`'s status, since `blocked` is derived only; a follow-up milestone adds a `sequence.cycle` mode over `roadmap.pairs`. **Why:** design re-check of 2026-11-05. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05, after an independent review and re-check found no remaining blockers; accepted together with ADR-83. | **substantive** |

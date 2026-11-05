@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N54MXZ93MM5TD65PXP5HQ3
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -135,3 +136,4 @@ once adopters of the milestone shape have migrated, and the `progress` key's nam
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 that `Blocked` is derived only, per `RFC-48`; #313's review found no decision record for the derived readings and a departure from the RFC. The maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-05 | Amended while Proposed: the dependency set is the pairs `roadmap.pairs` declares, not every `acyclic` pair, so a containment pair never blocks and check agrees with the roadmap; the containment warning is dropped; `Planned` while blocked is not reported. **Why:** coordinator alignment with the roadmap decision. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05 (blocked is derived only, per RFC-48); accepted together with ADR-82. | **substantive** |
