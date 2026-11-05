@@ -379,6 +379,13 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
+# The pairs that are dependencies, and how `urzua roadmap` groups its records
+# (ADR-82). A containment pair declared acyclic would not order work, so only
+# the sequencing pair is named. The engine names no grouping field.
+roadmap:
+  pairs: ["sequencing"]
+  group_by: ["Phase", "Track"]
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).

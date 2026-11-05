@@ -1,5 +1,5 @@
 ---
-Version: '0.17'
+Version: '0.18'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -131,6 +131,14 @@ supersession reciprocity and dangling cross-references. Never writes.
 **Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
 computes from evidence already in the record; apply mode writes the computed value back, gated hard.
 
+### `urzua roadmap`
+**Specified in full by SPEC-2** (the roadmap output). The order of work computed from the records:
+waves, the ready set, the critical path, what each record blocks and a grouping, over the sequencing
+pairs `roadmap.pairs` declares (SPEC-3). Read-only, nothing stored, always JSON. A repository that
+declares no pair gets a `no-sequencing-pair` note, not an empty roadmap. Exit 0 whenever it could be
+computed; the roadmap reports cycles and records to re-plan in its own output and does not fail on
+them. `ADR-82`.
+
 ### `urzua refs refresh`
 Rewrites the committed snapshot of the repository's issue and pull request numbers that
 `citation.issue-exists` (`SPEC-2`) checks citations against, from the GitHub REST API
@@ -179,7 +187,7 @@ Stdout is the only stream, success or failure, every invocation. No stderr for a
 codebase's own code can structure into JSON, including genuine errors (ADR-26's amendment).
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
-  `ExplainReport`, `ExportReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
+  `ExplainReport`, `ExportReport`, `RoadmapReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
   `DoctorReport`, `CouldNotRun`)
   stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
   no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
@@ -212,6 +220,7 @@ directory whose real path resolves outside the repository (a symlink) makes the 
 | `record_count` | integer | Length of `records`. |
 | `types` | array | One entry per configured type, in sorted name order: `type`, `dir`, `records` (the count exported). A type with no records is listed with `0`, so "empty" and "not configured" differ. |
 | `records` | array | Every record, ordered by `type` then `path`. |
+| `roadmap` | object | The computed roadmap, the same object `urzua roadmap` prints (SPEC-2). Present only when `roadmap.pairs` is declared (SPEC-3), so a repository that has not opted in sees no new key. |
 | `notices` | array | Omitted when empty, as for every report. |
 
 Each `records` entry:
@@ -319,3 +328,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-05 | Bumped to `0.16`. Re-baselined (BUG-50, attested by this PR's review): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus` 890414a9c2c9 -> 07cd765af78d. Reason: BUG-50 made a missing revision log a finding, so the clean-corpus fixture gained a revision log; the exit-0-on-a-clean-corpus behaviour this spec cites is unchanged **Why:** the pinned evidence changed and the PR review is the human re-verification that the claim still holds. | **structural** |
 > | 2026-11-05 | Bumped to `0.17`. `check` gains `--stdin-path`, named under `urzua check` and specified in `SPEC-2`. **Why:** `MILE-191`, `ADR-78` item 2. | **substantive** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-243) 4ec5a0737546 -> 4d5cc9cf4b35. Reason: The Command enum span changed only to add check's --stdin-path flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.18`. Adds `urzua roadmap` to the command surface and `RoadmapReport` to the report list; the export contract gains an optional `roadmap` key, present only when `roadmap.pairs` is declared. **Why:** `MILE-182`, decided in `ADR-82`: the roadmap is part of `export --format json` only for a repository that opted in. | **substantive** |

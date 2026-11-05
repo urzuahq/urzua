@@ -776,6 +776,26 @@ impl Report for GraphReport {
     }
 }
 
+/// `urzua roadmap`'s report (`ADR-82`): the computed order of work, read-only
+/// like `GraphReport`. The roadmap's own notes carry what could not be read;
+/// the exit code is 0 whenever it could be computed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RoadmapReport {
+    pub status: ReportStatus,
+    pub roadmap: crate::rules::Roadmap,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+impl Report for RoadmapReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
 /// One header field of an exported record, in file order. A list entry, not a
 /// map entry: a repeated key is a defect `check` reports, and a map would
 /// hide it.
@@ -845,6 +865,10 @@ pub struct ExportReport {
     pub record_count: usize,
     pub types: Vec<ExportTypeCount>,
     pub records: Vec<ExportedRecord>,
+    /// The computed roadmap (`ADR-82`), present only when `roadmap.pairs` is
+    /// declared: a repository that has not opted in sees no new key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roadmap: Option<crate::rules::Roadmap>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }

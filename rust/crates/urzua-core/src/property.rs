@@ -209,6 +209,7 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                roadmap: Default::default(),
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
@@ -340,6 +341,7 @@ mod tests {
             fail_on: Default::default(),
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
+            roadmap: Default::default(),
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -585,6 +587,7 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                roadmap: Default::default(),
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),

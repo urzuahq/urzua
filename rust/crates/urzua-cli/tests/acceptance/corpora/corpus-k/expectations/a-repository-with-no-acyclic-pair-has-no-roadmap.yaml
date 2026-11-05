@@ -1,0 +1,17 @@
+id: a-repository-with-no-acyclic-pair-has-no-roadmap
+corpus: corpus-k
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-1\n---\n# MILE-2 — m2\n"
+invocation: [--config, .urzua/no-pair.yaml, roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/schema, equals: 1}
+  - {at: /roadmap/notes/0/kind, equals: "no-sequencing-pair"}
+  - {at: /roadmap/records, equals: {}}
+  - {at: /roadmap/waves, equals: []}
+  - {at: /roadmap/ready, equals: []}
+  - {at: /roadmap/critical_path, equals: []}
+  - {at: /roadmap/pairs, equals: []}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

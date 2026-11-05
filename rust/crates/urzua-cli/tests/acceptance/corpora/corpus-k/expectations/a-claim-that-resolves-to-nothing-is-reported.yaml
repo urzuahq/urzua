@@ -1,0 +1,15 @@
+id: a-claim-that-resolves-to-nothing-is-reported
+corpus: corpus-k
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-99\n---\n# MILE-2 — m2\n"
+invocation: [roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/schema, equals: 1}
+  - {at: /roadmap/notes/0/kind, equals: "unresolved-claim"}
+  - {at: /roadmap/notes/0/record, equals: "MILE-2"}
+  - {at: /roadmap/notes/0/field, equals: "Depends-on"}
+  - {at: /roadmap/ready, equals: ["MILE-2"]}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

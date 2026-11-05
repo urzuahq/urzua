@@ -1,5 +1,5 @@
 ---
-Version: '0.72'
+Version: '0.73'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -797,9 +797,33 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   `RFC-48` (`Depends-on` a pointer field, both rules on) it therefore reports nothing and acts as a
   guard for the roadmap: the graph is only computed when no claim was dropped.
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
-  `sequence.terminal-parent-open-child`, the `condition` record type, the derived `blocked` value
-  and `urzua roadmap` are `RFC-48`'s other parts and belong to other milestones (`MILE-144`,
-  `MILE-182`).
+  `sequence.terminal-parent-open-child`, the `condition` record type and the derived `blocked` value
+  are `RFC-48`'s other parts and belong to other milestones (`MILE-144`). `urzua roadmap` is built
+  (`MILE-182`, `ADR-82`) and reads the pairs `roadmap.pairs` names, below.
+
+### `roadmap` (`ADR-82`, `MILE-182`)
+
+```yaml
+roadmap:
+  pairs: ["sequencing"]          # relation_pairs entries that are dependencies
+  group_by: ["Phase", "Track"]   # header fields to group by, outermost first
+```
+
+`urzua roadmap` (output in `SPEC-2`) computes one graph over the pairs `pairs` names. A pair can be
+`acyclic` without being a dependency: a containment pair (`Parent`/`Children`) is checked for cycles,
+but a child does not wait on its parent finishing, so only the pairs named here order work. Both keys
+are optional and default to empty. Absent `pairs` means no roadmap: the command says so in a note and
+`export --format json` carries no `roadmap` key.
+
+- `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
+- `group_by`: each name must be a field some record type declares (`required_fields` or
+  `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
+  A field no open record carries is not an error; the roadmap notes it.
+
+Load-time errors, reported as `roadmap: ...`: a `pairs` name that is not a declared pair, one that does
+not declare `acyclic: true`, a repeated `pairs` or `group_by` entry, a blank or padded `group_by` name,
+and a `group_by` name no type declares. A declaration that can never apply would read as a clean
+roadmap, so it is refused (`ADR-7`).
 
 Enabling either sequence rule while no pair declares `acyclic: true` is a load error, for the reason
 the pair rules refuse to run with no pair: it would examine nothing.
@@ -1313,3 +1337,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.70`. Documented that a type's `revision_log.required` also decides whether `revision-log.change-class-required` reports a record with no revision-log section. **Why:** `BUG-50` -- a record could leave the rule's scope by losing one line, and absence was indistinguishable from compliance; the rule reports it only for a type that declares `required: true`, so a configuration that never declared `revision_log` is unchanged. | **substantive** |
 > | 2026-11-05 | Bumped to `0.71`. A type's declared `identity` also decides how its H1 id is read: the `prefix` capture and a number, with a title that does not match reported as carrying no id. **Why:** `BUG-32`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.72`. A `dir` or `extra_dirs` entry not in canonical form (`./docs/adr`, `docs/adr/`, `docs//adr`) is a config load error (exit 2) that names the canonical spelling, where it used to parse and match nothing. **Why:** `BUG-168`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.73`. A top-level `roadmap: {pairs, group_by}` names the `relation_pairs` entries that are dependencies and the header fields `urzua roadmap` groups by, validated at load. **Why:** `MILE-182`, decided in `ADR-82`: one graph over the declared sequencing pairs, with the pairs declared because an `acyclic` containment pair is not a dependency. | **substantive** |

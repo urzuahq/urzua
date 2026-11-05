@@ -1,0 +1,24 @@
+id: the-critical-path-is-the-smallest-id-sequence-among-the-longest-chains
+corpus: corpus-k
+commits:
+  - write:
+      records/MILE-11-m11.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-11 — m11\n"
+      records/MILE-12-m12.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-11\n---\n# MILE-12 — m12\n"
+      records/MILE-13-m13.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-11\n---\n# MILE-13 — m13\n"
+      records/MILE-14-m14.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-13\n---\n# MILE-14 — m14\n"
+      records/MILE-15-m15.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-13\n---\n# MILE-15 — m15\n"
+      records/MILE-16-m16.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-15\n---\n# MILE-16 — m16\n"
+      records/MILE-19-m19.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-14\n---\n# MILE-19 — m19\n"
+      records/MILE-100-m100.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-14\n---\n# MILE-100 — m100\n"
+      records/MILE-30-m30.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-30 — m30\n"
+      records/MILE-31-m31.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-30\n---\n# MILE-31 — m31\n"
+      records/MILE-32-m32.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-31\n---\n# MILE-32 — m32\n"
+      records/MILE-33-m33.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-32\n---\n# MILE-33 — m33\n"
+invocation: [roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/critical_path, equals: ["MILE-11", "MILE-13", "MILE-14", "MILE-19"]}
+  - {at: /roadmap/ready, equals: ["MILE-11", "MILE-30"]}
+  - {at: /roadmap/waves/3, equals: ["MILE-16", "MILE-19", "MILE-33", "MILE-100"]}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

@@ -208,6 +208,7 @@ mod tests {
     fn no_relation_field_overrides() -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
@@ -223,6 +224,7 @@ mod tests {
     ) -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),

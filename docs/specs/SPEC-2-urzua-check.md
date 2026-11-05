@@ -1,5 +1,5 @@
 ---
-Version: '0.85'
+Version: '0.86'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -584,6 +584,71 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `waiver.matches-nothing` | `waiver-matches-no-finding` | `edit-field` `set` |
 <!-- action-table:end -->
 
+## The roadmap output (`urzua roadmap`)
+
+`urzua roadmap` (`MILE-182`, `ADR-82`, `RFC-48`) is read-only and prints one `RoadmapReport`:
+`{"status": "ok", "roadmap": {...}}`, exit 0 whenever the roadmap could be computed (a cycle or a
+record to re-plan is data in the output, not a failure), exit 2 as for every command when the
+configuration or corpus cannot be read. `export --format json` carries the same object under `roadmap`
+when `roadmap.pairs` is declared, and omits the key otherwise (`SPEC-1`). Nothing is stored.
+
+**One graph.** The edges are those of the pairs `roadmap.pairs` names (`SPEC-3`), read in either
+field, so a written `Blocks` counts, through the graph builder `sequence.cycle` uses. A loop that
+crosses two declared pairs is a cycle here, though `sequence.cycle` still reads one pair at a time. A
+claim on a record whose header cannot be read, or that resolves to nothing, draws no edge and is a
+note. An edge `A Depends-on B` runs `B -> A`: blocker first.
+
+| Key | Meaning |
+|---|---|
+| `schema` | Integer, `1`. Adding a key, a note kind or a `reason` does not change it; changing what a number means does. |
+| `pairs` | The declared `roadmap.pairs`, in declaration order. |
+| `waves` | Array of arrays of ids. A record's wave is `0` with no open dependency, else `1 +` the largest wave among its open dependencies; a dependency in a `success` status is ignored. Layer `n` holds wave `n`. |
+| `ready` | Open records that are not derived-blocked and not kept out by `needs_replan`. `blocked` is derived only (`ADR-83`): a record is blocked when a direct dependency is not in a status its own type declares `success`; a written status is never read for it. Ready is wave 0 by construction, and both are emitted. |
+| `critical_path` | The longest chain of included records by count, and among the longest the lexicographically smallest id sequence, blocker first. Computed over the whole chain, not greedily. One record when nothing has an included dependency. |
+| `records` | Map keyed by id, in natural order, of every open record, `needs_replan` ones included: `type`, `status` (the written value, `null` when none), `wave` (`null` when kept out), `ready`, `blocked`, `blocked_by` (direct dependencies not in `success`), `blocks` (every open record that transitively depends on this one, never itself). |
+| `groups` | `roadmap.group_by` as nested arrays: `{field, value, groups}` for a non-final field, `{field, value, records}` for the final one. Values sort naturally, the `null` bucket (no value) last. Holds the same set as `records`. `[]` when `group_by` is empty. |
+| `needs_replan` | `{record, reason, via}` per open record kept out of `waves`, `ready` and `critical_path`. |
+| `cycles` | Each strongly connected component of more than one record, or a record with an edge to itself, once, members ascending. |
+| `notes` | `{kind, record, pair, field, message}` from a closed set. |
+
+**Open.** A record is open when its status is in neither `success` nor `failure` of its own type. A
+record whose type declares no status vocabulary, or that states no `Status`, is open and draws a
+`no-status-vocabulary` note. In scope are the records of types that declare a side of a declared
+pair, and every record an edge reaches, whatever its type.
+
+**Natural order.** Every id list, map key set and `waves` layer is ascending in natural id order: the
+text before a trailing number compared as text, then the number as a number, then the whole as text,
+so `MILE-5` precedes `MILE-12`. Group values sort the same way.
+
+**`needs_replan.reason`** is a closed set. `failed-dependency`: a direct dependency is in a `failure`
+status (`via` is that dependency, the smallest id if several). `cycle`: the record is a member of a
+cycle (`via` is `null`). `depends-on-cycle`: a direct dependency is kept out because of a cycle
+(`via` is the smallest such dependency). `depends-on-excluded`: a direct dependency is kept out for a
+failure further down (`via` is the smallest such dependency, and the root cause is reachable by
+following `via`). A record with several reasons takes the first of `cycle`, `failed-dependency`,
+`depends-on-cycle`, `depends-on-excluded`. The way out of a failure is to re-point the `Depends-on`
+(a `Superseded` target at its successor); the record then re-enters a wave. A cycle is reported for
+every strongly connected component of the graph, including one whose other members are finished;
+only its open members appear in `needs_replan`.
+
+**`notes[].kind`** is a closed set, sorted in this order, then by `record` in natural order, then by
+`pair` (`null` first), then `field`, then `message`:
+
+| Kind | When |
+|---|---|
+| `no-sequencing-pair` | `roadmap.pairs` is empty. `records` is `{}` and every list is empty. The message says whether any pair declares `acyclic: true`. |
+| `pair-matches-nothing` | A declared pair no record carries a value for. |
+| `unresolved-claim` | An entry in a declared pair's field that names no record, names a record of a type the pair does not carry, or is prose. |
+| `unreadable-record` | A record whose header cannot be read but whose type declares a pair side, or a claim on one. |
+| `no-status-vocabulary` | An in-scope record whose type declares no status vocabulary or that states no `Status`. |
+| `unstructured-wait` | An open record that states a wait in one of its type's `narrative_fields` (placeholders, pending values and `—` excluded) and carries no value in the forward field of a declared pair. Stays until the `condition` record type exists. |
+| `group-field-unset` | A `group_by` field no open record carries. |
+| `nothing-open` | No in-scope record is open: `waves` is `[]` because everything is finished, not because nothing was declared. |
+
+A consumer treats an unknown `kind`, `reason` or key as informational, as for `kind` in `ADR-73`.
+The command emits notes and data, never findings, so it has no suggested action; the rules that
+judge the same records (`sequence.cycle`, `sequence.unresolved-blocker`) are unchanged.
+
 ## Exit codes
 
 | Code | When |
@@ -758,3 +823,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.83`. A reference to a record, or a `Realized-by` locator, whose file exists on disk but is not tracked by git is its own finding variant (`pointer-untracked`, `supersession-untracked`, `pair-untracked`, `blocker-untracked`, `locator-untracked`), distinct from the `-unresolved` and `locator-missing` variants for a target that exists nowhere. Each declares an `ADR-73` action: the missing variants keep `edit-field` `set`; the untracked ones are exempt, since the repair is `git add` and no action kind addresses git. The action table is regenerated. **Why:** `BUG-13`, maintainer decision 2026-11-05; the on-disk fact is supplied by the CLI so the rule layer stays pure. | **substantive** |
 > | 2026-11-05 | Bumped to `0.84`. A `Realized-by` comma separates entries only when a category prefix follows it; otherwise it belongs to the locator path. **Why:** `BUG-129`, maintainer decision 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.85`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule that can judge one record, without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the record. **Why:** `MILE-191`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.86`. Adds the roadmap output (`urzua roadmap`): the `RoadmapReport` object, how waves, ready, the critical path, cycles and `needs_replan` are read, natural id order, and the closed set of note kinds. **Why:** `MILE-182`, decided in `ADR-82`. | **substantive** |

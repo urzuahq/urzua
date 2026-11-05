@@ -1,0 +1,19 @@
+id: a-cycle-is-reported-and-never-looped-on
+corpus: corpus-k
+commits:
+  - write:
+      records/MILE-2-m2.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-4\n---\n# MILE-2 — m2\n"
+      records/MILE-3-m3.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-2\n---\n# MILE-3 — m3\n"
+      records/MILE-4-m4.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-3\n---\n# MILE-4 — m4\n"
+      records/MILE-5-m5.md: "---\nStatus: Planned\nPhase: 0\nDepends-on: MILE-3\n---\n# MILE-5 — m5\n"
+      records/MILE-6-m6.md: "---\nStatus: Planned\nPhase: 0\n---\n# MILE-6 — m6\n"
+invocation: [roadmap]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /roadmap/schema, equals: 1}
+  - {at: /roadmap/cycles, equals: [["MILE-2", "MILE-3", "MILE-4"]]}
+  - {at: /roadmap/ready, equals: ["MILE-6"]}
+  - {at: /roadmap/waves, equals: [["MILE-6"]]}
+  - {at: /roadmap/needs_replan, equals: [{"record": "MILE-2", "reason": "cycle", "via": null}, {"record": "MILE-3", "reason": "cycle", "via": null}, {"record": "MILE-4", "reason": "cycle", "via": null}, {"record": "MILE-5", "reason": "depends-on-cycle", "via": "MILE-3"}]}
+mutation_exempt: urzua roadmap is a read-only view; it applies no rule, so there is none to switch off.

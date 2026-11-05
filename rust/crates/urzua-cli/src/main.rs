@@ -136,6 +136,14 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
+    /// The order of work, computed from the records: waves, the ready set, the
+    /// critical path, what each record blocks and a grouping (ADR-82).
+    ///
+    /// One graph over the sequencing pairs `roadmap.pairs` declares. Read-only;
+    /// nothing is stored. A repository that declares none gets a note saying
+    /// there is no roadmap, not an empty one.
+    Roadmap,
+
     /// Cross-record reconciliation: supersession reciprocity, dangling
     /// references. Embodiment consistency lives in `check` and `fix`
     /// instead -- it turned out to be per-record, not cross-record
@@ -329,6 +337,7 @@ fn main() -> ExitCode {
         } => commands::check::run(cli.config, paths, base, fail_on.map(Into::into), stdin_path),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
+        Command::Roadmap => commands::roadmap::run(cli.config),
         Command::New {
             record_type,
             title,

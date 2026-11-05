@@ -347,6 +347,7 @@ mod tests {
         record_types.insert("milestone".to_string(), type_config(None));
         let config = Config {
             schema_version: 2,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
@@ -368,6 +369,7 @@ mod tests {
         record_types.insert("milestone".to_string(), type_config(Some("SPEC-6")));
         let config = Config {
             schema_version: 2,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),

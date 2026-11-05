@@ -19,36 +19,7 @@ pub fn sequence_cycle(
     let mut findings = Vec::new();
     let slots = pair_slots(records, config, |p| p.acyclic);
 
-    // One graph per pair, built from every readable claim.
-    type Graph = BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
-    let mut graphs: BTreeMap<&str, Graph> = BTreeMap::new();
-    for slot in &slots {
-        let Ok(references) = pair_slot_claims(slot) else {
-            continue;
-        };
-        let Some(own) = record_id(slot.record) else {
-            continue;
-        };
-        let own = crate::values::RecordId::new(&own);
-        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
-        graph.entry(own.clone()).or_default();
-        for reference in references {
-            let target = crate::values::RecordId::new(&reference);
-            let Some(record) = index.get(&target) else {
-                continue;
-            };
-            if record.header.is_unreadable() || !pair_carried_by(slot.pair, &record.record_type) {
-                continue;
-            }
-            graph.entry(target.clone()).or_default();
-            let (from, to) = if slot.forward {
-                (own.clone(), target)
-            } else {
-                (target, own.clone())
-            };
-            graph.entry(from).or_default().insert(to);
-        }
-    }
+    let graphs = sequence_graphs(&slots, index).graphs;
 
     // The records on a cycle, per pair, each with its cycle path.
     let mut on_cycle: BTreeMap<(&str, crate::values::RecordId), String> = BTreeMap::new();
@@ -115,6 +86,106 @@ pub fn sequence_cycle(
         },
         findings,
     )
+}
+
+pub(super) type SequenceGraph =
+    BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
+
+/// The sequencing graph of every pair in the given slots. An edge `X -> Y`
+/// reads "X depends on Y": `A.forward = B` is `A -> B` and `A.inverse = B` is
+/// `B -> A`, so a record that writes only the inverse side still takes part. A
+/// claim that resolves to no record, or to a type the pair does not carry, is
+/// no edge (`sequence.unresolved-blocker` reports the first), and neither is a
+/// claim on a record whose header cannot be read (`ADR-76`). What a rule that
+/// derives a value from the graph must not guess at is disclosed:
+/// `unreadable_dependencies` (the dependent of such a claim),
+/// `unresolved_claimants` (a record whose own dependency field names something
+/// that is not a resolvable record, so fixing the reference may add an edge)
+/// and `unreadable_writers` (a record whose header cannot be read but whose
+/// type declares a pair's inverse side, so it may be a dependency of a record
+/// that cannot be seen).
+// The disclosure sets are for a rule that derives a value from the graph and
+// must not guess (the derived `blocked` value); `urzua roadmap` reads
+// `graphs` and discloses per claim itself.
+#[allow(dead_code)]
+pub(super) struct SequenceGraphs<'a> {
+    pub graphs: BTreeMap<&'a str, SequenceGraph>,
+    pub unreadable_dependencies: BTreeSet<crate::values::RecordId>,
+    pub unresolved_claimants: BTreeSet<crate::values::RecordId>,
+    pub unreadable_writers: bool,
+}
+
+pub(super) fn sequence_graphs<'a>(
+    slots: &[super::relation::PairSlot<'a>],
+    index: &RecordIndex,
+) -> SequenceGraphs<'a> {
+    let mut graphs: BTreeMap<&'a str, SequenceGraph> = BTreeMap::new();
+    let mut unreadable_dependencies = BTreeSet::new();
+    let mut unresolved_claimants = BTreeSet::new();
+    let mut unreadable_writers = false;
+    for slot in slots {
+        let references = match pair_slot_claims(slot) {
+            Ok(references) => references,
+            Err(Outcome::Unreadable) => {
+                if !slot.forward {
+                    unreadable_writers = true;
+                }
+                continue;
+            }
+            Err(_) => continue,
+        };
+        let Some(own) = record_id(slot.record) else {
+            continue;
+        };
+        let own = crate::values::RecordId::new(&own);
+        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
+        graph.entry(own.clone()).or_default();
+        // A forward value that is not a record reference at all is prose.
+        if slot.forward
+            && references.is_empty()
+            && slot
+                .record
+                .header
+                .get(slot.own_field())
+                .is_some_and(|v| !crate::values::is_no_value_sentinel(v) && !v.trim().is_empty())
+        {
+            unresolved_claimants.insert(own.clone());
+        }
+        for reference in references {
+            let target = crate::values::RecordId::new(&reference);
+            let Some(record) = index.get(&target) else {
+                if slot.forward {
+                    unresolved_claimants.insert(own.clone());
+                }
+                continue;
+            };
+            if !pair_carried_by(slot.pair, &record.record_type) {
+                if slot.forward {
+                    unresolved_claimants.insert(own.clone());
+                }
+                continue;
+            }
+            if record.header.is_unreadable() {
+                if slot.forward {
+                    unreadable_dependencies.insert(own.clone());
+                }
+                continue;
+            }
+            graph.entry(target.clone()).or_default();
+            let (from, to) = if slot.forward {
+                (own.clone(), target)
+            } else {
+                (target, own.clone())
+            };
+            graph.entry(from).or_default().insert(to);
+        }
+    }
+    SequenceGraphs {
+        graphs,
+        unreadable_dependencies,
+        unresolved_claimants,
+        unreadable_writers,
+    }
 }
 
 /// Rule (`RFC-48`, `MILE-27`): a value in either field of an `acyclic` pair
@@ -217,7 +288,7 @@ pub fn sequence_unresolved_blocker(
 
 /// Tarjan's algorithm, iterative so a long chain cannot exhaust the stack.
 /// Components and their members come out in `RecordId` order.
-fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
+pub(super) fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
     let nodes: Vec<&N> = graph.keys().collect();
     let position: BTreeMap<&N, usize> = nodes.iter().enumerate().map(|(i, n)| (*n, i)).collect();
     let edges: Vec<Vec<usize>> = nodes
