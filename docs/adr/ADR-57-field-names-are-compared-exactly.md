@@ -8,7 +8,7 @@ Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: ADR-53
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/header.rs@sha256:7c679be9601d5570f38f284c20baf4a50a17c18aeae3cdfa94ed0b2671f4b2b4, code:rust/crates/urzua-core/src/header.rs@sha256:5c7df87d90f4d0532632ba6f2098fb1812743264043815689cc417a0e9e555e2, test:rust/crates/urzua-core/src/property.rs@sha256:dd31b4f429bc9982bd5756a1ba83716f5745d8d5d649119749713c8d659d9611
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs@sha256:52b3c1143b216049fbae50180c3d0f17b2c4c541678801c70ad1d1e8aa8d9b66, code:rust/crates/urzua-core/src/header.rs@sha256:5c7df87d90f4d0532632ba6f2098fb1812743264043815689cc417a0e9e555e2, test:rust/crates/urzua-core/src/property.rs@sha256:fc7ebda282a56e12a7c681536531d9a0fd23b98bc1e3fb7ec32b9733f1a3d14c
 ---
 # 57 — field names are compared exactly
 
@@ -141,3 +141,4 @@ waiver loader. `Header::get`, and every comparison of an adopter-declared field 
 > | 2026-11-04 | Amendment added: `Header::get_reserved` reads the engine's reserved keys case-insensitively (`#102`), an exception to "every comparison of a field name". **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/header.rs` 17e08ea792a9 -> 7c679be9601d, `rust/crates/urzua-core/src/header.rs` 7eeae176eeeb -> 5c7df87d90f4, `rust/crates/urzua-core/src/property.rs` 78acfe16ded9 -> dd31b4f429bc. Reason: Re-pinned with the amendment above: Header::get and declared-field comparison remain exact; the reserved-key exception is recorded. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/header.rs` 7c679be9601d -> 52b3c1143b21, `rust/crates/urzua-core/src/property.rs` dd31b4f429bc -> fc7ebda282a5. Reason: Re-verified against the Decision and its accepted amendment of 2026-11-04. Since the pin, rules/header.rs gained suggested_action and action_source on its findings (ADR-73) and property.rs gained fixture fields and the extra rule arguments of the property harness; Header::get and the declared-field comparison remain exact, and the reserved-key exception is the one the amendment records. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
