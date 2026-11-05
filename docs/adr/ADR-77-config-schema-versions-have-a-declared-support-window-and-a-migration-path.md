@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6MKSSRDSS40P16A4C93VBYY
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -110,3 +111,4 @@ relies on N-1 loading, shrinking the window is itself a break that needs the sam
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
