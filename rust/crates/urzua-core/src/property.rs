@@ -527,6 +527,7 @@ mod tests {
                 rules::embodiment_locator_exists(
                     &records,
                     &config,
+                    &[],
                     &|_| true,
                     &crate::locator::no_file_text,
                     &|_| false,

@@ -105,6 +105,31 @@ impl FailOn {
     }
 }
 
+/// What a `Realized-by` locator may name (`BUG-176`): one tracked file, a
+/// directory (every tracked file below it) or a glob (every tracked file it
+/// matches). Which kinds a repository accepts, and which of those may carry a
+/// `@sha256:` pin, are the `locator_kinds` and `pinnable` options of
+/// `embodiment.locator-exists`; both default to `[file]`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatorKind {
+    File,
+    Directory,
+    Glob,
+}
+
+impl std::fmt::Display for LocatorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            LocatorKind::File => "file",
+            LocatorKind::Directory => "directory",
+            LocatorKind::Glob => "glob",
+        })
+    }
+}
+
 /// A rule's options as a typed value, built from its `RuleSetting` in one
 /// place (`crate::rules::options`). Implemented per rule that reads options.
 pub trait RuleOpts: Sized {
@@ -278,6 +303,16 @@ pub struct RuleSetting {
     /// omitted means every stated value must match the computed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sticky_states: Option<Vec<String>>,
+    /// The kinds of locator a `Realized-by` may name: `file`, `directory`,
+    /// `glob` (`BUG-176`). Only meaningful to `embodiment.locator-exists`;
+    /// omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator_kinds: Option<Vec<LocatorKind>>,
+    /// The kinds of locator that may carry a `@sha256:` pin (`BUG-176`); each
+    /// must also be in `locator_kinds`. Only meaningful to
+    /// `embodiment.locator-exists`; omitted means `[file]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinnable: Option<Vec<LocatorKind>>,
     /// Header fields whose value must be a real `YYYY-MM-DD` calendar date
     /// (`MILE-137`). Only meaningful to `date.field-valid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1093,6 +1128,12 @@ pub enum ConfigError {
     TestPathOutsideBackPointerPaths { rule: String, entry: String },
     #[error("rule '{rule}' option 'sticky_states' names '{state}', which is a state evidence computes; a sticky state is one no evidence can reproduce, and naming a computed one would hide real drift")]
     StickyStateIsComputed { rule: String, state: String },
+    #[error("rule '{rule}' option 'pinnable' names '{kind}', which 'locator_kinds' does not declare; a locator of a kind the rule rejects can never be pinned (declared kinds: {declared})")]
+    PinnableKindNotDeclared {
+        rule: String,
+        kind: String,
+        declared: String,
+    },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
     #[error("embodiment: {reason}")]
@@ -1311,6 +1352,16 @@ const RULE_OPTIONS: &[RuleOption] = &[
     RuleOption {
         name: "sticky_states",
         consequence_if_missing: "holds every stated Embodiment to the computed value",
+        optional: true,
+    },
+    RuleOption {
+        name: "locator_kinds",
+        consequence_if_missing: "accepts only a file locator",
+        optional: true,
+    },
+    RuleOption {
+        name: "pinnable",
+        consequence_if_missing: "lets only a file locator carry a pin",
         optional: true,
     },
     RuleOption {
@@ -1942,6 +1993,28 @@ pub fn parse_with_document_models(
                         reason: format!(
                             "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
                         ),
+                    });
+                }
+            }
+        }
+
+        // A pin on a kind the rule rejects is a locator that is always
+        // reported, so `pinnable` may only narrow `locator_kinds` (`BUG-176`).
+        if setting.level != RuleLevel::Off {
+            let declared = setting
+                .locator_kinds
+                .clone()
+                .unwrap_or_else(|| vec![LocatorKind::File]);
+            for kind in setting.pinnable.iter().flatten() {
+                if !declared.contains(kind) {
+                    return Err(ConfigError::PinnableKindNotDeclared {
+                        rule: name.clone(),
+                        kind: kind.to_string(),
+                        declared: declared
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", "),
                     });
                 }
             }

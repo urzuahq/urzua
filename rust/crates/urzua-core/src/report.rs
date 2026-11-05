@@ -785,12 +785,31 @@ pub struct ExplainReport {
     /// a scope (`ADR-74` point 7): the authoring route for a scoped pin.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<ScopeExplanation>,
+    /// The files a directory or glob argument covers and the pin over them
+    /// (`BUG-176`), when the config accepts that kind of locator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<CoverageExplanation>,
     /// The records read to answer, as `check` reports a rule's population
     /// (`BUG-169`): an empty answer from an unread corpus is not the same as
     /// an empty answer from a read one.
     pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// What `urzua explain <directory-or-glob>` resolved (`BUG-176`).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CoverageExplanation {
+    /// `directory` or `glob`.
+    pub kind: String,
+    /// The tracked files the locator covers, sorted: what the pin hashes.
+    pub files: Vec<String>,
+    /// The hash over the sorted (path, file content hash) list.
+    pub sha256: String,
+    /// The locator to paste into `Realized-by`; absent when the config does not
+    /// let this kind carry a pin (`pinnable`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin: Option<String>,
 }
 
 /// What `urzua explain <path>#<scope>` resolved.

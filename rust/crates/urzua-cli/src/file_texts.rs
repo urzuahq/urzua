@@ -2,8 +2,8 @@
 //! drift check and re-baselining resolve scopes in the same files, and a file
 //! cited by several records is read one time, as `BUG-135` did for git.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{OnceCell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -12,6 +12,9 @@ use urzua_core::locator::{FileText, SharedText};
 pub(crate) struct FileTexts {
     root: PathBuf,
     cache: RefCell<HashMap<String, SharedText>>,
+    /// The tracked files, discovered on first use: only a directory or glob
+    /// locator needs them (`BUG-176`).
+    tracked: OnceCell<(Vec<PathBuf>, HashSet<PathBuf>)>,
 }
 
 impl FileTexts {
@@ -19,7 +22,25 @@ impl FileTexts {
         FileTexts {
             root,
             cache: RefCell::new(HashMap::new()),
+            tracked: OnceCell::new(),
         }
+    }
+
+    // BUG-176: a directory or glob locator is the tracked files it matches
+    /// What the locator path `path` names among the tracked files that are on
+    /// disk: its kind and the files it covers, sorted.
+    pub fn locator_files(&self, path: &str) -> Result<urzua_core::locator::LocatorFiles, String> {
+        let (list, set) = self.tracked.get_or_init(|| {
+            let list = urzua_io::discover_tracked_files(&self.root)
+                .map(|d| d.paths)
+                .unwrap_or_default();
+            let set = list.iter().cloned().collect();
+            (list, set)
+        });
+        urzua_core::locator::match_locator_files(path, list, &|p| {
+            let p = std::path::Path::new(p);
+            set.contains(p) && self.root.join(p).is_file()
+        })
     }
 
     /// The text of the repo-relative `path`; a file that is not valid UTF-8 is
