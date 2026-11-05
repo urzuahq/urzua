@@ -41,10 +41,6 @@ their suggested action), `MILE-158` (the glob matcher). Fixed in `embodiment_loc
 drift check and `pins.rs`; `SPEC-2`, `SPEC-3`, `SPEC-8` and `SPEC-13` are updated. This repository
 does not opt in to a kind: no record cites a directory or a glob.
 
-## Regression test
-
-planned: a rules.rs test pinning the decided behavior for Realized-by: code:<existing directory>
-
 > **Revision log**
 >
 > | Date | Change | Class |

@@ -45,10 +45,6 @@ claims at all.
 - `RFC-36`, which takes the open question here as its subject and measures it: 44 of 49 references in
   this repository's changeset history are bare, and most are citations rather than unstated claims.
 
-## Regression test
-
-not yet written -- a changeset naming a record that is still open must not report a clean run
-
 > **Revision log**
 >
 > | Date | Change | Class |

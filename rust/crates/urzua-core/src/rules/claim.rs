@@ -433,7 +433,8 @@ mod tests {
         let records = [bug];
         let index = build_normalized_index(&records);
         let config = config_for_required(vec![("bug", vec!["Status"])]);
-        let (exec, findings) = claim_status_agreement(&claims, &closed, &config, &index);
+        let (exec, findings) =
+            claim_status_agreement(&claims, &verb_only(&closed), &config, &index);
         let population = exec.population.expect("the rule carries a population");
         assert_eq!(
             (population.eligible(), population.examined()),

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-193]
 ---
 
 A record's `Status` can follow any evidence field its type declares. `statuses.delivery` already held a
