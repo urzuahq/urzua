@@ -516,6 +516,12 @@ pub(crate) fn compute_drifted_records_at(
         for entry in urzua_core::locator::realized_by_locators(realized_by_value) {
             // A locator that does not parse is `embodiment.locator-exists`' finding.
             let Ok(parsed) = entry.parsed else { continue };
+            // A commit anchor is reserved for MILE-84 and is reported by
+            // `embodiment.locator-exists` as unsupported; it is not judged
+            // for drift on the file's history either.
+            if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
+                continue;
+            }
             let locator = parsed.path.clone();
             let locator_path = PathBuf::from(&locator);
             if let (Some(urzua_core::locator::Anchor::Pin(pinned)), Some(_)) =
