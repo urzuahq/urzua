@@ -1,9 +1,9 @@
 ---
-Version: '0.64'
+Version: '0.66'
 Date: 2026-08-20
-Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-core/src/config.rs
+Status: Shipped
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
+Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
 Implements: RFC-1, RFC-11
@@ -1267,3 +1267,6 @@ proves this configuration produces the three findings.
 > | 2026-11-04 | Bumped to `0.62`. Documented scoped evidence pins: the locator grammar and parse order, the hashed bytes, the top-level `locator_resolvers` declaration (`start`, `end`, `leading`, `container`, `member`, `trait_container`), the five end kinds, resolution and its failure reasons, with normative test vectors. **Why:** `MILE-185` / `ADR-74` -- a pin on a volatile file went stale on edits unrelated to its decision; resolvers are repository configuration, not engine knowledge. | **substantive** |
 > | 2026-11-05 | Bumped to `0.63`. Documented the drift rule for a scoped pin: no file-based grace window, an audit date still applies, and a scope without a pin is judged on the whole file. **Why:** `MILE-185` / `ADR-74` point 8. | **substantive** |
 > | 2026-11-05 | Bumped to `0.64`. Clarified that an unpinned scope that does not resolve is reported by `embodiment.locator-exists` while drift is still judged on the whole file, and that a commit anchor is not judged for drift. **Why:** review of `MILE-185` part 2, reconciling `ADR-74` points 6 and 8. | **substantive** |
+> | 2026-11-05 | Bumped to `0.65`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.66`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
