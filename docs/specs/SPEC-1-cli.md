@@ -1,5 +1,5 @@
 ---
-Version: '0.17'
+Version: '0.18'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -40,7 +40,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-8** | `urzua fix` — eligibility test, detect/apply | Accepted |
 > | **SPEC-9** | the `bug` record type | Accepted |
 > | **SPEC-10** | the `waiver` record type | Accepted |
-> | **SPEC-11** | `urzua audit` | Accepted |
+> | **SPEC-11** | `urzua audit` — a deprecated alias of `check` (`ADR-79`) | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
 > | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` | Accepted |
@@ -124,8 +124,10 @@ failure mode this tool exists to eliminate, and shipping it would be self-refuti
 **Specified in full by SPEC-13.** Read-only relationship queries over data `check` already parses.
 
 ### `urzua audit`
-**Specified in full by SPEC-11.** Cross-record reconciliation, separate from per-record validation:
-supersession reciprocity and dangling cross-references. Never writes.
+**Specified in full by SPEC-11.** Deprecated (`ADR-79`): an alias of `urzua check` over the configured
+rules, with no rule set of its own, that adds one deprecation `Notice`. Never writes. Removed the
+release after. `urzua check --rules <id>,...` (`SPEC-2`) selects declared rules, and is the replacement
+for the narrower report `audit` used to give.
 
 ### `urzua fix`
 **Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
@@ -319,3 +321,5 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-05 | Bumped to `0.16`. Re-baselined (BUG-50, attested by this PR's review): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus` 890414a9c2c9 -> 07cd765af78d. Reason: BUG-50 made a missing revision log a finding, so the clean-corpus fixture gained a revision log; the exit-0-on-a-clean-corpus behaviour this spec cites is unchanged **Why:** the pinned evidence changed and the PR review is the human re-verification that the claim still holds. | **structural** |
 > | 2026-11-05 | Bumped to `0.17`. `check` gains `--stdin-path`, named under `urzua check` and specified in `SPEC-2`. **Why:** `MILE-191`, `ADR-78` item 2. | **substantive** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-243) 4ec5a0737546 -> 4d5cc9cf4b35. Reason: The Command enum span changed only to add check's --stdin-path flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.15`. `urzua audit` is a deprecated alias of `check`, and `check` takes `--rules`. **Why:** `MILE-190`, `ADR-79`. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-249) 4d5cc9cf4b35 -> 2e660f5d188b. Reason: The Command enum span changed to add check's --rules flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

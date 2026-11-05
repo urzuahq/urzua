@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6MP8T0T4AAJDC15G7PBQ49Q
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-79
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules/runner.rs, test:rust/crates/urzua-cli/tests/audit_fold_integration.rs
 ---
 # 190 — Fold audit into check: check --rules, rules_selected in the report, and audit as a deprecated alias of check
 
@@ -28,3 +29,5 @@ Blocked-on: —
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-79` Accepted 2026-11-05 folds `audit` into `check`; the milestone builds the part that ships now (selection, the alias and the deprecation Notice), with removal the release after. | **substantive** |
+> | 2026-11-05 | Built in #PR: `check --rules`, `rules_selected`, `audit` as a deprecated alias of `check` with one `Notice` (`SPEC-1`, `SPEC-2`, `SPEC-11`), and `BUG-99` fixed with its regression test. The command is removed the release after (`ADR-79`), which this milestone does not do. `Realized-by` added and `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's corpus. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |

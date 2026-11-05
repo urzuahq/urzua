@@ -92,6 +92,8 @@ struct Context<'a> {
     templates: urzua_core::new_record::TemplateValues,
     /// A proposed record is being judged (`--stdin-path`).
     record_only: bool,
+    /// `--rules`: the only rules to run (`ADR-79`); `None` runs every declared rule.
+    selected: Option<HashSet<String>>,
 }
 
 /// `revision-log.version-bump-required` judges a changed record against the
@@ -259,26 +261,71 @@ fn enabled_setting<'c>(config: &'c Config, rule: &str) -> Option<&'c RuleSetting
     config.rules.get(rule).filter(|s| s.level != RuleLevel::Off)
 }
 
-pub fn run(
-    config_path: Option<PathBuf>,
-    paths: Vec<PathBuf>,
-    base: Option<String>,
-    fail_on: Option<urzua_core::config::FailOn>,
-    stdin_path: Option<PathBuf>,
-) -> ExitCode {
-    match execute(config_path, paths, base, fail_on, stdin_path) {
+/// The `urzua check` command line, gathered so `run` stays one argument wide.
+#[derive(Default)]
+pub struct CheckArgs {
+    pub paths: Vec<PathBuf>,
+    pub base: Option<String>,
+    pub fail_on: Option<urzua_core::config::FailOn>,
+    pub stdin_path: Option<PathBuf>,
+    /// `--rules`: empty means every declared rule.
+    pub rules: Vec<String>,
+    /// Notices the invoking command adds to the report (`audit`'s deprecation).
+    pub extra_notices: Vec<Notice>,
+}
+
+pub fn run(config_path: Option<PathBuf>, args: CheckArgs) -> ExitCode {
+    match execute(config_path, args) {
         Ok(report) => emit(&report),
         Err(e) => emit(&CouldNotRun::from(e)),
     }
 }
 
-fn execute(
-    config_path: Option<PathBuf>,
-    paths: Vec<PathBuf>,
-    base: Option<String>,
-    fail_on: Option<urzua_core::config::FailOn>,
-    stdin_path: Option<PathBuf>,
-) -> Result<CheckReport, String> {
+/// `--rules` against what the configuration declares (`ADR-79`): an id this
+/// build does not ship and an id the configuration does not declare are both
+/// mistakes in the command, not findings about the corpus. Selection narrows
+/// what runs and never enables a rule, so a declared-`off` rule is accepted
+/// and reports `not-enabled`. Returns the ids in the order given, without
+/// repeats; `None` when no selection was asked for.
+fn validate_selection(
+    config: &Config,
+    requested: &[String],
+) -> Result<Option<Vec<String>>, String> {
+    if requested.is_empty() {
+        return Ok(None);
+    }
+    let mut out: Vec<String> = Vec::new();
+    for id in requested {
+        let id = id.trim();
+        if id.is_empty() {
+            return Err("urzua check --rules: an empty rule id (a stray comma?)".to_string());
+        }
+        if !rules::ALL_RULES.contains(&id) {
+            return Err(format!(
+                "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
+            ));
+        }
+        if !config.rules.contains_key(id) {
+            return Err(format!(
+                "urzua check --rules: '{id}' is not declared in the configuration; --rules narrows the declared rules and never enables one"
+            ));
+        }
+        if !out.iter().any(|o| o == id) {
+            out.push(id.to_string());
+        }
+    }
+    Ok(Some(out))
+}
+
+fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, String> {
+    let CheckArgs {
+        paths,
+        base,
+        fail_on,
+        stdin_path,
+        rules: requested_rules,
+        extra_notices,
+    } = args;
     if stdin_path.is_some() && (!paths.is_empty() || base.is_some()) {
         return Err(
             "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base"
@@ -287,13 +334,15 @@ fn execute(
     }
     let opened = open_session(&paths, config_path, base.as_deref(), stdin_path.as_deref())?;
     let session = &opened.session;
+    let selection = validate_selection(&session.config, &requested_rules)?;
     let scope = narrow(
         session,
         opened.requested_scopes,
         opened.changed,
         opened.prospective,
     )?;
-    let (context, mut notices) = load_context(session, &scope)?;
+    let (context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
     scope_findings(session, &scope, &mut findings);
     let waivers = urzua_core::waiver::load_suppressions(
@@ -332,6 +381,7 @@ fn execute(
             &scope.in_scope.iter().map(|p| p.as_path()).collect(),
         ),
         rules_executed: executions,
+        rules_selected: selection,
         scope: ScopeInfo {
             source: if scope.prospective.is_some() {
                 urzua_core::report::ScopeSource::Stdin
@@ -554,6 +604,7 @@ fn load_drift(
 fn load_context<'a>(
     session: &'a Session,
     scope: &ReportScope,
+    selection: Option<&[String]>,
 ) -> Result<(Context<'a>, Vec<Notice>), String> {
     let (repo_root, config, discovered) =
         (&session.repo_root, &session.config, &session.discovered);
@@ -596,7 +647,15 @@ fn load_context<'a>(
     let decision_gate_sources =
         crate::discovery::read_decision_gate_sources(repo_root, discovered, config)?;
 
-    let (drift, claim_ages) = load_drift(session, scope.prospective.as_ref());
+    // Drift is read only by `embodiment.consistency`, so a selection that leaves
+    // it out skips the git history it would cost.
+    let drift_wanted =
+        selection.is_none_or(|s| s.iter().any(|r| r == rules::RULE_EMBODIMENT_CONSISTENCY));
+    let (drift, claim_ages) = if drift_wanted {
+        load_drift(session, scope.prospective.as_ref())
+    } else {
+        (Default::default(), HashMap::new())
+    };
     notices.extend(crate::discovery::drift_notices(
         drift.shallow,
         &drift.git_problems,
@@ -683,6 +742,7 @@ fn load_context<'a>(
             base_text,
             templates,
             record_only: scope.prospective.is_some(),
+            selected: selection.map(|s| s.iter().cloned().collect()),
         },
         notices,
     ))
@@ -779,11 +839,14 @@ fn run_phase(
     phase: rules::Phase,
     ctx: &rules::RuleCtx<'_>,
 ) -> Vec<(RuleExecution, Vec<Finding>)> {
-    if context.record_only {
-        rules::run_phase_for_record(phase, ctx)
-    } else {
-        rules::run_phase(phase, ctx)
-    }
+    rules::run_phase_with(
+        phase,
+        ctx,
+        &rules::PhasePlan {
+            record_only: context.record_only,
+            selected: context.selected.as_ref(),
+        },
+    )
 }
 
 /// The two filesystem probes a rule may make.

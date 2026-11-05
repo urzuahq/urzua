@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Suppression;
+use crate::waiver::Waiver;
 use std::path::Path;
 
 /// Source files a back-pointer rule scans, with the `back_pointer_paths` that
@@ -17,7 +17,7 @@ pub struct RunState<'a> {
     pub executions: &'a [RuleExecution],
     /// The findings left after scoping, before waivers apply.
     pub findings: &'a [Finding],
-    pub waivers: &'a [Suppression],
+    pub waivers: &'a [Waiver],
     /// The run covers the whole corpus: no path scope, no `--base`.
     pub whole_corpus: bool,
     /// Whether a path is inside what the run reports on.
@@ -52,14 +52,10 @@ pub struct RuleCtx<'a> {
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
-    /// Record files on disk that git does not track, by id (`BUG-13`); read by
-    /// the rules that report an unresolved reference.
-    pub untracked_records: &'a UntrackedRecords,
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
-    pub boundaries: &'a [ResolvedBoundary],
-    pub ignore_marker: Option<&'a str>,
+    pub published_paths: &'a [String],
     pub index_artifacts: &'a [IndexArtifact],
     /// The declared override log, read by the caller; `None` when `override_log`
     /// is not declared (`MILE-188`).
@@ -144,30 +140,37 @@ pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding
 
 /// Every rule of `phase`, in table order.
 pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
-    run_phase_for(phase, ctx, false)
+    run_phase_with(phase, ctx, &PhasePlan::default())
 }
 
-/// [`run_phase`] for a run that reports on one record's proposed content
-/// (`check --stdin-path`, `MILE-191`). A rule whose findings are anchored
-/// outside the records (the configuration, a source file, an index, a diff)
-/// cannot report on that record, so an enabled one is not run and says so:
-/// `not-applicable`, never `ran` with nothing found.
-pub fn run_phase_for_record(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
-    run_phase_for(phase, ctx, true)
+/// How a run restricts the rules of a phase.
+#[derive(Default)]
+pub struct PhasePlan<'a> {
+    /// The run reports on one record's proposed content (`check --stdin-path`,
+    /// `MILE-191`). A rule whose findings are anchored outside the records (the
+    /// configuration, a source file, an index, a diff) cannot report on that
+    /// record, so an enabled one is not run and says so: `not-applicable`,
+    /// never `ran` with nothing found.
+    pub record_only: bool,
+    /// `check --rules` (`ADR-79`): only these rule ids are run. The others are
+    /// not run and not listed; selection narrows what runs and enables nothing.
+    pub selected: Option<&'a HashSet<String>>,
 }
 
-fn run_phase_for(
+/// [`run_phase`] under a [`PhasePlan`].
+pub fn run_phase_with(
     phase: Phase,
     ctx: &RuleCtx<'_>,
-    record_only: bool,
+    plan: &PhasePlan<'_>,
 ) -> Vec<(RuleExecution, Vec<Finding>)> {
     RULE_TABLE
         .iter()
         .filter(|d| d.phase == phase)
+        .filter(|d| plan.selected.is_none_or(|s| s.contains(d.id)))
         .map(|d| {
             let can_report_on_a_record =
                 matches!(d.anchor, Anchor::Record | Anchor::RecordOrDeclaredFile(_));
-            if record_only && !can_report_on_a_record {
+            if plan.record_only && !can_report_on_a_record {
                 gate_and_run(ctx.config, d.id, || {
                     (
                         RuleExecution {

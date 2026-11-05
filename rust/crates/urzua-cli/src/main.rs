@@ -125,6 +125,12 @@ enum Command {
         /// editor hook. Cannot be combined with PATHS or --base.
         #[arg(long, value_name = "PATH")]
         stdin_path: Option<PathBuf>,
+        /// Run only these declared rules (comma-separated ids). Narrows what
+        /// runs and never enables a rule; an id the configuration does not
+        /// declare is an error (exit 2). The report names the filter in
+        /// `rules_selected` and omits the other rules from `rules_executed`.
+        #[arg(long, value_delimiter = ',', value_name = "ID")]
+        rules: Vec<String>,
         paths: Vec<PathBuf>,
     },
 
@@ -325,8 +331,19 @@ fn main() -> ExitCode {
             base,
             fail_on,
             stdin_path,
+            rules,
             paths,
-        } => commands::check::run(cli.config, paths, base, fail_on.map(Into::into), stdin_path),
+        } => commands::check::run(
+            cli.config,
+            commands::check::CheckArgs {
+                paths,
+                base,
+                fail_on: fail_on.map(Into::into),
+                stdin_path,
+                rules,
+                ..Default::default()
+            },
+        ),
         Command::Explain { path } => commands::explain::run(cli.config, path),
         Command::Graph => commands::graph::run(cli.config),
         Command::New {

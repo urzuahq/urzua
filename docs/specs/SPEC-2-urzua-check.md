@@ -1,5 +1,5 @@
 ---
-Version: '0.88'
+Version: '0.89'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -385,6 +385,7 @@ but the JSON object below, so a consumer never has to find it inside prose.
       "status": "not-enabled"
     }
   ],
+  "rules_selected": null,
   "scope": { "source": "tracked-sweep", "base": null, "record_types": ["adr", "bug", "rfc"] },
   "blocking": false,
   "findings": [
@@ -595,6 +596,29 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `waiver.matches-nothing` | `waiver-matches-no-finding` | `edit-field` `set` |
 <!-- action-table:end -->
 
+### Rule selection: `--rules` (`ADR-79`, `MILE-190`)
+
+`urzua check --rules <id>[,<id>...]` restricts a run to the named rules of the repository's own
+declaration. Selection narrows what runs and never enables anything (`ADR-53`).
+
+- **`rules_selected`** is a top-level field of every report: the ids as given, in order and without
+  repeats, or `null` on a run that was not restricted. It is always present, so a consumer never
+  has to infer a filter from the length of `rules_executed`.
+- **An excluded rule is omitted from `rules_executed`.** It is not listed as `not-enabled`, which would
+  say the repository declined a policy it declared, and it is not run: a selection that leaves out
+  `embodiment.consistency` skips the git history that rule reads. `status`, `blocking` and the exit code
+  are computed over the rules that ran exactly as over a full run. A rule that is selected but
+  declared `off` is listed `not-enabled`, so a selection of only such rules is `not-run` (exit 2), as a
+  run with nothing enabled always is.
+- **Rules that read other rules' results see the selection.** `waiver.matches-nothing` judges a live
+  waiver only when its rule ran over the whole corpus, so under a selection that leaves the rule out the
+  waiver is eligible and not examined, never reported unmatched.
+- **A mistake in the command is exit 2, not a finding.** An empty id (`a,,b`), an id this build does not
+  ship, and an id the configuration does not declare are each `not-run` with an `error` naming the id.
+- Combines with a path argument, `--base` and `--stdin-path`; the selection applies to the rules, the
+  scope to the records.
+- `urzua audit` has no selection of its own (`SPEC-11`).
+
 ## Exit codes
 
 | Code | When |
@@ -643,8 +667,7 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 ## Out of scope
 
 - `--fix` in any form. See RFC-8; needs the revision log first.
-- **Writing.** `audit` shares `relation.supersession-reciprocity` with `check` (ADR-30) and adds
-  dangling-reference reporting on top, but both commands are read-only. The data-loss incident this
+- **Writing.** `audit` was a deprecated alias of `check` (ADR-79, `SPEC-11`); both commands are read-only. The data-loss incident this
   spec originally cited was about a bulk cross-reference *rewrite*, not about reading reciprocity —
   `check` running the same read-only rule `audit` does was never actually the risk.
 - Judging whether a section's *content* covers the scope it claims. SPEC-1 records this as a
@@ -772,3 +795,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.86`. `boundary.published-path-reference` reads declared boundaries (`SPEC-3`, "Boundaries"): a boundary's severity is the level of its findings and the rule's `level` only enables it; a back-pointer inside a `generated` boundary is a finding; an `exclude` entry, a boundary path or an ignore-marker use that matches or suppresses nothing is a finding; `published_paths` is read as a published boundary and now takes globs. Four finding variants are added to the action table, and `published-path-uncovered` keeps its valueless `edit-config` `set` targeting the entry, and `boundary-uncovered` offers the same. The rule-table rows are regenerated. **Why:** `MILE-125`, `ADR-80`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.87`. `override.unreviewed` added to the generated rule table and action table: an opt-in warning for a row of the committed override log (`override_log`, `SPEC-3`) whose `Reviewed-by` cell is blank, with a finding for a row that is not an entry and a population that counts log entries (`entry`). **Why:** `MILE-188`, `ADR-78` item 1 -- an editor-hook override must surface in the pull request that carries it. | **substantive** |
 > | 2026-11-05 | Bumped to `0.88`. `embodiment.locator-on-back-pointer-path` added to the generated rule and action tables: an opt-in warning for a `code:` or `test:` `Realized-by` locator on a file whose `Implements:` or `Verifies:` comment would be read automatically, exempt from an edit action: removing the locator before the comment exists would delete the evidence, and the comment is in a source file. **Why:** `MILE-189`, `ADR-78` item 4 (`RFC-7` section 5, prefer the lighter mechanism). | **substantive** |
+> | 2026-11-05 | Bumped to `0.89`. `check --rules <id>[,<id>...]` restricts a run to named declared rules, and every report gains a top-level `rules_selected` (the ids, or `null`); an excluded rule is omitted from `rules_executed` and not run, and an undeclared, unknown or empty id is a could-not-run (exit 2). `audit` is documented as a deprecated alias with no selection of its own. **Why:** `MILE-190`, `ADR-79`. | **substantive** |

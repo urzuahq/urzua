@@ -421,11 +421,16 @@ fn audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_faili
         stdout.contains("relation.supersession-reciprocity"),
         "stdout: {stdout}"
     );
-    // audit's rule set is narrower than check's -- the cross-record rules,
-    // never the per-record ones (ADR-0030).
-    assert!(
-        !stdout.contains("header.required-fields"),
-        "stdout: {stdout}"
+    // `audit` owns no rule set (ADR-79): it reports what `check` reports.
+    let check_out = run_urzua(&dir, &["check"]);
+    let findings = |bytes: &[u8]| {
+        let v: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        v["findings"].clone()
+    };
+    assert_eq!(
+        findings(&output.stdout),
+        findings(&check_out.stdout),
+        "audit and check report the same findings"
     );
 
     std::fs::remove_dir_all(&dir).ok();
@@ -1691,14 +1696,14 @@ fn a_run_in_which_no_rule_examined_anything_is_not_ok() {
 }
 
 /// `BUG-99`: `init` on a prefixless corpus proposes no identity-dependent
-/// rules, which happens to be `audit`'s entire rule set -- so the adopter's
-/// documented first two commands (`init` then `audit`) exit 2 immediately.
-/// Not a bug in `audit`'s exit-code policy (`BUG-77`, unchanged and still
-/// enforced below): `init` now discloses it up front instead of letting the
-/// adopter discover it from `audit`'s own exit code.
+/// rules, which used to be `audit`'s entire rule set, so the adopter's
+/// documented first two commands (`init` then `audit`) exited 2. `audit` owns
+/// no rule set now (ADR-79), so `init` has nothing to warn about: the
+/// regression test for the equivalence is `audit_fold_integration.rs`
+/// (`audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check`).
 #[test]
-fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
-    let dir = fixture_repo("init-prefixless-warns-about-audit");
+fn init_does_not_warn_about_audit_and_audit_runs_what_the_config_declares() {
+    let dir = fixture_repo("init-prefixless-no-audit-warning");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
         "---\nStatus: Accepted\n---\n",
@@ -1713,22 +1718,12 @@ fn init_warns_when_its_proposed_config_leaves_audit_with_nothing_declared() {
         "init itself must still succeed: {stdout}"
     );
     assert!(
-        stdout.contains("rule-applicability"),
-        "a prefixless corpus must warn that audit's rule set is entirely undeclared: {stdout}"
-    );
-    assert!(
-        stdout.contains("audit"),
-        "the notice must name the affected command: {stdout}"
+        !stdout.contains("audit's rule set"),
+        "audit has no rule set to leave undeclared: {stdout}"
     );
 
-    // `identity.collision` doesn't need a declared prefix to run
-    // meaningfully (unlike `pointer.resolution`/`relation.supersession-
-    // reciprocity`, which `identity_dependent` correctly drops here) --
-    // `audit` now has one rule that legitimately runs on this corpus, so
-    // `BUG-99`'s "exits non-zero for no real reason" symptom is gone: a
-    // thin-config corpus with nothing actually wrong is `ok`, per `ADR-53`.
-    // `MILE-120`: a bare-number filename is something wrong, and `audit` now
-    // says so with the expected name (a warning, so the exit stays 0).
+    // `MILE-120`: a bare-number filename is something wrong, and `audit`, being
+    // `check`, says so with the expected name (a warning, so the exit stays 0).
     let audit_out = run_urzua(&dir, &["audit"]);
     let audit_stdout = String::from_utf8_lossy(&audit_out.stdout).to_string();
     assert!(
@@ -1795,10 +1790,12 @@ fn init_does_not_propose_rules_that_would_examine_nothing_on_the_corpus_it_adopt
 }
 
 #[test]
-fn audit_with_neither_of_its_rules_declared_is_not_ok() {
+fn audit_with_no_rule_declared_is_not_ok() {
+    // `audit` is `check` over the declared rules (ADR-79): with none declared
+    // nothing ran, and that is not a clean pass, exactly as for `check`.
     let dir = one_adr_repo(
         "audit-no-rules",
-        "{header.required-fields: error}",
+        "{}",
         "---\nStatus: Accepted\n---\n# 1 — X\n",
     );
     let out = run_urzua(&dir, &["audit"]);
