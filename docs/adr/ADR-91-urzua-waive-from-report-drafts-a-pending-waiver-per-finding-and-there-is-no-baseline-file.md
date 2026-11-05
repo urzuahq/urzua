@@ -166,7 +166,7 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 - Demoting a rule to `info` (option C) remains available and is not rejected as a policy: it is rejected as the
   answer to a one-time backlog.
 - `SPEC-10` (the draft shape and the pending vocabulary), `SPEC-3` (`pending` on a suppression type), a new
-  spec for the command, and `SPEC-12` (the shared scaffold) change in `MILE-204`.
+  spec for the command, and `SPEC-12` (the shared scaffold) change in `MILE-205`.
 
 ## References
 
@@ -177,10 +177,11 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 - `BUG-177` -- a waiver without a real `Reason` suppresses nothing; the property this relies on.
 - `MILE-168` -- `waiver.matches-nothing`; `MILE-193` -- the permanence vocabulary.
 - `SPEC-10`, `SPEC-12`, `SPEC-14`, `SPEC-3`.
-- `MILE-204` -- builds this decision.
+- `MILE-205` -- builds this decision.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | The milestone that builds this is `MILE-205`, renumbered from `MILE-204` after a numbering collision. | **structural** |
