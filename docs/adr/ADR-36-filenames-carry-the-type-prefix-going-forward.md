@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:6e014472fce7e5a200420078b76ab22fe04bbda93bc7f085f06f7d217be2cef5, code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, test:rust/crates/urzua-core/src/rules/filename.rs@sha256:6e014472fce7e5a200420078b76ab22fe04bbda93bc7f085f06f7d217be2cef5, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
+Realized-by: code:rust/crates/urzua-core/src/rules/filename.rs@sha256:fbf1f65873e39ffeea80279fb59ae5d385309244528fbbb35584e7659987d545, code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, test:rust/crates/urzua-core/src/rules/filename.rs@sha256:fbf1f65873e39ffeea80279fb59ae5d385309244528fbbb35584e7659987d545, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -124,3 +124,4 @@ the unedited Decision/Consequences sections and this amendment's own text.
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 302571381. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` d1dfa0bf3267 -> 6e014472fce7, `rust/crates/urzua-core/src/new_record.rs` 5473850e4d7d -> 15511d30876e. Reason: Re-verified: new_record.rs now matches the record's two amendments (width-padded names from the identity pattern, unpadded when open-ended). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/filename.rs` 6e014472fce7 -> fbf1f65873e3. Reason: Drift review of 2026-11-04, recommendation (a). The only change to filename.rs since the pin is an action_source added to three findings (ADR-73, #275); the identity-pattern and title checks are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
