@@ -1,5 +1,5 @@
 ---
-Version: '0.84'
+Version: '0.86'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -157,6 +157,7 @@ resolution, `identity.collision` and `filename.identity-pattern`.
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
 | `git-diff` | changed against a base ref | the ref | **yes** (`MILE-123`) |
 | `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
+| `stdin` | one record's proposed content read from stdin | `null` | **yes** (`MILE-191`) |
 | `none` | nothing selected | `null` | no |
 
 The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of whichever internal
@@ -166,6 +167,35 @@ misled into branching on a value no run produces.
 
 `base` is always present in `scope`: the ref as the caller gave it for a `git-diff` run, `null` for
 every other source.
+
+**`stdin` scope** (`MILE-191`, `ADR-78`) is selected by `urzua check --stdin-path <path>`, the
+prospective-content form of `check` that `fix --stdin-path` is for `fix` (`SPEC-8`). It reads the
+proposed content of one record from stdin and judges it against every enabled rule that can judge one
+record, writing nothing; it is the call the editor hook relays.
+
+- **The proposal replaces the on-disk record** (or adds one: the path need not exist yet) before any
+  rule runs, in the records and their text. `urzua-core` is handed that data like any other; the stdin
+  read, the path and the git calls stay in the CLI. References still resolve against the rest of the
+  corpus as it is on disk.
+- **Only that record is reported on.** `files_examined` is `1`, and a finding is kept only when it is
+  about the proposed record's file. A finding anchored to the configuration, a source file or another
+  record is about something the edit does not touch and is left to `check`.
+- **A rule that cannot report on a record is not run.** An enabled rule whose findings are anchored
+  outside the records (`Config`, `Outside`, `Directory` or `ChangedPath` in the rule table) is listed
+  in `rules_executed` as `not-applicable`, never `ran` with nothing found. This is also what keeps a
+  single-record run to about half a second on this corpus.
+- **A rule that compares with a committed copy is judged against HEAD's.** The proposed record is
+  the one changed record, and its committed copy is the record at `HEAD`: `status.transition-allowed`
+  judges the proposed `Status` against HEAD's, and `revision-log.version-bump-required` judges a row the
+  proposal adds against HEAD's revision log and version. A record `HEAD` does not have is new: it has
+  nothing to compare with, so the transition rule starts it at an initial status and the bump rule leaves
+  it unexamined. `filename.identity-pattern` and `type.record-outside-declared-dir` are not judged here
+  (they are about a directory or a path, not the content), and are left to `check`.
+- **Drift is computed for that record only**, from the proposed text, as `fix --stdin-path` does.
+- **A path no record type governs** is `not-run` (exit 2) with an `error` naming it, as is a run with
+  no enabled rule that can look at the record. Combining `--stdin-path` with `PATHS` or `--base` is
+  `not-run` (exit 2) too, not a flag ignored in silence.
+- Severity, waivers, `fail_on` and the exit codes are those of a full run: an unwaived error exits 1.
 
 **`git-diff` scope** (`MILE-123`) is selected by `urzua check --base <ref>`. It is a reporting scope,
 not a reading scope, exactly as a path argument is (`BUG-60`):
@@ -218,7 +248,7 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   failure `BUG-24` fixed.
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
-run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
+run" on a missing base is reading the wrong field, and the sources exist so it does not have to.
 
 **No git repository**: there is no fallback. A directory walk has the failure mode above, so discovery is
 the tracked set or nothing. Outside a git repository, every command that reads one (`check`, `audit`,
@@ -267,7 +297,7 @@ which stays only for what genuinely isn't built yet.
 | `embodiment.requires-accepted-status` | A record whose `Status` is not an accepted status states an `Embodiment` the `embodiment` declaration marks `claims_built` (`MILE-138`): a decision not yet made cannot have been built. The accepted statuses are the type's declared `statuses.success`; a type declaring none uses the rule's `accepted_statuses` option, and with neither the type is not examined. Any other state, including the drift state and a sticky one, is not flagged, and a record missing either field is left to the header rules. Opt-in; the population counts the records the rule could judge. |
 | `embodiment.back-pointer-resolution` | A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids, each optionally followed by a note, as in `Implements: ADR-1 (why), ADR-2`) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. The marker is read at the start of a comment line or in a trailing comment after code (`//`, `#`, `--`, `/*`, `<!--` after whitespace); the marker is case-sensitive; reading continues past a note to the next comma-separated id and stops at a segment that does not open with one; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean. The optional `test_paths` option (path prefixes, each inside a `back_pointer_paths` entry, else a load error, or globs such as `**/*.test.*` matched among the scanned files; a glob that cannot compile is a load error and one matching no scanned file is a finding) declares the test class: a `Verifies: ADR-12` comment in a file under it is test-tier evidence for the record it cites, and is checked for resolution like an `Implements:` one; a `Verifies:` comment elsewhere is not read (`MILE-146`). |
 | `embodiment.back-pointer-decision-accepted` | A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not one at which implementation is permitted is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Permitted means the cited type's declared `statuses.implementable` (a terminal `success` status is not assumed to permit it); a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision. |
-| `embodiment.locator-exists` | A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. |
+| `embodiment.locator-exists` | A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries. |
 | `embodiment.locator-promotion-candidate` | The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18). |
 | `header.field-set-consistency` | Every header field belongs to its type's `required_fields` ∪ `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. |
 | `field.untrimmed-value` | A field value carrying leading/trailing whitespace, reachable only through `yaml-frontmatter` — disclosed rather than silently trimmed. |
@@ -736,4 +766,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.81`. `filename.title-consistency` reads an H1's id as a filename's is read: the declared `identity` prefix and a number, or with no pattern a leading `PREFIX-N` or bare `N`; a title that matches neither is reported as carrying no record id, and an overflowing number as too large to compare. The rule-table row is regenerated from `RULE_METADATA`. **Why:** `BUG-32`, maintainer decision 2026-11-05; `# 2026-09-16 Notes` no longer reads as 20260916. | **substantive** |
 > | 2026-11-05 | Bumped to `0.82`. Removed the no-git directory-walk fallback from Discovery: outside a git repository every command that reads one exits 2 with a "needs a git repository" error, as the binary already did. **Why:** `BUG-170`, maintainer decision 2026-11-05; the spec promised behavior that never existed. | **substantive** |
 > | 2026-11-05 | Bumped to `0.83`. A reference to a record, or a `Realized-by` locator, whose file exists on disk but is not tracked by git is its own finding variant (`pointer-untracked`, `supersession-untracked`, `pair-untracked`, `blocker-untracked`, `locator-untracked`), distinct from the `-unresolved` and `locator-missing` variants for a target that exists nowhere. Each declares an `ADR-73` action: the missing variants keep `edit-field` `set`; the untracked ones are exempt, since the repair is `git add` and no action kind addresses git. The action table is regenerated. **Why:** `BUG-13`, maintainer decision 2026-11-05; the on-disk fact is supplied by the CLI so the rule layer stays pure. | **substantive** |
-> | 2026-11-05 | Bumped to `0.84`. Output-contract change: a new `field-entry` population unit, and `citation.resolution` with `non_reference_field` set appears twice in `rules_executed` (its `citation` population, then a `field-entry` population counting each declared entry); the uncited and malformed findings move from the first to the second. A repository that does not set the option sees no change; a consumer that picks a rule's entry by id gets the `citation` one first. The rule table is regenerated. **Why:** `MILE-186` / `ADR-75` clause 3 -- a declared-ids check judged inside the citation count could not be told apart from a run over no declarations. | **substantive** |
+> | 2026-11-05 | Bumped to `0.84`. A `Realized-by` comma separates entries only when a category prefix follows it; otherwise it belongs to the locator path. **Why:** `BUG-129`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.85`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule that can judge one record, without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone; `status.transition-allowed` and `revision-log.version-bump-required` are judged against HEAD's copy of the record. **Why:** `MILE-191`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.86`. Output-contract change: a new `field-entry` population unit, and `citation.resolution` with `non_reference_field` set appears twice in `rules_executed` (its `citation` population, then a `field-entry` population counting each declared entry); the uncited and malformed findings move from the first to the second. A repository that does not set the option sees no change; a consumer that picks a rule's entry by id gets the `citation` one first. The rule table is regenerated. **Why:** `MILE-186` / `ADR-75` clause 3 -- a declared-ids check judged inside the citation count could not be told apart from a run over no declarations. | **substantive** |

@@ -143,18 +143,51 @@ pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding
 /// A rule with a companion population (`MILE-186`) contributes its second
 /// execution straight after its first, so `rules_executed` keeps table order.
 pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
+    run_phase_for(phase, ctx, false)
+}
+
+/// [`run_phase`] for a run that reports on one record's proposed content
+/// (`check --stdin-path`, `MILE-191`). A rule whose findings are anchored
+/// outside the records (the configuration, a source file, an index, a diff)
+/// cannot report on that record, so an enabled one is not run and says so:
+/// `not-applicable`, never `ran` with nothing found.
+pub fn run_phase_for_record(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
+    run_phase_for(phase, ctx, true)
+}
+
+fn run_phase_for(
+    phase: Phase,
+    ctx: &RuleCtx<'_>,
+    record_only: bool,
+) -> Vec<(RuleExecution, Vec<Finding>)> {
     let mut out = Vec::new();
-    for def in RULE_TABLE.iter().filter(|d| d.phase == phase) {
-        out.push(run_rule(def, ctx));
-        if let Some(companion) = def.companion {
+    for d in RULE_TABLE.iter().filter(|d| d.phase == phase) {
+        let can_report_on_a_record =
+            matches!(d.anchor, Anchor::Record | Anchor::RecordOrDeclaredFile(_));
+        if record_only && !can_report_on_a_record {
+            out.push(gate_and_run(ctx.config, d.id, || {
+                (
+                    RuleExecution {
+                        rule: d.id.to_string(),
+                        population: None,
+                        status: RuleStatus::NotApplicable,
+                        examined_records: Vec::new(),
+                    },
+                    Vec::new(),
+                )
+            }));
+            continue;
+        }
+        out.push(run_rule(d, ctx));
+        if let Some(companion) = d.companion {
             // Never called for a rule the repository has not enabled.
             let enabled = ctx
                 .config
                 .rules
-                .get(def.id)
+                .get(d.id)
                 .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
             if let Some(extra) = enabled.then(|| companion(ctx)).flatten() {
-                out.push(gate_and_run(ctx.config, def.id, || extra));
+                out.push(gate_and_run(ctx.config, d.id, || extra));
             }
         }
     }

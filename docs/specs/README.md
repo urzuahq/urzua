@@ -15,27 +15,27 @@ regenerates the list below from the records.
   The corpus acceptance suite
 - [SPEC-5](SPEC-5-urzua-init.md) — Accepted, 2026-08-20
   `urzua init`
-- [SPEC-6](SPEC-6-the-milestone-record-type.md) — Accepted, 2026-09-07
+- [SPEC-6](SPEC-6-the-milestone-record-type.md) — Shipped, 2026-09-07
   The `milestone` record type
 - [SPEC-8](SPEC-8-urzua-fix.md) — Shipped, 2026-09-07
   `urzua fix`
-- [SPEC-9](SPEC-9-the-bug-record-type.md) — Accepted, 2026-09-07
+- [SPEC-9](SPEC-9-the-bug-record-type.md) — Shipped, 2026-09-07
   The `bug` record type
 - [SPEC-10](SPEC-10-the-waiver-record-type.md) — Shipped, 2026-09-07
   The `waiver` record type
-- [SPEC-11](SPEC-11-urzua-audit.md) — Accepted, 2026-09-07
+- [SPEC-11](SPEC-11-urzua-audit.md) — Shipped, 2026-09-07
   `urzua audit`
 - [SPEC-12](SPEC-12-urzua-new.md) — Shipped, 2026-09-07
   `urzua new`
-- [SPEC-13](SPEC-13-urzua-explain-and-urzua-graph.md) — Accepted, 2026-09-07
+- [SPEC-13](SPEC-13-urzua-explain-and-urzua-graph.md) — Shipped, 2026-09-07
   `urzua explain` and `urzua graph`
-- [SPEC-14](SPEC-14-urzua-migrate.md) — Accepted, 2026-09-07
+- [SPEC-14](SPEC-14-urzua-migrate.md) — Shipped, 2026-09-07
   `urzua migrate`
-- [SPEC-15](SPEC-15-urzua-doctor.md) — Accepted, 2026-09-07
+- [SPEC-15](SPEC-15-urzua-doctor.md) — Shipped, 2026-09-07
   `urzua doctor`
-- [SPEC-16](SPEC-16-the-adr-record-type.md) — Accepted, 2026-09-08
+- [SPEC-16](SPEC-16-the-adr-record-type.md) — Shipped, 2026-09-08
   The `adr` record type
-- [SPEC-17](SPEC-17-the-rfc-record-type.md) — Accepted, 2026-09-08
+- [SPEC-17](SPEC-17-the-rfc-record-type.md) — Shipped, 2026-09-08
   The `rfc` record type
 - [SPEC-18](SPEC-18-the-spec-record-type.md) — Shipped, 2026-09-08
   The `spec` record type
