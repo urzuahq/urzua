@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-134]
 ---
 
 `declared_slots_for_roles` (used by three embodiment/relation rules) and `declared_cross_record_value`

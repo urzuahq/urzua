@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A scoped evidence pin drifts only when the hash of the item it names changes: an edit elsewhere in

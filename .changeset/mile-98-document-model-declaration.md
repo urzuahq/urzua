@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 A record type in `.urzua/config.yaml` can now declare its document model with three optional keys,

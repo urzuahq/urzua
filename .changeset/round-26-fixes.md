@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-142, BUG-143, BUG-144]
 ---
 
 Round 26's `/code-review` found and fixed three more defects, and filed one design-decision item:

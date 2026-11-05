@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-182]
 ---
 
 `urzua new` now follows the record type's declared `identity` pattern, status vocabulary and field

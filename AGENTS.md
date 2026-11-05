@@ -260,4 +260,6 @@ absorb it.
 
 - `make ci` passes locally (fmt, clippy, build, test, `urzua check docs/`).
 - A changeset exists in `.changeset/` for anything a person installing `urzua` would care about
-  (ADR-29) — skip only for CI config, internal refactors, or docs-only changes.
+  (ADR-29) — skip only for CI config, internal refactors, or docs-only changes. It carries `closes:`
+  (a one-line list of the records it closes, `[]` for none) and the record in it is closed in the same
+  PR (ADR-85).

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `field.pending` takes the optional `pending_until_required` option. Declared `true`, a pending value in a

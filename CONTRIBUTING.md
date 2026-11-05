@@ -57,6 +57,7 @@ while the change is fresh rather than reconstructed later at release time (ADR-2
 ```markdown
 ---
 default: minor
+closes: []
 ---
 
 # Add `urzua new`
@@ -66,7 +67,13 @@ pick a number.
 ```
 
 `default` is the package identifier (there's one package in this repo); the value is `major`,
-`minor`, or `patch`. Everything after the closing `---` is the changelog entry itself — written for
+`minor`, or `patch`. `closes` lists, on one line, the records the change closes (`closes: [BUG-60,
+BUG-61]`, one id, or `closes: []` when it closes none); every fragment carries it, and `urzua check`
+fails a fragment that lists a record still open, an id that names no record, or a value that is not
+a one-line list (a block list is rejected by the release tool as well). It is a claim made as data:
+a record the change merely mentions is not listed, and a mention in the text is never read as a
+claim. The release tool ignores the key, so the records a release closes do not reach `CHANGELOG.md`;
+a release note that wants them says so in the text (ADR-85). Everything after the closing `---` is the changelog entry itself — written for
 the person installing the tool, not a restatement of the commit. Create one with `knope
 document-change` (interactive) or write the file by hand, named anything ending in `.md`. CI fails a
 PR with neither a changeset nor the `no-changeset` label (for changes with nothing to tell an

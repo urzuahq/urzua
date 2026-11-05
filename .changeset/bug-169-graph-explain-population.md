@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-169]
 ---
 
 `urzua graph` and `urzua explain` now report a `population` (`eligible`, `examined`, `unreadable` and

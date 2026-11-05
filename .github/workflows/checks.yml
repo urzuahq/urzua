@@ -67,6 +67,22 @@ jobs:
         run: cargo machete
       - name: cargo deny (advisories, bans, licenses, sources)
         run: cargo deny check
+      # The release tool must tolerate the structured claim field a changeset
+      # fragment carries (`closes`). The pin and checksum are the release
+      # workflows'; the test reads the pin from prepare-release.yml and fails if
+      # the installed version differs, so a knope upgrade re-runs it.
+      - name: install knope 0.23.0 (pinned, checksummed)
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/knope" && cd "$RUNNER_TEMP/knope"
+          curl -fsSL -o knope.tgz "https://github.com/knope-dev/knope/releases/download/knope/v0.23.0/knope-x86_64-unknown-linux-musl.tgz"
+          echo "76a970a5e237344abc14be3de37ed50c021b659a9b66b3f54afc77e6d48ac501  knope.tgz" | sha256sum -c -
+          tar -xzf knope.tgz
+          echo "$PWD/knope-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+      - name: knope tolerates the closes key (ADR-85)
+        working-directory: .
+        run: .github/scripts/knope-closes-compat.test.sh
       - name: cargo build --release
         run: cargo build --workspace --release --locked
       # The tests run under a fresh TMPDIR, and the run fails when any urzua-*

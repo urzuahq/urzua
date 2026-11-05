@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `drift_grace_days` no longer contradicts a record that already states `Embodiment: Drift detected`.

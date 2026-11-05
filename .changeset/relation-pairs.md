@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Add `relation_pairs` to `.urzua/config.yaml`: declare a pair of inverse relation fields (a forward

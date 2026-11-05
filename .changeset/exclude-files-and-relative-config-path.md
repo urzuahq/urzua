@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-183, BUG-185]
 ---
 
 Add a per-type `exclude_files` declaration to `.urzua/config.yaml`: bare file names directly in a

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 New opt-in rule `embodiment.back-pointer-decision-accepted` reports a source `Implements: ADR-12`

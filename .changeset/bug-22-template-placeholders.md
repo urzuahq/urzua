@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-22]
 ---
 
 `field.quality` takes the optional `template_placeholders` option. Declared `true`, a required field whose value is

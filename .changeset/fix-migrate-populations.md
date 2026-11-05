@@ -1,5 +1,6 @@
 ---
 default: major
+closes: []
 ---
 
 **Breaking: `FixReport.records_examined` and `MigrateSchemaReport.records_examined` are replaced by

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-121]
 ---
 
 Fixes `BUG-121`: `check.rs`'s path-scope filter dropped a `claim.status-agreement` finding whenever

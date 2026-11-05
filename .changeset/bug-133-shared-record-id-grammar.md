@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-133]
 ---
 
 `is_record_reference` (prose/pointer-field record mentions) and `parse_record_filename` (filename

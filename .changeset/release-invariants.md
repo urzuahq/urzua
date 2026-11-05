@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-93]
 ---
 
 Fixes BUG-93: `make ci` checks two facts about the release that nothing read before — that the

@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [BUG-52]
 ---
 
 Fixes `BUG-52`: `SPEC-2`'s rule table claimed to be "the complete, current set" while nothing checked
