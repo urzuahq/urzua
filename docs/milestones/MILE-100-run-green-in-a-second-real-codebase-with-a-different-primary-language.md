@@ -4,6 +4,7 @@ Stable-Id: 01M2VN4CXDW71M0XYZHKDV9JZQ
 Phase: '1'
 Track: schema-governance
 Implements: SPEC-1
+Depends-on: MILE-98
 Blocked-on: —
 ---
 # 100 — Run green in a second real codebase with a different primary language
@@ -55,3 +56,4 @@ can read a shape this project did not invent -- `MILE-98`.
 > | 2026-11-04 | `Phase` 0 -> 1. **Why:** Maintainer decision, 2026-11-04: the second codebase is a Phase 1 exit criterion, so it no longer gates Phase 0 or the switchover (`MILE-102`). | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
+> | 2026-11-05 | `Depends-on: MILE-98` added. **Why:** the section 'Blocked on the document model' says a second codebase cannot run green until the engine reads a shape this project did not invent, which is `MILE-98` (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
