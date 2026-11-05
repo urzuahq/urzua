@@ -368,11 +368,19 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
 /// mapping (`{a: 1, b: 2}` on one line) falls back to the block's first
 /// content line via the caller's default.
 fn find_key_line(yaml_text: &str, key: &str) -> Option<usize> {
-    yaml_text.lines().enumerate().find_map(|(idx, line)| {
-        let trimmed = line.trim_start();
-        (trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}: ")))
-            .then_some(idx + 2)
-    })
+    let find = |top_level_only: bool| {
+        yaml_text.lines().enumerate().find_map(|(idx, line)| {
+            if top_level_only && line.starts_with(char::is_whitespace) {
+                return None;
+            }
+            let trimmed = line.trim_start();
+            (trimmed == format!("{key}:") || trimmed.starts_with(&format!("{key}: ")))
+                .then_some(idx + 2)
+        })
+    };
+    // An unindented line is the top-level key; an indented one of the same name
+    // belongs to a nested mapping and is only a fallback.
+    find(true).or_else(|| find(false))
 }
 
 /// The text a number or boolean was written as (`1.10`, `0x1F`, `1e3`), read
@@ -392,8 +400,18 @@ fn scalar_source_text(
         return None;
     }
     let line = yaml_text.lines().nth(line_no.checked_sub(2)?)?;
+    // Only a top-level key's line: an indented line of the same name belongs
+    // to a nested mapping or a block scalar, not to this value.
+    if line.starts_with(char::is_whitespace) {
+        return None;
+    }
     let (_, rest) = line.split_once(':')?;
-    let rest = rest.split(" #").next()?.trim();
+    // A comment starts at a `#` that follows a space or a tab.
+    let comment = rest
+        .char_indices()
+        .find(|&(i, c)| c == '#' && rest[..i].ends_with([' ', '\t']))
+        .map_or(rest.len(), |(i, _)| i);
+    let rest = rest[..comment].trim();
     if rest.is_empty() || rest.contains(['\'', '"', '[', '{', '&', '*', '!', '|', '>']) {
         return None;
     }
@@ -437,6 +455,14 @@ mod tests {
         assert_eq!(h.get("C"), Some("1e3"));
         assert_eq!(h.get("D"), Some("True"));
         assert_eq!(h.get("E"), Some("7"));
+    }
+
+    #[test]
+    fn a_tab_before_a_comment_and_a_nested_key_of_the_same_name_do_not_leak_into_the_value() {
+        let h = parse_yaml_frontmatter("---\nA: 1.10\t# note\n---\n");
+        assert_eq!(h.get("A"), Some("1.10"));
+        let h = parse_yaml_frontmatter("---\nMeta:\n  Version: 1.1\nVersion: 1.10\n---\n");
+        assert_eq!(h.get("Version"), Some("1.10"));
     }
 
     #[test]
