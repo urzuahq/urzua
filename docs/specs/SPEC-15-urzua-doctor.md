@@ -1,7 +1,7 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
 Author: beauwilliams
@@ -101,3 +101,4 @@ than compounded:
 > | 2026-11-04 | Bumped to `0.7`. Added the `hook-wired` check and its `layer` and `state` fields. **Why:** `ADR-71` makes wiring verifiable and `MILE-179` builds it; `doctor` examined the config and workflows but not hooks, so a repository could not verify its own hook. | **substantive** |
 > | 2026-11-05 | Bumped to `0.8`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_warning`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.9`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
