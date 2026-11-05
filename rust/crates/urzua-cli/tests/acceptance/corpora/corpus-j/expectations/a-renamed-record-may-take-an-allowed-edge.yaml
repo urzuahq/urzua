@@ -1,0 +1,15 @@
+id: a-renamed-record-may-take-an-allowed-edge
+corpus: corpus-j
+# Renamed and Accepted to Superseded in one change: judged against Accepted,
+# the edge the graph lists, not as a new record starting outside initial.
+commits:
+  - rename:
+      - {from: records/ADR-0002-accepted.md, to: records/ADR-0002-moved.md}
+  - write:
+      records/ADR-0002-moved.md: "---\nStable-Id: 01M6ME4QBH5GKHM9RP6E3E12KX\nStatus: Superseded\n---\n# ADR-0002 \u2014 Moves backward\n\nAccepted in the fixture; a case sends it back to Proposed, an edge the graph does not list.\n"
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - status.transition-allowed
+expect_no_findings:
+  - {rule: status.transition-allowed}

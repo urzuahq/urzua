@@ -56,3 +56,9 @@ written for the old format fails loudly with a version it does not recognise rat
 best-effort read, which is what this decision exists to guarantee.
 
 Nothing here is reversed. Only the file extension and the parser change.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

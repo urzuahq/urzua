@@ -1,9 +1,8 @@
 ---
 Stable-Id: 01M2WGK3J9WW6NCJAYGZPE8FW4
-Status: Open
+Status: Fixed
 Found-in: "Splitting BUG-59 once its status-vocabulary half was fixed"
-Regression-test: "not yet written -- a corpus whose suppression record type is named anything else must still suppress"
-Blocked-on: RFC-37
+Regression-test: 'rust/crates/urzua-cli/tests/suppression_type_integration.rs::a_type_declaring_the_suppression_role_suppresses_whatever_it_is_named_observed_failing, rust/crates/urzua-cli/tests/suppression_type_integration.rs::a_declared_role_displaces_the_literal_name_observed_failing, rust/crates/urzua-core/src/config.rs::the_suppression_type_is_declared_by_role_with_the_literal_as_fallback'
 ---
 # 74 — Suppressing a finding requires the record type to be named waiver
 
@@ -32,7 +31,7 @@ out, present from the start. The fix honours `ADR-11` rather than revisiting it.
 
 ## Where the declaration goes
 
-Blocked on `RFC-37`, not on `MILE-98`: which type carries suppression is neither identity, fields nor
+Not blocked on `RFC-37` (maintainer decision of 2026-11-05). Not blocked on `MILE-98` either: which type carries suppression is neither identity, fields nor
 sections, so the document model does not gate it -- the same reasoning that unblocked `BUG-59`'s
 status half.
 
@@ -65,3 +64,4 @@ suppression.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Triage: still reproduces on main; `Status` stays `Open`. `load_waivers` (`waiver.rs`) still filters on `r.record_type == "waiver"`, and `diff_scope.rs` reads `record_types.get("waiver")`. **Why:** `RFC-37`, which decides how a type declares what it does, is still Draft. | **substantive** |
+> | 2026-11-05 | Fixed; `Status` is `Fixed` and `Blocked-on` is dropped. A record type declares `role: suppression` (`SPEC-3`); the engine reads the declaration and the literal type name `waiver` is the fallback only when no type declares the role (`SPEC-10`). The struct and functions lost the corpus word (`Suppression`, `load_suppressions`; the file stays `waiver.rs`, which earlier records cite as evidence). This repository's `waiver` type declares the role. **Why:** the maintainer decided on 2026-11-05 that this does not wait for `RFC-37`; a single `role` value is the minimal declaration, and `RFC-37`'s `capabilities` axis can absorb it later. | **substantive** |

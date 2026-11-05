@@ -24,3 +24,8 @@ What this deliberately does not attempt to solve.
 
 ## References
 Related RFCs, research findings, external precedent.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|

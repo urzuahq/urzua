@@ -109,3 +109,9 @@ to clear.
   format rather than another bespoke line-recognizer.
 - ADR-1, ADR-5/6, ADR-13 — the pure-core and cross-compilation constraints the dependency
   choice was verified against.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

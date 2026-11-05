@@ -75,3 +75,9 @@ expensive or noisy it is deleted without consequence.
 - `MILE-103`, on `urzua new` being the faster path.
 - `BUG-24`, on explicit argv paths and untracked records.
 - `ADR-55`, on the tool saying what it knows.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

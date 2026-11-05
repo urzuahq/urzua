@@ -115,6 +115,8 @@ mod tests {
                     relation_fields: None,
                     companion_fields: None,
                     revision_log: None,
+                    role: None,
+                    effective_requires: None,
                 },
             )]
             .into_iter()
