@@ -142,6 +142,112 @@ note kind, a `reason` or a key is additive.
 - This repository's roadmap stays near-empty until its record-naming waits move to `Depends-on` and the
   prose waits to condition records.
 
+## Amendment (2026-11-05): a repository may declare which record types are work, and the roadmap orders only those
+
+*Status of this amendment: proposed, pending maintainer acceptance. Drafted 2026-11-05 at the maintainer's request (decision of 2026-11-05: amend this record with an opt-in setting that declares which types are work). `Status` stays `Accepted` and the Decision text above is unchanged; nothing below is built until the maintainer accepts it (`MILE-196`).*
+
+The Options table defines "open" as a status in neither `success` nor `failure`, and ready as open and not
+derived-blocked. That treats every record type as work. A repository can declare a type for a fact nobody
+builds (`SPEC-23`, `MILE-187`): an `Open` record is a wait that is met or dropped, never started, finished
+or ordered. Measured on this repository's corpus at `0fa6d374`: `urzua roadmap` puts `COND-1` to `COND-4`
+in wave 0 and in `ready`, and `COND-1` on the critical path (`COND-1`, `MILE-13`), as if they were buildable
+(`rules/roadmap.rs:315-319` takes every record whose standing is open into the open set; `:466` makes
+a record ready when it is included and unblocked). No configuration removes them: `roadmap` accepts only
+`pairs` and `group_by` (`config.rs:85-92`, `deny_unknown_fields` at `:84`), and `group_by` only groups
+(`rules/roadmap.rs:533-540`). Found by the independent review of `#349`.
+
+**1. The setting.** `roadmap.work_types` is an optional list of record type names, each a key of
+`record_types`. It says which types are work: the records the roadmap orders. It names no type itself; the
+engine knows no type name (`ADR-64`), and `condition` is only this repository's example of a type a
+repository may leave out. Any type that models a fact, a signal, a decision awaited or an external event
+is a candidate.
+
+**2. Absent means no change.** With `work_types` absent, every type is work and the roadmap is
+byte-identical to today's: same records, waves, ready set, critical path, groups, notes and keys, and no
+`waiting_on` key (item 5). A repository that has not opted in sees nothing.
+
+**3. A declared non-work record still gates its dependents, and is never ordered itself.** With the key
+declared, a record whose type is not listed is non-work. It stays a node of the one graph. What it means
+for its dependents is unchanged: a dependent of an `Open` non-work record is blocked, and out of `ready`
+(it is derived-blocked, `ADR-83`); a dependent of a `Met` (success) one is released, as of any record in
+a `success` status; a dependent of a `Dropped` (failure) one goes to `needs_replan` with `failed-dependency`
+and `via` naming the non-work record. What changes is that a non-work record is not itself a subject of the
+output:
+
+- not in `waves`, `ready` or `critical_path`;
+- not a key of `records`, which holds the work records it did before, and not in `groups`;
+- not counted by `nothing-open` (that note means no work record is open) and not a subject of
+  `unstructured-wait` (a fact does not wait to be ordered);
+- not in `needs_replan` as a record (its dependents are, where item 3 says so). Exclusion still propagates through it,
+  so a work record behind a non-work record that itself waits on a failed work record is
+  `depends-on-excluded`, with `via` the non-work record;
+- `no-status-vocabulary` is still raised for a non-work type with no status vocabulary: it is still read as
+  open, and a wait that is never read as finished blocks forever, which is worth saying.
+
+**4. Waves, `blocks` and the critical path count work only.** A work record's wave is 0 with no open
+**work** dependency, else 1 + the largest wave among them. The consequence is stated, not hidden: the Options
+table's "ready is wave 0 by construction" holds only when every dependency is work. With the key declared,
+`ready` is a subset of wave 0: a work record whose only open dependency is a non-work record is in wave 0 and
+not ready, and reads `blocked: true` with the non-work id in `blocked_by` (`blocked_by` is unchanged: the
+direct dependencies not in `success`, of any type). `blocks` lists work records only, but reaches them
+through non-work ones: if `MILE-13` depends on `COND-1` and `MILE-30` depends on `MILE-13`, `MILE-13`'s `blocks`
+lists `MILE-30`. The critical path is the longest chain of included work records, linked by work-to-work
+edges: a gate between two work records does not join them in the path, because the path counts work and a
+fact has no effort to count. The tie-break is unchanged.
+
+**5. Where non-work records are shown: a top-level `waiting_on` array (recommended).** Hiding them
+would hide the very information that made them worth declaring. Three placements were considered.
+
+| Placement | Pros | Cons |
+|---|---|---|
+| A. `waiting_on`, a top-level array of the non-work records that are not in `success`, each `{record, type, status, blocks}` in natural id order, `blocks` the work records that transitively depend on it (**recommended**) | One list answers "what is the work waiting on, and what does each wait gate"; named for the role, not for any type; `Met` records, which gate nothing, drop out; additive under `schema` 1 | A consumer joins `blocked_by` on a work record to `waiting_on` by id for the per-record view |
+| B. `conditions`, the same list under a type-flavoured name | Reads well in this repository | Names a type the engine does not know; wrong for a repository whose non-work type is called something else |
+| C. A `waiting_on` list on each work record, inside `records` | No join | Repeats one wait on every dependent; says nothing of a non-work record that blocks nothing yet; changes every entry's shape |
+
+Recommended: A. The key is present **only when `work_types` is declared** (empty list when every non-work
+record is `Met`), so a repository without the setting keeps its output unchanged (item 2). Adding a key is
+non-breaking and `schema` stays 1 (Decision, notes paragraph). A `Dropped` non-work record is listed:
+it gates dependents into `needs_replan` and someone must re-point them. `export --format json` carries
+`waiting_on` as part of the `roadmap` object.
+
+**6. Cycles, `check` and the derived blocked value are unaffected.**
+
+- `cycles` still lists a loop's members whatever their type: a loop is a fact about the graph, not about
+  what is work, and a non-work record on a loop is a member (`rules/roadmap.rs:324-339` reads the whole
+  merged graph before any type is consulted). A work record behind a cycle member is `depends-on-cycle`
+  as before.
+- `sequence.cycle` (`MILE-192`) reads every `acyclic` pair's slots with no type filter
+  (`rules/sequence.rs:26`) and merges the pairs `roadmap.pairs` names (`:27-45`, `merged_graph` at `:197-205`). It never reads
+  `work_types`, so the cross-pair reading of `MILE-192` finds a loop through a non-work record exactly as
+  today, and `check` and the roadmap still agree on which loops exist.
+- `sequence.status-agreement` (`ADR-83`) decides blocked from the dependency's own `success` set
+  (`rules/sequence.rs:576-582`, `:594`) and chooses which records to examine by the dependent's declared
+  `progress`/`blocked` statuses (`:533-538`). It never reads `work_types`, so a work record with an `Open`
+  non-work dependency is derived-blocked in `check` and in the roadmap alike, and a non-work dependent is
+  examined or not by its own type's declaration as before. `ready` implies not `blocked`
+  in both readings.
+
+**7. Validation, at config load.** In `validate_roadmap` (`config.rs:2767`, called at `:1841`, reported as
+`roadmap: ...` through `ConfigError::InvalidRoadmap`, `:1267-1268`), alongside `pairs` and `group_by` and under
+`ADR-64` clause 5 (a declaration that can never apply is refused, not read as a clean roadmap):
+a name that is not a `record_types` key is a load error naming it (the case the maintainer named: an unknown
+type name); a name listed twice is a load error; a blank name or one with surrounding whitespace is a load
+error; and an empty list is a load error, since a declaration that nothing is work orders nothing. A
+`work_types` with no `roadmap.pairs` is accepted and inert, and the existing `no-sequencing-pair` note
+(`rules/roadmap.rs:211`) already says there is no roadmap. A binary without this setting rejects the key
+(`deny_unknown_fields`, `config.rs:84`), so a repository that declares it cannot be silently misread by an
+older `urzua`.
+
+**8. Reversibility.** The key name and the `waiting_on` shape are the parts to settle; both are additive
+and a rename is a config migration (`ADR-77`). Narrowing the work set later moves records out of the output,
+the direction this Decision's open-set row warns about, which is why it is opt-in per repository and
+changes nothing for one that does not declare it.
+
+**9. Follow-through.** `SPEC-2` (the roadmap output: `waiting_on`, and the ready-versus-wave-0 sentence),
+`SPEC-3` (the `roadmap.work_types` key and its load errors) and `SPEC-23` ("How a condition is read")
+gain revision rows when this is built (`MILE-196`). This repository then declares `work_types` in
+`.urzua/config.yaml`, so `COND-1` to `COND-4` leave the ready set and `COND-1` leaves the critical path.
+
 ## References
 
 `RFC-48`, `ADR-76`, `ADR-64`, `ADR-73`, `ADR-77`, `MILE-182`, `MILE-144`, `MILE-115`, `SPEC-2`, `SPEC-3`.
@@ -154,3 +260,4 @@ note kind, a `reason` or a key is additive.
 > | 2026-11-05 | Amended while Proposed after design review: one graph over the pairs `roadmap.pairs` declares (a cross-pair loop is detected); ready means open and not derived-blocked; natural id ordering, the critical-path tie-break and the cycle listing fixed; `needs_replan` reasons and `via` defined; output always an object with `schema`, a per-record map and structured notes from a closed set including `unstructured-wait`; groups nest as arrays with `value: null` last; a type with no status vocabulary is open and noted; the departures from `RFC-48`'s sketch are named; `export` carries the roadmap only when opted in. **Why:** maintainer decision, 2026-11-05, on the review of this record. | **substantive** |
 > | 2026-11-05 | Re-check amendments: edge direction fixed (blocker to dependent); `records` and `groups` include `needs_replan` records; a null `pair` sorts first in `notes`; a transitive `blocks` example; Consequences no longer says acceptance moves `MILE-182`'s status, since `blocked` is derived only; a follow-up milestone adds a `sequence.cycle` mode over `roadmap.pairs`. **Why:** design re-check of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05, after an independent review and re-check found no remaining blockers; accepted together with ADR-83. | **substantive** |
+> | 2026-11-05 | Amendment added, proposed and pending maintainer acceptance: an opt-in `roadmap.work_types` declares which record types are work; a non-work record still blocks its dependents but never appears in waves, `ready`, the critical path, `records` or `groups`, and is listed in a top-level `waiting_on`; `check` and the derived blocked value are unaffected; an unknown type name is a load error. The Decision text and `Status` are unchanged. **Why:** `#349` review: open `condition` records sit in wave 0 and the ready set and no configuration removes them; maintainer decision, 2026-11-05, to amend. | **substantive** |
