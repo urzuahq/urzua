@@ -651,6 +651,82 @@ fn graph_could_not_run_emits_json() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `BUG-169`: `graph` and `explain` answered `ok` whatever the records
+/// contributed, so an unreadable header dropped its edges with no sign. Both
+/// now carry the population block `check` reports, plus a warning notice that
+/// lists the records left out; the status stays `ok`.
+#[test]
+fn graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_failing() {
+    let dir = fixture_repo("graph-population");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    pointer_fields: [\"Derives-from\"]\n    known_fields: [\"Status\", \"Derives-from\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        "---\nStatus: Accepted\n---\n# ADR-1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-b.md"),
+        "---\nStatus: Accepted\nDerives-from: ADR-1: bad: yaml\n---\n# ADR-2\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    for args in [&["graph"][..], &["explain", "src/nonexistent.rs"][..]] {
+        let output = run_urzua(&dir, args);
+        assert_eq!(output.status.code(), Some(0), "{args:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "ok", "{args:?}: {stdout}");
+        let population = &parsed["population"];
+        assert_eq!(population["unit"], "record", "{args:?}: {stdout}");
+        assert_eq!(population["eligible"], 2, "{args:?}: {stdout}");
+        assert_eq!(population["examined"], 1, "{args:?}: {stdout}");
+        assert_eq!(population["unreadable"], 1, "{args:?}: {stdout}");
+        let notices = parsed["notices"].as_array().unwrap();
+        assert!(
+            notices.iter().any(|n| n["severity"] == "warning"
+                && n["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("docs/adr/ADR-2-b.md")
+                && !n["message"].as_str().unwrap().contains("ADR-1-a.md")),
+            "{args:?}: {stdout}"
+        );
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice() {
+    let dir = fixture_repo("graph-empty");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("README.md"), "fixture").unwrap();
+    commit_all(&dir);
+
+    for args in [&["graph"][..], &["explain", "src/a.rs"][..]] {
+        let output = run_urzua(&dir, args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed = assert_valid_json_object(&stdout);
+        assert_eq!(parsed["status"], "ok", "{args:?}: {stdout}");
+        assert_eq!(parsed["population"]["eligible"], 0, "{args:?}: {stdout}");
+        assert_eq!(parsed["population"]["examined"], 0, "{args:?}: {stdout}");
+        assert!(parsed.get("notices").is_none(), "{args:?}: {stdout}");
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// A found-in-review gap: `graph` used to build its index with the lossy
 /// `build_normalized_index` and never disclosed a collision at all, unlike
 /// `check`/`audit`. An edge naming a colliding identifier could silently
