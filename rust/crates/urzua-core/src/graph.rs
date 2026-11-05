@@ -8,8 +8,8 @@ use crate::config::{Config, RelationRole};
 use crate::record::Record;
 use crate::report::{Notice, NoticeSeverity, Population, PopulationUnit};
 use crate::rules::{
-    build_index_reporting_collisions, extract_references, parse_realized_by, record_id,
-    relation_field_name, IdentifierCollision, RelationKind, NARRATIVE, POINTER,
+    build_index_reporting_collisions, extract_references, record_id, relation_field_name,
+    IdentifierCollision, RelationKind, NARRATIVE, POINTER,
 };
 use crate::values::RecordId;
 use std::collections::HashMap;
@@ -68,6 +68,10 @@ pub struct GoverningRecord {
     /// The `Realized-by` category the match came from (`spec`, `code`, or
     /// `test`) -- the same tiers `embodiment.consistency` computes from.
     pub via: String,
+    /// The scope the record cites within the file (`ADR-74`), when it cites
+    /// one; absent for a whole-file locator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// Every record whose `Realized-by` names `path` as evidence -- "which
@@ -86,18 +90,19 @@ pub fn explain(records: &[Record], path: &str, config: &Config) -> Vec<Governing
         let Some(realized_by_value) = record.header.get(locator_field) else {
             continue;
         };
-        let parsed = parse_realized_by(realized_by_value);
-        for (category, locators) in [
-            ("spec", &parsed.spec),
-            ("code", &parsed.code),
-            ("test", &parsed.test),
-        ] {
-            if locators.iter().any(|l| l == path) {
-                matches.push(GoverningRecord {
-                    record: record.path.clone(),
-                    record_type: record.record_type.clone(),
-                    via: category.to_string(),
-                });
+        for entry in crate::locator::realized_by_locators(realized_by_value) {
+            let Ok(locator) = entry.parsed else { continue };
+            if locator.path != path {
+                continue;
+            }
+            let found = GoverningRecord {
+                record: record.path.clone(),
+                record_type: record.record_type.clone(),
+                via: entry.category,
+                scope: locator.scope.as_ref().map(ToString::to_string),
+            };
+            if !matches.contains(&found) {
+                matches.push(found);
             }
         }
     }
@@ -206,6 +211,7 @@ mod tests {
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -220,6 +226,7 @@ mod tests {
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),
