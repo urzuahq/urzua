@@ -1,5 +1,5 @@
 ---
-Version: '0.15'
+Version: '0.16'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -190,6 +190,10 @@ Every one of the following is a hard gate — none are optional, none are defaul
   byte-for-byte — verified by test, not just intended.
   That includes the file's line endings and trailing-newline state, and the new revision-log row
   repeats the existing table's own row prefix (`BUG-164`, `BUG-165`).
+- **The value is replaced by position, never by substring** (`BUG-192`). The edit rewrites what follows
+  `Field:` on the field's own line and nothing else. A stated value that is empty, `~` or `null` is
+  filled in place, and its revision row reads "stated no value disagreed" rather than quoting an empty
+  span.
 
 Every applied write appends a `structural` revision-log entry naming the computation and the
 evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
@@ -267,3 +271,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.13`. Documents the record-edit hook that relays `--stdin-path` verdicts to a harness, replacing the example editor script. **Why:** `MILE-178`, `ADR-69`. | **substantive** |
 > | 2026-11-04 | Bumped to `0.14`. `fix --rebaseline` lists stale `@sha256:` pins and, on `--apply --ids`/`--force --by --reason`, re-pins the chosen records with an attributed revision row. **Why:** `MILE-181` -- a pin was a block with no sanctioned way to say "re-verified, still holds"; `RFC-2` proposed exactly this review-before-apply refresh. | **substantive** |
 > | 2026-11-04 | Bumped to `0.15`. Documents how `check` findings point at the `Embodiment` and `Status` repairs: a `run-command` `suggested_action` naming `urzua fix --apply --ids <record>`, offered only where `fix` lists that repair. No change to `fix` itself. **Why:** `MILE-44`, `ADR-73`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.16`. Apply replaces a field's value by position after `Field:`, never by substring, and fills an empty, `~` or `null` stated value in place; the revision row says "stated no value" for it. **Why:** `BUG-192` -- an empty stated value matched everywhere and the computed value was written at column 0 (`ImplementedEmbodiment: null`). | **substantive** |

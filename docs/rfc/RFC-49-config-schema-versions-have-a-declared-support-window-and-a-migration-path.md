@@ -88,6 +88,21 @@ amend `ADR-54`'s default ("a break ships no migration aid"), because the reason 
 - A general plugin or extension compatibility contract.
 - Changing what `schema_version` 2 means today.
 
+## Amendment (2026-11-05): decided as proposed
+
+The maintainer decided on 2026-11-05 to accept this proposal as written, and `ADR-77` records the decision (as Proposed). The
+open questions are answered by the proposal itself:
+
+- **Window.** N and N-1.
+- **Outdated.** A warning, `config.schema-version-outdated`, not an error.
+- **Command.** `urzua migrate config` is its own command.
+- **Testing.** A fixture config at every supported version in the acceptance corpora, each proved to load to the same effective
+  config.
+- **Adopter population.** `ADR-54`'s default holds only while no real adopter config exists; this policy applies from then on.
+
+`Status` stays `Draft`: it is the maintainer's to change, and it should become `Accepted` alongside `ADR-77`. The proposal text
+above is unchanged.
+
 ## References
 
 - `MILE-34`: the milestone this would let be built.
@@ -102,4 +117,4 @@ amend `ADR-54`'s default ("a break ships no migration aid"), because the reason 
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-05 | Amendment added: the proposal is decided as written and recorded in `ADR-77` (Proposed). `Status` stays `Draft`; it should become `Accepted` alongside `ADR-77`. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
