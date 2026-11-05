@@ -183,3 +183,40 @@ fn the_declared_pending_vocabulary_reads_whole_values_only() {
     let rules = finding_rules(&dir);
     assert!(rules.is_empty(), "{rules:?}");
 }
+
+/// ADR-74 / MILE-185: this repository's rust resolver addresses the struct
+/// fields ADR-39, ADR-43 and ADR-44 pin, by name, so a new option elsewhere in
+/// `RecordTypeConfig` cannot stale them.
+#[test]
+fn the_own_rust_resolver_addresses_each_pinned_record_type_config_field() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    for field in [
+        "required_fields",
+        "known_fields",
+        "spec",
+        "pointer_fields",
+        "narrative_fields",
+    ] {
+        let out = urzua(
+            &root,
+            &[
+                "explain",
+                &format!("rust/crates/urzua-core/src/config.rs#RecordTypeConfig::{field}"),
+            ],
+        );
+        let parsed: serde_json::Value = serde_json::from_slice(&out.stdout)
+            .unwrap_or_else(|e| panic!("{field}: not JSON ({e}): {out:?}"));
+        let text = parsed["scope"]["text"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{field}: {parsed}"));
+        let last = text.lines().last().unwrap();
+        assert!(
+            last.trim_start().starts_with(&format!("pub {field}:")),
+            "{field}: the span ends at the declaration: {text}"
+        );
+        assert!(
+            !text.contains("pub fn"),
+            "{field}: the span is one field, not a neighbour: {text}"
+        );
+    }
+}

@@ -379,12 +379,37 @@ pub struct LocatorResolver {
     pub leading: Option<String>,
     #[serde(default)]
     pub container: Option<ContainerDecl>,
-    #[serde(default)]
-    pub member: Option<MemberDecl>,
+    /// The item inside a container span. One mapping, or a list of mappings
+    /// when members end differently (a Rust `fn` is `brace_balanced`, a struct
+    /// field is `indent`): a name is looked for with every pattern, and the
+    /// matches are counted together.
+    #[serde(
+        default,
+        rename = "member",
+        deserialize_with = "one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub members: Vec<MemberDecl>,
     /// Like `container`, with `{trait}` and `{symbol}` placeholders, for
     /// `Type::<Trait>` and `Type::<Trait>::member`.
     #[serde(default)]
     pub trait_container: Option<ContainerDecl>,
+}
+
+fn one_or_many<'de, D>(d: D) -> Result<Vec<MemberDecl>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(MemberDecl),
+        Many(Vec<MemberDecl>),
+    }
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(m) => vec![m],
+        OneOrMany::Many(v) => v,
+    })
 }
 
 const SYMBOL: &str = "{symbol}";
@@ -455,7 +480,7 @@ pub fn validate_resolvers(resolvers: &[LocatorResolver]) -> Result<(), String> {
                 true,
             )?;
         }
-        if let Some(m) = &r.member {
+        for m in &r.members {
             check(&format!("resolver '{n}' member start"), &m.start, false)?;
         }
         for (what, c) in [
@@ -473,12 +498,12 @@ pub fn validate_resolvers(resolvers: &[LocatorResolver]) -> Result<(), String> {
                 }
             }
         }
-        if r.member.is_some() && r.container.is_none() && r.trait_container.is_none() {
+        if !r.members.is_empty() && r.container.is_none() && r.trait_container.is_none() {
             return Err(format!(
                 "resolver '{n}' declares a member but no container or trait_container to find it in"
             ));
         }
-        if r.member.is_none() && r.container.is_some() {
+        if r.members.is_empty() && r.container.is_some() {
             return Err(format!(
                 "resolver '{n}' declares a container but no member to find in it"
             ));
@@ -732,28 +757,38 @@ impl Resolution<'_> {
         spans: &[Raw],
         name: &str,
     ) -> Result<Span, ScopeError> {
-        let Some(member) = &resolver.member else {
+        if resolver.members.is_empty() {
             return Err(ScopeError::Unsupported(format!(
                 "resolver '{}' declares no member pattern",
                 resolver.name
             )));
-        };
-        let re = compile(&member.start, name, None)?;
-        let mut found: Vec<(usize, Raw)> = Vec::new();
+        }
+        let patterns: Vec<regex::Regex> = resolver
+            .members
+            .iter()
+            .map(|m| compile(&m.start, name, None))
+            .collect::<Result<_, _>>()?;
+        // (line, container span, which member pattern matched it). A line two
+        // patterns both match is two candidates, never first-pattern-wins.
+        let mut found: Vec<(usize, Raw, usize)> = Vec::new();
         for span in spans {
             for line in self.direct_children(container_kind, *span) {
-                if re.is_match(self.lines[line]) {
-                    found.push((line, *span));
+                for (k, re) in patterns.iter().enumerate() {
+                    if re.is_match(self.lines[line]) {
+                        found.push((line, *span, k));
+                    }
                 }
             }
         }
         match found.as_slice() {
             [] => Err(ScopeError::NotFound(format!("member '{name}' not found"))),
-            [(line, container)] => end_of(member.end, self.lines, *line, container.1)
-                .map(|e| self.finish((*line, e)))
-                .ok_or(ScopeError::EndNotFound),
+            [(line, container, k)] => {
+                end_of(resolver.members[*k].end, self.lines, *line, container.1)
+                    .map(|e| self.finish((*line, e)))
+                    .ok_or(ScopeError::EndNotFound)
+            }
             many => Err(ScopeError::Ambiguous {
-                lines: many.iter().map(|(l, _)| l + 1).collect(),
+                lines: many.iter().map(|(l, _, _)| l + 1).collect(),
             }),
         }
     }
