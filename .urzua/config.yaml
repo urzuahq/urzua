@@ -380,6 +380,42 @@ record_types:
           - {name: behaviour-preserving-refactor}
           - {name: unreachable-failure}
         cite_field: Justified-by
+  # A fact nobody builds (RFC-48, MILE-187): an open question or an observed
+  # signal that a Depends-on can point at. Declared from configuration alone, with
+  # primitives that already exist: a directory, a prefix and a padded identity, a
+  # status vocabulary with success and failure sets, transitions, and
+  # statuses.require. The engine knows no type called condition; MILE-187's test
+  # declares the same shape under another name and gets the same findings.
+  condition:
+    dir: "docs/conditions"
+    prefix: "COND"
+    identity: {from: filename, pattern: '^(?P<prefix>COND)-(?P<number>\d{4})-(?P<slug>.+)$'}
+    revision_log: {marker: "**Revision log**", required: true}
+    required_fields:
+      - "Status"
+    header_shape: "yaml-frontmatter"
+    known_fields:
+      - "Stable-Id"
+      - "Met-by"
+    statuses:
+      values: ["Open", "Met", "Dropped"]
+      success: ["Met"]
+      failure: ["Dropped"]
+      # A condition is filed Open; a person moves it to Met or Dropped, both
+      # terminal. Met names its evidence in Met-by.
+      initial: ["Open"]
+      transitions:
+        Open: ["Met", "Dropped"]
+      require:
+        - {when: ["Met"], fields: ["Met-by"]}
+    sections:
+      from: headings
+      required:
+        - {name: Signal}
+    spec: "SPEC-23"
+    pointer_fields:
+      - "Met-by"
+    narrative_fields: []
 
 # An RFC that amends another is echoed by the amended RFC's Amended-by. A claim
 # from an RFC that is not yet accepted is provisional (MILE-154, MILE-127): it

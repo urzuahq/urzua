@@ -1,5 +1,5 @@
 ---
-Version: '0.88'
+Version: '0.89'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1117,6 +1117,24 @@ pair, an unknown `reciprocity`, and enabling either pair rule while no pair is d
 declared as a `pointer_fields` entry is also resolved by `pointer.resolution`, so an unresolved
 reference reports twice; keep pair fields outside `pointer_fields`, as `Supersedes / Superseded-by` is.
 
+### A record type declared from configuration alone: `condition` (`MILE-187`, `RFC-48`)
+
+A record type needs no engine support when its shape is made of primitives this file already
+documents. `condition`, the record for a fact nobody builds, is the first such type; its schema,
+statuses and `Signal` section are specified by `SPEC-23`.
+
+| Type | Spec | Directory and identity | Statuses | Required by status |
+|---|---|---|---|---|
+| `condition` | `SPEC-23` | `docs/conditions`, prefix `COND`, `COND-NNNN-slug.md` | `Open` (initial) moves to `Met` (success) or `Dropped` (failure), both terminal | `Met-by` in `Met` |
+
+The declaration uses `dir`, `prefix`, `identity`, `statuses` (`values`, `success`, `failure`,
+`initial`, `transitions`, `require`), `sections` and `spec`, and nothing else. No rule, option or
+code path reads the name `condition`: the same declaration under another type name, prefix and
+directory reports the same findings and the same roadmap (a fixture proves it). A `Depends-on` from
+any record that declares the field resolves to a condition through the sequencing pair like any other
+record, which needs `cross_type: true` on that pair as here. A type's effective prefix defaults to its
+upper-cased name (`CONDITION`), so a type whose prefix differs from its name declares `prefix`.
+
 ## `urzua doctor`
 
 **Specified in full by SPEC-15.** Reports on the tool's own configuration and invocation health —
@@ -1819,3 +1837,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.86`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.87`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.88`. `roadmap.pairs` also sets what `sequence.cycle` reads as one graph: a loop that uses an edge of each of two declared pairs is reported, and an `acyclic` pair not named, or an absent `roadmap.pairs`, keeps the per-pair reading. The load-time check that each named pair declares `acyclic: true` is what guarantees every pair in that graph is cycle-checked. **Why:** `MILE-192`, following `ADR-82` (design re-check of 2026-11-05): the roadmap saw a cross-pair loop that `check` did not. | **substantive** |
+> | 2026-11-05 | Bumped to `0.89`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |
