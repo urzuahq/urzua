@@ -733,7 +733,8 @@ end: brace_balanced
                 _ => FileText::Missing,
             })
         };
-        let (_, findings) = embodiment_locator_exists(&[r], &scoped_config(), &present, &read, &|_| false);
+        let (_, findings) =
+            embodiment_locator_exists(&[r], &scoped_config(), &present, &read, &|_| false);
         findings.into_iter().map(|f| f.message).collect()
     }
 
@@ -945,14 +946,22 @@ end: brace_balanced
             &untracked_on_disk,
         );
         assert_eq!(findings.len(), 2, "{findings:?}");
-        let drafted = findings.iter().find(|f| f.message.contains("drafted")).unwrap();
+        let drafted = findings
+            .iter()
+            .find(|f| f.message.contains("drafted"))
+            .unwrap();
         assert_eq!(drafted.action_source.variant, "locator-untracked");
         assert!(
-            drafted.message.contains("exists on disk but is not tracked by git"),
+            drafted
+                .message
+                .contains("exists on disk but is not tracked by git"),
             "{}",
             drafted.message
         );
-        let gone = findings.iter().find(|f| f.message.contains("gone")).unwrap();
+        let gone = findings
+            .iter()
+            .find(|f| f.message.contains("gone"))
+            .unwrap();
         assert_eq!(gone.action_source.variant, "locator-missing");
         assert!(gone.message.contains("not in the working tree"));
     }
