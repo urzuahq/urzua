@@ -135,7 +135,8 @@ new waiver field, and that 16 records get 16 waivers.
   applies without regard to expiry: when the record gains a test or is fixed so the finding stops, the waiver
   matches nothing and is reported (`rules/waiver.rs:104-121`), so a permanent waiver cannot outlive its cause;
   (3) a rule renamed or removed is reported as unknown (`rules/waiver.rs:91-103`); (4) a citation is a pointer
-  field, so `pointer.resolution` reports a cited record that is later retired or superseded; (5) new: the
+  field, so `pointer.resolution` reports a cited record that does not resolve and `pointer.target-status`
+  (where it lists the field) reports one that is later superseded; (5) new: the
   report counts permanent waivers by category, so the number and the causes are visible on every run (the
   population line or a notice; the milestone fixes the form).
 - **Scope stays one record per waiver.** `Scope` is unchanged. A list or glob scope is not added (option E).
@@ -190,4 +191,5 @@ report as ineffective.
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer request of 2026-11-05: waivers do not let a repository state a permanent exception on a declared reason, which `ADR-84`'s exemption route needs for 19 `Fixed` defects with no test to cite. | **substantive** |
 > | 2026-11-05 | Amended after independent review; `Status` stays `Proposed`. Corrected the line citations (`effective_requires` at `config.rs:752`, validated near `:1779`; the waiver config at `.urzua/config.yaml:349-351`); stated that the `waiver-ineffective` message is reworded to name the unmet requirement; restated the remaining set as 16 (not 24 or 19); added `unreachable-failure` and a repository-only `behaviour-preserving-refactor` so the vocabulary covers all 16, with each record mapped; noted that `SPEC-10`'s "no relationship fields" is amended once `Justified-by` is added; wrote the reviewer's five recommended answers into the text as decided points and removed the open questions. **Why:** independent review of `#338` found the vocabulary covered 14 of the 16, the counts were stale and three citations were wrong. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Corrected the Honesty clause on citations: `pointer.resolution` reports a cited record that does not resolve, and `pointer.target-status` (with `Justified-by` in its `fields`) reports one that is `Superseded`. The decision is unchanged; `MILE-193` lists `Justified-by` under `pointer.target-status`. **Why:** independent review of #345 found `pointer.resolution` never reads a target's status, and `pointer.target-status` is the rule that does. | **structural** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
