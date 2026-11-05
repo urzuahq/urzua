@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Harness-neutral core of the record-edit hook (ADR-69, ADR-78, MILE-178, MILE-191).
 #
-#   record-edit-hook.sh [--override NAME] <record-path> < proposed-content
+#   record-edit-hook.sh [--override NAME [--reason TEXT]] <record-path> < proposed-content
 #
 # Judges the content a harness is about to write to <record-path>, before it is
 # written, by relaying `urzua check --stdin-path` (SPEC-2): every enabled rule that
@@ -13,6 +13,7 @@
 #   argv     the record path, absolute or relative to the repo root
 #   env      URZUA_BIN             urzua binary (default: rust/target/release/urzua, then PATH)
 #            URZUA_HOOK_OVERRIDE   a name; same as --override
+#            URZUA_HOOK_REASON     why; same as --reason
 #   stdout   exactly one JSON object:
 #              verdict  allow | allow-with-warnings | block | allow-unjudged |
 #                       allow-override | not-governed
@@ -25,7 +26,13 @@
 #   allow-with-warnings  judged; warnings are shown in `message`, nothing blocks
 #   allow-unjudged       urzua could not judge (missing, not-run, history unreadable,
 #                        unparsable output). The edit proceeds; the message says so.
-#   allow-override       a block was overridden by name; the name is in the output
+#   allow-override       a block was overridden by name; the name is in the output and,
+#                        when the config declares `override_log`, one row per overridden
+#                        finding is appended to that committed log (ADR-78, MILE-188):
+#                        date, name, record, field, rule, reason, and a blank Reviewed-by
+#                        that a person fills in later. A reason is then required.
+#                        With no `override_log` declared the override is not recorded and
+#                        the message says so.
 #   not-governed         urzua says no record type governs the path: not a record
 #   allow                judged, nothing to report; the message counts the rules that ran
 #                        and names the enabled rules a single record cannot be judged by
@@ -35,11 +42,14 @@
 set -u
 
 override="${URZUA_HOOK_OVERRIDE:-}"
+reason="${URZUA_HOOK_REASON:-}"
 override_given=0
 [ -n "$override" ] && override_given=1
-if [ "${1:-}" = "--override" ]; then
-  override="${2-}"; override_given=1; shift 2 || true
-fi
+while [ "${1:-}" = "--override" ] || [ "${1:-}" = "--reason" ]; do
+  if [ "$1" = "--override" ]; then override="${2-}"; override_given=1
+  else reason="${2-}"; fi
+  shift 2 || break
+done
 path="${1:-}"
 [ -n "$path" ] || { echo '{"verdict":"allow-unjudged","message":"record-edit-hook: no record path given; the edit was not judged"}'; exit 0; }
 
@@ -120,15 +130,43 @@ if [ "$introduced" = "[]" ]; then
   emit allow-with-warnings "record-edit-hook: urzua judged $rel; nothing this edit introduced blocks it. $(ran_summary)$note" "$shown"; exit 0
 fi
 
+# The committed override log is the config's top-level `override_log` scalar
+# (SPEC-3); this is the only config line the hook reads.
+declared_log() {
+  awk '/^override_log:[ \t]/ { sub(/^override_log:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); sub(/[ \t]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit }' .urzua/config.yaml 2>/dev/null
+}
+# One cell of a Markdown table row: no pipe, no newline.
+cell() { printf '%s' "$1" | tr '\n|' '  ' | sed -e 's/^ *//' -e 's/ *$//'; }
+
+# Appends one row per overridden finding. Returns non-zero when the log cannot be
+# written, which blocks the edit: an override that is not recorded is not allowed.
+persist_override() { # log-path name rel findings-json reason
+  local log="$1" name="$2" record="$3" found="$4" why="$5" today
+  today="$(date -u +%F)"
+  mkdir -p "$(dirname "$log")" 2>/dev/null || return 1
+  if [ ! -s "$log" ]; then
+    printf '# Override log\n\nEach row is an editor-hook override that let a blocked record edit through\n(written by scripts/hooks/record-edit-hook.sh). A person sets Reviewed-by once they\nhave looked at it; `override.unreviewed` reports every row where it is blank.\n\n| Date | Name | Record | Field | Rule | Reason | Reviewed-by |\n|---|---|---|---|---|---|---|\n' > "$log" || return 1
+  fi
+  while IFS=$'\t' read -r rule field; do
+    printf '| %s | %s | %s | %s | %s | %s | |\n' "$today" "$(cell "$name")" "$(cell "$record")" "$(cell "$field")" "$(cell "$rule")" "$(cell "$why")" >> "$log" || return 1
+  done < <(echo "$found" | jq -r '.[] | [.rule, (.suggested_action.target.field // "-")] | @tsv')
+}
+
 if [ "$override_given" -eq 1 ]; then
   if [ -z "${override//[[:space:]]/}" ]; then
     emit block "record-edit-hook: blocked. An override needs a name (--override NAME or URZUA_HOOK_OVERRIDE=NAME); an empty one is not accepted."$'\n'"$(describe "$introduced")" "$introduced"; exit 1
   fi
-  # Extension point (ADR-78 item 1, MILE-188): persist_override is where the
-  # committed override log is written. Today the override exists only in this output.
-  persist_override() { :; }
-  persist_override "$override" "$rel" "$introduced"
-  emit allow-override "record-edit-hook: OVERRIDE '$override' let this edit to $rel through despite:"$'\n'"$(describe "$introduced")$note" "$introduced"; exit 0
+  logpath="$(declared_log)"
+  recorded="record-edit-hook: this override is NOT recorded: no override_log is declared in .urzua/config.yaml."
+  if [ -n "$logpath" ]; then
+    if [ -z "${reason//[[:space:]]/}" ]; then
+      emit block "record-edit-hook: blocked. An override is recorded in $logpath and needs a reason (--reason TEXT or URZUA_HOOK_REASON=TEXT)."$'\n'"$(describe "$introduced")" "$introduced"; exit 1
+    fi
+    persist_override "$logpath" "$override" "$rel" "$introduced" "$reason" || {
+      emit block "record-edit-hook: blocked. The override could not be recorded in $logpath, and an override that is not recorded is not allowed."$'\n'"$(describe "$introduced")" "$introduced"; exit 1; }
+    recorded="Recorded in $logpath; a person reviews it by setting Reviewed-by on its row."
+  fi
+  emit allow-override "record-edit-hook: OVERRIDE '$override' let this edit to $rel through despite:"$'\n'"$(describe "$introduced")"$'\n'"$recorded$note" "$introduced"; exit 0
 fi
 
 emit block "record-edit-hook: blocked. urzua reports errors this edit introduced:"$'\n'"$(describe "$introduced")"$'\n'"Fix the record as the findings say. The rest of the edit is fine. To proceed anyway, a named override is required: URZUA_HOOK_OVERRIDE=<name>.$note" "$introduced"

@@ -1,9 +1,9 @@
 ---
-Version: '0.17'
+Version: '0.18'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:4d5cc9cf4b356cbe034c5f107ec508882b43e30c84a7393b9aad030290cbd7bc, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:1e3eb7deafd1dd20cc7b74340c7dbf3fe42983f61f066ccd62523f82e924905f, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:21de607499b2453344d7e1fb24a5ffb1ccd57e1ae9d12b33342f7256fe4ea480, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:07cd765af78dfcd83c0996ec133281f8010ebb2279e738a38edfdf44f7e95a40, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:cca33395d984b0d38f89a05aee9a135e42df1d2a93cb4c6ea382c2c0cbe0f18d, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:fffd3008d4cfd41aae64857e29f11f8fb82ab6dbc09c01f5bbb3ea82382af46e, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:ee81adceb0d7885807dfbfbd781ac6462ab116e6f95dbc8277b0ab3e40ca28b4
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:6329cd27ceb04e4fe7b6c4641637f9d8500fa4b85cba0d1db1f03325120a63e3, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:1e3eb7deafd1dd20cc7b74340c7dbf3fe42983f61f066ccd62523f82e924905f, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:21de607499b2453344d7e1fb24a5ffb1ccd57e1ae9d12b33342f7256fe4ea480, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:07cd765af78dfcd83c0996ec133281f8010ebb2279e738a38edfdf44f7e95a40, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:cca33395d984b0d38f89a05aee9a135e42df1d2a93cb4c6ea382c2c0cbe0f18d, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:fffd3008d4cfd41aae64857e29f11f8fb82ab6dbc09c01f5bbb3ea82382af46e, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:ee81adceb0d7885807dfbfbd781ac6462ab116e6f95dbc8277b0ab3e40ca28b4
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -40,7 +40,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-8** | `urzua fix` — eligibility test, detect/apply | Accepted |
 > | **SPEC-9** | the `bug` record type | Accepted |
 > | **SPEC-10** | the `waiver` record type | Accepted |
-> | **SPEC-11** | `urzua audit` | Accepted |
+> | **SPEC-11** | `urzua audit` — a deprecated alias of `check` (`ADR-79`) | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
 > | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` | Accepted |
@@ -124,8 +124,10 @@ failure mode this tool exists to eliminate, and shipping it would be self-refuti
 **Specified in full by SPEC-13.** Read-only relationship queries over data `check` already parses.
 
 ### `urzua audit`
-**Specified in full by SPEC-11.** Cross-record reconciliation, separate from per-record validation:
-supersession reciprocity and dangling cross-references. Never writes.
+**Specified in full by SPEC-11.** Deprecated (`ADR-79`): an alias of `urzua check` over the configured
+rules, with no rule set of its own, that adds one deprecation `Notice`. Never writes. Removed the
+release after. `urzua check --rules <id>,...` (`SPEC-2`) selects declared rules, and is the replacement
+for the narrower report `audit` used to give.
 
 ### `urzua fix`
 **Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
@@ -319,3 +321,6 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-05 | Bumped to `0.16`. Re-baselined (BUG-50, attested by this PR's review): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus` 890414a9c2c9 -> 07cd765af78d. Reason: BUG-50 made a missing revision log a finding, so the clean-corpus fixture gained a revision log; the exit-0-on-a-clean-corpus behaviour this spec cites is unchanged **Why:** the pinned evidence changed and the PR review is the human re-verification that the claim still holds. | **structural** |
 > | 2026-11-05 | Bumped to `0.17`. `check` gains `--stdin-path`, named under `urzua check` and specified in `SPEC-2`. **Why:** `MILE-191`, `ADR-78` item 2. | **substantive** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-243) 4ec5a0737546 -> 4d5cc9cf4b35. Reason: The Command enum span changed only to add check's --stdin-path flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.15`. `urzua audit` is a deprecated alias of `check`, and `check` takes `--rules`. **Why:** `MILE-190`, `ADR-79`. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-249) 4d5cc9cf4b35 -> 2e660f5d188b. Reason: The Command enum span changed to add check's --rules flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-248) 4d5cc9cf4b35 -> 6329cd27ceb0. Reason: audit.rs now runs check's engine over the configured rules with a deprecation notice, and Command::Audit's help describes the deprecated alias (ADR-79 as amended, MILE-190); the supersession-reciprocity behaviour ADR-30 cites is unchanged, now reported through check, and the pinned test body changed only to match **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

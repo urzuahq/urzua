@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6MP8QCAARFPZ420Z71Z8QPM
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-78
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/rules/override_log.rs, code:rust/crates/urzua-core/src/rules/table.rs, code:scripts/hooks/record-edit-hook.sh, test:rust/crates/urzua-cli/tests/override_log_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
 ---
 # 188 — A committed override log records every editor-hook override, and check reports an override not yet reviewed
 
@@ -20,7 +21,7 @@ A committed log of editor-hook overrides, declared in `.urzua/config.yaml`, with
 
 - The log's location and shape are declared in `.urzua/config.yaml` (not hardcoded in the hook or the engine), and `SPEC-3` documents the declaration.
 - A hook run that passes a block with `--override NAME` appends one entry with the name, the field, the record, the reason and the date, and an override with no reason is refused like an empty name; the entry is a committed file change that appears in the pull request.
-- `check` reports a warning for each log entry not yet reviewed, naming the entry and the record, and no finding for a reviewed one; "reviewed" is defined in `SPEC-2` and exercised by a planted-violation test that fails before the rule exists; a declared log that is missing or unparsable is reported, never read as empty.
+- `check` reports a warning for each log entry not yet reviewed, naming the entry and the record, and no finding for a reviewed one; "reviewed" is defined in `SPEC-3` (a person has named themselves in `Reviewed-by`) and exercised by a planted-violation test that fails before the rule exists; a declared log that is missing or unparsable is reported, never read as empty.
 - The rule is enabled in this repository's own `.urzua/config.yaml` with a log that exists, and `make rule-table-check` passes with the new rule in the table.
 
 > **Revision log**
@@ -28,3 +29,6 @@ A committed log of editor-hook overrides, declared in `.urzua/config.yaml`, with
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-78` Accepted 2026-11-05 decides a committed override log read by `check` and notes that no milestone exists for it. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-05 | Built in #309: top-level `override_log` and the opt-in `override.unreviewed` rule (`SPEC-2`, `SPEC-3`), the hook recording a named override and requiring a reason (`SPEC-8`), and both enabled in this repository's configuration with an empty log. `Realized-by` added and `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's configuration. | **substantive** |
+> | 2026-11-05 | Fixed after review of #309: `Reviewed-by` counts as a review only when it names a person (a blank cell, a placeholder such as `TBD` or `-`, and a value the record types declare as pending are not a review, using the field-state vocabulary of `field.quality` and `field.pending`), and a declared log that does not exist is reported with the variant `override-log-missing` instead of read as empty, which is what the third item of Done means asks for. **Why:** the reviewer showed the warning cleared by `TBD`, `-` and `Pending`, and found the missing-log item of Done means unmet while the milestone read `Done`; both are now met and exercised by tests. | **substantive** |
