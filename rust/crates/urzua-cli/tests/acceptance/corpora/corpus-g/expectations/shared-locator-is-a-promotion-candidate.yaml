@@ -3,6 +3,6 @@ corpus: corpus-g
 invocation: [--config, .urzua/promotion.yaml, check]
 expect_exit: 1
 expect_findings:
-  - {rule: embodiment.locator-promotion-candidate, message_contains: src/cache.rs}
+  - {rule: embodiment.locator-promotion-candidate, message_contains: src/cache.rs, no_suggested_action: true}
 expect_no_findings:
   - {rule: embodiment.locator-promotion-candidate, message_contains: src/queue.rs}

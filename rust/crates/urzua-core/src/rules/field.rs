@@ -61,6 +61,8 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
                     line: None,
                     waived: None,
                     declared_severity,
+                    suggested_action: None,
+                    action_source: ActionSource::new("field-pending").field(field.as_str()),
                     message: format!(
                         "field '{field}' is marked pending -- work declared unfinished"
                     ),
@@ -118,6 +120,8 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("untrimmed-value").field(field.as_str()).text(value.trim()),
                     message: format!(
                         "field '{field}' is {value:?} -- the surrounding whitespace is part of the value, so any exact comparison against '{}' fails",
                         value.trim()
@@ -194,6 +198,8 @@ pub fn field_leading_reserved_indicator(
                         line: None,
                         waived: None,
                         declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("leading-reserved-indicator").field(field.as_str()),
                         message: format!(
                             "field '{field}' is {value:?} -- it needs quoting only because it starts with '{first}', a reserved YAML indicator character; confirm the character is meaningful, or drop it (BUG-18)"
                         ),
@@ -257,6 +263,8 @@ pub fn field_quality(records: &[Record], config: &Config) -> (RuleExecution, Vec
                     line: None,
                     waived: None,
                     declared_severity,
+                    suggested_action: None,
+                    action_source: ActionSource::new("field-quality").field(field.as_str()),
                     message: format!("field '{field}' is {state:?} -- not a real, present value"),
                 });
             }

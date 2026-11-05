@@ -91,6 +91,8 @@ pub fn date_field_valid(records: &[Record], config: &Config) -> (RuleExecution, 
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("date-invalid").field(field.as_str()),
                     message: format!("{field} '{}' {problem}", value.trim()),
                 });
             }
@@ -166,6 +168,8 @@ pub fn date_field_order(records: &[Record], config: &Config) -> (RuleExecution, 
                     line: None,
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("date-order").field(later.as_str()),
                     message: format!(
                         "{earlier} '{}' is later than {later} '{}', but {earlier} must not be later than {later}",
                         dates[0], dates[1]

@@ -235,17 +235,28 @@ fn is_test_file(path: &std::path::Path, test_paths: &[String]) -> bool {
 /// was checked, and an empty set of files reads exactly like a clean one.
 fn uncovered_source_paths(
     rule: &str,
+    variant: &'static str,
     files: &[SourceFile],
     source_paths: &[String],
 ) -> Vec<Finding> {
-    uncovered_paths(rule, files, source_paths, "source path", None)
+    uncovered_paths(
+        rule,
+        variant,
+        files,
+        source_paths,
+        ("source path", "back_pointer_paths"),
+        None,
+    )
 }
 
+/// `label` names the entry in the message; `option` is the rule option it was
+/// declared under, which is where the suggested edit lands.
 fn uncovered_paths(
     rule: &str,
+    variant: &'static str,
     files: &[SourceFile],
     paths: &[String],
-    label: &str,
+    (label, option): (&str, &str),
     scanned: Option<&[String]>,
 ) -> Vec<Finding> {
     // A test-path glob can match a file the scan never reads, so it must match
@@ -269,6 +280,8 @@ fn uncovered_paths(
             ),
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new(variant).key_path(["rules", rule, option]),
         })
         .collect()
 }
@@ -317,18 +330,26 @@ pub fn embodiment_back_pointer_resolution(
                     ),
                     waived: None,
                     declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("back-pointer-unresolved"),
                 });
             }
         }
         Outcome::Examined
     });
 
-    findings.extend(uncovered_source_paths(RULE_ID, files, source_paths));
+    findings.extend(uncovered_source_paths(
+        RULE_ID,
+        "back-pointer-uncovered-path",
+        files,
+        source_paths,
+    ));
     findings.extend(uncovered_paths(
         RULE_ID,
+        "back-pointer-uncovered-test-path",
         files,
         test_paths,
-        "test path",
+        ("test path", "test_paths"),
         Some(source_paths),
     ));
 
@@ -366,7 +387,7 @@ pub fn embodiment_back_pointer_decision_accepted(
     let prefixes = declared_prefixes(config);
     let declared = super::status::statuses_by_type(config);
     let mut findings = Vec::new();
-    let mut push = |pointer: &BackPointer, message: String| {
+    let mut push = |variant: &'static str, pointer: &BackPointer, message: String| {
         findings.push(Finding {
             rule: RULE_ID.to_string(),
             severity: FindingSeverity::Error,
@@ -375,6 +396,8 @@ pub fn embodiment_back_pointer_decision_accepted(
             message,
             waived: None,
             declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new(variant),
         });
     };
 
@@ -422,6 +445,7 @@ pub fn embodiment_back_pointer_decision_accepted(
             match accepted {
                 Some(true) => {}
                 Some(false) => push(
+                    "decision-not-implementable",
                     &pointer,
                     format!(
                         "back-pointer cites {}, whose {status_field} is '{status}', not a status \
@@ -431,6 +455,7 @@ pub fn embodiment_back_pointer_decision_accepted(
                     ),
                 ),
                 None => push(
+                    "decision-unjudgeable",
                     &pointer,
                     format!(
                         "back-pointer cites {}, but type '{}' declares no implementable statuses and \
@@ -443,7 +468,12 @@ pub fn embodiment_back_pointer_decision_accepted(
         Outcome::Examined
     });
 
-    findings.extend(uncovered_source_paths(RULE_ID, files, source_paths));
+    findings.extend(uncovered_source_paths(
+        RULE_ID,
+        "decision-uncovered-path",
+        files,
+        source_paths,
+    ));
 
     (
         RuleExecution {

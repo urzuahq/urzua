@@ -33,6 +33,194 @@ pub struct Finding {
     /// serialized: the finding's `severity` already carries the outcome.
     #[serde(skip)]
     pub declared_severity: Option<FindingSeverity>,
+    /// What to do about it (`ADR-73`): omitted when the finding's variant is
+    /// declared exempt in the rule table, or when no action applies. Never
+    /// `null`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_action: Option<SuggestedAction>,
+    /// What the rule knows that the declared action needs: the variant it is
+    /// reporting and the target and value it computed. The rule table turns
+    /// this into `suggested_action` (`rules::resolve_action`). Never
+    /// serialized.
+    #[serde(skip)]
+    pub action_source: ActionSource,
+}
+
+/// The closed vocabulary of `suggested_action.kind` (`ADR-73`). Closed per
+/// release and extensible across releases: a consumer treats a kind it does
+/// not know as no machine-actionable guidance and reads `message`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ActionKind {
+    EditField,
+    EditSection,
+    EditConfig,
+    AddRecord,
+    RunCommand,
+}
+
+impl ActionKind {
+    pub const ALL: [ActionKind; 5] = [
+        ActionKind::EditField,
+        ActionKind::EditSection,
+        ActionKind::EditConfig,
+        ActionKind::AddRecord,
+        ActionKind::RunCommand,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ActionKind::EditField => "edit-field",
+            ActionKind::EditSection => "edit-section",
+            ActionKind::EditConfig => "edit-config",
+            ActionKind::AddRecord => "add-record",
+            ActionKind::RunCommand => "run-command",
+        }
+    }
+
+    /// The `op` values the kind accepts. Empty means the kind carries none.
+    pub fn ops(self) -> &'static [ActionOp] {
+        match self {
+            ActionKind::EditField => &[
+                ActionOp::Set,
+                ActionOp::Remove,
+                ActionOp::Append,
+                ActionOp::Rename,
+            ],
+            ActionKind::EditSection => &[ActionOp::Add, ActionOp::Set, ActionOp::Remove],
+            ActionKind::EditConfig => &[ActionOp::Set, ActionOp::Remove, ActionOp::Append],
+            ActionKind::AddRecord | ActionKind::RunCommand => &[],
+        }
+    }
+}
+
+/// What an edit does (`ADR-73`): one word each, so the same finding object
+/// never means both "fill in" and "remove".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ActionOp {
+    Set,
+    Remove,
+    Append,
+    Rename,
+    Add,
+}
+
+/// A computed `value` (`ADR-73`): a string, a list of strings or a boolean,
+/// and nothing else.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum ActionValue {
+    Text(String),
+    List(Vec<String>),
+    Flag(bool),
+}
+
+/// The flat `target` key vocabulary (`ADR-73`). A key that was not computed
+/// is omitted, never `null`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct ActionTarget {
+    /// Repository-root-relative. May differ from the finding's own file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<PathBuf>,
+    /// The declared spelling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+    /// Only where it differs from the finding's own line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    /// Path segments, never a dotted string.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_path: Option<Vec<String>>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub record_type: Option<String>,
+    /// Concrete, `argv[0]` is `urzua`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub argv: Option<Vec<String>>,
+}
+
+/// `Finding.suggested_action` (`ADR-73`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SuggestedAction {
+    pub kind: ActionKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op: Option<ActionOp>,
+    pub target: ActionTarget,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<ActionValue>,
+}
+
+/// What a rule hands the rule table about one finding: the variant it is
+/// (the unit the table declares an action or an exemption for) and the target
+/// and value it computed. The kind and `op` are not here: they are declared
+/// once per variant in `RULE_TABLE`, not at each construction site.
+///
+/// The default has an empty variant, which no rule declares: it is for a
+/// finding that no rule produced (a test double).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ActionSource {
+    pub variant: &'static str,
+    pub target: ActionTarget,
+    pub value: Option<ActionValue>,
+}
+
+impl ActionSource {
+    pub fn new(variant: &'static str) -> Self {
+        ActionSource {
+            variant,
+            ..Default::default()
+        }
+    }
+
+    /// The edit belongs on a file other than the finding's own.
+    pub fn file(mut self, file: impl Into<PathBuf>) -> Self {
+        self.target.file = Some(file.into());
+        self
+    }
+
+    pub fn field(mut self, field: impl Into<String>) -> Self {
+        self.target.field = Some(field.into());
+        self
+    }
+
+    pub fn section(mut self, section: impl Into<String>) -> Self {
+        self.target.section = Some(section.into());
+        self
+    }
+
+    pub fn line(mut self, line: usize) -> Self {
+        self.target.line = Some(line);
+        self
+    }
+
+    pub fn key_path<S: Into<String>>(mut self, path: impl IntoIterator<Item = S>) -> Self {
+        self.target.key_path = Some(path.into_iter().map(Into::into).collect());
+        self
+    }
+
+    pub fn record_type(mut self, record_type: impl Into<String>) -> Self {
+        self.target.record_type = Some(record_type.into());
+        self
+    }
+
+    pub fn argv<S: Into<String>>(mut self, argv: impl IntoIterator<Item = S>) -> Self {
+        self.target.argv = Some(argv.into_iter().map(Into::into).collect());
+        self
+    }
+
+    pub fn text(mut self, value: impl Into<String>) -> Self {
+        self.value = Some(ActionValue::Text(value.into()));
+        self
+    }
+
+    pub fn list<S: Into<String>>(mut self, value: impl IntoIterator<Item = S>) -> Self {
+        self.value = Some(ActionValue::List(
+            value.into_iter().map(Into::into).collect(),
+        ));
+        self
+    }
 }
 
 /// One rule's execution record: not just "did it run" but what it was handed
@@ -981,9 +1169,128 @@ mod tests {
                 message: "pending".to_string(),
                 waived: waived.map(str::to_string),
                 declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::default(),
             }],
             notices: vec![],
             fail_on,
+        }
+    }
+
+    fn finding_with_action(action: Option<SuggestedAction>) -> serde_json::Value {
+        serde_json::to_value(Finding {
+            rule: "field.quality".to_string(),
+            severity: FindingSeverity::Error,
+            file: PathBuf::from("docs/bugs/BUG-1.md"),
+            line: None,
+            message: "blank".to_string(),
+            waived: None,
+            declared_severity: None,
+            suggested_action: action,
+            action_source: ActionSource::default(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_finding_without_an_action_has_no_suggested_action_key() {
+        let json = finding_with_action(None);
+        assert!(json.get("suggested_action").is_none(), "{json}");
+    }
+
+    #[test]
+    fn an_action_serializes_its_kind_op_and_target_and_omits_what_was_not_computed() {
+        let json = finding_with_action(Some(SuggestedAction {
+            kind: ActionKind::EditField,
+            op: Some(ActionOp::Set),
+            target: ActionTarget {
+                file: Some(PathBuf::from("docs/bugs/BUG-1.md")),
+                field: Some("Regression-test".to_string()),
+                ..Default::default()
+            },
+            value: None,
+        }));
+        assert_eq!(
+            json["suggested_action"],
+            serde_json::json!({
+                "kind": "edit-field",
+                "op": "set",
+                "target": { "file": "docs/bugs/BUG-1.md", "field": "Regression-test" }
+            })
+        );
+        // An uncomputed key is omitted, never null (`line: null` on the finding
+        // itself is the shipped contract and not the action's).
+        assert!(
+            !json["suggested_action"].to_string().contains("null"),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn a_value_is_a_string_a_list_of_strings_or_a_boolean() {
+        let with = |value| {
+            finding_with_action(Some(SuggestedAction {
+                kind: ActionKind::EditConfig,
+                op: Some(ActionOp::Set),
+                target: ActionTarget {
+                    file: Some(PathBuf::from(".urzua/config.yaml")),
+                    key_path: Some(vec![
+                        "record_types".into(),
+                        "adr.v2".into(),
+                        "known_fields".into(),
+                    ]),
+                    ..Default::default()
+                },
+                value: Some(value),
+            }))["suggested_action"]
+                .clone()
+        };
+        assert_eq!(with(ActionValue::Text("x".into()))["value"], "x");
+        assert_eq!(
+            with(ActionValue::List(vec![]))["value"],
+            serde_json::json!([])
+        );
+        assert_eq!(with(ActionValue::Flag(true))["value"], true);
+        // A key path is segments, never a dotted string, so a dotted name survives.
+        assert_eq!(
+            with(ActionValue::Flag(true))["target"]["key_path"],
+            serde_json::json!(["record_types", "adr.v2", "known_fields"])
+        );
+    }
+
+    #[test]
+    fn a_kind_with_no_ops_serializes_without_one_and_a_command_carries_argv() {
+        let json = finding_with_action(Some(SuggestedAction {
+            kind: ActionKind::RunCommand,
+            op: None,
+            target: ActionTarget {
+                argv: Some(vec!["urzua".into(), "index".into(), "--apply".into()]),
+                ..Default::default()
+            },
+            value: None,
+        }));
+        assert_eq!(
+            json["suggested_action"],
+            serde_json::json!({ "kind": "run-command", "target": { "argv": ["urzua", "index", "--apply"] } })
+        );
+    }
+
+    #[test]
+    fn the_vocabulary_is_the_five_kinds_of_adr_73() {
+        let names: Vec<&str> = ActionKind::ALL.iter().map(|k| k.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "edit-field",
+                "edit-section",
+                "edit-config",
+                "add-record",
+                "run-command"
+            ]
+        );
+        for kind in ActionKind::ALL {
+            let serialized = serde_json::to_value(kind).unwrap();
+            assert_eq!(serialized, kind.as_str());
         }
     }
 

@@ -6,4 +6,4 @@ commits:
 invocation: [--config, .urzua/diff.yaml, check, --base, base]
 expect_exit: 1
 expect_findings:
-  - {rule: diff.source-requires-record, file: src/lib.rs, severity: error}
+  - {rule: diff.source-requires-record, file: src/lib.rs, severity: error, suggested_action: {kind: add-record}}

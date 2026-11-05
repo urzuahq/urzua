@@ -591,6 +591,13 @@ impl Default for RevisionLogId {
 }
 
 impl RevisionLogId {
+    /// The text that opens the section: the marker line or the heading text.
+    pub fn name(&self) -> &str {
+        match self {
+            RevisionLogId::Marker(text) | RevisionLogId::Heading(text) => text.trim(),
+        }
+    }
+
     /// The identity in words, for a message that names what was looked for.
     pub fn describe(&self) -> String {
         match self {

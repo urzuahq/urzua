@@ -7,3 +7,4 @@ expect_findings:
     file: records/ADR-0011-case-variant.md
     severity: error
     message_contains: "'author'"
+    suggested_action: {kind: edit-field, op: rename, target: {field: author}, value: Author}

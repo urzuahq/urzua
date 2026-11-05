@@ -7,3 +7,4 @@ expect_findings:
     file: records/docs/DOC-0003-case-variant.md
     severity: error
     message_contains: "'Status' (line 2)"
+    no_suggested_action: true
