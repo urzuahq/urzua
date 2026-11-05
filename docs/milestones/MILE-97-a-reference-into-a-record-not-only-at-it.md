@@ -4,6 +4,7 @@ Stable-Id: 01M2QB6RMF6Z3B5W1X8YCAES8T
 Phase: '2'
 Track: schema-governance
 Implements: —
+Depends-on: MILE-98
 Blocked-on: —
 ---
 # 97 — A reference into a record, not only at it
@@ -51,3 +52,4 @@ A reference can name part of a record (`RFC-9#open-questions`), the form is pars
 > | 2026-11-02 | Unblocked: `RFC-33` was Accepted; maintainer decision 2026-11-02. `Blocked-on` now reads `MILE-98`; `Status` stays `Planned`. **Why:** `narrative-field.stale` flagged the reference once `RFC-33` reached a terminal status, and the maintainer decided the dependency no longer holds. `MILE-98` is still open and stays named. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
+> | 2026-11-05 | `Depends-on: MILE-98` added. **Why:** the section 'Blocked on the document model' says a reference into a record is meaningless until sections are declared, which `MILE-98` built (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |

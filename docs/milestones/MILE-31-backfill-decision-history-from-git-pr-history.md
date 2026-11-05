@@ -4,6 +4,7 @@ Stable-Id: 01M1Y5JWMX52SZ76Y8B1XCTSQM
 Phase: '3'
 Track: backfill
 Implements: —
+Depends-on: MILE-52
 Blocked-on: —
 ---
 # 31 — Backfill decision history from git/PR history
@@ -26,3 +27,4 @@ A backfill command reconstructs decision records from git and pull request histo
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: MILE-52` added. **Why:** `MILE-52` states the concurrency design for the backfill engine is settled before the engine's execution model is built. Proposed for maintainer review; `Status` unchanged. | **structural** |
