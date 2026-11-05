@@ -132,15 +132,18 @@ pub fn relation_field_name<'a>(
 /// kind (`locator_kinds`) and it matches at least one tracked file that is
 /// present; a pin on one needs `pinnable` to allow it (`BUG-176`).
 ///
-/// `tracked`, `present` and `read` are supplied by the caller: this crate does
-/// not touch the filesystem. `read` returns a file's text for a scope to
-/// resolve in.
+/// `tracked`, `present`, `read` and `untracked_on_disk` are supplied by the caller: this
+/// crate does not touch the filesystem. `read` returns a file's text for a
+/// scope to resolve in. `untracked_on_disk` is true for a path that exists but
+/// that git does not track, which is its own variant (`BUG-13`) because the
+/// repair is to track the file, not to correct the locator.
 pub fn embodiment_locator_exists(
     records: &[Record],
     config: &Config,
     tracked: &[PathBuf],
     present: &dyn Fn(&str) -> bool,
     read: &dyn Fn(&str) -> crate::locator::SharedText,
+    untracked_on_disk: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
     use crate::config::LocatorKind;
     use crate::locator::{self, Anchor, FileText, ScopeError};
@@ -228,6 +231,14 @@ pub fn embodiment_locator_exists(
                             l.path,
                             locator::GRAMMAR
                         ));
+                    } else if untracked_on_disk(&l.path) {
+                        report(
+                            "locator-untracked",
+                            format!(
+                                "{field} names '{}', which exists on disk but is not tracked by git",
+                                l.path
+                            ),
+                        );
                     } else {
                         report(
                             "locator-missing",
@@ -787,7 +798,8 @@ end: brace_balanced
                 _ => FileText::Missing,
             })
         };
-        let (_, findings) = embodiment_locator_exists(&[r], &scoped_config(), &[], &present, &read);
+        let (_, findings) =
+            embodiment_locator_exists(&[r], &scoped_config(), &[], &present, &read, &|_| false);
         findings.into_iter().map(|f| f.message).collect()
     }
 
@@ -983,6 +995,44 @@ end: brace_balanced
     }
 
     #[test]
+    fn a_locator_naming_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        let r = record(
+            "docs/adr/ADR-1-x.md",
+            "adr",
+            "---\nRealized-by: code:src/real.rs, code:src/drafted.rs, code:src/gone.rs\n---\n",
+        );
+        let present = |p: &str| p == "src/real.rs";
+        let untracked_on_disk = |p: &str| p == "src/drafted.rs";
+        let (_, findings) = embodiment_locator_exists(
+            std::slice::from_ref(&r),
+            &embodiment_config(),
+            &[],
+            &present,
+            &crate::locator::no_file_text,
+            &untracked_on_disk,
+        );
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        let drafted = findings
+            .iter()
+            .find(|f| f.message.contains("drafted"))
+            .unwrap();
+        assert_eq!(drafted.action_source.variant, "locator-untracked");
+        assert!(
+            drafted
+                .message
+                .contains("exists on disk but is not tracked by git"),
+            "{}",
+            drafted.message
+        );
+        let gone = findings
+            .iter()
+            .find(|f| f.message.contains("gone"))
+            .unwrap();
+        assert_eq!(gone.action_source.variant, "locator-missing");
+        assert!(gone.message.contains("not in the working tree"));
+    }
+
+    #[test]
     fn a_locator_naming_a_missing_path_is_an_error_observed_failing() {
         let r = record(
             "docs/adr/ADR-1-x.md",
@@ -997,6 +1047,7 @@ end: brace_balanced
             &[],
             &present,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         // One candidate per declared slot, whatever its locator count: the
         // population is the rule's input, not its work count.
@@ -1013,6 +1064,7 @@ end: brace_balanced
             &[],
             &all_there,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         assert!(none.is_empty(), "{none:?}");
 
@@ -1029,6 +1081,7 @@ end: brace_balanced
             &[],
             &all_there,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(
@@ -1054,6 +1107,7 @@ end: brace_balanced
                 &[],
                 &present,
                 &crate::locator::no_file_text,
+                &|_| false,
             );
             assert!(findings.is_empty(), "{spelled}: {findings:?}");
         }
@@ -1089,6 +1143,7 @@ end: brace_balanced
             &[],
             &present,
             &crate::locator::no_file_text,
+            &|_| false,
         );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");

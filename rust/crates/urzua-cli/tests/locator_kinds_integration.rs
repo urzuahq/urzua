@@ -161,7 +161,9 @@ fn a_directory_or_glob_matching_no_tracked_file_is_missing() {
         let m = exists_messages(&dir);
         assert_eq!(m.len(), 1, "{locator}: {m:?}");
         assert!(
-            m[0].contains("not in the working tree") || m[0].contains("matches no tracked file"),
+            m[0].contains("not in the working tree")
+                || m[0].contains("matches no tracked file")
+                || m[0].contains("not tracked by git"),
             "{locator}: {m:?}"
         );
     }

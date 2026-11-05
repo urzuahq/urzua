@@ -456,7 +456,7 @@ mod tests {
             ),
             (
                 "pointer.resolution",
-                rules::pointer_resolution(&records, &config, &record_index),
+                rules::pointer_resolution(&records, &config, &record_index, &Default::default()),
             ),
             (
                 "pointer.target-status",
@@ -468,11 +468,21 @@ mod tests {
             ),
             (
                 "relation.supersession-reciprocity",
-                rules::supersession_reciprocity(&records, &config, &record_index),
+                rules::supersession_reciprocity(
+                    &records,
+                    &config,
+                    &record_index,
+                    &Default::default(),
+                ),
             ),
             (
                 "relation.pair-reciprocity",
-                rules::relation_pair_reciprocity(&records, &config, &record_index),
+                rules::relation_pair_reciprocity(
+                    &records,
+                    &config,
+                    &record_index,
+                    &Default::default(),
+                ),
             ),
             (
                 "relation.cross-type-disallowed",
@@ -484,7 +494,12 @@ mod tests {
             ),
             (
                 "sequence.unresolved-blocker",
-                rules::sequence_unresolved_blocker(&records, &config, &record_index),
+                rules::sequence_unresolved_blocker(
+                    &records,
+                    &config,
+                    &record_index,
+                    &Default::default(),
+                ),
             ),
             (
                 "embodiment.consistency",
@@ -505,6 +520,7 @@ mod tests {
                     &[],
                     &|_| true,
                     &crate::locator::no_file_text,
+                    &|_| false,
                 ),
             ),
             (
