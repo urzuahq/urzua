@@ -1,5 +1,5 @@
 ---
-Version: '0.75'
+Version: '0.76'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -146,6 +146,7 @@ resolution, `identity.collision` and `filename.identity-pattern`.
 | `tracked-sweep` | the tracked record set | `null` | **yes** |
 | `git-diff` | changed against a base ref | the ref | **yes** (`MILE-123`) |
 | `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
+| `stdin` | one record's proposed content read from stdin | `null` | **yes** (`MILE-187`) |
 | `none` | nothing selected | `null` | no |
 
 The values are a serde-renamed `ScopeSource` enum (`BUG-25`), not a rendering of whichever internal
@@ -155,6 +156,28 @@ misled into branching on a value no run produces.
 
 `base` is always present in `scope`: the ref as the caller gave it for a `git-diff` run, `null` for
 every other source.
+
+**`stdin` scope** (`MILE-187`, `ADR-78`) is selected by `urzua check --stdin-path <path>`, the
+prospective-content form of `check` that `fix --stdin-path` is for `fix` (`SPEC-8`). It reads the
+proposed content of one record from stdin and judges it against every enabled rule, writing nothing; it
+is the call the editor hook relays.
+
+- **The proposal replaces the on-disk record** (or adds one: the path need not exist yet) before any
+  rule runs, in the records and their text. `urzua-core` is handed that data like any other; the stdin
+  read, the path and the git calls stay in the CLI. References still resolve against the rest of the
+  corpus as it is on disk.
+- **Only that record is reported on.** `files_examined` is `1`, and a finding is kept only when it is
+  about the proposed record's file. A finding anchored to the configuration, a source file or another
+  record is about something the edit does not touch and is left to `check`.
+- **A rule that cannot report on a record is not run.** An enabled rule whose findings are anchored
+  outside the records (`Config`, `Outside`, `Directory` or `ChangedPath` in the rule table) is listed
+  in `rules_executed` as `not-applicable`, never `ran` with nothing found. This is also what keeps a
+  single-record run to about half a second on this corpus.
+- **Drift is computed for that record only**, from the proposed text, as `fix --stdin-path` does.
+- **A path no record type governs** is `not-run` (exit 2) with an `error` naming it, as is a run with
+  no enabled rule that can look at the record. Combining `--stdin-path` with `PATHS` or `--base` is
+  `not-run` (exit 2) too, not a flag ignored in silence.
+- Severity, waivers, `fail_on` and the exit codes are those of a full run: an unwaived error exits 1.
 
 **`git-diff` scope** (`MILE-123`) is selected by `urzua check --base <ref>`. It is a reporting scope,
 not a reading scope, exactly as a path argument is (`BUG-60`):
@@ -207,7 +230,7 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   failure `BUG-24` fixed.
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
-run" on a missing base is reading the wrong field, and the four sources exist so it does not have to.
+run" on a missing base is reading the wrong field, and the sources exist so it does not have to.
 
 **Fallback with no git repository**: fall back to a directory walk, and say so in `scope.source`.
 Never silently — the fallback has the failure mode above, so a run using it must be identifiable
@@ -696,3 +719,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-04 | Bumped to `0.73`. Added `revision-log.version-bump-required` to the rule table (regenerated from `RULE_METADATA`): a diff rule that compares a changed record's revision log and version field against the merge base's copy, read by the CLI and handed to the rules as data. **Why:** `BUG-51`; `SPEC-3` states the declaration. | **substantive** |
 > | 2026-11-04 | Bumped to `0.74`. `embodiment.locator-exists` also reports a locator that does not parse, a scope that does not resolve in the file (with the reason), a scope given without a pin and a commit anchor (not yet supported); the rule table is regenerated. **Why:** `MILE-185` / `ADR-74` -- a scope that stops resolving must be reported, never passed; `SPEC-3` lists every reason. | **substantive** |
 > | 2026-11-05 | Bumped to `0.75`. `embodiment.consistency` judges a scoped pin by the hash of its resolved span: an edit elsewhere in the file is not drift, there is no file-based grace window for it, and a scope that does not resolve is reported by `embodiment.locator-exists` and not also as drift. **Why:** `MILE-185` / `ADR-74`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.76`. `check --stdin-path <path>` judges one record's proposed content against every enabled rule without writing, with `scope.source` `stdin`, a `not-applicable` entry for each enabled rule that cannot report on a record, and findings kept for that record alone. **Why:** `MILE-187`, `ADR-78` item 2 -- the editor hook judges every rule on the edited record, not only the computed `Embodiment`. | **substantive** |

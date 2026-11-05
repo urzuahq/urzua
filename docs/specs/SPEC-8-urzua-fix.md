@@ -1,5 +1,5 @@
 ---
-Version: '0.17'
+Version: '0.18'
 Date: 2026-09-07
 Status: Accepted
 Author: beauwilliams
@@ -108,30 +108,36 @@ uses it is described under "The record-edit hook" below.
 
 ### The record-edit hook
 
-`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`) is the harness-neutral core that
-relays this verdict to a coding-agent harness before a record edit is written. Its contract: stdin is
-the proposed full content, argv the record path (absolute or repo-relative); stdout is one JSON object
-`{verdict, path, message, repairs, override?}`; exit 0 lets the edit proceed and 1 blocks it. It
-derives nothing: it reads `repairs` from `fix --stdin-path`.
+`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`, `MILE-187`, `ADR-78`) is the
+harness-neutral core that relays `urzua check --stdin-path` (`SPEC-2`) to a coding-agent harness before
+a record edit is written, so the editor judges every enabled rule on the edited record and not only the
+computed fields `fix` repairs. Its contract: stdin is the proposed full content, argv the record path
+(absolute or repo-relative); stdout is one JSON object `{verdict, path, message, findings, override?}`;
+exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findings` from `check`.
 
-- `block`: a repair whose stated value the edit introduced (the on-disk file does not already say it).
-  The message names the file, line, stated and computed values, and the `Realized-by` evidence.
-  Every other edit to the record passes; a disagreement already on disk is listed, not blocked.
-- `allow-unjudged`: urzua is missing, answers `not-run` (including a record that states no
-  `Embodiment`), exits otherwise than 0, prints non-JSON, or reports an `embodiment-drift-git`
-  notice. The edit proceeds and the message says plainly that it was not judged.
+- `block`: an unwaived error finding the edit introduced. An error is introduced when the record as it
+  is on disk, judged the same way, does not already report it (same rule and message). The message
+  lists each as `file:line: [rule] message`, with the command a `run-command` suggested action offers.
+  An error already on disk is listed as "Already failing on disk", not blocked, so the edit that fixes
+  something else is not refused. A baseline that cannot be judged leaves every error introduced.
+- `allow-with-warnings`: judged; the warnings (and any error already on disk) are in `message` and the
+  Claude Code adapter shows them to the agent. Nothing blocks.
+- `allow`: judged against every enabled rule, no findings.
+- `allow-unjudged`: urzua is missing, answers `not-run` (including a configuration in which no enabled
+  rule can look at the record), exits otherwise than 0 or 1, prints non-JSON, or reports an
+  `embodiment-drift-git` notice. The edit proceeds and the message says plainly that it was not judged.
 - `not-governed`: urzua reports that no record type governs the path (silent, the file is not a record).
 - `allow-override` / `block`: `--override NAME` or `URZUA_HOOK_OVERRIDE=NAME` lets a block through and
   puts the name in the output; an override without a name keeps the block. Where an override is
-  persisted, and whom an unacknowledged block routes to, are undecided (`RFC-7`, `MILE-12`): the
-  `persist_override` function in the script is the extension point, a no-op today.
+  persisted is `ADR-78` item 1 (`MILE-188`): the `persist_override` function in the script is the
+  extension point.
 
-Only computed fields in `repairs` (today `Embodiment` and the delivered `Status` repair) are judged; `check`'s header, field and status
-rules have no prospective-content mode and run at commit and CI. The Claude Code adapter
-`scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
+The Claude Code adapter `scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
 `Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
-Code's hook output; a second harness is a second adapter over the same core. Measured on this
-corpus: about 0.19s per single-record judgement through the core and about 0.39s through the Claude Code adapter (10-run means).
+Code's hook output; a second harness is a second adapter over the same core. Measured on this corpus
+(`MILE-187`, release build, 522 records): about 0.6s per record through the core when the edit has no
+errors, which is one `check --stdin-path` run, and about 1.1s when it has errors, which pays for the
+second, baseline run; the Claude Code adapter adds about 0.04s. `fix --stdin-path` alone is about 0.2s.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
 a different value would silently do nothing rather than fail loud. Writes nothing, ever. Exit
@@ -158,7 +164,7 @@ command is offered only when `fix` would list a repair for that record and field
 does not repair (a stated tier with neither a locator nor a citing back-pointer, a success `Status`
 with no evidence) offers an edit to the field or nothing. A test runs each offered command and checks
 the finding is gone. The command is the whole promise: `--apply` still needs an identity (`--by`) and
-its own gates, and the editor hook (`ADR-69`) still reads `repairs` only, never findings.
+its own gates. The editor hook (`ADR-69`) now relays `check --stdin-path` and reads its findings (`ADR-78`).
 
 ## Apply mode (`--apply`)
 
@@ -288,3 +294,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-04 | Bumped to `0.15`. Documents how `check` findings point at the `Embodiment` and `Status` repairs: a `run-command` `suggested_action` naming `urzua fix --apply --ids <record>`, offered only where `fix` lists that repair. No change to `fix` itself. **Why:** `MILE-44`, `ADR-73`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.16`. Apply replaces a field's value by position after `Field:`, never by substring, and fills an empty, `~` or `null` stated value in place; the revision row says "stated no value" for it. **Why:** `BUG-192` -- an empty stated value matched everywhere and the computed value was written at column 0 (`ImplementedEmbodiment: null`). | **substantive** |
 > | 2026-11-05 | Bumped to `0.17`. `--rebaseline` re-pins a scoped pin from the hash of its resolved span, keeps the scope in its spelling, shows the span beside the hashes and lists a scoped pin that does not resolve under `failed_pins` instead of re-pinning it; `explain <path>#<scope>` is named as the authoring route. **Why:** `MILE-185` / `ADR-74` -- re-hashing whatever is at a range now would turn a deleted symbol into a silent pass. | **substantive** |
+> | 2026-11-05 | Bumped to `0.18`. The record-edit hook relays `check --stdin-path` and judges every enabled rule on the edited record, with a new `allow-with-warnings` verdict and `findings` replacing `repairs` in its output; `fix --stdin-path` is unchanged and no longer the hook's call. **Why:** `MILE-187`, `ADR-78` item 2. | **substantive** |

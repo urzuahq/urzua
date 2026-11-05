@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6MP8P2DDJ4VGWQ3QAMAES1Y
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-78
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules/runner.rs, code:scripts/hooks/record-edit-hook.sh, code:scripts/hooks/claude-code-record-edit.py, test:rust/crates/urzua-cli/tests/check_stdin_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
 ---
 # 187 — urzua check --stdin-path judges one record's proposed content against every enabled rule, and the editor hook relays all its findings
 
@@ -29,3 +30,4 @@ Blocked-on: —
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-78` Accepted 2026-11-05 decides the hook judges every rule on the edited record and notes that no milestone exists for it; it needs the prospective-content form of `check`. | **substantive** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
