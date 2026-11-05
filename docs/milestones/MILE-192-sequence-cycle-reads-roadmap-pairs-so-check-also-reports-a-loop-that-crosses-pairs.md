@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6N5F92SMEKRAQMT0FF3B1HB
-Status: Planned
+Status: Done
+Realized-by: code:rust/crates/urzua-core/src/rules/sequence.rs, test:rust/crates/urzua-cli/tests/sequencing_integration.rs, test:rust/crates/urzua-cli/tests/roadmap_integration.rs
 Phase: '0'
 Track: roadmap-tracking
 Implements: RFC-48
@@ -28,3 +29,4 @@ Blocked-on: —
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** design re-check of `ADR-82` (Proposed) found `check` still sees cycles per pair while the roadmap sees them across declared pairs; this closes the gap. Depends on `ADR-82` being Accepted and on the `roadmap.pairs` key it declares. | **substantive** |
+> | 2026-11-05 | `Status` Planned -> Done; `Realized-by` added. **Why:** Done means is met. With `roadmap.pairs` declared, `sequence.cycle` reads those pairs as one graph, the one `urzua roadmap` reads (`merged_graph` in `sequence.rs`, now shared by both), and reports a loop that uses an edge of each of two pairs on every member, with the cycle's path and the pairs it crosses; the same fixture is not reported when `roadmap.pairs` is absent or names only one of the pairs (`sequencing_integration.rs`), and `roadmap_integration.rs` shows `check` and the roadmap agreeing on a cross-pair loop. A `roadmap.pairs` name that is not `acyclic` was already a load error (`validate_roadmap`, from `MILE-182`); `sequencing_integration.rs` now covers it through `check`. Urzua's own config declares `roadmap.pairs: [sequencing]` and `urzua check` reports no cycle on its corpus. `SPEC-2` and `SPEC-3` document the mode. Built to `ADR-82`. | **substantive** |

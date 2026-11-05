@@ -372,7 +372,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SEQUENCE_CYCLE,
-        description: "A cycle in a declared `relation_pairs` entry that sets `acyclic: true` (`RFC-48`, `MILE-27`): following the written claims of either field, in the direction each declares, returns to the record it started at. Every record on a cycle is reported with the cycle's path, including a record that names itself and a cycle that crosses record types. A claim whose target does not resolve is `sequence.unresolved-blocker`'s. Needs an acyclic pair; enabling it with none declared is a load error.",
+        description: "A cycle in a declared `relation_pairs` entry that sets `acyclic: true` (`RFC-48`, `MILE-27`): following the written claims of either field, in the direction each declares, returns to the record it started at. Every record on a cycle is reported with the cycle's path, including a record that names itself and a cycle that crosses record types. The pairs `roadmap.pairs` names are read as one graph (`ADR-82`, `MILE-192`), so a loop that uses an edge of each of two declared pairs is reported on every member, and the message names the pairs it crosses; any other acyclic pair, and every pair when `roadmap.pairs` is absent, is read on its own. A claim whose target does not resolve is `sequence.unresolved-blocker`'s. Needs an acyclic pair; enabling it with none declared is a load error.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         needs_identity_index: true,
@@ -384,6 +384,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("sequence-cycle", ActionDecl::Exempt("breaking a cycle means choosing which dependency to drop, a decision the tool cannot compute")),
+            VariantAction::new("sequence-cycle-cross-pair", ActionDecl::Exempt("breaking a loop that crosses declared roadmap pairs means choosing which dependency, in which pair, to drop, a decision the tool cannot compute")),
         ],
         phase: Phase::Main,
         companion: None,

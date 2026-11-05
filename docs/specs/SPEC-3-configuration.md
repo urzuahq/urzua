@@ -1,5 +1,5 @@
 ---
-Version: '0.87'
+Version: '0.88'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1071,8 +1071,10 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   on its parent finishing. The top-level `roadmap: {pairs: [name, ...]}` names the `relation_pairs`
   entries that are dependencies, and the derived `blocked` value reads exactly those, so `check` and
   the roadmap command cannot disagree. Each name must be a declared pair that sets `acyclic: true`,
-  listed once; anything else is a load error. `sequence.cycle` and `sequence.unresolved-blocker` still
-  read every `acyclic` pair.
+  listed once; anything else is a load error. `sequence.unresolved-blocker` reads every `acyclic` pair.
+  `sequence.cycle` reads the pairs named here as one graph (`MILE-192`, `ADR-82`), so a loop that uses an
+  edge of each of two of them is reported; an `acyclic` pair not named here, and every pair when
+  `roadmap.pairs` is absent, is read on its own.
 - **The derived `blocked` value** is read from these edges by `sequence.status-agreement` (see
   `statuses.progress` and `statuses.blocked`).
 - **Not built here.** `sequence.phase-order`, `sequence.failed-dependency`,
@@ -1095,6 +1097,8 @@ are optional and default to empty. Absent `pairs` means no roadmap: the command 
 `export --format json` carries no `roadmap` key.
 
 - `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
+  `sequence.cycle` reads these pairs as one graph, the graph `urzua roadmap` reads, so `check` and the
+  roadmap agree on a loop that crosses pairs (`SPEC-2`).
 - `group_by`: each name must be a field some record type declares (`required_fields` or
   `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
   A field no open record carries is not an error; the roadmap notes it.
@@ -1814,3 +1818,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.85`. `info` is a rule level and a `field_levels` level and a boundary `severity` (`ADR-87`, `MILE-194`): findings are reported and counted, never `blocking`, never fail `fail_on`, and a rule set to `info` caps every declared severity at `info`. `fail_on: info` and every other unrecognised level are refused at load, the level message listing `off`, `info`, `warn` and `error`. **Why:** `MILE-194` builds `ADR-87`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.86`. Documented `permanent` on the suppression type: per rule, a suppression without `Expires` takes effect only under a declared category and, where the category requires it, a resolving citation; declaring it closes permanence for unlisted rules; the load-time validation. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.87`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.88`. `roadmap.pairs` also sets what `sequence.cycle` reads as one graph: a loop that uses an edge of each of two declared pairs is reported, and an `acyclic` pair not named, or an absent `roadmap.pairs`, keeps the per-pair reading. The load-time check that each named pair declares `acyclic: true` is what guarantees every pair in that graph is cycle-checked. **Why:** `MILE-192`, following `ADR-82` (design re-check of 2026-11-05): the roadmap saw a cross-pair loop that `check` did not. | **substantive** |
