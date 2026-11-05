@@ -87,6 +87,16 @@ claim age) are built as written.
 - **Git failures and shallow clones are reported (`#214`).** A commit git cannot find is an error
   the check reports, not a read of "no drift". `ADR-32`'s amendment records the same change.
 
+## Amendment (2026-11-04): a locator may carry a scope
+
+The pin syntax of the Decision, `code:path@sha256:<64 hex>`, gains an optional scope between the path
+and the pin: `code:path#<symbol>@sha256:<hex>` or `code:path#L<a>-L<b>@sha256:<hex>`, so a pin hashes
+one item and not the whole file (`ADR-74`, built by `MILE-185`). The Decision text above is
+unchanged: a file-level pin keeps its meaning and still hashes the raw bytes of the file. For a scoped
+pin the grace window is not counted from the cited file's last commit, since that commit says nothing
+about the scope; a scoped pin that no longer matches is drift immediately unless the record declares
+an audit date (`drift_audit_field`), which anchors the window as for a file-level pin.
+
 ## References
 
 - `ADR-32` -- the git-history drift this refines.
@@ -100,3 +110,4 @@ claim age) are built as written.
 > | 2026-11-04 | Amendment added: attributed re-baselining is built (`#238`, `MILE-181`), and `#182`, `MILE-166` and `#214` are recorded. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. `Status` stays `Proposed` and the Decision text is unchanged. | **substantive** |
 > | 2026-11-04 | Status changed from Proposed to Accepted, including the amendment of 2026-11-04. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Implements: ADR-67` back-pointers added in `rust/crates/urzua-cli/src/discovery.rs` (the pin branch, the grace window, the audit anchor), `rust/crates/urzua-core/src/fix.rs` (`detect_rebaselines`, `apply_rebaseline`) and `rust/crates/urzua-cli/src/commands/fix.rs` (`run_rebaseline`). Comments only; no behaviour changes. **Why:** the drift review of 2026-11-04 found no back-pointer from the code to this record. | **structural** |
+> | 2026-11-04 | Amendment added: a locator may carry a scope between its path and its pin, and a scoped pin has no file-based grace window. **Why:** `ADR-74` (Accepted 2026-11-04) decides the scoped-locator grammar; `MILE-185` builds it. The Decision text is unchanged. | **substantive** |
