@@ -7,6 +7,7 @@ Author: beauwilliams
 Deciders: beauwilliams
 Supersedes / Superseded-by: —
 Derives-from: RFC-6
+Non-reference-ids: SPEC-7
 ---
 # 14 — An append-only revision log, not edit-in-place
 
@@ -104,3 +105,4 @@ Does not require rewriting past terse entries — applies going forward.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the Decision is unchanged. | **structural** |

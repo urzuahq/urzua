@@ -3,6 +3,7 @@ Stable-Id: 01M6D5B37EB2FEZEBNP95GPTCA
 Status: Rejected
 Date: 2026-11-02
 Author: beauwilliams
+Non-reference-ids: ADR-173, ADR-0173, ADR-00173, ADR-174
 ---
 # 46 — A bare numeric filename gets its identity from the type, not from the filename
 
@@ -159,3 +160,4 @@ pattern and migrates mechanically, never contradicts it.
 > | 2026-11-02 | Filed as `Draft`. **Why:** a real adopter corpus names files `NNNN-slug.md` and cites `ADR-NNNN`; a declared `prefix` gives such files no identity, so every cross-record pointer fails to resolve (`MILE-126`). | **substantive** |
 > | 2026-11-02 | `Draft` -> `Rejected`. **Why:** maintainer decision: keep the type in the filename and rename bare-number corpora rather than add a per-type identity exception. | **substantive** |
 > | 2026-11-02 | Decision worded as a policy choice; alternatives moved under Proposal; filename migration described as future tooling. **Why:** review found the decision called a policy choice a technical limit, and `migrate` does not rename files. | **structural** |
+> | 2026-11-05 | Added the `Non-reference-ids` header field declaring `ADR-173, ADR-0173, ADR-00173, ADR-174`. **Why:** the text names these ids as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the proposal is unchanged. | **structural** |
