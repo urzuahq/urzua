@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NWW8WX0N9Z2R86HX2E9SBM
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -22,10 +23,16 @@ less than its documents say. What is true today:
   written by a heredoc, `sed -i` or `tee` is never judged at the editor; the layers left are the
   pre-commit hook, which warns and exits 0 when the binary is absent (`.git-hooks/pre-commit`, `not_run`) and
   is skipped by `--no-verify`, and CI.
-- **The hook fails open in several ways.** No `jq` (`scripts/hooks/record-edit-hook.sh:71`), no binary
-  (`:69`) and an unreadable payload all allow the edit with a message. A missing `python3` or an unset
-  project-directory variable makes the command itself exit non-zero, which the agent harness treats as
-  non-blocking, so the agent is told nothing. Nothing checks at the start of a session that the hook can run.
+- **The hook fails open in several ways, and closed in one.** No `jq` (`scripts/hooks/record-edit-hook.sh:71`),
+  no binary (`:86`, through the `unjudged()` helper at `:69`) and an unreadable payload all allow the edit with
+  a message. A missing `python3` makes the command exit 127, which the agent harness treats as non-blocking,
+  so the agent is told nothing. An unset `CLAUDE_PROJECT_DIR` fails the other way: the command becomes
+  `python3 -I "/scripts/hooks/..."`, `python3` cannot open that file and exits 2 (reproduced on 2026-11-05),
+  and 2 is a blocking exit, so every Write, Edit and MultiEdit is refused with no verdict that says why.
+  Both come from one gap: nothing checks at the start of a session that the hook can run. The session-start
+  check (section 1) reports a missing interpreter or an unset project-directory variable, and the adapter's
+  command does not depend on that variable (the translator takes the project directory from the request's
+  `cwd`), so an unset variable becomes a stated verdict and not an opaque block. That fix is part of `MILE-198`.
 - **Its override is the agent's to take.** The override name is read from an environment variable
   (`record-edit-hook.sh:48`), which any process the agent starts controls.
 - **Acceptance is a plain transition.** The `adr` type allows `Proposed -> Accepted` and `Rejected`
@@ -44,25 +51,27 @@ less than its documents say. What is true today:
 - **Attestation is a string.** `fix --rebaseline --apply` takes `--by` and `resolve_identity` lets a
   verified `gh` login replace it, reporting the difference only as a `warning` field
   (`rust/crates/urzua-io/src/lib.rs:254-267`; callers `rust/crates/urzua-cli/src/commands/fix.rs:192` and `:423`).
-  Where `gh` is unavailable `--by` is taken as given (`lib.rs:271-276`), so the same command is verified in one
+  Where `gh` is unavailable `--by` is taken as given (`lib.rs:272-276`), so the same command is verified in one
   environment and asserted in another, and the revision row does not say which
   (`rust/crates/urzua-core/src/fix.rs:304`). Two re-pin reasons were found on 2026-11-05 that did not
-  describe the change they covered.
+  describe the change they covered. The tier order is deliberate (`RFC-2`, `MILE-66`: a verified login beats a
+  typed name), and `BUG-16` records that no tier proves who is acting. In particular a verified login says
+  nothing about whether a person or an agent holding that login's token ran the command.
 - **An Accepted ADR was edited in place** on 2026-11-05 (the change to `ADR-85` was moved into a dated
   amendment afterwards, `docs/adr/ADR-85-*.md` revision log), and the maintainer reports that record numbers
   from `urzua new` have collided between branches; both were caught by a person reading a diff, not by the
   harness.
 - **Adopters get none of it.** The only thing urzua installs into another repository is the CI gate action
   (`.github/actions/urzua-gate/action.yml:1-15`). A repository that adopts urzua has to write its own hook,
-  commands and agent instructions, which is how a mature adopter ended up with a bundle of exactly this
-  kind: record-type commands, lifecycle commands, an editor hook, a session-start check, and settings, all
-  installed together.
+  commands and agent instructions, and every hand-written copy drifts from the engine.
 
 The maintainer decided on 2026-11-05: urzua ships an agent harness (skills, slash commands, hooks, settings)
 as an installable bundle, so that a repository which installs it has working guardrails; who may accept a
 record is enforced by the harness and its CI and not by prose; the attestation identity source is a
 configuration option; and Bash writes to records are caught by a check that runs after the command. This is
-an agent guardrail and belongs in Phase 0.
+an agent guardrail and belongs in Phase 0. The same day the maintainer decided, on the question of agent
+identity, that the repository documents the limits plainly and accepts the risk for now (section 4, "Accepted
+risk").
 
 ## Options considered
 
@@ -87,10 +96,12 @@ Where the guardrail logic lives:
 In the context of agents that edit governed records through a harness that does not see Bash, can be
 reconfigured by the agent, leaves acceptance and attestation to prose and cannot be installed anywhere else,
 we decided to **ship the harness as a versioned bundle that `urzua harness install` writes into a repository,
-with the guardrail logic in the engine behind a vendor-neutral contract, and to enforce acceptance by a
-declared table of deciders that the local hook and CI both read**, to achieve guardrails that work
-the day a repository installs them and that an agent cannot talk its way past, accepting a bundle that is
-released with the engine and an adapter to write for each agent vendor.
+with the guardrail logic in the engine behind a vendor-neutral contract, and to declare who may accept a
+record in one table that the local hook enforces for the editor tools and that CI reports against**, to
+achieve guardrails that work the day a repository installs them and that stop in-band self-acceptance through
+the edit tools and leave an authorship trail in CI, accepting a bundle that is released with the engine, an
+adapter to write for each agent vendor, and the bypasses listed under "Accepted risk" in section 4, which the
+maintainer accepted on 2026-11-05.
 
 ### 1. What the bundle contains
 
@@ -103,36 +114,56 @@ Everything below is generated or copied by the install, so a repository holds no
 - **Lifecycle commands**, each a thin wrapper over a urzua command that does the checking:
   `/amend` (a dated `## Amendment` on an Accepted ADR, with a revision row), `/repin`
   (`fix --rebaseline`, naming the real delta as its reason and listing the re-pin for the reviewer),
-  `/done` (sets `Realized-by` and the delivered status together, only for a type whose status the
-  configuration derives from evidence, `ADR-84`). `/done` is also how a bug is filed `Fixed`: `/bug` always
-  files at the scaffolded `Open`. `/done` never sets a status an acceptance gate names (section 4). It is read
-  as outside `ADR-70`, which governs drafting commands and forbids them to set a completion or fix state;
-  if the maintainer reads `ADR-70` as covering it, this item needs an amendment there.
+  `/done` (sets the `Realized-by` evidence and then runs `urzua fix --apply`, so the delivered status is the one
+  the engine computes from that evidence, only for a type whose status the configuration derives from evidence,
+  `ADR-84`; the command never writes a status itself). `/done` is also how a bug is filed `Fixed`: `/bug`
+  always files at the scaffolded `Open`. `/done` never sets a status an acceptance gate names (section 4).
+  `ADR-70` forbids a drafting command to write `Done` or `Fixed`; a dated amendment to `ADR-70`
+  (2026-11-05, proposed, pending maintainer acceptance) lets a lifecycle command set a status only when the
+  engine computes it from evidence, never by an agent's choice, and that amendment is what `/done` stands on.
 - **The editor hook**, now `urzua harness run edit`: it judges a Write, Edit or MultiEdit as `ADR-69` and
-  `ADR-78` describe, plus the acceptance and protected-path gates of section 4. It replaces the
+  `ADR-78` describe, plus the acceptance and protected-path refusals of section 4. It replaces the
   `jq`, `bash` and `python3` chain, so the paths that fail open today become a verdict the engine states
   (`allow-unjudged` is kept for the genuine cases of `ADR-71`, and is configurable per guardrail below).
 - **The post-command check**, `urzua harness run post-command`, specified by the amendment to `ADR-78`.
 - **A session-start readiness check**, `urzua harness run session-start`: the binary is found and its
-  version matches the installed bundle, the hook entries are wired in the agent's settings, the git hooks
-  are wired (`urzua doctor`, `MILE-179`), and the adapter's own prerequisites exist. It prints what would
+  version matches the installed bundle, the hook entries are wired in the agent's project settings, the git hooks
+  are wired (`urzua doctor`, `MILE-179`), and the adapter's own prerequisites exist (the interpreter, and the
+  project-directory variable the vendor sets). It prints what would
   fail open, to the agent, at the start of the session.
 - **Protected paths** (section 4) and **an agent-instructions block**: a section between begin and end
   markers in the repository's agent-instructions file, rewritten by the install and never touched outside the
   markers (the same marker mechanism as `index.freshness`), stating what an agent must not do (accept a
-  record, set an override, edit a protected path).
+  record, set an override, edit a protected path). The file is named in the configuration
+  (`harness.instructions_file`; `AGENTS.md` here), and the engine does not assume a name.
 - **A lock file**, `.urzua/harness.lock`: the bundle version, the adapter, and a hash of every installed
-  file.
+  file, including the hook entries the install merged into the agent's settings.
 
 ### 2. Installation and versioning
 
 Option B. `urzua harness install [--adapter NAME] [--dry-run]` writes the files for the adapter named in
 `--adapter`, or in `harness.adapters` in the configuration; `urzua harness status` compares the lock with the
-files and the binary and reports missing, modified and out-of-date files; `urzua harness update` rewrites
+files and the binary and reports missing, modified and out-of-date files, and exits 1 on any drift so a CI
+step can run it (it is a separate step and not part of `urzua check`); `urzua harness update` rewrites
 files whose hash still matches the lock, and reports (and does not overwrite) a file a person changed unless
-`--force`. The bundle version is the engine version, so a binary older than the lock is reported by
+`--force`; `urzua harness uninstall` removes the files whose hash still matches the lock, takes the urzua
+hook entries and the marked instructions block out of the shared files, reports and leaves a file a person
+changed, and deletes the lock last. The bundle version is the engine version, so a binary older than the lock is reported by
 `urzua doctor`. Customisation goes in the configuration, not in the installed files, which is what makes
-`update` safe. `--dry-run` writes nothing and lists what would change. The bundle directory is laid out so it
+`update` safe. `--dry-run` writes nothing and lists what would change. Rules for files the install shares with a person:
+
+- **An existing agent settings file is merged, never replaced.** The install adds its hook entries to the
+  project settings file (`.claude/settings.json` for the first adapter), keyed by event, matcher and command;
+  every other key and entry is left as written; an entry already present is not duplicated, so a second install
+  changes nothing. An entry is urzua's when its command runs `urzua harness run`, which is how `update` and
+  `uninstall` find it. If the file is not valid JSON, or holds an entry with the same key that a person edited,
+  the install refuses (`not-run`, exit 2) and names the entry; it never guesses.
+- **Only the project settings file is written.** A local settings file (`settings.local.json`) and the
+  user-level settings are neither read nor written: the install cannot see them and says so in `status`.
+- **The agent-instructions block is idempotent.** The install rewrites only the text between its markers and
+  adds the markers once at the end of the file when absent; running it twice yields identical bytes.
+
+The bundle directory is laid out so it
 can later also be published as a release asset (option C) without a second format.
 
 ### 3. Opt-in configuration for each guardrail
@@ -155,46 +186,98 @@ principle, the default for the editor hook) or `deny`. The acceptance and protec
 `deny`, because an unjudged gate is not a gate. A key the build does not know, or a guardrail the chosen
 adapter cannot provide (an agent with no post-command event), is reported at install and by `doctor`, never
 skipped silently. Commands for record types are generated whenever the harness is installed and need no key.
+`acceptance` or `protected-paths` enabled with no top-level `authority` key (section 4) is a load error naming
+the guardrail: a gate with nothing to enforce is not left to read as protection.
+
+**The escape hatch for `on_unjudged: deny`.** A denying guardrail that cannot judge (a broken `authority`
+table, a missing binary, a version mismatch) refuses an agent's edit to the protected paths, including
+`.urzua/config.yaml`, the file that would repair it, and the override of `ADR-78` is deliberately not accepted
+for this verdict. The way out is a person: a human edits outside the agent harness (a plain editor or a
+terminal), where no hook runs. `urzua doctor` and the session-start check say so in the message that reports
+the unjudged state, and a test pins both that message and that a request with actor `human` is allowed when
+the guardrail is unjudged. A repository that does not want this lockout sets `on_unjudged: allow` for the
+guardrail, and the loud message remains.
 
 ### 4. The acceptance guardrail
 
-The configuration names who may move a record to an accepting status, and the engine enforces it in two
-places from one table. A top-level `authority` key (structured, `ADR-64`; the precedent for a top-level key
-the hook and the engine both read is `override_log`):
+The configuration names who may move a record to an accepting status. One table is read in two places, and
+what each place can and cannot do is stated here and nowhere claimed beyond it. A top-level `authority` key
+(structured, `ADR-64`; the precedent for a top-level key the hook and the engine both read is `override_log`):
 
 ```yaml
 authority:
   deciders:
-    maintainers: [beauwilliams]        # GitHub logins
-  evidence: [pr-approver]              # pr-author | pr-approver, any of
+    maintainers: {logins: [beauwilliams]}
+  evidence: [pr-author]                # pr-author | pr-approver, any of; the default is pr-author
   gates:
     - {type: adr, to: [Accepted, Rejected], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected], by: maintainers}
     - {paths: [".claude", "scripts/hooks", ".git-hooks", ".github/workflows", ".urzua/config.yaml"], by: maintainers}
 ```
 
-- **Local: an agent's edit is refused.** `urzua harness run edit` and `post-command` take the actor from the
-  request (`agent`, set by the adapter, which is only ever invoked by an agent). For an agent, a change that
-  moves a record of a gated type to a gated status, compared with the copy on disk or at `HEAD`, is
-  **denied outright**, and so is a write under a gated path. This verdict cannot be overridden: the override
-  of `ADR-78` is a name in an environment variable the agent controls, so it is not accepted for this
-  verdict, and the output says so. A human edits outside the agent harness and is not affected.
-- **CI: a pull request that makes such a move must be authored or approved by a declared decider.** A new
-  opt-in rule `diff.decider-required` reads the base copy of every changed record (the mechanism the status
-  transition rules already use, `rust/crates/urzua-cli/src/commands/check.rs:92-135`) and, for each gated
-  move or gated path, requires that one of the configured `evidence` kinds names a login in the gate's group.
-  The identities arrive as input, never fetched by the engine (`check` does not use the network): the gate
-  action (`.github/actions/urzua-gate/action.yml`) writes a file from the GitHub API with the pull request's
-  author and the logins whose approval is current for the head commit, and passes it as
+`evidence` names the pull-request facts the host supplies (`pr-author`, `pr-approver`) and a decider group lists
+`logins`; both are the host's vocabulary, read from a file the gate writes. The default is `pr-author`. It is
+not `pr-approver`, because GitHub bars a pull request's author from approving it, so on a single-maintainer
+repository `pr-approver` could never be satisfied and no acceptance could merge.
+
+**What the guardrail does, exactly:**
+
+- **Locally, it refuses the edit tools.** `urzua harness run edit` takes the actor from the request (`agent`,
+  set by the adapter, which is only ever invoked by an agent). For an agent, a Write, Edit or MultiEdit that
+  moves a record of a gated type to a gated status, compared with the copy on disk or at `HEAD`, is **denied
+  outright**, and so is a write under a gated path. This verdict cannot be overridden: the override of `ADR-78`
+  is a name in an environment variable the agent controls, so it is not accepted for this verdict, and the
+  output says so. A human edits outside the agent harness and is not affected.
+- **After a Bash command, it reports and does not block.** `urzua harness run post-command` (`ADR-78`,
+  amendment) sees a gated move or a change under a gated path made by a shell command, and reports it to the
+  agent as an error-level finding in its own right, not only as the generic record finding. The command has
+  already run, so nothing is refused.
+- **In CI, the only evidence is authorship, and it is always the maintainer's.** A new opt-in rule
+  `diff.decider-required` reads the base copy of every changed record (the status-transition mechanism,
+  `diff_scope::committed_statuses`, `rust/crates/urzua-cli/src/commands/check.rs:770`; the base-text loader
+  at `:104-135` serves the version-bump rule and is not the one used) and, for each gated move or path,
+  requires that one of the configured `evidence` kinds names a login in the gate's group. The identities arrive
+  as input, never fetched by the engine (`check` does not use the network): the gate action
+  (`.github/actions/urzua-gate/action.yml`) writes a file from the GitHub API with the pull request's author and
+  the logins whose approval is current for the head commit, and passes it as
   `urzua check --base REF --actors FILE`. A stale approval (given before a later push) does not count.
+  Agents act under the maintainer's GitHub token, so with a single maintainer every pull request an agent opens
+  is authored by a decider and the rule passes. **With a single maintainer, CI cannot enforce who accepted.**
+  What it gives is a recorded trail and, in a repository that has a second human or a distinct agent
+  identity, a check that means something.
 - **No silent no-op.** A gated move with no `--actors` file is reported, as `info` on a local run (pre-commit
   cannot know) and as an error when the option `require_evidence: true` is set, which the gate action
-  sets. A `by` group that names no login, a login not in any group, and a gate whose `type` or `to` the
+  sets. A `by` group that names no login, a login in no group, and a gate whose `type` or `to` the
   configuration does not declare are load errors.
-- **The protected paths protect the table itself.** `.urzua/config.yaml`, the harness files and the workflow
-  that runs the gate are in the paths a decider must authorise, so lowering the gate is itself gated.
-  This cannot be complete: the required status check and branch protection live in the host's settings,
-  which the engine can read neither to enforce nor to verify. `urzua doctor` says so and does not claim it.
+- **The protected paths name the table and the harness.** `.urzua/config.yaml`, the harness files and the
+  workflow that runs the gate are in the paths a decider must authorise, so an edit-tool change to them is
+  refused locally. This is not a barrier against the routes listed next, and the required status check and
+  branch protection live in the host's settings, which the engine can read neither to enforce nor to verify.
+  `urzua doctor` says so and does not claim it.
+
+**Accepted risk.** The maintainer decided on 2026-11-05: "We just need to clearly document this for now and
+accept the risk." These routes get past the guardrail, and they are accepted:
+
+1. **A Bash command that writes the status.** `sed -i 's/^Status: Proposed/Status: Accepted/'`, `python -c`,
+   `cp`, `tee` or a heredoc is outside the editor hook's matcher. The post-command check reports it and cannot
+   stop it.
+2. **Editing the guardrail itself by shell.** `.claude/settings.json`, the hook entries, the scripts, the git
+   hooks and `.urzua/config.yaml` (`block_on`, `override_log`, a rule's `level`, the `authority` table) can be
+   changed by a Bash command, or by the agent's own settings (a local or user-level settings file the install
+   neither reads nor writes), and `git commit --no-verify` skips the commit hook.
+3. **A pull request that changes its own workflow.** The gate runs from the head commit's workflow, so a pull
+   request can drop or weaken the gate step it is judged by. Only `CODEOWNERS` and branch protection, which
+   are host settings, can stop that, and neither is configured by this decision.
+4. **An agent acting as the maintainer.** Agents use the maintainer's token. CI cannot tell an agent from the
+   maintainer, so `pr-author` is always satisfied and no CI check can say who accepted.
+
+What is claimed is therefore only this: through the edit tools an agent cannot move a gated record or write a
+protected path; a Bash route is reported, not prevented; and in CI the evidence is authorship, which for a
+single maintainer is always the maintainer's. The agent-instructions block and the person reading the diff stay
+the controls for the rest. **A future option, not decided here:** give agents a distinct identity (a separate
+GitHub App or bot account, with a fine-grained token) so that `pr-author` can tell them apart from the
+maintainer, and add `CODEOWNERS` on the protected paths with branch protection requiring the code owner. A later
+decision would record it; nothing in this one depends on it.
 
 ### 5. The attestation identity option
 
@@ -213,13 +296,25 @@ attestation:
 - **`asserted`**: `--by` is taken as given, for a repository whose agents attest on behalf of a named human
   with no `gh` session. A verified login, when `gh` answers, is recorded beside it, not instead of it.
   `require_verified: true` is refused at load with `asserted`.
-- **The identity source is recorded in the revision row** (`gh-verified`, `asserted`, or `git-config`), so a
-  reader can tell a verified attestation from an asserted one without the report. The existing row text
-  (`Tool-authored (by NAME): ...`) gains the source; `SPEC-8` is revised.
+- **The identity source and the actor kind are recorded in the revision row.** The source is `gh-verified`,
+  `asserted` or `git-config`; the actor kind is `agent`, `human` or `unspecified`. A verified login proves
+  which account's token ran the command and not who held it, and with agents running under the maintainer's
+  token a `gh-verified` row names the maintainer as the attester of what an agent did. That is the rubber stamp
+  `RFC-2` and `BUG-16` describe, so the row says it: the lifecycle commands of section 1 pass `--actor agent`
+  to `fix`, a direct run records `human` only when `--actor human` is given and `unspecified` otherwise, and
+  the label is the caller's claim and not proof (the same standing as `--by`). A reader can tell a verified
+  attestation from an asserted one, and an agent's from a person's, without the report. The existing row text
+  (`Tool-authored (by NAME): ...`) gains both; `SPEC-8` is revised.
+- **`asserted` reverses a principle** of `RFC-2` and `MILE-66` (a verified login beats a typed name). It is
+  opt-in, never the default, and the row says `asserted`, so the reversal is visible where it applies.
+  `MILE-18` (real identity binding for roles) is the longer-term answer; a `signed-commit` source (`BUG-16`'s
+  own suggestion) is a possible later value of `identity` and is not decided here.
 
 ### 6. Vendor neutrality
 
-The engine names no agent vendor. It speaks a neutral request (`event`, `tool`, `paths`, `content`,
+The engine source names no agent vendor. The embedded bundle's adapter directory does, because an adapter is
+exactly the vendor-specific part (the string `claude-code` and the `.claude/` paths); a test that scans for
+vendor names covers the engine source and excludes the bundle directory. It speaks a neutral request (`event`, `tool`, `paths`, `content`,
 `actor`, `cwd`) and a neutral verdict (`allow`, `deny`, `allow-unjudged`, with the message and findings), and
 `urzua harness adapters` lists the adapter directories in the bundle. An **adapter** is a directory of
 installable files: a settings fragment that wires the vendor's events to `urzua harness run <event>`, and
@@ -234,7 +329,7 @@ declared in the adapter and reported (section 3), and the CI gate still holds fo
 Moderate. The installed files, the lock and the `harness` key are additive and removable, and an absent key
 changes nothing, so adopting is easy to undo. The three commitments that are not: the `authority` table and
 `diff.decider-required` become a contract that an adopter's CI relies on; the neutral request and verdict
-become an interface adapters are written against; and the revision-row text gains the identity source, which
+become an interface adapters are written against; and the revision-row text gains the identity source and the actor kind, which
 history rows then cite. The cost of being wrong is a gate that blocks a legitimate acceptance (a decider
 reaches the PR late), or a lock file that reports drift nobody acts on.
 
@@ -246,33 +341,57 @@ reaches the PR late), or a lock file that reports drift nobody acts on.
   `make rule-table-check` covers the new rule.
 - `scripts/hooks/*.sh` and `*.py` are replaced by the engine subcommands and one translator. The tests that
   pin their behaviour move to the engine and keep their planted cases.
-- The strength of the CI check depends on the host: on a repository where agents run under a
-  decider's own token, the pull-request author is the decider, so `pr-author` evidence proves nothing there
-  and `pr-approver` is the meaningful one. A single-maintainer repository cannot approve its own pull
-  request; the local refusal is then the barrier, and CI proves only authorship. This is recorded in the
-  open question, not hidden.
-- The deny verdict for an agent edit to an accepting status makes an agent unable to accept a record even
-  when a person asks it to in conversation. The person edits or approves; that is the intent.
+- The strength of the CI check depends on the host: where agents run under a decider's own token, the
+  pull-request author is the decider and `pr-author` proves nothing about who accepted. A single-maintainer
+  repository cannot use `pr-approver`. The local refusal then covers the edit tools only, and the routes in
+  "Accepted risk" (section 4) stay open until a distinct agent identity and `CODEOWNERS` exist.
+- The deny verdict for an agent edit to an accepting status makes an agent unable to accept a record through
+  the edit tools even when a person asks it to in conversation. The person edits or approves; that is the intent.
+- A denying guardrail that cannot judge locks an agent out of the protected paths until a person edits outside
+  the harness (section 3).
 - A bundle older than the binary is a finding at session start and in `doctor`, so every release that
   changes the bundle asks installed repositories to run `update`.
 - Every adapter is another thing to keep working; one with no post-command event holds the other guardrails
   and relies on pre-commit and CI for Bash writes.
 - The agent-instructions block is prose, and stays advisory; only the engine verdicts bind.
-- Milestones `MILE-198` to `MILE-202` build this and are not blocked on each other beyond their `Depends-on`.
+- Milestones `MILE-198` to `MILE-202` and `MILE-204` build this and are not blocked on each other beyond their
+  `Depends-on`.
+
+## Open questions
+
+1. **Which moves are gated?** The example gates `Accepted` and `Rejected`. Should the gate also cover
+   `Accepted` to `Superseded` or `Retired`, and an in-place edit of an Accepted ADR's Decision text (the
+   `ADR-85` incident, which an amendment now handles by convention only)? Both are expressible as more
+   `gates` entries; whether this repository ships them on is for the maintainer when accepting.
+2. **Is a `signed-commit` identity source worth adding** to section 5, as `BUG-16` suggests, once agents have
+   a distinct identity? Not needed for the first build.
+3. **A distinct agent identity and `CODEOWNERS`.** Whether and when to adopt them is the future option of
+   section 4, not decided.
+4. **Embedded bundle (B) or published bundle (C)?** B is chosen for Phase 0 and the directory layout keeps C
+   open; a decision to publish separately would be its own ADR.
+
+Resolved on 2026-11-05 and recorded above: `/done` is covered by an amendment to `ADR-70` (section 1);
+the CI evidence default is `pr-author`, with the single-maintainer residual risk accepted by the maintainer
+(section 4); the attestation default stays `gh-verified` with the actor kind added to the row (section 5).
 
 ## References
 
-- `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-78`: the
-  override log and `block_on`, which gains an amendment for the post-command check.
+- `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
+  amendment for lifecycle commands (`/done`); `ADR-78`: the override log and `block_on`, which gains an
+  amendment for the post-command check.
+- `RFC-2`, `BUG-16`, `MILE-18`, `MILE-66`: identity resolution, why a verified login is not an attestation of
+  who acted, and the longer-term identity binding.
 - `ADR-64`: structured in, structured out. `ADR-80`: declared boundaries. `ADR-84`: status follows evidence.
 - `ADR-87`: the `info` level used for an unverified local run.
 - `SPEC-2`, `SPEC-3`, `SPEC-8`, `SPEC-19`: the specs this revises.
 - `MILE-19` (human attestation with expiry) and `MILE-79` (a guarded edit command) are related and not
   replaced; `MILE-179` (git hooks and `doctor`) is the readiness check this extends.
-- `MILE-198`, `MILE-199`, `MILE-200`, `MILE-201`, `MILE-202`: the build.
+- `MILE-198`, `MILE-199`, `MILE-200`, `MILE-201`, `MILE-202`, `MILE-204`: the build.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decisions, 2026-11-05 (ship an installable harness bundle in Phase 0; acceptance enforced by the harness and CI; attestation identity source a configuration option); the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | Amended after independent review of the Proposed text. The acceptance guardrail now claims only what holds (edit tools refused locally, Bash reported, CI evidence is authorship) and gains an "Accepted risk" section (bypasses accepted by the maintainer); the default `evidence` is `pr-author`; the `ADR-70` question is resolved by an amendment there; actor kind joins the attestation row and `RFC-2`, `BUG-16`, `MILE-18` and `MILE-66` are cited; `harness uninstall`, settings-merge rules, the `on_unjudged: deny` escape hatch and an Open questions section are added; citation and vendor-neutrality corrections. **Why:** Maintainer decisions of 2026-11-05 on the review at pull request 355; `Status` stays Proposed. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

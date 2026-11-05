@@ -144,7 +144,7 @@ note kind, a `reason` or a key is additive.
 
 ## Amendment (2026-11-05): a repository may declare which record types are work, and the roadmap orders only those
 
-*Status of this amendment: proposed, pending maintainer acceptance. Drafted 2026-11-05 at the maintainer's request (decision of 2026-11-05: amend this record with an opt-in setting that declares which types are work). `Status` stays `Accepted` and the Decision text above is unchanged; nothing below is built until the maintainer accepts it (`MILE-196`).*
+*Status of this amendment: accepted by the maintainer on 2026-11-05. Drafted 2026-11-05 at the maintainer's request (an opt-in setting that declares which types are work). `Status` stays `Accepted` and the Decision text above is unchanged; `MILE-196` builds it.*
 
 The Options table defines "open" as a status in neither `success` nor `failure`, and ready as open and not
 derived-blocked. That treats every record type as work. A repository can declare a type for a fact nobody
@@ -274,3 +274,4 @@ gain revision rows when this is built (`MILE-196`). This repository then declare
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05, after an independent review and re-check found no remaining blockers; accepted together with ADR-83. | **substantive** |
 > | 2026-11-05 | Amendment added, proposed and pending maintainer acceptance: an opt-in `roadmap.work_types` declares which record types are work; a non-work record still blocks its dependents but never appears in waves, `ready`, the critical path, `records` or `groups`, and is listed in a top-level `waiting_on`; `check` and the derived blocked value are unaffected; an unknown type name is a load error. The Decision text and `Status` are unchanged. **Why:** `#349` review: open `condition` records sit in wave 0 and the ready set and no configuration removes them; maintainer decision, 2026-11-05, to amend. | **substantive** |
 > | 2026-11-05 | Amendment revised while proposed after independent review: waves and the critical path contract dependency edges through chains of non-work records, so a work record behind a non-work record that is behind open work is in a later wave; a non-work record's own status still gates; worked example added; `ready` is a subset of wave 0 when the key is declared, and `SPEC-2` will say so. **Why:** review of `#350` found waves disagreed with `blocks`; the amendment is still proposed and `Status` stays `Accepted`. | **substantive** |
+> | 2026-11-05 | Amendment (`roadmap.work_types`) accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

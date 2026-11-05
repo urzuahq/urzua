@@ -149,7 +149,7 @@ revision row.
 
 ## Amendment (2026-11-05): after any Bash command the harness runs `check` on the records git shows as changed
 
-*Status of this amendment: proposed, pending maintainer acceptance (decided by the maintainer on 2026-11-05, drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
 Item 2 puts the judgement of a record at the editor. The editor hook sees three tools: its matcher is
 `Write|Edit|MultiEdit` (`.claude/settings.json:5`) and its adapter returns for any other tool
@@ -165,14 +165,16 @@ does not read the command: no parsing of shell, no list of write verbs, no guess
 touched. Git's view of the working tree is the ground truth and a Bash command that changes a record by any
 route changes it.
 
-**2. The list includes untracked files, and they are judged from their content.** The merge-base diff
-`check --base` uses is `git diff --name-status` (`rust/crates/urzua-io/src/lib.rs:179-189`) and lists tracked
-changes only, and discovery reads the union of `git ls-files` and staged files
-(`lib.rs:56`, `:75`), so a record a Bash command creates is neither in the changed set nor examined by
-`check PATHS` until it is staged. The post-command check takes its paths from `git status --porcelain -z`,
-which names modified, added and untracked files; it runs `urzua check PATHS` on the tracked ones and relays
-each untracked record's content through `urzua check --stdin-path` (which needs no tracked file), and it
-does not stage anything. A deleted record is not judged.
+**2. The list includes untracked files, and `check PATHS` examines them.** The merge-base diff `check --base`
+uses is `git diff --name-status` (`rust/crates/urzua-io/src/lib.rs:179-189`) and lists tracked changes only, so
+a record a Bash command creates is not in `--base`'s changed set. It is not missing from `check PATHS`, which
+examines a file named on the command line whether or not git tracks it (`resolve_argv_overrides`,
+`rust/crates/urzua-cli/src/discovery.rs:321`, `BUG-24`; `rust/crates/urzua-cli/src/commands/check.rs:446-470`).
+The one refusal is `--base` combined with a named untracked file (`check.rs:451-456`), and the post-command
+check does not use `--base`. So it takes its paths from `git status --porcelain -z`, which names modified,
+added and untracked files, keeps the governed ones and runs `urzua check PATHS` on all of them in one call,
+tracked or not, and it does not stage anything. No `--stdin-path` relay is needed. A deleted record is not
+judged.
 
 **3. It reports; it does not block.** The command has already run, so the check cannot refuse it. It
 reports each finding with its file, rule and message, says which are errors, and says that pre-commit and CI
@@ -191,8 +193,9 @@ loud "not judged" form as item 2 (`ADR-71`); a missing check is never a quiet pa
 | Cons | Parsing shell is fuzzy (variables, heredocs, `python -c`); a miss reads as clearance; it needs a list of verbs that grows | Reports after the fact; the record is already changed on disk |
 
 A record that a Bash command moved to an accepting status is reported with the same finding the acceptance
-guardrail of `ADR-89` gives an editor edit; it cannot be prevented here, and is stopped by the commit hook
-and by CI there.
+guardrail of `ADR-89` gives an editor edit, as an error-level report in its own right. It cannot be prevented
+here, and neither the commit hook nor CI can tell who made the move on a repository with a single maintainer;
+`ADR-89` lists this under "Accepted risk" and does not claim otherwise.
 
 The build is `MILE-202`. Switching the post-command check off is a per-guardrail option in `ADR-89`'s
 `harness` configuration, on only when named.
@@ -206,6 +209,7 @@ The build is `MILE-202`. Switching the post-command check off is a per-guardrail
 - `MILE-12` -- closes when this ADR is accepted.
 - `MILE-142` -- `diff.source-and-records-mixed`.
 - `SPEC-2`, `SPEC-8` -- `check` and `fix`, where `--stdin-path` is specified.
+- `BUG-24` -- `check PATHS` examines a named file git does not track.
 
 > **Revision log**
 >
@@ -216,3 +220,5 @@ The build is `MILE-202`. Switching the post-command check off is a per-guardrail
 > | 2026-11-05 | Amendment added: the editor hook blocks on errors the edit introduces by default, and a `block_on: introduced \| all` option widens it to every error in the edited record. **Why:** `MILE-191` (#308) merged with the introduced-only behaviour, #305 trimmed `MILE-191`'s Done means, and no ADR sets either; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
 > | 2026-11-05 | Amendment (`block_on`) accepted, together with `MILE-191`'s restored Done means. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Amendment added: after any Bash command the harness runs `check` on the records git shows as changed, untracked included, and reports the findings to the agent without parsing the command; it reports and does not block, and pre-commit and CI stay the hard gate. **Why:** the editor hook's matcher does not cover Bash (`.claude/settings.json:5`), so a record written by a shell command is never judged at the editor; maintainer decision, 2026-11-05; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Post-command amendment corrected after review: untracked records are examined by `check PATHS` directly (`BUG-24`), so the `--stdin-path` relay is dropped and all changed paths go to one `check PATHS` call; a gated move by Bash is reported as an error and is no longer said to be stopped by the commit hook and CI. **Why:** Independent review of pull request 355 found the untracked-file claim false (`check.rs:446-470`) and the commit-hook and CI claim untrue for a single maintainer (`ADR-89` "Accepted risk"); proposed, pending maintainer acceptance, `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment (post-Bash check) accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

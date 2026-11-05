@@ -1,12 +1,13 @@
 ---
 Stable-Id: 01M6PYD2NGM8E41XYRCM7S22Q7
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-05
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
 Embodiment: null
 Supersedes / Superseded-by: null
-Derives-from: ADR-87, ADR-73, ADR-64
+Derives-from: ADR-87, ADR-78, ADR-73, ADR-64
 ---
 # 90 — A rule may declare scope: changed so it judges only the records a --base diff adds or changes
 
@@ -20,7 +21,7 @@ it is not: a nudge says "while you are here, do this", and it is only useful at 
 touching the record. `MILE-189`'s rule, `embodiment.locator-on-back-pointer-path`, nudges a `Realized-by`
 locator on a file under `back_pointer_paths` toward an `Implements:` or `Verifies:` comment. It is enabled
 here at `level: info` (`.urzua/config.yaml:597-600`, `ADR-87`). Run over this repository at `0b481385`
-it reports 398 findings on 158 records (the maintainer's decision cites about 367; the corpus has grown).
+it reports 398 findings on 158 records (the maintainer's decision cites about 367; the corpus has grown). PR #357 removes the 25 findings on `Fixed` records, giving 373; both counts are re-stated after it merges.
 All 158 are records that are already closed: 116 `Done`, 15 `Fixed`, 14 `Shipped`, 12 `Accepted` and 1
 `Retired`. Nobody is editing them, so the backlog cannot be burned down, and the findings carry no
 information on a run that touches none of those records. The nudge is useful in exactly one place: a
@@ -35,8 +36,8 @@ What exists today, and why none of it is this:
   The set is changed records plus *dependents* (`diff_scope.rs:376-380`, built at `:344-374`). A record is a
   dependent when it names a changed or deleted id (`:351-353`), shares an id (`:356-357`), cites a locator
   under any changed path (`:359-366`), shares a locator with a changed record (`:367-369`), or a touched
-  waiver covers it (`:349-350`). The rule's population is the whole corpus either way: 492 eligible and 348
-  examined on this repository, whatever the diff is.
+  waiver covers it (`:349-350`). The rule's population is the whole corpus either way: 494 eligible and 348
+  examined on this repository, whatever the diff is. The unit is the `field` slot (a record's `Realized-by` locator), not the record.
 - **Dependents defeat the purpose.** `evidence_changed` (`diff_scope.rs:359-366`) makes a record a
   dependent of any edit under a path it cites. The 158 records cite source files, so an edit to one source
   file reaches every record citing it. Narrowing the rule's findings to the diff-scoped set would still
@@ -51,11 +52,16 @@ What exists today, and why none of it is this:
 - **The population has a count for "not reached", with a meaning that does not fit.**
   `Outcome::OutOfScope` is "the record does not match the shape the configuration declared" and is the one
   state whose subject is the configuration (`report.rs:371-389`); `Absent` is "the slot is not there"
-  and carries no reason.
+  and carries no reason. `config.scope-matches-nothing` reads it: it warns for any `ran` rule whose
+  population has `out_of_scope() > 0` ("the rule cannot apply to them however the records are edited",
+  `rules/type_scope.rs:294-320`), and a `Population` carries no cause. Reusing `out_of_scope` for a rule's
+  own `scope` would put about 494 slots there on a plain `check`, warn against the locator rule and exit 1
+  under `fail_on: warning`.
 - **Options are per rule and refused where they do not apply.** `RuleSetting` is the one definition of the
   option set (`config.rs:188-208`); an option declared on a rule that does not list it is a load error,
   "rule 'x' does not take the option 'y'" (`config.rs:1233-1234`, enforced at `:2086-2093` through
-  `rule_accepts_option`, `rules/table.rs:1640-1643`).
+  `rule_accepts_option`, `rules/table.rs:1640-1643`). `option_field` (`config.rs:1533-1553`) reads only
+  sequence-valued options, so it never sees a scalar such as `scope`.
 - **`--stdin-path` is a one-record diff.** The proposed record is made "the one changed record" against
   HEAD (`commands/check.rs:152-165`, wired at `:730-736`), which is how the two diff-aware rules above are
   judged on an editor edit (`SPEC-2`, "`stdin` scope").
@@ -82,25 +88,32 @@ such a rule is silent on a plain `check`.
 1. **The option.** `scope` is a rule option under `rules:`, in table form
    (`embodiment.locator-on-back-pointer-path: { level: info, scope: changed, ... }`). Its one value is
    `changed`; any other value is a load error naming `changed`. There is no `scope: all`: omitting the
-   option is that. Making the option a field of `RuleSetting` and listing it in the rule's `options`
-   (`rules/table.rs`) follows the existing pattern (`config.rs:188-208`).
+   option is that. The option is a field of `RuleSetting` listed in the rule's `options` (`rules/table.rs`)
+   (`config.rs:188-208`). Because `scope` is a scalar and `option_field` handles only sequence options
+   (`config.rs:1533-1553`), `rule_accepts_option` (`:2086`) would never see it and a `scope` on any rule
+   would be silently accepted. The build therefore adds a dedicated validation of `scope`: the value must
+   be `changed`, and a rule that does not list `scope` in its `options` is a load error. A test covers it.
 2. **What it does under `check --base`.** The rule's candidates are all still eligible; the rule judges
    (reaches a verdict on, and may report a finding for) only the records whose path is in the diff's changed
    set: added, modified, or the new name of a rename, working-tree edits included
    (`GitChanges.changed`, `rust/crates/urzua-io/src/lib.rs:133-144`; `diff_scope.rs:316-320`). A candidate that is not changed
-   is eligible, not examined, and counted as out of scope. This is decided inside the rule's census, where
+   is eligible, not examined, and counted in the new `deferred_by_scope` counter (point 4). An unchanged
+   candidate that is `Absent` anyway is counted as `Absent` first: the slot is not there, so there is
+   nothing to defer. This is decided inside the rule's census, where
    the population is built, not by dropping findings afterward; the afterward-drop at
    `commands/check.rs:901-917` cannot make the population say what was not judged.
 3. **What it does on a plain `check`.** No diff exists (`changed_paths` is `None`, `rules/runner.rs:77-78`,
    `commands/check.rs:769`), so the rule judges none of its candidates: all are eligible, none examined,
    none reported. The rule's execution is `ran`, not `not-applicable`: it ran and found its scope empty.
    That differs on purpose from the two diff-aware rules above, which have nothing to run without a base.
-4. **A disclosed reason, in the population.** The unjudged candidates are counted in the population's
-   `out_of_scope` (the wire shape of `SPEC-2` does not change), and the report carries one `info` notice
-   per such rule: the rule id, `scope: changed`, the number of candidates not judged, and why ("no `--base`"
-   or "unchanged since <base>"). `Outcome::OutOfScope`'s documentation is amended to say that it also covers
-   a candidate the rule's own `scope` option excludes, so "out of scope" is not read as a misconfigured
-   corpus. A new counter is a wire change and is not made here.
+4. **A disclosed reason, in the population.** The unjudged candidates are counted in a new, separate,
+   additive `Population` counter, `deferred_by_scope`. This is an additive output-contract change to
+   `SPEC-2`: a consumer that does not know the field ignores it. `out_of_scope` keeps its meaning, a
+   configuration that does not reach a record, and the rule `config.scope-matches-nothing` does not read
+   `deferred_by_scope`, so a plain `check` raises no warning. The unit is the `field` slot, not the record.
+   The report carries one `info` notice per such rule: the rule id, `scope: changed`, the number of
+   slots not judged, and why ("no `--base`" or "unchanged since <base>"). `Outcome::OutOfScope`'s
+   documentation is unchanged; the new counter has its own.
 5. **Dependents do not count as changed.** Only records the diff touches are judged. `diff_scope.rs`'s
    dependents exist so a defect a change causes in an *unchanged* record is reported (a stranded reference,
    a half of a collision; `diff_scope.rs:3-6`); a nudge is not a defect the change caused. Counting
@@ -118,7 +131,13 @@ such a rule is silent on a plain `check`.
    table marks such rules.
 7. **Which rules may take it.** A record-level rule: `Scope::Records` (`rules/table.rs:5-17`) whose
    findings are anchored to a record (`Anchor::Record` or `Anchor::RecordOrDeclaredFile`,
-   `:116-136`), less the two above. A config-level rule (`Scope::Config`), a file-level one
+   `:116-136`), less the two above. Of these, only a rule whose verdict on a record depends on that
+   record alone may take it. A cross-record rule (id collision, reference resolution and similar) anchors
+   a finding on a record other than the one it judged, so deferring the unchanged records would hide the
+   defect; such a rule does not list `scope`. In the rule table, `Scope::Records` has 39 rules anchored to
+   a record, 1 to `RecordOrDeclaredFile` and 1 to a directory; the build marks each rule per-record or
+   cross-record, adds a table-consistency test that `scope` appears in `options` only for per-record
+   rules, and cross-checks the `options` list against `rule_accepts_option`. A config-level rule (`Scope::Config`), a file-level one
    (`Scope::Files`), a `Scope::Diff` rule and a `Scope::Run` rule cannot: the declaration is refused at load
    with the existing error, "rule 'x' does not take the option 'scope'" (`config.rs:1233-1234`). The
    Directory-anchored `filename.identity-pattern` cannot either: its finding is on a directory, not a
@@ -127,7 +146,7 @@ such a rule is silent on a plain `check`.
    only on a whole-corpus run in which the target rule ran (`rules/waiver.rs:16-22`, `:118-121`). Under
    `scope: changed` a plain whole-corpus run is a run where the rule did not look at most records, so the
    absent finding proves nothing. A waiver whose rule declares the option is eligible and unexamined for
-   that case, as under `--base` today. The build tests it.
+   that case, as under `--base` today; the check reads the rule's `scope` setting. The build tests it.
 9. **`ADR-73` is unchanged.** A finding the rule does emit carries the `suggested_action` or exemption
    its variant declares, exactly as without the option, and the coverage test is unaffected. A record that
    is out of scope yields no finding and therefore no action. The option adds no kind, no `target` key and
@@ -148,22 +167,22 @@ such a rule is silent on a plain `check`.
 Moderate. The option is additive: a configuration that omits it is unchanged, so the engine change can be
 removed without touching a report. Once a repository declares it, removing the option brings back every
 finding the rule suppresses, which for this repository is the 398-finding backlog at `info`. The shape that
-is hard to reverse is the wire: reusing `out_of_scope` for a reason that is not a misconfiguration (point 4)
-and a notice per rule become part of what consumers read. That is why a separate counter is deferred rather
-than rejected, and why `scope` accepts one value now: a second value is a new decision.
+is hard to reverse is the wire: the additive `deferred_by_scope` counter and a notice per rule become part
+of what consumers read. A consumer ignores a field it does not know, so adding it is cheap, but removing it
+later is not. `out_of_scope` is untouched. `scope` accepts one value now: a second value is a new decision.
 
 ## Consequences
 
 - The nudge reaches an author at the moment of the edit: on `check --base` in CI, and in the editor through
   `--stdin-path`. Closed records stop generating findings nobody can act on.
 - A plain `check` is silent on this rule by design. A repository that wants the full backlog visible runs
-  without the option or reads the population: `eligible` 492, `examined` 0, with the notice saying why. The
+  without the option or reads the population: `eligible` 494 slots, `examined` 0, with the notice saying why. The
   backlog is disclosed, not hidden ("you get what you declare", `ADR-53`).
 - `check <path>` on one closed record, with no `--base`, reports nothing from such a rule. An agent that
   wants the nudge for a record uses `--base` or `--stdin-path`.
-- `out_of_scope` now has two causes (a configuration that does not reach a record; a rule's own `scope`
-  option). The notice and the amended `Outcome` documentation separate them; a consumer that treats any
-  non-zero `out_of_scope` as a misconfiguration will misread it until it reads the notice.
+- `out_of_scope` keeps one cause (a configuration that does not reach a record) and
+  `config.scope-matches-nothing` keeps working on it. A rule's own `scope` is counted in
+  `deferred_by_scope`, which that rule does not read. `SPEC-2` gains the field.
 - A rule with the option cannot be used as a gate over the whole corpus. That is the trade, and why the
   option is opt-in and per rule, never a default.
 - A touched-but-unchanged record is never nudged: a dependent whose evidence moved gets no nudge until it
@@ -176,6 +195,7 @@ than rejected, and why `scope` accepts one value now: a second value is a new de
 ## References
 
 - `ADR-87` -- the `info` level at which this repository enables the rule.
+- `ADR-78` -- item 4, the basis of the rule this option applies to.
 - `ADR-73` -- suggested actions, unchanged.
 - `ADR-64` -- structured config in, structured output out; no string mini-language.
 - `ADR-53` -- a repository gets what it declares; a rule that read nothing says so.
@@ -188,3 +208,5 @@ than rejected, and why `scope` accepts one value now: a second value is a new de
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-05 | Amended while Proposed after independent review: a separate additive `deferred_by_scope` counter replaces reuse of `out_of_scope` (which `config.scope-matches-nothing` would have warned on); dedicated scalar validation for `scope`; units are `field` slots (494 eligible); cross-record rules named; ADR-78 added. **Why:** Review of PR #360 found that reuse would warn on every plain `check`. Status stays Proposed. | **substantive** |
+> | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

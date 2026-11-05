@@ -49,6 +49,20 @@ Easy. The commands are markdown files; deleting them returns to `AGENTS.md` pros
 - The command depends on a built binary, the same precondition as every other local `urzua` use here.
 - The suggestion rule in `AGENTS.md` ("offer the command when a decision is noticed") stays an instruction; no tool catches a missed suggestion.
 
+## Amendment (2026-11-05): a lifecycle command may set a status only when the engine computes it from evidence
+
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted with `ADR-89`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The Decision says a drafting command "refuses to write `Accepted`, `Done`, `Fixed` or an acceptance date", and the Context says a record's `Status` is a human decision. `ADR-89` adds lifecycle commands, among them `/done`, which finishes a milestone or a bug, and a reading of that command as outside this decision would leave a standing tension between the two. This amendment resolves it.
+
+**1. Drafting commands are unchanged.** A drafting command creates `Draft`, `Open`, `Planned` or `Proposed` and refuses every other status, as above.
+
+**2. A lifecycle command may set a status only when the engine computes it from evidence.** The status of a type that declares an evidence field follows that evidence (`ADR-84`). A lifecycle command records the evidence (for `/done`, `Realized-by` or the fix's regression test) and then runs `urzua fix --apply`, so the status written is the one the engine computed. The command never writes a status itself and never takes one from the agent. An agent's choice of status is still a human decision, as the Context says.
+
+**3. A status an acceptance gate names stays out of reach.** `ADR-89`'s `authority` gates (`Accepted`, `Rejected` for a decision) are not computed from evidence, and no lifecycle command sets them.
+
+**4. Nothing else changes.** `urzua check` still verifies every result, and a command still reports the number of records examined.
+
 ## References
 
 - `RFC-7` -- section 3, drafting-assistance commands.
@@ -61,3 +75,5 @@ Easy. The commands are markdown files; deleting them returns to `AGENTS.md` pros
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-05 | Amendment added: a lifecycle command may set a status only when the engine computes it from the record's evidence (`urzua fix --apply`), never by an agent's choice; drafting commands are unchanged and gated statuses stay out of reach. **Why:** `ADR-89` adds `/done`, which writes `Done` and `Fixed`, and the Decision forbids a command to write them; maintainer decision, 2026-11-05; proposed, pending maintainer acceptance, `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment (lifecycle commands set a status only from evidence) accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
