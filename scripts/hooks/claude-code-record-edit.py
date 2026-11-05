@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 CORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "record-edit-hook.sh")
+NOT_JUDGED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "record-edit-not-judged.sh")
 
 
 def proposed(tool, inp, path):
@@ -38,6 +39,18 @@ def proposed(tool, inp, path):
     return text
 
 
+def not_judged(why):
+    """Fail open, but visibly: the shared helper prints a stderr notice and logs a row."""
+    try:
+        p = subprocess.run(["bash", NOT_JUDGED, why], capture_output=True, text=True)
+        sys.stderr.write(p.stderr)
+        return p.stdout.strip()
+    except OSError:
+        msg = f"record-edit-hook: urzua did NOT judge this edit ({why}). It is allowed."
+        sys.stderr.write(msg + "\n")
+        return msg
+
+
 def out(obj):
     json.dump(obj, sys.stdout)
     sys.stdout.write("\n")
@@ -47,7 +60,7 @@ def main():
     try:
         payload = json.load(sys.stdin)
     except ValueError:
-        out({"systemMessage": "record-edit-hook: unreadable hook payload; the edit was NOT judged"})
+        out({"systemMessage": not_judged("unreadable hook payload")})
         return 0
     tool = payload.get("tool_name")
     inp = payload.get("tool_input") or {}
@@ -57,7 +70,7 @@ def main():
     try:
         content = proposed(tool, inp, path)
     except ValueError as e:
-        msg = f"record-edit-hook: urzua did NOT judge this {tool} of {path} ({e}). The edit is allowed."
+        msg = not_judged(f"{tool} of {path}: {e}")
         out({"systemMessage": msg, "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}})
         return 0
     cwd = payload.get("cwd") or None
@@ -65,7 +78,7 @@ def main():
         p = subprocess.run(["bash", CORE, path], input=content, capture_output=True, text=True, cwd=cwd)
         v = json.loads(p.stdout)
     except (OSError, ValueError):
-        msg = f"record-edit-hook: urzua did NOT judge this edit to {path} (the core hook failed). The edit is allowed."
+        msg = not_judged(f"the core hook failed for {path}")
         out({"systemMessage": msg, "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}})
         return 0
     verdict, msg = v.get("verdict"), v.get("message", "")

@@ -49,7 +49,7 @@ fi
 
 # The attestation binds this exact digest to the release workflow that built
 # it; a swapped archive fails here even when no checksum was pinned.
-if ! gh attestation verify "$archive" --repo "$repo" >&2; then
+if ! gh attestation verify "$archive" --repo "$repo" --signer-workflow "$repo/.github/workflows/publish-release.yml" >&2; then
   fail "build provenance attestation failed for urzua-$target.tar.gz ($actual)"
 fi
 

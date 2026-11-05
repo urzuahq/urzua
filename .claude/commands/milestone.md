@@ -43,5 +43,9 @@ repository's own configuration and records where that fits. Step 4 refuses a rec
 5. If `check` reports findings, fix the record's content (not the config, not a waiver) and run
    step 4 again. Do not report success on a record `check` did not examine (zero examined is a
    failure) or on one with unwaived findings.
-6. Report to the user: the path written, the record's status as scaffolded and that it is theirs
+6. Changeset. If the change touches what someone installing `urzua` would care about, add
+   `.changeset/<slug>.md` with `default: patch|minor` and `closes: [MILE-N]`, listing only records
+   the same PR leaves closed (a milestone the PR fully delivers; AGENTS.md says how it is marked), or `closes: []` for none. A milestone the
+   change only mentions is not listed.
+7. Report to the user: the path written, the record's status as scaffolded and that it is theirs
    to change, the indexes regenerated, and the `check` result with its examined count.

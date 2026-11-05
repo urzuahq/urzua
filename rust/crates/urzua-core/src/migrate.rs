@@ -5,7 +5,6 @@
 //! fields, just against a candidate field that isn't declared yet.
 
 use crate::config::Config;
-use crate::field_state::classify;
 use crate::record::Record;
 use crate::report::{census, Notice, NoticeSeverity, Outcome, Population, PopulationUnit};
 use crate::FieldState;
@@ -33,7 +32,12 @@ pub fn schema_report(
     records: &[Record],
     field: &str,
     config: &Config,
+    templates: &crate::new_record::TemplateValues,
 ) -> (Population, Vec<SchemaReportEntry>, Vec<Notice>) {
+    let statuses = crate::rules::statuses_by_type(config);
+    let from_templates = config
+        .rule_opts::<crate::rules::FieldQualityOpts>(crate::rules::RULE_FIELD_QUALITY)
+        .template_placeholders;
     let mut report = Vec::new();
     let mut notices = Vec::new();
 
@@ -61,7 +65,13 @@ pub fn schema_report(
             });
             return Outcome::Unreadable;
         }
-        let state = classify(record.header.get(field));
+        let state = crate::rules::classify_quality_field(
+            record,
+            field,
+            from_templates,
+            templates,
+            &statuses,
+        );
         if state != FieldState::Present {
             report.push(SchemaReportEntry {
                 record: record.path.clone(),
@@ -133,7 +143,8 @@ mod tests {
     fn a_record_missing_the_candidate_field_is_reported_observed_failing() {
         let r = record("docs/adr/0001-x.md", "adr", "---\nStatus: Accepted\n---\n");
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
-        let (population, report, notices) = schema_report(&[r], "Reviewers", &config);
+        let (population, report, notices) =
+            schema_report(&[r], "Reviewers", &config, &Default::default());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].state, FieldState::Blank);
@@ -148,7 +159,8 @@ mod tests {
             "---\nStatus: Accepted\nReviewers: alice\n---\n",
         );
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
-        let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
+        let (population, report, _notices) =
+            schema_report(&[r], "Reviewers", &config, &Default::default());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert!(report.is_empty());
     }
@@ -169,7 +181,8 @@ mod tests {
             "ADR".to_string(),
         );
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
-        let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
+        let (population, report, _notices) =
+            schema_report(&[r], "Reviewers", &config, &Default::default());
         assert_eq!(
             (population.eligible(), population.examined()),
             (1, 0),
@@ -196,7 +209,8 @@ mod tests {
             "CODE".to_string(),
         );
         let config = config_with_header_shape("code", crate::header::HeaderShape::None);
-        let (population, report, notices) = schema_report(&[r], "Reviewers", &config);
+        let (population, report, notices) =
+            schema_report(&[r], "Reviewers", &config, &Default::default());
         assert_eq!(
             (population.eligible(), population.examined(), population.out_of_scope()),
             (1, 0, 1),
@@ -217,7 +231,8 @@ mod tests {
             "---\nStatus: Accepted\nReviewers: TBD\n---\n",
         );
         let config = config_with_header_shape("adr", crate::header::HeaderShape::default());
-        let (population, report, _notices) = schema_report(&[r], "Reviewers", &config);
+        let (population, report, _notices) =
+            schema_report(&[r], "Reviewers", &config, &Default::default());
         assert_eq!((population.eligible(), population.examined()), (1, 1));
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].state, FieldState::Placeholder);

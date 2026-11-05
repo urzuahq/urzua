@@ -184,16 +184,28 @@ output:
 - `no-status-vocabulary` is still raised for a non-work type with no status vocabulary: it is still read as
   open, and a wait that is never read as finished blocks forever, which is worth saying.
 
-**4. Waves, `blocks` and the critical path count work only.** A work record's wave is 0 with no open
-**work** dependency, else 1 + the largest wave among them. The consequence is stated, not hidden: the Options
-table's "ready is wave 0 by construction" holds only when every dependency is work. With the key declared,
-`ready` is a subset of wave 0: a work record whose only open dependency is a non-work record is in wave 0 and
-not ready, and reads `blocked: true` with the non-work id in `blocked_by` (`blocked_by` is unchanged: the
-direct dependencies not in `success`, of any type). `blocks` lists work records only, but reaches them
-through non-work ones: if `MILE-13` depends on `COND-1` and `MILE-30` depends on `MILE-13`, `MILE-13`'s `blocks`
-lists `MILE-30`. The critical path is the longest chain of included work records, linked by work-to-work
-edges: a gate between two work records does not join them in the path, because the path counts work and a
-fact has no effort to count. The tie-break is unchanged.
+**4. Waves and the critical path count work records, with edges contracted through non-work ones.** For waves
+and the critical path, dependency edges contract through chains of non-work records: a work record depends
+transitively on every work record that any non-work record on its path depends on. Only work records are
+ever counted, but a non-work record in between does not cut the ordering. A work record's wave is 0 with no
+open work dependency in the contracted graph, else 1 + the largest wave among them. A non-work record's own
+status still gates, as item 3 says: `Open` blocks its dependents, `Met` releases them, `Dropped` sends them to
+`needs_replan`. Contraction orders work; it never releases a gate.
+
+Worked example. `W` (work, `Open`) <- `C` (non-work, `Met`) <- `R` (work), that is `C` depends on `W` and `R`
+depends on `C`. `R` depends transitively on `W` through `C`, so `W` is wave 0 and `R` is wave 1, not wave 0.
+Without contraction both would be wave 0, and a wave would not be strictly after the work `blocks` says it
+waits for. With `C` `Open`, `R` is also `blocked` (blocked by `C`) and not `ready`; with `C` `Dropped`, `R` is
+`needs_replan` with `failed-dependency` via `C`. The critical path follows the same contracted edges: `W`, `R`
+is a chain of length 2.
+
+The consequence is stated, not hidden: the Options table's "ready is wave 0 by construction" holds only when
+every dependency is work. With the key declared, `ready` is a subset of wave 0: a work record whose only open
+dependency is a non-work record is in wave 0 and not ready, and reads `blocked: true` with the non-work id in
+`blocked_by` (`blocked_by` is unchanged: the direct dependencies not in `success`, of any type). `SPEC-2` will
+say so. `blocks` lists work records only, but reaches them through non-work ones: if `MILE-13` depends on
+`COND-1` and `MILE-30` depends on `MILE-13`, `MILE-13`'s `blocks` lists `MILE-30`. The tie-break of the
+critical path is unchanged.
 
 **5. Where non-work records are shown: a top-level `waiting_on` array (recommended).** Hiding them
 would hide the very information that made them worth declaring. Three placements were considered.
@@ -261,3 +273,4 @@ gain revision rows when this is built (`MILE-196`). This repository then declare
 > | 2026-11-05 | Re-check amendments: edge direction fixed (blocker to dependent); `records` and `groups` include `needs_replan` records; a null `pair` sorts first in `notes`; a transitive `blocks` example; Consequences no longer says acceptance moves `MILE-182`'s status, since `blocked` is derived only; a follow-up milestone adds a `sequence.cycle` mode over `roadmap.pairs`. **Why:** design re-check of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05, after an independent review and re-check found no remaining blockers; accepted together with ADR-83. | **substantive** |
 > | 2026-11-05 | Amendment added, proposed and pending maintainer acceptance: an opt-in `roadmap.work_types` declares which record types are work; a non-work record still blocks its dependents but never appears in waves, `ready`, the critical path, `records` or `groups`, and is listed in a top-level `waiting_on`; `check` and the derived blocked value are unaffected; an unknown type name is a load error. The Decision text and `Status` are unchanged. **Why:** `#349` review: open `condition` records sit in wave 0 and the ready set and no configuration removes them; maintainer decision, 2026-11-05, to amend. | **substantive** |
+> | 2026-11-05 | Amendment revised while proposed after independent review: waves and the critical path contract dependency edges through chains of non-work records, so a work record behind a non-work record that is behind open work is in a later wave; a non-work record's own status still gates; worked example added; `ready` is a subset of wave 0 when the key is declared, and `SPEC-2` will say so. **Why:** review of `#350` found waves disagreed with `blocks`; the amendment is still proposed and `Status` stays `Accepted`. | **substantive** |

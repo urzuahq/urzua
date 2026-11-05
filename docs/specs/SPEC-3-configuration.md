@@ -1,5 +1,5 @@
 ---
-Version: '0.90'
+Version: '0.91'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -748,7 +748,8 @@ rules:
   listed unless it is also declared as one.
 - `urzua index` is read-only by default and reports each artifact as `current`, `stale` or `missing`;
   `--apply` rewrites the lines between `begin` and `end` (everything else is kept byte for byte), or
-  the whole file when no markers are declared, and creates a missing artifact. Entries are in record
+  the whole file when no markers are declared, and creates a missing artifact; the file is replaced
+  through a temporary file and a rename, so a failed write leaves the old artifact. Entries are in record
   id order, so a second run changes nothing and reports `current`. A record that cannot fill a
   placeholder (no H1 for `{title}`, no `Date` header for `{Date}`), a file that is not text and a marker that is absent are
   failures naming the artifact, never a partial write.
@@ -1846,4 +1847,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.87`. `statuses.delivery` documented as applying to any record type, with the optional `back_pointer_evidence` key (default `true`, today's reading; `false` holds the type to its declared evidence field alone), an `unevidenced_tiers` that may be empty, the waiver for a deliberately open record with evidence, and the load error for a type without its evidence field. **Why:** `ADR-84`, accepted by the maintainer on 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.88`. `roadmap.pairs` also sets what `sequence.cycle` reads as one graph: a loop that uses an edge of each of two declared pairs is reported, and an `acyclic` pair not named, or an absent `roadmap.pairs`, keeps the per-pair reading. The load-time check that each named pair declares `acyclic: true` is what guarantees every pair in that graph is cycle-checked. **Why:** `MILE-192`, following `ADR-82` (design re-check of 2026-11-05): the roadmap saw a cross-pair loop that `check` did not. | **substantive** |
 > | 2026-11-05 | Bumped to `0.89`. Records that `condition`, the record type for a fact nobody builds (`SPEC-23`), is declared in configuration alone from the primitives documented here, with no engine code that reads the name, and that a `Depends-on` resolves to it through the cross-type sequencing pair. **Why:** `MILE-187`, `RFC-48`. | **substantive** |
-> | 2026-11-05 | Bumped to `0.90`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |
+> | 2026-11-05 | Bumped to `0.90`. `urzua index --apply` replaces an artifact through a temporary file and a rename. **Why:** review of the CLI found the write truncated the file first. | **substantive** |
+> | 2026-11-05 | Bumped to `0.91`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |

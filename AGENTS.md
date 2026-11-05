@@ -36,8 +36,9 @@ that claim; read it before assuming a change is obviously fine.
 
 ## The record-type workflow
 
-Six record types, each governing its own directory and each defined by its own `spec` (`SPEC-16`
-adr, `SPEC-17` rfc, `SPEC-18` spec, `SPEC-6` milestone, `SPEC-9` bug, `SPEC-10` waiver) — read the
+Seven record types, each governing its own directory and each defined by its own `spec` (`SPEC-16`
+adr, `SPEC-17` rfc, `SPEC-18` spec, `SPEC-6` milestone, `SPEC-9` bug, `SPEC-10` waiver, `SPEC-23`
+condition) — read the
 relevant one before hand-writing a record of that type, rather than inferring its schema from nearby
 examples. What each is *for*, not just its fields:
 
@@ -53,11 +54,19 @@ examples. What each is *for*, not just its fields:
 - **`milestone`** — this project's own backlog: decided-but-unbuilt work, explicitly deferred work,
   unrouted research findings. *Planned* work moving toward done.
 - **`bug`** — a real defect already found, retrospective rather than planned, whose
-  `Status` follows its `Realized-by` evidence (`ADR-84`), so "nobody verified this is actually fixed" is
+  `Status` follows its `Realized-by` evidence (`ADR-84`; `Realized-by` is the one evidence
+  field for every type, and the old `Regression-test` field is retired), so "nobody verified this is actually fixed" is
   a finding and not a judgement.
-- **`waiver`** — a reviewed, time-boxed exception to a specific rule finding, never a config-level
-  ignore list. A waived finding still appears in `check`'s output, only excluded from the blocking
-  exit code.
+- **`waiver`** — a reviewed exception to a specific rule finding, never a config-level ignore
+  list. A waived finding still appears in `check`'s output, only excluded from the blocking exit
+  code. It carries an `Expires`, or is permanent (`ADR-86`): a waiver with no `Expires` takes effect
+  only for a rule this repository's `permanent:` list names, with a `Category` from that entry's
+  vocabulary (and a `Justified-by` record where the category requires one); otherwise it is
+  ineffective and the finding is reported again.
+- **`condition`** (`COND`, `SPEC-23`) — a fact nobody builds: an open question or an observed signal
+  (an adopter asking for a feature). Filed `Open`; a milestone, ADR or RFC that waits on it points
+  at it with `Depends-on`. It becomes `Met` only with `Met-by` naming the record that shows the
+  signal, or `Dropped`; both are terminal.
 
 The typical pipeline: an idea becomes an `rfc`; an `adr` derives from it to accept or reject; an
 accepted decision that isn't built yet becomes a `milestone` (`Implements` pointing at the `rfc`/`adr`
@@ -120,7 +129,7 @@ much as to a change's own author. The loop:
 5. **Ship each round as one PR**: fresh branch off `origin/main`, a changeset (`.changeset/*.md`)
    per PR describing what an adopter would care about — skip it for the same cases "Before calling
    anything done" already exempts (CI config, internal refactors, docs-only changes) — then `gh pr
-   comment <n> --body "@coderabbitai review"` after pushing, `gh pr checks <n>` polled until
+   comment <n> --body "@coderabbitai review"` after pushing, `gh api repos/{owner}/{repo}/commits/<sha>/check-runs` (REST; `gh pr checks` uses GraphQL, which can be blocked) polled until
    resolved. **Never force-push.** Merging
    belongs to the human running the session, with one exception: when the maintainer has authorized
    merging for the session, an agent may squash-merge (or enable squash auto-merge on) a PR once CI
@@ -140,7 +149,8 @@ conversation history. If you're doing multi-step work worth remembering:
   `test:path#name@sha256:<pin>` (`urzua explain path#name` prints the pin), and file the bug already
   `Fixed` in the PR that fixes it; a bug left `Open` while its `Realized-by` names a test is a
   `status.delivery-agreement` finding that `urzua fix --apply` repairs. A bug that is open on
-  purpose with evidence is waived with a reason and an expiry, not given a new status. Cross-link the milestone that plans the fix and the bug that describes the
+  purpose with evidence is waived (a reason and an expiry, or a permanent waiver with a `Category`),
+  not given a new status. Cross-link the milestone that plans the fix and the bug that describes the
   defect via a real `Implements` pointer, not just a prose mention — verify the edge actually
   resolves with `urzua graph` before treating the record as done.
 - **Every finding is checked against both our own workflow configuration and the engine.** When a finding
@@ -213,9 +223,9 @@ about behavior as true:
 ## Never silently rewrite an Accepted decision
 
 If understanding changes after an ADR/RFC is `Accepted`, don't edit its Decision/Consequences
-content to match. Either add a dated, transparent note to its own Consequences section explaining
-the correction, or write a new record that narrows/supersedes it and say so explicitly in both
-places. `Status` is never silently changed during an otherwise-structural edit.
+content to match. Either add a dated `## Amendment (YYYY-MM-DD): <what changed>` section after the
+Decision explaining the correction, leaving the Decision text as it was, or write a new record that
+narrows/supersedes it and say so explicitly in both places. `Status` is never silently changed during an otherwise-structural edit.
 
 ## A record's Status: who sets it
 
@@ -232,6 +242,28 @@ bug follows the fixed-in-PR convention. The same rule covers any other field who
 decision was reached on someone's behalf (`Supersedes / Superseded-by`, a vacated-number tombstone,
 closing a cross-reference) and is not covered by the exceptions above. Distinct from the rule above
 this one: that one guards an already-decided record's content; this one guards the decision itself.
+
+## Findings, levels and the editor hook
+
+- **Levels.** A rule is `off`, `info`, `warn` or `error` (`ADR-87`). An `info` finding is reported and
+  counted but never trips `fail_on` or sets `blocking`; it is not a finding to silence.
+- **The editor hook** (`.claude/settings.json`, `scripts/hooks/`, `ADR-69`, `ADR-78`) judges a
+  `Write`, `Edit` or `MultiEdit` of a governed record before it is written, by running `urzua check
+  --stdin-path`. It blocks an unwaived error the edit introduced (`block_on: introduced`; `block_on:
+  all` in `.urzua/config.yaml` blocks any). Warnings are shown, not blocking. It does not cover
+  edits made through `Bash`, and it allows an edit it could not judge with a message saying so, so
+  run `urzua check` before committing either way.
+- **When it blocks, fix the record.** Never set `URZUA_HOOK_OVERRIDE` or `--override` yourself. An
+  override needs a named human, and every one is appended to `.urzua/override-log.md`, where
+  `override.unreviewed` reports it until a person fills `Reviewed-by`. Don't fill `Reviewed-by`
+  yourself either.
+- **Re-pinning evidence.** A stale `@sha256:` pin on `Realized-by` is repaired with `urzua fix
+  --rebaseline --apply --ids <record> --by <name> --reason "<delta>"` (`SPEC-8`). `--by` is
+  attribution, not authentication, so it names the human who authorised the re-pin and only with
+  that person's authorisation. The reason must say what actually changed in the pinned code, not
+  that the pin was stale. Look at the diff of the pinned file before re-pinning, list every re-pin
+  and its reason in the PR body so a reviewer can check it, and never re-pin to quiet drift you have
+  not read.
 
 ## Don't build speculative capability
 
@@ -262,7 +294,7 @@ absorb it.
 
 ## Before calling anything done
 
-- `make ci` passes locally (fmt, clippy, build, test, `urzua check docs/`).
+- `make ci` passes locally (fmt, clippy, build, test, `make records`, the rule-table check).
 - A changeset exists in `.changeset/` for anything a person installing `urzua` would care about
   (ADR-29) — skip only for CI config, internal refactors, or docs-only changes. It carries `closes:`
   (a one-line list of the records it closes, `[]` for none) and the record in it is closed in the same

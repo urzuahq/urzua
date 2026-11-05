@@ -394,7 +394,7 @@ fn main() -> ExitCode {
         } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => commands::init::run(dry_run),
-        Command::Doctor => commands::doctor::run(),
+        Command::Doctor => commands::doctor::run(cli.config),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(cli.config, apply),
         Command::Refs {
