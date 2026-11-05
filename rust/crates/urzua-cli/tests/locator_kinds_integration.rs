@@ -3,7 +3,9 @@
 //! `embodiment.locator-exists`). Real git-repo fixtures, real binary; all
 //! output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -54,9 +56,8 @@ fn commit_all(dir: &Path) {
     git(dir, &["commit", "-q", "-m", "fixture"]);
 }
 
-fn repo(name: &str, exists_options: &str, realized_by: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-kinds-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, exists_options: &str, realized_by: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-kinds-{name}"));
     for d in ["docs/adr", "src/sub", "other", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -250,7 +251,7 @@ fn explained(dir: &Path, arg: &str) -> serde_json::Value {
     json(&out)
 }
 
-fn pinned_repo(name: &str, locator: &str) -> PathBuf {
+fn pinned_repo(name: &str, locator: &str) -> common::TempDir {
     let dir = repo(name, ALL_PINNABLE, "code:src/a.rs");
     let pin = explained(&dir, locator)["coverage"]["pin"]
         .as_str()
