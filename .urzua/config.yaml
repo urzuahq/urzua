@@ -27,14 +27,18 @@ locator_resolvers:
     end: brace_balanced
     # Doc comments and attributes directly above an item are part of it.
     leading: '^\s*(#\[|///|//!)'
-    # `Type::member`: an inherent `impl Type {` or `impl<T> Type<T> {`, in as many blocks as the file has.
+    # `Type::member`: a `struct Type {` or an inherent `impl Type {` / `impl<T> Type<T> {`, in as many blocks as the file has.
     container:
-      start: '^\s*impl(<.*?>)?\s+{symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      start: '^\s*(impl(<.*?>)?\s+|(pub(\([^)]*\))?\s+)?struct\s+){symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
       end: brace_balanced
       spans: all
+    # Two member patterns, counted together: a method ends at its closing brace, and
+    # a struct field (`Type::field`, in the `struct Type {` span) at the next field.
     member:
-      start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*fn\s+{symbol}\b'
-      end: brace_balanced
+      - start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*fn\s+{symbol}\b'
+        end: brace_balanced
+      - start: '^\s*(pub(\([^)]*\))?\s+)?{symbol}\s*:([^:]|$)'
+        end: indent
     # `Type::<Trait>::member`: `impl Trait for Type {`, with an optional path before the trait.
     trait_container:
       start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'

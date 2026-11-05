@@ -506,8 +506,8 @@ fn semicolon_ends_at_the_first_line_ending_in_a_semicolon_at_its_own_depth() {
     let src =
         "impl A {\n    const X: Foo = Foo {\n        a: 1;\n    };\n    const Y: u8 = 3;\n}\n";
     let mut r = rust();
-    r.member.as_mut().unwrap().start = "^\\s*const\\s+{symbol}\\b".to_string();
-    r.member.as_mut().unwrap().end = EndKind::Semicolon;
+    r.members[0].start = "^\\s*const\\s+{symbol}\\b".to_string();
+    r.members[0].end = EndKind::Semicolon;
     let one = |sym: &str| {
         let s = ok(&format!("f.rs#A::{sym}")).scope.unwrap();
         resolve_scope(src, Some(&r), &s).map(|s| (s.start, s.end))
@@ -531,10 +531,10 @@ fn an_indent_container_matches_members_at_its_child_indent() {
         end: EndKind::Indent,
         spans: Spans::One,
     });
-    r.member = Some(MemberDecl {
+    r.members = vec![MemberDecl {
         start: "^\\s+{symbol}:".to_string(),
         end: EndKind::Indent,
-    });
+    }];
     let t = "a:\n  x:\n    deep: 1\n  y: 2\nb:\n  x: 3\n";
     assert_eq!(resolve_with(&r, t, "a::x"), Ok((2, 3)));
     assert_eq!(resolve_with(&r, t, "a::y"), Ok((4, 4)));
@@ -596,6 +596,131 @@ fn crlf_and_lf_files_give_the_same_pinned_bytes() {
     let crlf = "fn a() {\r\n    1\r\n}\r\n";
     let s = Span { start: 1, end: 3 };
     assert_eq!(span_text(lf, s), span_text(crlf, s));
+}
+
+// ---- more than one member pattern (struct fields beside methods) -------------
+
+const FIELD_CONTAINER: &str =
+    r"^\s*(impl(<.*?>)?\s+|(pub(\([^)]*\))?\s+)?struct\s+){symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$";
+const FIELD_MEMBER: &str = r"^\s*(pub(\([^)]*\))?\s+)?{symbol}\s*:([^:]|$)";
+
+/// The `rust` resolver where `Type::name` also finds a struct field: the
+/// container matches a `struct` as well as an inherent `impl`, and a second
+/// member pattern ends at the next field (`indent`).
+fn rust_with_fields() -> LocatorResolver {
+    let mut r = rust();
+    r.container.as_mut().unwrap().start = FIELD_CONTAINER.to_string();
+    r.members.push(MemberDecl {
+        start: FIELD_MEMBER.to_string(),
+        end: EndKind::Indent,
+    });
+    r
+}
+
+fn field_span(text: &str, scope: &str) -> Result<(usize, usize), ScopeError> {
+    let s = ok(&format!("f.rs#{scope}")).scope.unwrap();
+    resolve_scope(text, Some(&rust_with_fields()), &s).map(|s| (s.start, s.end))
+}
+
+const FIELDS_SRC: &str = "\
+pub struct Cfg {
+    /// The required names.
+    #[serde(default)]
+    pub required: Vec<String>,
+    pub known: Option<Vec<String>>,
+    pub spec: Option<String>,
+}
+
+impl Cfg {
+    pub fn known(&self) -> usize {
+        0
+    }
+}
+";
+
+#[test]
+fn a_struct_field_is_found_with_its_doc_comment_and_attribute() {
+    assert_eq!(field_span(FIELDS_SRC, "Cfg::required"), Ok((2, 4)));
+    assert_eq!(field_span(FIELDS_SRC, "Cfg::spec"), Ok((6, 6)));
+}
+
+#[test]
+fn a_field_ends_before_the_next_field_and_the_closing_brace() {
+    // `required` stops before `known`, and `spec` short of the closing `}`.
+    assert_eq!(field_span(FIELDS_SRC, "Cfg::required"), Ok((2, 4)));
+    assert_eq!(field_span(FIELDS_SRC, "Cfg::spec"), Ok((6, 6)));
+}
+
+#[test]
+fn a_field_and_a_method_of_one_name_are_ambiguous_never_first_pattern_wins() {
+    assert_eq!(
+        field_span(FIELDS_SRC, "Cfg::known"),
+        Err(ScopeError::Ambiguous { lines: vec![5, 10] })
+    );
+}
+
+#[test]
+fn methods_still_resolve_beside_a_field_pattern_and_a_missing_field_is_not_found() {
+    let src = "struct A {\n    a: u8,\n}\nimpl A {\n    fn go(&self) {}\n}\n";
+    assert_eq!(field_span(src, "A::go"), Ok((5, 5)));
+    assert_eq!(field_span(src, "A::a"), Ok((2, 2)));
+    assert!(matches!(
+        field_span(src, "A::b"),
+        Err(ScopeError::NotFound(_))
+    ));
+}
+
+#[test]
+fn a_field_pattern_does_not_match_a_path_or_a_nested_field() {
+    // `x::y: ...` is not field `x`; a field of another struct inside a method
+    // body is deeper than the container's children.
+    let src = "struct A {\n    a: u8,\n}\nimpl A {\n    fn f(&self) {\n        b: 1,\n    }\n}\n";
+    assert!(matches!(
+        field_span(src, "A::b"),
+        Err(ScopeError::NotFound(_))
+    ));
+    let src = "struct A {\n    x::y: u8,\n}\n";
+    assert!(matches!(
+        field_span(src, "A::x"),
+        Err(ScopeError::NotFound(_))
+    ));
+}
+
+#[test]
+fn a_multi_line_field_type_ends_at_the_first_line_not_indented_deeper() {
+    // The known blindness of `indent` (ADR-74): the closing `>,` is level with
+    // the field, so it is not part of the span.
+    let src = "struct A {\n    b: Vec<\n        u8,\n    >,\n    c: u8,\n}\n";
+    assert_eq!(field_span(src, "A::b"), Ok((2, 3)));
+}
+
+#[test]
+fn a_member_is_one_mapping_or_a_list_in_config() {
+    let one: LocatorResolver = yaml_serde::from_str(
+        "name: r\nglob: '**/*.rs'\nstart: '{symbol}'\nend: blank_line\ncontainer: {start: '{symbol}', end: brace_balanced}\nmember: {start: '{symbol}', end: indent}\n",
+    )
+    .unwrap();
+    assert_eq!(one.members.len(), 1);
+    let many: LocatorResolver = yaml_serde::from_str(
+        "name: r\nglob: '**/*.rs'\nstart: '{symbol}'\nend: blank_line\ncontainer: {start: '{symbol}', end: brace_balanced}\nmember:\n  - {start: 'a {symbol}', end: indent}\n  - {start: 'b {symbol}', end: brace_balanced}\n",
+    )
+    .unwrap();
+    assert_eq!(many.members.len(), 2);
+    assert_eq!(many.members[1].end, EndKind::BraceBalanced);
+    assert_eq!(validate_resolvers(&[many]), Ok(()));
+}
+
+#[test]
+fn every_member_pattern_is_validated() {
+    let mut r = rust_with_fields();
+    r.members[1].start = "^no placeholder".to_string();
+    assert!(validate_resolvers(&[r]).unwrap_err().contains("{symbol}"));
+    let mut r = rust_with_fields();
+    r.members[1].start = "^({symbol}".to_string();
+    assert!(validate_resolvers(&[r]).unwrap_err().contains("pattern"));
+    let mut r = rust_with_fields();
+    r.members.clear();
+    assert!(validate_resolvers(&[r]).unwrap_err().contains("member"));
 }
 
 // ---- resolver config ---------------------------------------------------------

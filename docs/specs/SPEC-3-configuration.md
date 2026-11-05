@@ -1,5 +1,5 @@
 ---
-Version: '0.81'
+Version: '0.82'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1248,12 +1248,15 @@ locator_resolvers:
     end: brace_balanced
     leading: '^\s*(#\[|///)'    # optional: contiguous lines above that are part of the item
     container:                  # optional: `Type::member` is found inside these spans
-      start: '^\s*impl(<.*?>)?\s+{symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      start: '^\s*(impl(<.*?>)?\s+|(pub\s+)?struct\s+){symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
       end: brace_balanced       # brace_balanced, indent or heading
       spans: all                # `all`: every match is a candidate span; default `one`: exactly one
-    member:                     # the item inside a container span, with its own start and end kind
-      start: '^\s*(pub\s+)?fn\s+{symbol}\b'
-      end: brace_balanced
+    member:                     # the item inside a container span, with its own start and end kind;
+                                # one mapping, or a list when members end differently
+      - start: '^\s*(pub\s+)?fn\s+{symbol}\b'
+        end: brace_balanced
+      - start: '^\s*(pub\s+)?{symbol}\s*:([^:]|$)'   # a struct field, up to the next field
+        end: indent
     trait_container:            # `Type::<Trait>` and `Type::<Trait>::member`
       start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
       end: brace_balanced
@@ -1262,8 +1265,8 @@ locator_resolvers:
 
 Patterns are regular expressions matched against one line. `{symbol}` (and `{trait}`) are replaced by
 the regular-expression-escaped text from the record, so a `.` in a symbol is a literal dot. A
-`start`, `container.start` and `member.start` must contain `{symbol}`, a `trait_container.start`
-also `{trait}`; a malformed pattern or glob, a missing placeholder, a `member` with no `container`
+`start`, `container.start` and every `member.start` must contain `{symbol}`, a `trait_container.start`
+also `{trait}`; a malformed pattern or glob, a missing placeholder, a `member` (any entry of a list) with no `container`
 or `trait_container` or the reverse for `container`, a `container` end kind other than
 `brace_balanced`, `indent` or `heading`, an unknown key, a repeated name and two resolvers with the
 same glob are config-load errors. A file covered by two different globs is reported where a scope
@@ -1290,8 +1293,15 @@ as a `semicolon`-ended `member` of its container (vector 18).
 none is not found, more than one is ambiguous and reported with the line of each candidate, exactly
 one is the item (extended upward over `leading`). `Type::member` finds the container spans of
 `Type` (none: container not found; several without `spans: all`: ambiguous), then the lines
-matching `member.start` that are direct children of any of those spans, counted together: none is
-not found, more than one is ambiguous, one is the item. A direct child of a `brace_balanced`
+matching a `member.start` (every entry of a `member` list is tried) that are direct children of any
+of those spans, counted together across spans and across entries: none is not found, more than one
+is ambiguous (a line two entries both match counts twice, so is ambiguous), one is the item, ended
+by the end kind of the entry that matched it. A `member` list is how one resolver addresses items
+that end differently, such as a Rust method (`brace_balanced`) and a struct field (`indent`, up to
+the next field or the closing brace: the closing `>,` of a field whose type spans lines is level
+with the field and is not part of the span). The container may match a `struct` as well as an
+`impl`, so `Type::field` is found in the struct's span and `Type::method` in the impls'; a name used
+by both is ambiguous. A direct child of a `brace_balanced`
 container is a line that starts at brace depth one; of an `indent` container, a line at the
 indentation of the container's first non-blank body line; of a `heading` container, a heading one
 level deeper. A match deeper inside another member (a nested `fn`) is not a candidate. A member's
@@ -1345,6 +1355,10 @@ inclusive) or the failure. Rows 1 to 12 use the `rust` resolver above with the `
 | 16 | `# T` / `## One` / `text` / `### Sub` / `more` / `## Two` (`heading`, start `^#+\s+{symbol}$`) | `One` | 2-5 |
 | 17 | `k1:` / `  v` / `` / `k2:` (`blank_line`) | `k1` | 1-2 |
 | 18 | `impl A {` / `  const X: Foo = Foo {` / `    a: 1;` / `  };` / `  const Y: u8 = 3;` / `}` (member `end: semicolon`, start `^\s*const\s+{symbol}\b`) | `A::X` | 2-4 |
+| 21 | `struct A {` / `    /// d` / `    a: u8,` / `    b: u8,` / `}` (the `rust` resolver, its container also matching `struct`, and a second `member` entry `^\s*{symbol}\s*:([^:]|$)` with `end: indent`) | `A::a` | 2-3 (doc line included, `b` excluded) |
+| 22 | as 21, with `impl A {` / `    fn a(&self) {}` / `}` appended | `A::a` | ambiguous: lines 3, 7 (a field and a method) |
+| 23 | as 21 | `A::z` | not found |
+| 24 | `struct A {` / `    b: Vec<` / `        u8,` / `    >,` / `    c: u8,` / `}` (resolver of 21) | `A::b` | 2-3 (the closing `>,` is level with the field and is not included) |
 | 19 | the bytes `a\r\nb\r\r\nc\n`, lines 1-3 | | pinned bytes `a\nb\r\nc` |
 | 20 | the bytes `\uFEFFfn a() {\n}\n`, lines 1-2 | | pinned bytes `fn a() {\n}` |
 
@@ -1667,3 +1681,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.79`. A top-level `roadmap: {pairs, group_by}` names the `relation_pairs` entries that are dependencies and the header fields `urzua roadmap` groups by, validated at load. **Why:** `MILE-182`, decided in `ADR-82`: one graph over the declared sequencing pairs, with the pairs declared because an `acyclic` containment pair is not a dependency. | **substantive** |
 > | 2026-11-05 | Bumped to `0.80`. Documented the `locator_kinds` and `pinnable` options of `embodiment.locator-exists`: a `Realized-by` locator may name a directory or glob when the repository declares that kind, a directory or glob is legal when it covers a tracked file, its drift uses the newest commit among the files it covers, its pin hashes the sorted (path, file content hash) list, `explain` shows the files, and an undeclared kind is a finding naming the option. Both options default to `[file]`. **Why:** `BUG-176` -- maintainer decision, 2026-11-05: which locator kinds are legal, and which can be pinned, is configuration. | **substantive** |
 > | 2026-11-05 | Bumped to `0.81`. Documented the decision gate options of `diff.source-requires-record` (`decision_types`, `fix_types`, `link_fields`) and their load-time validation. **Why:** `MILE-133`, maintainer decision 2026-11-05. | **substantive** |
+> | 2026-11-05 | Bumped to `0.82`. A resolver's `member` may be a list of entries, each with its own `start` and `end`, tried together (a Rust method ends `brace_balanced`, a struct field `indent`); a `container` may match a `struct` as well as an `impl`, so `Type::field` is addressable. A single mapping is read as before. Vectors 21-24 added. **Why:** `ADR-74` made the symbol the scope, but its `member` could name only an `fn`, so a decision about one struct field could pin only a line range, which shifts when anything is inserted above it; the declared resolver now reaches the field, with no language knowledge in the engine (`ADR-74` point 5: a member declares its own start pattern and end kind from the closed set). | **substantive** |
