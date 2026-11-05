@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1ZHBEPZ8S9XNM9WYRCA0JP3
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:251b70ec14f1d01f8af3431c4b36757fc05754f81929fad6910912011a941b87, code:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:8dddf55562e6e74cd5297fa93137c564cce36f875ff2d566629c5a9fc4caf29d, test:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:8dddf55562e6e74cd5297fa93137c564cce36f875ff2d566629c5a9fc4caf29d
+Realized-by: code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig@sha256:ff7dbbe0876e0a97b07c88950669d80210d90f1d19c853900c873beb6b944a42, code:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:dbdcaf431cd2a6b7fce85c17f78bfe28fa7a8a22d154cafa74642ce81c3d6e1d, test:rust/crates/urzua-core/src/rules/type_scope.rs@sha256:dbdcaf431cd2a6b7fce85c17f78bfe28fa7a8a22d154cafa74642ce81c3d6e1d
 Date: 2026-09-08
 Accepted-on: 2026-09-08
 Author: beauwilliams
@@ -85,3 +85,5 @@ either leaves every other rule and the existing schema untouched.
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 27929a050. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/config.rs` f8fe5e070ddb -> 251b70ec14f1, `rust/crates/urzua-core/src/rules/type_scope.rs` e2c01a1981cd -> 8dddf55562e6. Reason: Re-verified: type.no-declared-spec is unchanged; the added exclude_files warning is a sibling rule in the same file. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): narrowed the file-level pins to scoped pins (`ADR-74`, `MILE-185`): `config.rs` to `RecordTypeConfig` (lines 424-556). Reason: the drift review of 2026-11-04 found the changes to these files do not touch what this decision describes, and the decision is about these items, so a reviewer re-verified that the claim holds for them. **Why:** an unrelated edit to a volatile file must not stale this pin again. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/type_scope.rs` 8dddf55562e6 -> dbdcaf431cd2. Reason: Drift review of 2026-11-04, recommendation (a): type_scope.rs gained a sibling warning for exclude_files; type.no-declared-spec is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

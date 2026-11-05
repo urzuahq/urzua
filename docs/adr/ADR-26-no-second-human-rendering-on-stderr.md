@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:e085b319c36373a235488b6fd0a2b5568df9a95a3aa2841179b0d75d191e6510, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b668d62f2f4a538e1b48383362b11314795407225697dd62f3f560ada9e74348
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#fix_could_not_run_emits_json@sha256:61ac67a58509aca0d1f0a07e1d55fa7d84497e96cd73a51a7e3fac3e66051f62, test:rust/crates/urzua-cli/tests/check_integration.rs#explain_could_not_run_emits_json@sha256:ca1589422ef2bfca0c9281bf74ce6000d218d72bd6974f3ae84e3b4d5f22d0be, test:rust/crates/urzua-cli/tests/check_integration.rs#graph_could_not_run_emits_json@sha256:4cade01073a00cf0bfb00062580f65e972215641e525b3495a2686071c68782c
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -90,3 +90,4 @@ Two things this does **not** touch, both already decided:
 > | 2026-11-04 | `Realized-by` locators pinned by content hash (`@sha256:`) after re-verifying each cited file against the Decision. **Why:** Re-verified against current code; maintainer decision 2026-11-04. | **substantive** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 314829bf1. | **structural** |
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a. Reason: Re-verified: results still print one JSON object to stdout; the only eprintln! calls are the two pre-existing urzua new numbering notices. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): narrowed the file-level pins to scoped pins (`ADR-74`, `MILE-185`): `main.rs` to `emit` (lines 39-56); `check_integration.rs` to `fix_could_not_run_emits_json` (lines 577-593), `explain_could_not_run_emits_json` (lines 623-636), `graph_could_not_run_emits_json` (lines 638-651). Reason: the drift review of 2026-11-04 found the changes to these files do not touch what this decision describes, and the decision is about these items, so a reviewer re-verified that the claim holds for them. **Why:** an unrelated edit to a volatile file must not stale this pin again. | **structural** |

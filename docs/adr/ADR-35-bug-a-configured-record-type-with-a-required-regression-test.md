@@ -1,7 +1,7 @@
 ---
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:8bc61e85bdcce1d754a31cf5b9d304cd0df564d848a7fb50cc263e82b7fe5d46, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b668d62f2f4a538e1b48383362b11314795407225697dd62f3f560ada9e74348
+Realized-by: code:.urzua/config.yaml#record_types::bug@sha256:0f500a61157f43b60d32cf4b5914dfd1ca1bfa0d5ada47536eea5e8ce5379582, test:rust/crates/urzua-cli/tests/own_config_integration.rs#a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not@sha256:466121d460c0528b48b0ff9ce9a4a010fd1798f1b66f3b1bcc74428d44fbcb52
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -87,3 +87,4 @@ list in the config is the authority; this text does not enumerate it again.
 > | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `.urzua/config.yaml` e185c4da7b1f -> 8bc61e85bdcc, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a. Reason: Re-verified: the bug type still requires Status, Found-in and Regression-test; config.yaml growth is unrelated rule options and types. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Amendment added: the `bug` type declares five statuses, not the three the Decision lists. **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): narrowed the file-level pins to scoped pins (`ADR-74`, `MILE-185`): `config.yaml` to `record_types::bug` (lines 247-295); `check_integration.rs` to `a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not` (lines 122-167). Reason: the drift review of 2026-11-04 found the changes to these files do not touch what this decision describes, and the decision is about these items, so a reviewer re-verified that the claim holds for them. **Why:** an unrelated edit to a volatile file must not stale this pin again. | **structural** |
