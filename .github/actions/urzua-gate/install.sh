@@ -61,7 +61,7 @@ install -m 0755 "$bin" "$dest/urzua"
 
 reported="$("$dest/urzua" --version 2>&1 || true)"
 case "$reported" in
-  *"${version#v}"*) ;;
+  *" ${version#v}"|*" ${version#v} "*) ;;
   *) fail "installed binary reports '$reported', not the pinned $version" ;;
 esac
 

@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.20'
+Version: '0.21'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -100,7 +100,13 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   whose hash still matches the lock and reports, without overwriting, one a person changed unless
   `--force`. `uninstall` removes what matches the lock, takes only urzua's hook entries and the marked
   block out of the shared files, reports and leaves what a person changed, and deletes the lock last.
-  `adapters` lists the adapter directories of the bundle.
+  `adapters` lists the adapter directories of the bundle. An install that finds a conflicting file or
+  entry writes nothing and exits 2; its items then read `would-create`, `would-merge` and `would-write`
+  as `--dry-run` does, and the advice is to move or delete the file and install again. A settings entry
+  whose command names a script with `record-edit` in its name, the hand-copied
+  first-generation editor hook and its adapter, is named in a warning by `install` and by `doctor`
+  (`harness-legacy-hook`), because every record edit would run both hooks, raising a block and logging
+  an override twice.
 - **Shared files are merged, never replaced.** The settings merge adds the bundle's entries, keyed by
   event, matcher and handler, and leaves every other key and entry as written; a second install changes
   nothing. A file that is not valid JSON, or that holds an entry with a key of ours that a person edited,
@@ -260,4 +266,5 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.17`. This repository runs on the installed bundle: `/adr`, `/rfc` and `/milestone` are generated (their type-specific guidance moved into the type templates), `scripts/hooks` and `scripts/draft-record.sh` are deleted, the protected-path list no longer names `scripts/hooks`, and the commands run the helper through `bash` (a file the install writes carries no executable bit, so the direct call was denied). **Why:** `MILE-204`, `ADR-89` section 6. | **substantive** |
 > | 2026-11-06 | Bumped to `0.18`. The post-command check also reports a changed protected path (report only) and covers a commit made inside the command, comparing with the commit the last check saw; the edit gates match paths ASCII case-insensitively, judge a symlink edit as its target, find the repository from the file edited when `cwd` is outside it, and `.urzua/templates` is a protected path here; an adapter failure is refused where `acceptance` or `protected-paths` is on with `on_unjudged: deny`. **Why:** the second-pass review of `MILE-198` to `MILE-204` found the shell route to the guardrails silent, a commit hiding the change, and four ways an edit went unjudged although the configuration said deny. The drafting helper `urzua-record.sh` reads `URZUA_BIN` (as the translator does) and still accepts `URZUA`, and the bundle's instructions say the post-command check reports a shell edit of a guardrail. | **substantive** |
 > | 2026-11-06 | Bumped to `0.19`. An edit the translator cannot place is refused only on a protected path or a gated record; any other file is allowed with a notice (`SPEC-24`). **Why:** review of pull request 378: the refusal overreached onto ungated files. | **substantive** |
-> | 2026-11-06 | Bumped to `0.20`. The editor hook also covers NotebookEdit and any MCP tool whose input carries a file path and content (an MCP call it cannot read is refused under `on_unjudged: deny` only on a protected path or a gated record); gate matching uses Unicode case folding and resolves a hard link to the protected or gated file it shares an inode with (Unix); the post-command check reports a change to a gitignored protected file by content hash. The accepted-risk list is rewritten to what remains, and says a change is reported once. **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378 in Phase 0, under `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.20`. `harness install` reports a refused install honestly (every item `would-create`, `would-merge` or `would-write`, nothing `created`, `merged` or `written`) and no longer advises `update --force`, which needs an install; `install` and `doctor` (`harness-legacy-hook`) warn on a settings entry whose command names a hand-copied first-generation editor hook (a script with `record-edit` in its name). **Why:** Phase 0 hardening from a second adopter switchover -- a conflict reported success states for nothing written, and the old and new editor hooks both stayed wired. | **substantive** |
+> | 2026-11-06 | Bumped to `0.21`. The editor hook also covers NotebookEdit and any MCP tool whose input carries a file path and content (an MCP call it cannot read is refused under `on_unjudged: deny` only on a protected path or a gated record); gate matching uses Unicode case folding and resolves a hard link to the protected or gated file it shares an inode with (Unix); the post-command check reports a change to a gitignored protected file by content hash. The accepted-risk list is rewritten to what remains, and says a change is reported once. **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378 in Phase 0, under `ADR-89`. | **substantive** |

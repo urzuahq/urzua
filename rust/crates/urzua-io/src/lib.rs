@@ -50,6 +50,12 @@ pub struct DiscoveredFiles {
     /// someone deleted and has not staged, and skipping both let a record
     /// vanish from the corpus with the run still reported clean (BUG-82).
     pub staged_deletions: std::collections::HashSet<PathBuf>,
+    /// Tracked record paths missing from the working tree that nothing has
+    /// staged for deletion (an `rm`, or a `mv` before `git add`). The caller
+    /// that notices them also adds them to `staged_deletions`, so they are
+    /// treated as removed; this set is what lets the run say so rather than
+    /// let a record vanish in silence (BUG-82).
+    pub unstaged_deletions: std::collections::HashSet<PathBuf>,
     pub source: DiscoverySource,
 }
 
@@ -125,6 +131,7 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
     Ok(DiscoveredFiles {
         paths,
         staged_deletions,
+        unstaged_deletions: std::collections::HashSet::new(),
         source: DiscoverySource::GitTracked,
     })
 }

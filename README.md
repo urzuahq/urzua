@@ -160,16 +160,18 @@ cd /path/to/your-repo
 
 A record type is whatever `.urzua/config.yaml` says it is. Urzua ships no hardcoded notion of "an ADR" or "an RFC."
 
-```toml
-[record_types.adr]
-dir = "docs/adr"
-required_fields = ["Status", "Date", "Author", "Deciders"]
-header_shape = "yaml-frontmatter" # or "none" for a type with no header
+```yaml
+schema_version: 2
+record_types:
+  adr:
+    dir: docs/adr
+    required_fields: [Status, Date, Author, Deciders]
+    header_shape: yaml-frontmatter # or "none" for a type with no header
 
-[record_types.incident-review]     # any record type your org actually uses
-dir = "docs/postmortems"
-required_fields = ["Status", "Severity", "Owner"]
-header_shape = "yaml-frontmatter"
+  incident-review: # any record type your org actually uses
+    dir: docs/postmortems
+    required_fields: [Status, Severity, Owner]
+    header_shape: yaml-frontmatter
 ```
 
 The header shape is declared, not guessed: YAML frontmatter, or `none` for a type whose metadata lives in prose. A record that does not match fails loud (`no header-shaped region found`, naming a removed blockquote or bold-list form when that is what it is written in), never a silent match on the wrong lines.

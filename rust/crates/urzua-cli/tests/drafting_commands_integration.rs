@@ -393,3 +393,52 @@ fn this_repository_runs_on_the_installed_bundle_with_no_drift_and_no_hook_script
     assert!(!root.join("scripts/hooks").exists());
     assert!(!root.join("scripts/draft-record.sh").exists());
 }
+
+/// MILE-200: the files that enforce the gate are protected paths in this repository's own
+/// configuration. An agent's edit to the gate action, its scripts or the release
+/// configuration is denied; a person's is not.
+#[test]
+fn an_agent_edit_to_the_files_that_enforce_the_gate_is_denied_in_this_repository() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let root = repo_root();
+    let edit = |path: &str, actor: &str| -> (i32, serde_json::Value) {
+        let request = serde_json::json!({
+            "event": "edit", "tool": "Write", "paths": [path], "content": "x\n",
+            "actor": actor, "cwd": root.to_string_lossy(),
+        });
+        let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+            .args(["harness", "run", "edit"])
+            .env_remove("URZUA_HOOK_OVERRIDE")
+            .env_remove("URZUA_HOOK_REASON")
+            .current_dir(&root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(request.to_string().as_bytes())
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        (
+            out.status.code().unwrap(),
+            serde_json::from_slice(&out.stdout).unwrap(),
+        )
+    };
+    for path in [
+        ".github/actions/urzua-gate/action.yml",
+        ".github/actions/urzua-gate/actors.sh",
+        ".github/scripts/release-invariants.sh",
+        "knope.toml",
+    ] {
+        let (code, v) = edit(path, "agent");
+        assert_eq!(code, 1, "{path}: {v}");
+        assert_eq!(v["verdict"], "block", "{path}: {v}");
+        let (code, v) = edit(path, "human");
+        assert_eq!(code, 0, "{path}: {v}");
+    }
+}

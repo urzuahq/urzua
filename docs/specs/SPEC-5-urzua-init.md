@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.10'
+Version: '0.11'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Drift detected
@@ -70,7 +70,7 @@ live, and no rule needs to know it exists.
 disk rather than taking a `--types` selection. Type selection, built-in profiles, and non-interactive
 setup for a repository with no records yet are `MILE-114`'s scope, not this spec's current subject.
 
-`init` also proposes a directory whose files are not numbered records when at least two of its markdown files carry a header and they are at least half of the directory's markdown files (a flat spec directory named by slug), with no `prefix`, and says so in an `init-scan` notice. A proposed directory none of whose files has a header is named in an `init-scan` warning notice, since it may hold pages rather than records; it stays proposed, because a Nygard-style corpus has records with no header.
+`init` also proposes a directory whose files are not numbered records when at least two of its markdown files carry a header and they are at least half of the directory's markdown files (a flat spec directory named by slug), with no `prefix`, and says so in an `init-scan` notice. A proposed directory none of whose files has a header is named in an `init-scan` warning notice, since it may hold pages rather than records; it is not proposed (a type with nothing to read is noise), and the notice says to declare it by hand if it is a record directory. A hidden directory (any path component starting with a dot, such as `.changeset`) is never proposed or mentioned, a leading dot being neither a legal type name nor a legal prefix. An unnumbered directory needs, beyond the header test above, at least two headed files carrying a `status` field (any letter case); a directory of headed pages without one (front matter holding only `title`) is named in a notice and not proposed. A type name is lower-case ASCII letters and digits in hyphen-separated segments with no all-digit segment, so its upper-cased default prefix always loads; a directory whose records share a prefix an earlier directory already holds is not proposed and is named in a notice. The rendered config is parsed before anything is written, and one that does not load is refused.
 
 ## Proposed header shape
 
@@ -97,9 +97,10 @@ the rule. Each rule's declaration is the `reads_declaration` of its entry in the
 ## Safety
 
 - **Never clobber.** An existing `.urzua/config.yaml` is not overwritten. `init` reports what exists
-  and exits 2.
-- **Idempotent, via the never-clobber refusal above.** A re-run against an initialized repository
-  exits 2 and changes nothing.
+  and exits 2. `init --dry-run` still runs, shows what adopt would propose today with a notice that
+  a config exists, and writes nothing.
+- **Idempotent, via the never-clobber refusal above.** A re-run (without `--dry-run`) against an
+  initialized repository exits 2 and changes nothing.
 - **The config is written whole or not at all** (a temporary file renamed into place), so a full disk
   or a killed process leaves no truncated `.urzua/config.yaml`, which a re-run would refuse to
   overwrite.
@@ -183,3 +184,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-04 | Bumped to `0.8`. Added `## Proposed rules`: `init` does not propose a rule that reads a per-type declaration it leaves empty (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and names each in a `rule-applicability` notice with the declaration to write. **Why:** `BUG-73`; the four rules ran over zero records on every adopted corpus. | **substantive** |
 > | 2026-11-05 | Bumped to `0.9`. `init` writes the config through a temporary file and a rename. **Why:** review of the CLI found every record and config write truncated the file before writing it. | **substantive** |
 > | 2026-11-05 | Bumped to `0.10`. `init` proposes a header-bearing directory of unnumbered files and flags a proposed directory with no header in any file, in `init-scan` notices. **Why:** Phase 0 hardening from an adopter switchover -- the spec directory was missed and two directories of pages were proposed without comment. | **substantive** |
+> | 2026-11-06 | Bumped to `0.11`. `init` never proposes a hidden directory or a directory none of whose files has a header, proposes an unnumbered directory only when at least two of its headed files carry a `status` field, legalises every type name, drops a type whose prefix an earlier one holds, refuses to write a config that does not load, and `--dry-run` runs when a config already exists. **Why:** Phase 0 hardening from a second adopter switchover -- `init` wrote a config naming a `.changeset` type that could not load, and proposed 39 types. | **substantive** |

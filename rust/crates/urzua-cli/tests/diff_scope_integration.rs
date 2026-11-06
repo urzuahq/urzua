@@ -841,19 +841,20 @@ fn retargeting_a_symlinked_config_puts_the_whole_corpus_in_scope() {
 }
 
 #[test]
-fn an_unstaged_deletion_cannot_be_loaded_so_the_run_could_not_run() {
-    // Existing behaviour (BUG-82): a tracked record missing from disk and not
-    // staged for deletion is rejected by load_records, diff-scoped or not.
+fn an_unstaged_deletion_is_judged_as_removed_diff_scoped_or_not() {
+    // A tracked record missing from disk and not staged for deletion is treated
+    // as removed and named in a notice; it does not stop the run.
     let dir = empty_repo("unstaged-delete", RICH_CONFIG);
     adr(&dir, "ADR-1-target.md", "Accepted", &[]);
     adr(&dir, "ADR-2-ref.md", "Accepted", &[("Implements", "ADR-1")]);
     tag_base(&dir);
     std::fs::remove_file(dir.join("docs/adr/ADR-1-target.md")).unwrap();
 
-    let (full_code, _) = check(&dir, &[]);
+    let (full_code, full) = check(&dir, &[]);
     let (code, report) = check(&dir, &["--base", "base"]);
-    assert_eq!(full_code, Some(2));
-    assert_eq!(code, Some(2), "{report}");
+    assert_ne!(full_code, Some(2), "{full}");
+    assert_ne!(code, Some(2), "{report}");
+    assert!(report.to_string().contains("ADR-1-target.md"), "{report}");
 }
 
 const TRANSITIONS_CONFIG: &str = "schema_version: 2

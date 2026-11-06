@@ -440,7 +440,7 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
                 conflicts.push(if owned {
                     format!("{path} is an older bundle file; run `urzua harness update`")
                 } else {
-                    format!("{path} exists and differs from the bundle; the install will not overwrite it (move it, or run `urzua harness update --force` after an install)")
+                    format!("{path} exists and differs from the bundle; the install will not overwrite a file it does not own: move or delete it and install again")
                 });
             }
         }
@@ -508,8 +508,28 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
         }
     }
 
+    // A hand-copied first-generation editor hook wired beside the bundle's.
+    for (file, s) in &shared {
+        let legacy = settings::legacy_commands(&s.doc);
+        if !legacy.is_empty() {
+            report.notice(
+                NoticeSeverity::Warning,
+                settings::legacy_warning(file, &legacy),
+            );
+        }
+    }
     if !conflicts.is_empty() {
-        report.items.retain(|_| true);
+        // Nothing is written, so no item may say it was: report what the
+        // install would do once the conflict is cleared.
+        for item in &mut report.items {
+            item.state = match item.state.as_str() {
+                "created" => "would-create",
+                "merged" => "would-merge",
+                "written" => "would-write",
+                other => other,
+            }
+            .to_string();
+        }
         return report.refuse(conflicts.join("; "));
     }
     for (file, s) in &shared {
@@ -1209,6 +1229,22 @@ pub(crate) fn doctor_checks(
                     "harness-installed",
                     format!("{d} (run `urzua harness status`; `urzua harness update` repairs it)"),
                 ));
+            }
+        }
+    }
+    if let Ok(want) = desired(&env, &adapters) {
+        let files: std::collections::BTreeSet<&String> =
+            want.entries.iter().map(|(f, _)| f).collect();
+        for file in files {
+            if let Ok(s) = load_settings(root, file) {
+                let legacy = settings::legacy_commands(&s.doc);
+                if !legacy.is_empty() {
+                    out.push((
+                        Level::Warn,
+                        "harness-legacy-hook",
+                        settings::legacy_warning(file, &legacy),
+                    ));
+                }
             }
         }
     }

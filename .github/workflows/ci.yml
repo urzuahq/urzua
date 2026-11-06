@@ -19,7 +19,8 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A push to main is never cancelled: the deploy-gating run for each main commit must finish.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read

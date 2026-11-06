@@ -99,13 +99,70 @@ fn hook_state(path: &std::path::Path) -> Result<HookState, String> {
     let content =
         std::fs::read(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let content = String::from_utf8_lossy(&content);
-    Ok(
-        if content.contains("urzua") || content.contains("make records") {
-            HookState::InstalledRunningUrzua
-        } else {
-            HookState::InstalledNotRunningUrzua
-        },
-    )
+    Ok(if invokes_urzua(&content, None, false) {
+        HookState::InstalledRunningUrzua
+    } else {
+        HookState::InstalledNotRunningUrzua
+    })
+}
+
+/// Whether `content` runs urzua: a command position, not a word in a comment
+/// or an `echo`. A line's `#` comment is dropped, and a line that only prints
+/// (`echo`, `printf`) runs nothing. The executable is any path ending in
+/// `urzua`, followed by a subcommand (`subcommand` when given). With
+/// `accept_action`, a `uses:` line naming urzua's reusable gate action counts
+/// too. The engine knows no repository's wrapper script or make target, so a
+/// repository that wraps the call is seen only through the call itself.
+fn invokes_urzua(content: &str, subcommand: Option<&str>, accept_action: bool) -> bool {
+    // Variables assigned a path that ends in `urzua` (`bin="$root/.../urzua"`),
+    // so `"$bin" check` is seen as the call it is.
+    let mut binaries: Vec<String> = Vec::new();
+    for line in content.lines() {
+        let l = line.trim_start().trim_start_matches("export ");
+        if let Some((name, value)) = l.split_once('=') {
+            let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+            if !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && value.rsplit('/').next() == Some("urzua")
+            {
+                binaries.push(name.to_string());
+            }
+        }
+    }
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        let code = match line.find(" #") {
+            Some(at) => &line[..at],
+            None => line,
+        };
+        let tokens: Vec<&str> = code
+            .split(|c: char| c.is_whitespace() || "\"'();&|`".contains(c))
+            .filter(|t| !t.is_empty())
+            .collect();
+        if matches!(tokens.first(), Some(&"echo") | Some(&"printf")) {
+            continue;
+        }
+        if accept_action && tokens.iter().any(|t| t.contains("actions/urzua-gate")) {
+            return true;
+        }
+        for pair in tokens.windows(2) {
+            let executable = pair[0].rsplit('/').next() == Some("urzua")
+                || binaries
+                    .iter()
+                    .any(|b| pair[0] == format!("${b}") || pair[0] == format!("${{{b}}}"));
+            let wanted = match subcommand {
+                Some(sub) => pair[1] == sub,
+                None => pair[1].starts_with(|c: char| c.is_ascii_alphabetic()),
+            };
+            if executable && wanted {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// What is wrong with the local git hook layers, as plain messages: the
@@ -375,10 +432,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
                     Ok(content) => {
                         // `urzua-gate` is urzua's own reusable action
                         // (MILE-180), which runs `urzua check` for the caller.
-                        if content.contains("urzua check")
-                            || content.contains("make records")
-                            || content.contains("actions/urzua-gate")
-                        {
+                        if invokes_urzua(&content, Some("check"), true) {
                             found = true;
                             break;
                         }

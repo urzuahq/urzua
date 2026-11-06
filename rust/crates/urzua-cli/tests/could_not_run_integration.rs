@@ -125,23 +125,21 @@ fn doctor_reports_a_missing_config_as_its_own_report() {
     assert_eq!(json["checks"][0]["check"], "config-exists");
 }
 
+#[cfg(unix)]
 #[test]
 fn every_corpus_command_reports_an_unreadable_tracked_record() {
     let dir = repo("unreadable");
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
-    std::fs::write(
-        dir.join("docs/adr/ADR-1-x.md"),
-        "---\nStatus: Accepted\n---\n# x\n",
-    )
-    .unwrap();
+    // A tracked record that is present but cannot be read as a file (a link to
+    // a directory): unlike an absent one, which is judged as removed, it is
+    // not a record that passes.
+    std::os::unix::fs::symlink(".", dir.join("docs/adr/ADR-1-x.md")).unwrap();
     git(&dir, &["add", "-A"]);
     git(&dir, &["commit", "-q", "-m", "fixture"]);
-    // Tracked, then removed without staging the deletion: the one absence
-    // the loader must not read as "no such record".
-    std::fs::remove_file(dir.join("docs/adr/ADR-1-x.md")).unwrap();
-    let error = "could not read 1 tracked record(s): docs/adr/ADR-1-x.md: No such file or directory (os error 2)";
+    let error =
+        "could not read 1 tracked record(s): docs/adr/ADR-1-x.md: Is a directory (os error 21)";
     for args in CORPUS_COMMANDS {
         assert_not_run(&run(&dir, args), error, &args.join(" "));
     }
