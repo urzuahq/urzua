@@ -259,12 +259,13 @@ repository `pr-approver` could never be satisfied and no acceptance could merge.
 accept the risk." These routes get past the guardrail, and they are accepted:
 
 1. **A Bash command that writes the status.** `sed -i 's/^Status: Proposed/Status: Accepted/'`, `python -c`,
-   `cp`, `tee` or a heredoc is outside the editor hook's matcher. The post-command check reports it and cannot
-   stop it.
+   `cp`, `tee` or a heredoc is outside the editor hook's matcher. The post-command check reports it, also when
+   the same command commits it, and cannot stop it.
 2. **Editing the guardrail itself by shell.** `.claude/settings.json`, the hook entries, the scripts, the git
    hooks and `.urzua/config.yaml` (`block_on`, `override_log`, a rule's `level`, the `authority` table) can be
-   changed by a Bash command, or by the agent's own settings (a local or user-level settings file the install
-   neither reads nor writes), and `git commit --no-verify` skips the commit hook.
+   changed by a Bash command, which the post-command check reports for a protected path and cannot stop, or by
+   the agent's own settings (a local or user-level settings file the install neither reads nor writes), which
+   nothing reports, and `git commit --no-verify` skips the commit hook.
 3. **A pull request that changes its own workflow.** The gate runs from the head commit's workflow, so a pull
    request can drop or weaken the gate step it is judged by. Only `CODEOWNERS` and branch protection, which
    are host settings, can stop that, and neither is configured by this decision.
@@ -414,3 +415,4 @@ convention and is not gated. The Status of this ADR stays Accepted.
 > | 2026-11-05 | Amended after independent review of the Proposed text. The acceptance guardrail now claims only what holds (edit tools refused locally, Bash reported, CI evidence is authorship) and gains an "Accepted risk" section (bypasses accepted by the maintainer); the default `evidence` is `pr-author`; the `ADR-70` question is resolved by an amendment there; actor kind joins the attestation row and `RFC-2`, `BUG-16`, `MILE-18` and `MILE-66` are cited; `harness uninstall`, settings-merge rules, the `on_unjudged: deny` escape hatch and an Open questions section are added; citation and vendor-neutrality corrections. **Why:** Maintainer decisions of 2026-11-05 on the review at pull request 355; `Status` stays Proposed. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-06 | Added an `## Amendment (2026-11-06)`, accepted by the maintainer on 2026-11-06: `require_evidence` is a config option the repository sets, the gate action always passes `--actors`, and this repository leaves it off (an action cannot set a rule option); open question 1 answered (this repository gates `Accepted`, `Rejected`, `Superseded` and `Retired` for ADRs and `Accepted`, `Rejected` and `Superseded` for RFCs). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-06, on the review of pull request 374. | **substantive** |
+> | 2026-11-06 | Accepted-risk list brought in line with the harness after a second-pass review; the decision is unchanged. A Bash write to a protected path, and any change the same command commits, is now reported by the post-command check (route 2 shrinks from silent to reported; routes 1 and 2 are still not prevented); the settings file outside the install stays unreported. An adapter failure no longer defeats `on_unjudged: deny` for `acceptance` and `protected-paths`. **Why:** the review found the report claimed more than the check did, and the adapter failing open where the configuration said deny. | **structural** |

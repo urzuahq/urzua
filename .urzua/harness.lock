@@ -15,7 +15,7 @@
     ".claude/commands/rfc.md": "sha256:d8b3308af758e3e4e7835d8bae793811c585aad0fb64f312c0f2f1a087f83fca",
     ".claude/commands/spec.md": "sha256:3b7fcb49f0893a3b6388c75406ac5f8d1be5ccb5ca2dc9c59fc3dee08079a96c",
     ".claude/commands/waiver.md": "sha256:188690a392b5a9734644b848814b5c569d436dcd6dbdd8e68087c8d13304b287",
-    ".claude/hooks/urzua-claude-code.py": "sha256:ae3db934432b86d0414002d7f8d2dad6303dd737374102dc32553b4c919cdbb1",
+    ".claude/hooks/urzua-claude-code.py": "sha256:fd8a658971d9ed711ddc6545a1875aa8b30114453f4f7c03f22ffe83001e2551",
     ".claude/hooks/urzua-record.sh": "sha256:11b063331dbb6ddea9898466c9cf4a98539bb7c8e2340185f446afdd714ef642"
   },
   "entries": [

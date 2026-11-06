@@ -106,13 +106,17 @@ fn export_json_emits_every_record_with_parsed_header_and_raw_text() {
 #[test]
 fn export_agdr_stays_unimplemented_and_json_must_be_named() {
     let dir = fixture_repo("agdr");
-    for args in [&["export", "--format", "agdr"][..], &["export"][..]] {
-        let output = run_urzua(&dir, args);
-        assert_eq!(output.status.code(), Some(2), "args: {args:?}");
-        let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(v["status"], "not-run");
-        assert!(v["error"].as_str().unwrap().contains("not implemented"));
-    }
+    let output = run_urzua(&dir, &["export", "--format", "agdr"]);
+    assert_eq!(output.status.code(), Some(2));
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["status"], "not-run");
+    assert!(v["error"].as_str().unwrap().contains("not implemented"));
+    // No default format: a bare export asks for one instead of naming agdr.
+    let output = run_urzua(&dir, &["export"]);
+    assert_eq!(output.status.code(), Some(2));
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["status"], "not-run");
+    assert!(v["error"].as_str().unwrap().contains("--format"));
 }
 
 #[test]

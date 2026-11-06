@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.5'
+Version: '0.6'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -29,7 +29,8 @@ unreadable one is not a crash: it is a stated verdict (below).
 | `paths` | list of strings | `edit` requires exactly one path, absolute or relative to `cwd`. `post-command` reads none: git names the changed paths. |
 | `content` | string or null | `edit`: the full proposed content of the file. The adapter computes it from the agent's edit. |
 | `actor` | `agent` or `human` | Who is acting. Absent means `agent`. Only `on_unjudged: deny` reads it. |
-| `cwd` | string or null | The directory the engine enters before it finds the repository. |
+| `cwd` | string or null | The directory the engine enters before it finds the repository. For `edit` with an absolute path, the repository that holds the file is used when it differs, so a `cwd` outside the repository still finds it. |
+| `adapter_error` | string or absent | `edit`: set by a translator that could not build a request (an unreadable payload, an edit it could not place). The engine builds no judgement from it: it refuses the call for an agent when `acceptance` or `protected-paths` is enabled with `on_unjudged: deny` (read from the raw configuration), and otherwise returns `allow-unjudged` with a message. |
 | `override` | `{name, reason}` or absent | A named override of the editor hook (`ADR-78`). The environment variables `URZUA_HOOK_OVERRIDE` and `URZUA_HOOK_REASON` mean the same when the field is absent. |
 
 ## The verdict
@@ -43,7 +44,7 @@ readiness problems, each `{check, message}`.
 | `allow` | 0 | Judged, nothing to report. The message counts the rules that ran and names the enabled rules a single record cannot be judged by. |
 | `allow-with-warnings` | 0 | Judged; warnings (or errors already on disk) are in `message`, nothing blocks. |
 | `block` | 1 | An unwaived error this edit introduced (`block_on`, `SPEC-3`), an unjudged edit refused by `on_unjudged: deny`, or, for an `agent` actor, a move to a status or a write to a path the `authority` table gates (`acceptance`, `protected-paths`). The last is final: a named override is not accepted for it, the message says so, and no override-log row is written. A `human` actor is not affected. |
-| `allow-unjudged` | 0 | The engine could not judge: no rule examined the record, history or configuration unreadable, the guardrail is not enabled, an unreadable request. The message says so and the edit proceeds. |
+| `allow-unjudged` | 0 | The engine could not judge: no rule examined the record, history or configuration unreadable, the guardrail is not enabled, an unreadable request, an `adapter_error`. The message says so and the edit proceeds. |
 | `allow-override` | 0 | A block was overridden by name; with `override_log` declared, one row per overridden finding is appended to it. |
 | `not-governed` | 0 | No record type governs the path. |
 
@@ -54,19 +55,31 @@ not load, the engine reads `harness.guardrails.editor-hook` from the raw file to
 does not silently turn a denying guardrail into an allowing one; a file that is not valid YAML cannot be read
 and is allowed.
 
+A failure of the adapter itself fails the same way, by the same two guardrails: the Claude Code translator
+sends `adapter_error` for an unreadable payload or an edit it cannot place, and refuses the edit itself, from
+the configuration's text, when the engine command cannot be run or answers with something that is not a
+verdict. It does so only where `acceptance` or `protected-paths` is enabled and not set to `on_unjudged: allow`;
+under any other configuration the call proceeds with a stated notice.
+
+Gate matching (`acceptance`, `protected-paths`) compares paths ASCII case-insensitively on every filesystem, and
+judges an edit through a symlink as the file it resolves to.
+
 ### The post-command verdict
 
 `urzua harness run post-command` (`ADR-78`, amendment; `MILE-202`) runs after a shell command and
 reports; it never blocks and always exits 0. It does not read the command: it lists the changed files with
 `git status --porcelain=v1 -z --no-renames --untracked-files=all` (modified, added and untracked files; a
-deleted file is dropped), keeps those a record type governs, drops those whose content hash is the one last
-reported, and runs `check PATHS` once over the rest, in process, staging nothing. Its verdict carries three
+deleted file is dropped from the records it checks but kept for protected paths) together with the files
+that differ between the commit the last post-command check saw and `HEAD` (so a command that committed its
+own change is covered), keeps those a record type governs, drops those whose content hash is the one last
+reported, and runs `check PATHS` once over the rest, in process, staging nothing. Its verdict carries these
 extra fields:
 
 | Field | Meaning |
 |---|---|
 | `findings` | The unwaived findings the checked records have now and did not have at `HEAD`, as `urzua check` prints them. |
-| `gated_moves` | One line per changed record the command moved to a status the `authority` table gates (a new record, or one whose status at `HEAD` was another), judged against `HEAD` when `acceptance` is enabled. Reported as errors of their own, never blocked; empty when none, and reported even when `check` cannot run. A Bash write to a protected path is not reported here. |
+| `gated_moves` | One line per changed record the command moved to a status the `authority` table gates (a new record, or one whose status at `HEAD` was another), judged against that commit (`HEAD` when the command committed nothing) when `acceptance` is enabled. Reported as errors of their own, never blocked; empty when none, and reported even when `check` cannot run. |
+| `protected_changes` | One line per path under an `authority` path gate that the command changed, created, deleted or committed, when `protected-paths` is enabled. Matched ASCII case-insensitively. Reported as errors of their own, never blocked, once per content hash. |
 | `pre_existing` | The unwaived findings the same record already had at `HEAD`, judged from its committed text (a record with no copy at `HEAD` has none). Listed, not new. |
 | `checked` | The records `check` ran on this time. Empty when no check ran: a clean tree, no governed record changed, the guardrail is off, or every changed record's content hash was already reported. |
 
@@ -75,8 +88,10 @@ findings with file, line, severity, rule and message, says that the command had 
 prevented, and that pre-commit and CI remain the hard gate. `allow-unjudged` is stated, never a quiet pass,
 for a `git` that cannot be run, a working tree git does not know, a configuration that does not load, an
 unreadable request and a `check` that cannot run; the message contains "NOT judged". The memory of reported
-hashes is `.urzua/cache/post-command.json` (derived, ignored by git): it keeps exactly the records that are
-changed now, so a reverted record is forgotten, and a clean tree removes it. The guardrail takes no
+hashes is `.urzua/cache/post-command.json` (derived, ignored by git): it keeps exactly the records and protected
+paths that are changed now, so a reverted one is forgotten, and a clean tree removes it. The commit the next check
+starts from is `.urzua/cache/post-command-head`, written by every check that judged and by `session-start`; when
+it is absent or no longer in the history the working tree is compared with `HEAD` only. The guardrail takes no
 `on_unjudged`.
 
 ## Adapter layout
@@ -154,3 +169,4 @@ out of the shared files, and deletes the lock last.
 > | 2026-11-06 | Bumped to `0.3`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |
 > | 2026-11-06 | Bumped to `0.4`. The adapter layout gains `commands/` and the manifest key `commands_dir` (`MILE-199`); `status` reports a bundle file the lock does not know yet as `missing`. **Why:** `ADR-89` section 1. | **substantive** |
 > | 2026-11-06 | Bumped to `0.5`. Drops the not-covered entry for cutting this repository over: it runs on the installed bundle (`SPEC-19`). **Why:** `MILE-204`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.6`. Adds the request field `adapter_error` and the adapter-failure rule for `on_unjudged: deny` (`acceptance`, `protected-paths`), the post-command verdict field `protected_changes`, the commit range and `post-command-head` memory, and the case-insensitive and symlink-resolving gate matching. **Why:** the second-pass review of the harness. | **substantive** |

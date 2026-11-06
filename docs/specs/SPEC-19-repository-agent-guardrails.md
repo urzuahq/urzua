@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.17'
+Version: '0.18'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -120,7 +120,11 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   reports the unwaived findings to the agent as context. It reads no command, stages nothing, never blocks and
   always exits 0; pre-commit and CI remain the hard gate. With `acceptance` enabled it also reports, as an error of
   its own, a changed record whose status is one the `authority` table gates and that `HEAD` did not hold (a
-  Bash-made acceptance); a Bash write to a protected path is not reported by it. A record failing at `HEAD` is listed as pre-existing,
+  Bash-made acceptance), and, with `protected-paths` enabled, a changed, created or deleted path under a
+  protected-paths gate (a Bash-made write to `.claude` or `.urzua/config.yaml`), as a report only. A command that commits its own
+  change is covered too: the commit the last check saw is kept in `.urzua/cache/post-command-head` (seeded at session
+  start) and the files changed since it are examined with the working tree's, a record compared with that commit
+  rather than `HEAD`. A record failing at `HEAD` is listed as pre-existing,
   a record whose content hash was already reported is not checked again, a deleted record is not judged, and a
   `git` that is absent, a tree git does not know, a configuration that does not load or a `check` that cannot
   run is stated as NOT judged. The request, verdict and memory are in `SPEC-24`. This repository enables it in
@@ -160,12 +164,18 @@ and this section claims only what each place does.
 
 - **Locally, the edit tools are refused.** With `harness.guardrails.acceptance` and `protected-paths`
   enabled, `urzua harness run edit` denies an agent's Write, Edit or MultiEdit that moves an ADR or RFC to
-  `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `.git-hooks`, `.github/workflows` or
-  `.urzua/config.yaml`. The deny cannot be overridden: the override of `ADR-78` is a name in an environment
+  `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `.git-hooks`, `.github/workflows`,
+  `.urzua/config.yaml` or `.urzua/templates` (the templates shape every new record). Paths match ASCII case-insensitively, always, on every
+  filesystem, so `.Claude/settings.json` is the protected file on a case-insensitive one; an edit through a symlink is judged as
+  the file it resolves to; and the repository is the one that holds the file being edited, so an edit made from a `cwd` outside it is
+  still judged. The deny cannot be overridden: the override of `ADR-78` is a name in an environment
   variable the agent controls, so it is not accepted for this verdict, and the output says so. A person
   edits outside the agent harness and is not affected; that is also the escape hatch when a denying
   guardrail cannot judge (a broken `authority` table, a missing binary), and `urzua doctor` and the verdict
-  say so. This repository declares both gates and has the Claude Code bundle installed, so the refusal is
+  say so. An edit the adapter could not hand to the engine (an unreadable payload, an edit whose text the
+  translator cannot place, an engine that cannot be run) is refused the same way when `acceptance` or
+  `protected-paths` is on with `on_unjudged: deny`, and only then; where the configuration allows, it is allowed with a
+  stated notice. This repository declares both gates and has the Claude Code bundle installed, so the refusal is
   wired into an agent session here.
 - **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), fed an `--actors` file the gate
   action (`.github/actions/urzua-gate`, input `actors: "true"`) writes from the GitHub API, requires the pull
@@ -175,7 +185,7 @@ and this section claims only what each place does.
   working by hand, can still accept a record and commit it.
 - **Accepted risk.** The maintainer decided on 2026-11-05: "We just need to clearly document this for now
   and accept the risk." These get past the guardrail: (1) a Bash command that writes the status
-  (`sed -i`, `python -c`, `cp`, `tee`, a heredoc), which the post-command check reports (a gated status move; a protected path written by shell is not) and cannot stop;
+  (`sed -i`, `python -c`, `cp`, `tee`, a heredoc), which the post-command check reports (a gated status move, or a change to a protected path; also when the same command commits it) and cannot stop;
   (2) editing the guardrail itself by shell or through a settings file the install does not read, and
   `git commit --no-verify`; (3) a pull request that changes its own workflow, since the gate runs from the
   head commit's workflow, which only `CODEOWNERS` and branch protection (the host's settings) could stop;
@@ -241,3 +251,4 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.15`. Documents the acceptance and protected-path guardrails (`MILE-200`): the local refusal of an agent's edit-tool move to a gated status or write to a protected path (final, not liftable by the override), `diff.decider-required` fed by the gate action's actors file as authorship evidence only, and the "Accepted risk" statement (the Bash, shell-edited guardrail, self-modifying workflow and shared-token routes, accepted by the maintainer on 2026-11-05). The post-command check also reports a Bash-made move to a gated status, judged against `HEAD`. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |
 > | 2026-11-06 | Bumped to `0.16`. Documents the generated drafting command for every record type, `/amend`, `/repin` and `/done` and the helper they call (`MILE-199`): what each refuses, that `/done` sets a state only through `urzua fix --apply` and `fix` refuses a state an `authority` gate names, and that this repository commits the commands for the types it lacked while `/adr`, `/rfc` and `/milestone` stay hand-written until `MILE-204`. **Why:** `ADR-89` section 1, `ADR-70` amendment of 2026-11-05. | **substantive** |
 > | 2026-11-06 | Bumped to `0.17`. This repository runs on the installed bundle: `/adr`, `/rfc` and `/milestone` are generated (their type-specific guidance moved into the type templates), `scripts/hooks` and `scripts/draft-record.sh` are deleted, the protected-path list no longer names `scripts/hooks`, and the commands run the helper through `bash` (a file the install writes carries no executable bit, so the direct call was denied). **Why:** `MILE-204`, `ADR-89` section 6. | **substantive** |
+> | 2026-11-06 | Bumped to `0.18`. The post-command check also reports a changed protected path (report only) and covers a commit made inside the command, comparing with the commit the last check saw; the edit gates match paths ASCII case-insensitively, judge a symlink edit as its target, find the repository from the file edited when `cwd` is outside it, and `.urzua/templates` is a protected path here; an adapter failure is refused where `acceptance` or `protected-paths` is on with `on_unjudged: deny`. **Why:** the second-pass review of `MILE-198` to `MILE-204` found the shell route to the guardrails silent, a commit hiding the change, and four ways an edit went unjudged although the configuration said deny. | **substantive** |

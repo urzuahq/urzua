@@ -247,7 +247,7 @@ this one: that one guards an already-decided record's content; this one guards t
 
 `authority` in `.urzua/config.yaml` (`ADR-89` section 4, `SPEC-3`) names the maintainer as the only
 decider for an ADR or RFC moving to `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`) and for the protected paths (`.claude`,
-`.git-hooks`, `.github/workflows`, `.urzua/config.yaml`). Through `urzua harness run
+`.git-hooks`, `.github/workflows`, `.urzua/config.yaml`, `.urzua/templates`; matched without regard to letter case). Through `urzua harness run
 edit` the engine refuses an agent's Write, Edit or MultiEdit that does either, and no override lifts it;
 a person edits outside the agent harness. In CI `diff.decider-required` checks that the pull request's
 author is the maintainer. That is **authorship, not who decided**: agents here run under the
@@ -257,7 +257,7 @@ maintainer's token, so it cannot tell an agent from the maintainer.
 the risk").** These routes get past the guardrail and are accepted, so the rule that you never accept a
 record or touch a guardrail rests on this file and on the person reading the diff: a Bash command that
 writes a `Status` (`sed -i`, `python -c`, `cp`, `tee`, a heredoc), which the post-command check reports
-(a move to a gated status; a protected path written by shell is not reported) and cannot stop; editing the guardrails by shell, through a local or user-level settings file, or
+(a move to a gated status or a change to a protected path, also when the same command commits it) and cannot stop; editing the guardrails by shell, through a local or user-level settings file, or
 skipping the commit hook with `--no-verify`; a pull request that changes its own workflow, since the
 gate runs from the head commit's workflow; and an agent acting as the maintainer. A distinct agent
 identity with `CODEOWNERS` and branch protection is a future option, not configured. Do none of these.
@@ -270,7 +270,8 @@ identity with `CODEOWNERS` and branch protection is a future option, not configu
   `Write`, `Edit` or `MultiEdit` of a governed record before it is written, by running `urzua check
   --stdin-path`. It blocks an unwaived error the edit introduced (`block_on: introduced`; `block_on:
   all` in `.urzua/config.yaml` blocks any). Warnings are shown, not blocking. It does not cover
-  edits made through `Bash`, and it allows an edit it could not judge with a message saying so, so
+  edits made through `Bash`, and it allows an edit it could not judge with a message saying so (except
+  where `acceptance` or `protected-paths` is on with `on_unjudged: deny`, which refuses one), so
   run `urzua check` before committing either way.
 - **When it blocks, fix the record.** Never set `URZUA_HOOK_OVERRIDE` or `--override` yourself. An
   override needs a named human, and every one is appended to `.urzua/override-log.md`, where
