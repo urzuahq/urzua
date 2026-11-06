@@ -1,5 +1,5 @@
 ---
-Version: '0.93'
+Version: '0.95'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -567,7 +567,7 @@ Non-reference-ids: ADR-72
   the records and ids. A notice never changes the exit code.
 - Adding the field to an Accepted record is a `structural` revision-log row, not an amendment.
 
-## Declared, not parsed: `claim.status-agreement`'s `closes` and `strict`
+## Declared, not parsed: `claim.status-agreement`'s `closes`, `strict` and `verb_claims`
 
 A changeset fragment says which records it closes as data, in a frontmatter key, and
 `claim.status-agreement` checks the data instead of a sentence (`BUG-66`, `ADR-85`):
@@ -580,6 +580,7 @@ rules:
     closed_statuses: ["Fixed", "Done"]   # the verb reading's list; see below
     closes: closes                       # optional: the frontmatter key; none declared, nothing below applies
     strict: true                         # optional, default false, needs closes
+    verb_claims: false                   # optional, default true, needs closes; false stops prose being read
 ```
 
 ```yaml
@@ -596,6 +597,15 @@ closes: [BUG-60, BUG-61]
   key a finding (`claim.field-missing`), so a fragment that names a record without saying whether it
   closes it is caught. `closes: []` is the declaration that it closes nothing. `strict` without
   `closes` is a load-time error, and so is either option on any other rule.
+- **`verb_claims`** (`true` by default, `ADR-88`, `MILE-197`) set to `false` turns the closing-verb
+  reading off: no line of a fragment, frontmatter or body, is read as a prose claim, so only the
+  `closes` field is a claim, and `check` prints an `Info` notice that the reading is off instead of
+  a count. It is independent of `strict`, and the two compose: `strict` requires the key,
+  `verb_claims` stops prose being read. A repository that turns prose off should keep `strict` on,
+  because a fragment without the key then has no claim at all; with `verb_claims: false` and
+  `strict` off, `check` adds a notice saying so. `verb_claims` without `closes` is a load-time
+  error whether the value is `true` or `false`, and so is the option on any other rule. Absent, the
+  reading is unchanged. Removing the reading from the engine is a separate decision.
 - **The value is one line:** a flow list `[A-1, B-2]`, a single id, or `[]`. Single or double
   quotes around an id are read as the id. The parser is deliberately small: it reads the `---`
   block the file begins with, reads only the declared key, and ignores every other key, including the
@@ -620,9 +630,9 @@ closes: [BUG-60, BUG-61]
   `could_not_read_changeset`); without `strict` it is read as no frontmatter, as before.
 - **Prose is not read for this claim.** The frontmatter block is skipped by the closing-verb
   reading once `closes` is declared, so the key is not read again as the verb "closes". That reading
-  still runs over the body, unchanged, as a deprecated convenience; `check` prints an `Info` notice
-  with how many closing-verb claims it found, so a repository can see when it is safe to stop. Removing
-  it is a separate decision.
+  still runs over the body, unchanged, as a deprecated convenience, unless `verb_claims: false` turns
+  it off; `check` prints an `Info` notice with how many closing-verb claims it found, so a repository
+  can see when it is safe to stop. Removing it is a separate decision.
 - **The release tool must tolerate the key.** The pinned knope accepts a one-line list, a scalar
   and `[]`, ignores the key and gives the same bump and changelog, and rejects a block list and a
   list continued over two lines. `.github/scripts/knope-closes-compat.test.sh` runs the pinned knope
@@ -1093,12 +1103,13 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
 roadmap:
   pairs: ["sequencing"]          # relation_pairs entries that are dependencies
   group_by: ["Phase", "Track"]   # header fields to group by, outermost first
+  work_types: ["milestone", "bug"]  # record types that are work; absent means every type
 ```
 
 `urzua roadmap` (output in `SPEC-2`) computes one graph over the pairs `pairs` names. A pair can be
 `acyclic` without being a dependency: a containment pair (`Parent`/`Children`) is checked for cycles,
 but a child does not wait on its parent finishing, so only the pairs named here order work. Both keys
-are optional and default to empty. Absent `pairs` means no roadmap: the command says so in a note and
+are optional and default to empty, and so is `work_types`. Absent `pairs` means no roadmap: the command says so in a note and
 `export --format json` carries no `roadmap` key.
 
 - `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
@@ -1107,10 +1118,19 @@ are optional and default to empty. Absent `pairs` means no roadmap: the command 
 - `group_by`: each name must be a field some record type declares (`required_fields` or
   `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
   A field no open record carries is not an error; the roadmap notes it.
+- `work_types` (`ADR-82` Amendment of 2026-11-05, `MILE-196`): the `record_types` keys whose records the
+  roadmap orders. A record of any other type still blocks its dependents but is not in `waves`,
+  `ready`, `critical_path`, `records` or `groups`, and the output gains a `waiting_on` list (`SPEC-2`).
+  The engine names no type: a repository lists the types that are work, and leaves out any type that
+  models a fact, a signal or an awaited decision (`SPEC-23`). Absent, every type is work and the output
+  is unchanged. `sequence.cycle` and `sequence.status-agreement` never read it. With no `pairs` it is
+  accepted and inert.
 
 Load-time errors, reported as `roadmap: ...`: a `pairs` name that is not a declared pair, one that does
 not declare `acyclic: true`, a repeated `pairs` or `group_by` entry, a blank or padded `group_by` name,
-and a `group_by` name no type declares. A declaration that can never apply would read as a clean
+a `group_by` name no type declares, and a `work_types` entry that is not a `record_types` key, that
+is listed twice, or that is blank or padded, or an empty `work_types` list (a declaration that nothing
+is work orders nothing). A declaration that can never apply would read as a clean
 roadmap, so it is refused (`ADR-7`).
 
 Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
@@ -1896,4 +1916,6 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.90`. `urzua index --apply` replaces an artifact through a temporary file and a rename. **Why:** review of the CLI found the write truncated the file first. | **substantive** |
 > | 2026-11-05 | Bumped to `0.91`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |
 > | 2026-11-05 | Bumped to `0.92`. The compiled-in `field.pending` match reads `pending` as a whole word and ignores a path-shaped token, so `spending` and `docs/pending-settlement/x.md` are no longer pending; a type declaring `statuses.pending` is unchanged. **Why:** Phase 0 hardening from an adopter switchover -- a waiver `Scope` path containing `spending` was reported as unfinished work. | **substantive** |
-> | 2026-11-05 | Bumped to `0.93`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.93`. Documents `roadmap.work_types` (`MILE-196`): the optional list of record types that are work, its effect on `urzua roadmap`, and its `roadmap: ...` load errors (an unknown, repeated or blank name, and an empty list). **Why:** `ADR-82`'s Amendment of 2026-11-05, accepted by the maintainer. | **substantive** |
+> | 2026-11-05 | Bumped to `0.94`. Documents the `verb_claims` option of `claim.status-agreement` (`MILE-197`): `false` turns the closing-verb reading off so only `closes` is a claim; default `true`; a load error without `closes` (either value) or on any other rule; a notice when set without `strict`. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
+> | 2026-11-05 | Bumped to `0.95`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |

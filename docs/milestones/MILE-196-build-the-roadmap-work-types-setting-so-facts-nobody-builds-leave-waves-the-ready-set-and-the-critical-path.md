@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NVCAB8J6WF7579JXM1PPYF
-Status: Planned
+Status: Done
+Realized-by: code:rust/crates/urzua-core/src/rules/roadmap.rs, code:rust/crates/urzua-core/src/config.rs, code:.urzua/config.yaml, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-23-the-condition-record-type.md, test:rust/crates/urzua-cli/tests/work_types_integration.rs
 Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-82
@@ -31,3 +32,4 @@ Since `MILE-187` (#349) the open `condition` records `COND-1` to `COND-4` are in
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** Maintainer decision, 2026-11-05: amend `ADR-82` with an opt-in `roadmap.work_types` so facts nobody builds leave the ready set; the amendment is proposed and this milestone waits for the maintainer to accept it. | **substantive** |
 > | 2026-11-05 | Done means now requires a test for the contracted chain through a non-work record, and that `ready` is a subset of wave 0 (`SPEC-2` says so). **Why:** review of `#350`: waves must agree with `blocks`. | **substantive** |
+> | 2026-11-05 | `Status` Planned -> Done; `Realized-by` added. **Why:** Done means is met and the maintainer accepted the `ADR-82` Amendment (`#365`). `roadmap.work_types` loads (an unknown, repeated, blank or padded name and an empty list are each a `roadmap: ...` error); absent, `roadmap` and `export --format json` are byte-identical to before on this repository and a fixture corpus and carry no `waiting_on`; declared, a non-work record gates but is in no wave, `ready`, `critical_path`, `records`, `groups` or `needs_replan`, waves and the critical path contract through non-work chains (the worked example is a test, for `Open`, `Met` and `Dropped`), `ready` is a subset of wave 0, and `waiting_on` lists the unfinished non-work records; `sequence.cycle` and `sequence.status-agreement` give the same findings with and without it. `SPEC-2`, `SPEC-3` and `SPEC-23` have revision rows, and this repository lists every type but `condition`, so `COND-1` to `COND-4` are in no wave, not ready and off the critical path while `MILE-13`, `MILE-21`, `MILE-23` and `MILE-30` stay blocked and listed under `waiting_on`. | **substantive** |
