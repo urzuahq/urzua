@@ -1,5 +1,5 @@
 ---
-Version: '0.108'
+Version: '0.109'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -204,7 +204,9 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   working tree, so a branch is not charged for what its base gained since the fork, and staged and
   unstaged edits to tracked files count. Untracked files never do (the tracked-only guarantee
   above). A rename is a deletion plus an addition, and a deleted path is simply not a record any
-  more.
+  more. A tracked record missing from the working tree that nothing has staged for deletion (an `rm`,
+  or a `mv` before `git add`) is treated the same way, as removed, and a `missing-record` warning
+  notice names it, so a record never vanishes in silence and the run is not `not-run`.
 - The **examined set** is the changed records plus their dependents, and `files_examined`,
   `records_read_by_any_rule` and the findings are limited to it. A dependent is an unchanged record
   that (a) names a changed or deleted record's id in any header field (a pointer, narrative or
@@ -678,7 +680,9 @@ declaration. Selection narrows what runs and never enables anything (`ADR-53`).
   has to infer a filter from the length of `rules_executed`.
 - **An excluded rule is omitted from `rules_executed`.** It is not listed as `not-enabled`, which would
   say the repository declined a policy it declared, and it is not run: a selection that leaves out
-  `embodiment.consistency` skips the git history that rule reads. `status`, `blocking` and the exit code
+  `embodiment.consistency` skips the git history that rule reads, and one that leaves out the
+  back-pointer and boundary rules does not read the source files under `back_pointer_paths` or the
+  published boundary files. `status`, `blocking` and the exit code
   are computed over the rules that ran exactly as over a full run. A rule that is selected but
   declared `off` is listed `not-enabled`, so a selection of only such rules is `not-run` (exit 2), as a
   run with nothing enabled always is.
@@ -969,3 +973,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.106`. The `claim.status-agreement` rule description and notice cover `verb_claims` (`MILE-197`): with it `false` no prose is read for a claim and `check` states that the reading is off instead of counting, and adds a notice when `strict` is off. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
 > | 2026-11-05 | Bumped to `0.107`. A population gains the additive `deferred_by_scope` counter (present only when non-zero) for a rule that declares `scope: changed`, separate from `out_of_scope`, with one `info` notice per such rule; `waiver.matches-nothing` leaves a waiver on such a rule eligible and unexamined; `urzua rules` prints each rule's `options` and `judges`. The `embodiment.locator-on-back-pointer-path` rule-table row is regenerated. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.108`. Adds the opt-in rule `diff.decider-required` and `check --actors FILE` (`MILE-200`): a gated status move or protected-path change in a `--base` diff needs the pull request's author or a current approver in the gate's decider group, read from an actors file the caller supplies; `info` locally and an error under `require_evidence` with no file, `not-applicable` with no `--base`; it proves authorship only. A rule table row and two finding variants (exempt) are generated. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |
+> | 2026-11-06 | Bumped to `0.109`. A tracked record missing from the working tree and not staged for deletion is judged as removed and named in a `missing-record` warning notice, where it made the whole run `not-run`; a `--rules` selection reads the back-pointer sources and published boundary files only for the rules that read them. **Why:** Phase 0 hardening from a second adopter switchover -- one `rm` stopped every check and the editor hook could not judge, and a header-only rule paid for scanning every source file. | **substantive** |
