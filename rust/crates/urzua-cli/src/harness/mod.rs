@@ -18,6 +18,7 @@ mod bundle;
 mod gate;
 mod json;
 mod lock;
+mod post_command;
 mod run;
 mod settings;
 
@@ -33,6 +34,7 @@ use crate::session::Workspace;
 use json::J;
 use lock::{BlockHash, EntryHash, Lock, LOCK_PATH};
 
+pub use post_command::run_post_command;
 pub use run::{run_edit, run_session_start};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");

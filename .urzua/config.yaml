@@ -493,17 +493,21 @@ attestation:
   identity: gh-verified
   require_verified: false
 
-# The agent harness this repository declares (ADR-89 section 3, MILE-200). Only the two gates are
-# turned on here: `urzua harness run edit` refuses an agent's Write, Edit or MultiEdit that moves a
-# record to a gated status or writes a protected path (the override of ADR-78 does not lift it), and
-# a person edits outside the agent harness. Both default to on_unjudged: deny. The editor hook and
-# the installed bundle itself are MILE-204's cutover from scripts/hooks.
+# The agent harness this repository declares and has installed (ADR-89, MILE-200, MILE-202).
+# `urzua harness install` writes the adapter's hook entries and translator; a guardrail is on only
+# when named. `acceptance` and `protected-paths` make `urzua harness run edit` refuse an agent's
+# Write, Edit or MultiEdit that moves a record to a gated status or writes a protected path (the
+# override of ADR-78 does not lift it); a person edits outside the agent harness. Both default to
+# on_unjudged: deny. `post-command` reports, never blocks, what a Bash command changed.
 harness:
   adapters: [claude-code]
   instructions_file: AGENTS.md
   guardrails:
     acceptance: {enabled: true}
     protected-paths: {enabled: true}
+    editor-hook: {enabled: true}
+    post-command: {enabled: true}
+    session-start: {enabled: true}
 # Who may accept a record and change a protected path (ADR-89 section 4, MILE-200, SPEC-3). CI reads
 # this through diff.decider-required and the actors file the gate action writes; the evidence is the
 # pull request's author (`pr-author`, the default: a host bars an author from approving their own
