@@ -473,3 +473,54 @@ fn export_and_import_require_a_format_and_the_help_says_which_is_implemented() {
     assert!(!text.contains("Only Tier 1"), "{text}");
     assert!(text.contains("--rebaseline"), "{text}");
 }
+
+// --------------------------- the drafting helper's binary variable, the docs
+
+#[test]
+fn the_drafting_helper_honours_urzua_bin_and_still_accepts_urzua() {
+    let dir = fixture("helper-bin", &config(""));
+    let helper = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("bundle/claude-code/files/.claude/hooks/urzua-record.sh");
+    let fake = dir.join("fake-urzua");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\necho called >> \"$0.log\"\necho '{\"path\": \"x.md\"}'\n",
+    )
+    .unwrap();
+    bash(&dir, "chmod +x fake-urzua");
+    for var in ["URZUA_BIN", "URZUA"] {
+        let _ = std::fs::remove_file(dir.join("fake-urzua.log"));
+        let out = Command::new("bash")
+            .arg(&helper)
+            .args(["new", "adr", "T"])
+            .current_dir(&dir)
+            .env("PATH", "/usr/bin:/bin")
+            .env_remove("URZUA_BIN")
+            .env_remove("URZUA")
+            .env(var, &fake)
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(!err.contains("no urzua binary"), "{var}: {err}");
+        assert!(
+            dir.join("fake-urzua.log").exists(),
+            "{var} was not used: {err}"
+        );
+    }
+}
+
+#[test]
+fn the_installed_instructions_say_the_post_command_check_reports_a_shell_edit_of_a_guardrail() {
+    let text = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("bundle/instructions.md"),
+    )
+    .unwrap();
+    assert!(
+        text.contains("post-command check reports it after the command"),
+        "{text}"
+    );
+    // And it is true: the shell edit of a guardrail is reported (see the first test).
+    let dir = fixture("instructions-true", &config(""));
+    bash(&dir, "echo '# x' >> .urzua/config.yaml");
+    assert_eq!(post(&dir)["protected_changes"].as_array().unwrap().len(), 1);
+}

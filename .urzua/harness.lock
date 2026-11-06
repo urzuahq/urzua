@@ -16,7 +16,7 @@
     ".claude/commands/spec.md": "sha256:3b7fcb49f0893a3b6388c75406ac5f8d1be5ccb5ca2dc9c59fc3dee08079a96c",
     ".claude/commands/waiver.md": "sha256:188690a392b5a9734644b848814b5c569d436dcd6dbdd8e68087c8d13304b287",
     ".claude/hooks/urzua-claude-code.py": "sha256:fd8a658971d9ed711ddc6545a1875aa8b30114453f4f7c03f22ffe83001e2551",
-    ".claude/hooks/urzua-record.sh": "sha256:11b063331dbb6ddea9898466c9cf4a98539bb7c8e2340185f446afdd714ef642"
+    ".claude/hooks/urzua-record.sh": "sha256:796e939b7a48e5e10b40be558a302b04f96e6ffdb00b3bb06dbe06bee51ae6b6"
   },
   "entries": [
     {
@@ -43,7 +43,7 @@
   "blocks": [
     {
       "file": "AGENTS.md",
-      "hash": "sha256:d8d2cf4f6afb05e9834e7c36ac073efd9f0ec75bb470e765316c9c662d309ec3"
+      "hash": "sha256:0f0425819cf28199f344549fbc961d394b5e652770497257d79ac4ff278e5900"
     }
   ]
 }
