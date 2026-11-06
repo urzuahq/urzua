@@ -1,5 +1,5 @@
 ---
-Version: '0.93'
+Version: '0.94'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1125,12 +1125,13 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
 roadmap:
   pairs: ["sequencing"]          # relation_pairs entries that are dependencies
   group_by: ["Phase", "Track"]   # header fields to group by, outermost first
+  work_types: ["milestone", "bug"]  # record types that are work; absent means every type
 ```
 
 `urzua roadmap` (output in `SPEC-2`) computes one graph over the pairs `pairs` names. A pair can be
 `acyclic` without being a dependency: a containment pair (`Parent`/`Children`) is checked for cycles,
 but a child does not wait on its parent finishing, so only the pairs named here order work. Both keys
-are optional and default to empty. Absent `pairs` means no roadmap: the command says so in a note and
+are optional and default to empty, and so is `work_types`. Absent `pairs` means no roadmap: the command says so in a note and
 `export --format json` carries no `roadmap` key.
 
 - `pairs`: each name must be a declared `relation_pairs` entry that sets `acyclic: true`, listed once.
@@ -1139,10 +1140,19 @@ are optional and default to empty. Absent `pairs` means no roadmap: the command 
 - `group_by`: each name must be a field some record type declares (`required_fields` or
   `known_fields`), listed once, with no surrounding whitespace. The engine names no grouping field.
   A field no open record carries is not an error; the roadmap notes it.
+- `work_types` (`ADR-82` Amendment of 2026-11-05, `MILE-196`): the `record_types` keys whose records the
+  roadmap orders. A record of any other type still blocks its dependents but is not in `waves`,
+  `ready`, `critical_path`, `records` or `groups`, and the output gains a `waiting_on` list (`SPEC-2`).
+  The engine names no type: a repository lists the types that are work, and leaves out any type that
+  models a fact, a signal or an awaited decision (`SPEC-23`). Absent, every type is work and the output
+  is unchanged. `sequence.cycle` and `sequence.status-agreement` never read it. With no `pairs` it is
+  accepted and inert.
 
 Load-time errors, reported as `roadmap: ...`: a `pairs` name that is not a declared pair, one that does
 not declare `acyclic: true`, a repeated `pairs` or `group_by` entry, a blank or padded `group_by` name,
-and a `group_by` name no type declares. A declaration that can never apply would read as a clean
+a `group_by` name no type declares, and a `work_types` entry that is not a `record_types` key, that
+is listed twice, or that is blank or padded, or an empty `work_types` list (a declaration that nothing
+is work orders nothing). A declaration that can never apply would read as a clean
 roadmap, so it is refused (`ADR-7`).
 
 Enabling `sequence.cycle` or `sequence.unresolved-blocker` while no pair declares `acyclic: true` is a load error, for the reason
@@ -1883,4 +1893,5 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.90`. `urzua index --apply` replaces an artifact through a temporary file and a rename. **Why:** review of the CLI found the write truncated the file first. | **substantive** |
 > | 2026-11-05 | Bumped to `0.91`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |
 > | 2026-11-05 | Bumped to `0.92`. The compiled-in `field.pending` match reads `pending` as a whole word and ignores a path-shaped token, so `spending` and `docs/pending-settlement/x.md` are no longer pending; a type declaring `statuses.pending` is unchanged. **Why:** Phase 0 hardening from an adopter switchover -- a waiver `Scope` path containing `spending` was reported as unfinished work. | **substantive** |
-> | 2026-11-06 | Bumped to `0.93`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
+> | 2026-11-05 | Bumped to `0.93`. Documents `roadmap.work_types` (`MILE-196`): the optional list of record types that are work, its effect on `urzua roadmap`, and its `roadmap: ...` load errors (an unknown, repeated or blank name, and an empty list). **Why:** `ADR-82`'s Amendment of 2026-11-05, accepted by the maintainer. | **substantive** |
+> | 2026-11-06 | Bumped to `0.94`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
