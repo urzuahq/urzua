@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4EKB28QJCG9KDSD12V
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-06

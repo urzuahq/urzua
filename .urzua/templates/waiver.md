@@ -1,5 +1,6 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Rule: rule.identifier this waiver covers, e.g. field.quality
 > Scope: a file path this waiver covers, or `*` for every file the rule examines
 > Reason: why this exception is reviewed and accepted, not left to drift

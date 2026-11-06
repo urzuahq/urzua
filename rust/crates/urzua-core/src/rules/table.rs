@@ -520,7 +520,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
         header_none: HeaderNone::OutOfScope,
         options: &[],
         actions: &[
-            VariantAction::new("target-status-undeclared", ActionDecl::CONFIG_SET),
+            VariantAction::new("target-status-undeclared", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("target-status-undeclared-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
@@ -1062,10 +1063,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("companion-field-missing", ActionDecl::CONFIG_APPEND),
             VariantAction::new("companion-pair-undeclared", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("companion-field-missing-declare-set", ActionDecl::CONFIG_SET),
+            VariantAction::new("companion-pair-undeclared-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| config_companion_declaration_missing(c.config, c.config_path),
+        run: |c| config_companion_declaration_missing(c.config, c.config_path, c.records),
     },
     RuleDef {
         id: RULE_CONFIG_POINTER_DECLARATION_MISSING,
@@ -1104,11 +1107,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pointer-field-not-known", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("pointer-field-not-known-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            config_pointer_field_not_known(c.config, c.config_path)
+            config_pointer_field_not_known(c.config, c.config_path, c.records)
         },
     },
     RuleDef {
@@ -1169,11 +1173,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("relation-field-not-known", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("relation-field-not-known-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            config_relation_field_not_known(c.config, c.config_path)
+            config_relation_field_not_known(c.config, c.config_path, c.records)
         },
     },
     RuleDef {

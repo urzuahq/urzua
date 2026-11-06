@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK5F9GRPBMYF7DMG289H
 Version: '0.12'
 Date: 2026-09-08
 Status: Shipped

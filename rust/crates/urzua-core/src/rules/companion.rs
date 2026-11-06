@@ -1,6 +1,48 @@
 use super::*;
 use crate::config::RelationRole;
 
+/// The suggested action for one companion finding. With `known_fields`
+/// declared, the missing field is appended. With none declared, appending
+/// would create a one-item list and switch `header.field-set-consistency` on
+/// for the type, so the suggestion sets the full set instead; for a pair of
+/// which neither field is declared, it adds both.
+fn companion_source(
+    type_name: &str,
+    type_config: &crate::config::RecordTypeConfig,
+    records: &[Record],
+    missing: Option<&str>,
+    names: &[&str; 2],
+) -> ActionSource {
+    let key_path = ["record_types", type_name, "known_fields"];
+    match missing {
+        Some(field) => super::declaration::known_fields_source(
+            "companion-field-missing",
+            "companion-field-missing-declare-set",
+            type_name,
+            type_config,
+            records,
+            field,
+        ),
+        None if type_config.known_fields.is_none() => {
+            let mut source = super::declaration::known_fields_source(
+                "companion-pair-undeclared-declare-set",
+                "companion-pair-undeclared-declare-set",
+                type_name,
+                type_config,
+                records,
+                names[0],
+            );
+            if let Some(crate::report::ActionValue::List(list)) = source.value.as_mut() {
+                list.push(names[1].to_string());
+                list.sort();
+                list.dedup();
+            }
+            source
+        }
+        None => ActionSource::new("companion-pair-undeclared").key_path(key_path),
+    }
+}
+
 /// Rule (`BUG-41`): a type declaring a companion pair declares both fields of
 /// it. The pairs are the type's `companion_fields` (relation role keys),
 /// resolved to field names through `relation_fields`; no pair is known to the
@@ -11,6 +53,7 @@ use crate::config::RelationRole;
 pub fn config_companion_declaration_missing(
     config: &Config,
     config_path: &std::path::Path,
+    records: &[Record],
 ) -> (RuleExecution, Vec<Finding>) {
     schema_inventory_rule(
         config,
@@ -53,22 +96,13 @@ pub fn config_companion_declaration_missing(
                     waived: None,
                     declared_severity: None,
                     suggested_action: None,
-                    action_source: {
-                        let source = ActionSource::new(if missing.is_some() {
-                            "companion-field-missing"
-                        } else {
-                            "companion-pair-undeclared"
-                        })
-                        .key_path([
-                            "record_types",
-                            type_name,
-                            "known_fields",
-                        ]);
-                        match missing {
-                            Some(field) => source.text(field),
-                            None => source,
-                        }
-                    },
+                    action_source: companion_source(
+                        type_name,
+                        type_config,
+                        records,
+                        missing,
+                        &names,
+                    ),
                     message,
                 });
             }
@@ -97,7 +131,12 @@ mod tests {
         );
         type_config.relation_fields = relation;
         let config = config_with_types(vec![("spec", type_config)]);
-        config_companion_declaration_missing(&config, std::path::Path::new(".urzua/config.yaml")).1
+        config_companion_declaration_missing(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        )
+        .1
     }
 
     #[test]

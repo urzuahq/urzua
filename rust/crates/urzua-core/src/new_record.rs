@@ -333,6 +333,11 @@ pub fn render_synthetic_yaml(
         Value::String(params.stable_id.to_string()),
     );
     for field in required_fields {
+        // A type that requires `Stable-Id` already has the generated one above;
+        // listing it again as a blank required field would overwrite it with null.
+        if field == "Stable-Id" {
+            continue;
+        }
         let value = match field.as_str() {
             f if f == params.date_field => Value::String(params.today.to_string()),
             f if f == params.author_field => Value::String(params.author.to_string()),
@@ -650,6 +655,28 @@ mod tests {
         assert!(result.contains("Status: null\n"));
         assert!(result.contains("Severity: null\n"));
         assert!(result.contains("# 1 — X"));
+    }
+
+    #[test]
+    fn a_required_stable_id_keeps_the_generated_value() {
+        let params = NewRecordParams {
+            h1_prefix: None,
+            h1_width: 0,
+            initial_status: None,
+            status_field: "Status",
+            date_field: "Date",
+            author_field: "Author",
+            display_number: 1,
+            title: "X",
+            stable_id: "01ABC",
+            author: "beau",
+            today: "2026-09-06",
+        };
+        let required = vec!["Status".to_string(), "Stable-Id".to_string()];
+        let result = render_synthetic_yaml(&params, &required, &[]);
+        assert!(result.contains("Stable-Id: 01ABC\n"), "{result}");
+        assert!(!result.contains("Stable-Id: null"), "{result}");
+        assert_eq!(result.matches("Stable-Id").count(), 1, "{result}");
     }
 
     #[test]
