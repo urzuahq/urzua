@@ -1386,7 +1386,8 @@ end: brace_balanced
             "adr",
             "---\nRealized-by: code:src/shared.rs, test:src/shared.rs\n---\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config(), None);
+        let (_, findings) =
+            embodiment_locator_promotion_candidate(&[a], &embodiment_config(), None);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -1397,7 +1398,8 @@ end: brace_balanced
             "adr",
             "---\nRealized-by: code:src/a.rs\n---\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config(), None);
+        let (_, findings) =
+            embodiment_locator_promotion_candidate(&[a], &embodiment_config(), None);
         assert!(findings.is_empty());
     }
 

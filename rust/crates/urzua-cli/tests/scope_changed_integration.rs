@@ -402,7 +402,10 @@ fn the_promotion_nudge_without_the_option_reports_the_shared_locator_on_every_ru
     assert_eq!(found[0]["file"], PATH_1, "{v}");
     let p = &execution(&v, PROMO)["population"];
     assert_eq!(p["examined"], 3, "{p}");
-    assert!(p.as_object().unwrap().get("deferred_by_scope").is_none(), "{p}");
+    assert!(
+        p.as_object().unwrap().get("deferred_by_scope").is_none(),
+        "{p}"
+    );
 }
 
 #[test]
@@ -422,7 +425,10 @@ fn the_promotion_nudge_with_scope_changed_says_nothing_on_a_plain_check_and_why(
         .filter(|n| n["subject"] == PROMO)
         .collect();
     assert_eq!(notices.len(), 1, "{v}");
-    assert!(notices[0]["message"].as_str().unwrap().contains("scope: changed"));
+    assert!(notices[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("scope: changed"));
 }
 
 #[test]
@@ -437,7 +443,10 @@ fn the_promotion_nudge_with_scope_changed_fires_on_the_changed_citer_and_names_a
     assert_eq!(code, 0, "{v}");
     let found = promo_findings(&v);
     assert_eq!(found.len(), 1, "{v}");
-    assert_eq!(found[0]["file"], PATH_2, "the finding sits on the changed record: {v}");
+    assert_eq!(
+        found[0]["file"], PATH_2,
+        "the finding sits on the changed record: {v}"
+    );
     let message = found[0]["message"].as_str().unwrap();
     for path in [PATH_1, PATH_2, "docs/adr/ADR-3-c.md"] {
         assert!(message.contains(path), "{message}");
@@ -448,8 +457,12 @@ fn the_promotion_nudge_with_scope_changed_fires_on_the_changed_citer_and_names_a
 }
 
 #[test]
-fn the_promotion_nudge_with_scope_changed_is_silent_when_the_changed_record_cites_no_shared_locator() {
-    let dir = fixture("promo-scope-unrelated", &promo_config("    scope: changed\n"));
+fn the_promotion_nudge_with_scope_changed_is_silent_when_the_changed_record_cites_no_shared_locator(
+) {
+    let dir = fixture(
+        "promo-scope-unrelated",
+        &promo_config("    scope: changed\n"),
+    );
     std::fs::write(
         dir.join("docs/adr/ADR-4-d.md"),
         format!("{}\nMore.\n", record(4, None)),
@@ -462,11 +475,7 @@ fn the_promotion_nudge_with_scope_changed_is_silent_when_the_changed_record_cite
 #[test]
 fn the_promotion_nudge_with_scope_changed_does_not_fire_for_a_locator_with_one_citer() {
     let dir = fixture("promo-scope-single", &promo_config("    scope: changed\n"));
-    std::fs::write(
-        dir.join(PATH_2),
-        record(2, Some("code:src/only-here.rs")),
-    )
-    .unwrap();
+    std::fs::write(dir.join(PATH_2), record(2, Some("code:src/only-here.rs"))).unwrap();
     git(&dir, &["add", "-A"]);
     git(&dir, &["commit", "-q", "-m", "ADR-2 cites its own file"]);
     std::fs::write(
