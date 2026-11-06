@@ -274,6 +274,29 @@ pub fn today() -> String {
 
 const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Where a resolved identity came from (`ADR-89` section 5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentitySource {
+    /// The `gh` login that `gh api user` verified.
+    GhVerified,
+    /// `--by`, taken as given.
+    Asserted,
+    /// `git config user.name`.
+    GitConfig,
+}
+
+/// The `attestation` configuration, as `resolve_identity_with` reads it
+/// (`ADR-89` section 5). `urzua-io` does not know the configuration type, so
+/// the caller passes the two decisions.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct IdentityPolicy {
+    /// `identity: asserted`: `--by` is taken as given, a verified login is
+    /// recorded beside it.
+    pub asserted: bool,
+    /// `require_verified: true`: no `gh` answer is an error, never a fallback.
+    pub require_verified: bool,
+}
+
 /// `resolve_identity`'s result plus any non-fatal notice about it. Structured
 /// rather than a bare `eprintln!` so a caller can fold `warning` into its own
 /// JSON report instead of it landing as unparseable stderr prose.
@@ -281,24 +304,43 @@ const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct ResolvedIdentity {
     pub name: String,
     pub warning: Option<String>,
+    pub source: IdentitySource,
+    /// The `--by` a verified login replaced, when the two differ.
+    pub replaced_by: Option<String>,
+    /// The login `gh` verified, recorded beside an `asserted` name.
+    pub verified_login: Option<String>,
 }
 
-/// Identity tiering (RFC-0002 §2, amended by ADR-0031 in this repo's own
-/// records): `gh api user` wins even over an explicit `--by` (surfaced via
-/// `warning` on divergence, never silently discarding `--by`); `--by` wins
-/// over `git config user.name`. Errors rather than defaulting when none of
-/// the three resolve.
+/// `resolve_identity_with` under the default policy (`gh-verified`, nothing
+/// required): the behaviour of a repository that declares no `attestation`.
 pub fn resolve_identity(
     explicit: Option<&str>,
     repo_root: &Path,
+) -> Result<ResolvedIdentity, String> {
+    resolve_identity_with(explicit, repo_root, IdentityPolicy::default())
+}
+
+/// Identity tiering (RFC-0002 §2, amended by ADR-0031 in this repo's own
+/// records; `ADR-89` section 5 makes the source configurable): under the
+/// default a `gh api user` login wins even over an explicit `--by` (surfaced
+/// via `warning` and `replaced_by` on divergence, never silently discarding
+/// `--by`); `--by` wins over `git config user.name`. Errors rather than
+/// defaulting when none of the three resolve.
+pub fn resolve_identity_with(
+    explicit: Option<&str>,
+    repo_root: &Path,
+    policy: IdentityPolicy,
 ) -> Result<ResolvedIdentity, String> {
     // Checked whichever tier wins: a `--by` that would corrupt the row is
     // refused even when a gh login supersedes it.
     if let Some(by) = explicit {
         row_safe_identity(by, "--by")?;
     }
-    let resolved = resolve_identity_unchecked(explicit, repo_root)?;
+    let resolved = resolve_identity_unchecked(explicit, repo_root, policy)?;
     row_safe_identity(&resolved.name, "the resolved identity")?;
+    if let Some(login) = &resolved.verified_login {
+        row_safe_identity(login, "the verified gh login")?;
+    }
     Ok(resolved)
 }
 
@@ -319,27 +361,70 @@ fn row_safe_identity(name: &str, source: &str) -> Result<(), String> {
 fn resolve_identity_unchecked(
     explicit: Option<&str>,
     repo_root: &Path,
+    policy: IdentityPolicy,
 ) -> Result<ResolvedIdentity, String> {
-    if let Some(login) = gh_authenticated_login() {
-        let warning = match explicit {
-            Some(by) if by != login => Some(format!(
-                "--by '{by}' differs from the authenticated gh login '{login}' -- using '{login}'"
-            )),
-            _ => None,
+    let verified = gh_authenticated_login();
+
+    if policy.asserted {
+        // `--by` as given, the verified login beside it (`ADR-89` section 5).
+        // With no `--by` there is nothing asserted: the git configuration is
+        // the next tier, as it is under `gh-verified`.
+        let (name, source) = match explicit {
+            Some(by) => (by.to_string(), IdentitySource::Asserted),
+            None => (git_config_name(repo_root)?, IdentitySource::GitConfig),
         };
+        return Ok(ResolvedIdentity {
+            name,
+            warning: None,
+            source,
+            replaced_by: None,
+            verified_login: verified,
+        });
+    }
+
+    if let Some(login) = verified {
+        let replaced_by = explicit.filter(|by| *by != login).map(str::to_string);
+        let warning = replaced_by.as_ref().map(|by| {
+            format!(
+                "--by '{by}' differs from the authenticated gh login '{login}' -- using '{login}'"
+            )
+        });
         return Ok(ResolvedIdentity {
             name: login,
             warning,
+            source: IdentitySource::GhVerified,
+            replaced_by,
+            verified_login: None,
         });
+    }
+
+    if policy.require_verified {
+        return Err(
+            "attestation.require_verified is true and gh could not verify a login (`gh api user` failed or timed out); nothing was written. Log in with `gh auth login`, or set `attestation.identity: asserted` for a repository whose agents attest on behalf of a named person"
+                .to_string(),
+        );
     }
 
     if let Some(by) = explicit {
         return Ok(ResolvedIdentity {
             name: by.to_string(),
             warning: None,
+            source: IdentitySource::Asserted,
+            replaced_by: None,
+            verified_login: None,
         });
     }
 
+    Ok(ResolvedIdentity {
+        name: git_config_name(repo_root)?,
+        warning: None,
+        source: IdentitySource::GitConfig,
+        replaced_by: None,
+        verified_login: None,
+    })
+}
+
+fn git_config_name(repo_root: &Path) -> Result<String, String> {
     if let Ok(output) = Command::new("git")
         .args(["config", "user.name"])
         .current_dir(repo_root)
@@ -348,14 +433,10 @@ fn resolve_identity_unchecked(
         if output.status.success() {
             let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !name.is_empty() {
-                return Ok(ResolvedIdentity {
-                    name,
-                    warning: None,
-                });
+                return Ok(name);
             }
         }
     }
-
     Err("could not resolve an identity (gh api user unavailable, git config user.name unset) -- pass --by explicitly".to_string())
 }
 
@@ -1106,6 +1187,154 @@ mod tests {
         let result = result.unwrap();
         assert_eq!(result.name, "gh-login");
         assert!(result.warning.unwrap().contains("explicit-name"));
+    }
+
+    fn quiet_repo(prefix: &str, with_git_name: bool) -> Scratch {
+        let tmp = Scratch::new(prefix);
+        fs::create_dir_all(&tmp).unwrap();
+        if with_git_name {
+            init_repo(&tmp); // sets local user.name to "test"
+        } else {
+            Command::new("git")
+                .args(["init", "-q"])
+                .current_dir(&tmp)
+                .output()
+                .unwrap();
+        }
+        tmp
+    }
+
+    const GH_VERIFIED: IdentityPolicy = IdentityPolicy {
+        asserted: false,
+        require_verified: false,
+    };
+    const GH_REQUIRED: IdentityPolicy = IdentityPolicy {
+        asserted: false,
+        require_verified: true,
+    };
+    const ASSERTED: IdentityPolicy = IdentityPolicy {
+        asserted: true,
+        require_verified: false,
+    };
+
+    #[test]
+    fn gh_verified_names_the_replaced_by_as_a_field_and_the_source() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_successful_gh_to_path("gh-login");
+        let tmp = quiet_repo("urzua-io-id-replaced", true);
+
+        let result = resolve_identity_with(Some("typed"), &tmp, GH_VERIFIED);
+        let agree = resolve_identity_with(Some("gh-login"), &tmp, GH_VERIFIED);
+
+        std::env::set_var("PATH", original_path);
+
+        let result = result.unwrap();
+        assert_eq!(result.name, "gh-login");
+        assert_eq!(result.source, IdentitySource::GhVerified);
+        assert_eq!(result.replaced_by.as_deref(), Some("typed"));
+        assert!(result.warning.unwrap().contains("typed"));
+        let agree = agree.unwrap();
+        assert_eq!(agree.source, IdentitySource::GhVerified);
+        assert!(agree.replaced_by.is_none() && agree.warning.is_none());
+    }
+
+    #[test]
+    fn gh_verified_without_a_gh_answer_records_by_as_asserted_and_git_as_git_config() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
+        let tmp = quiet_repo("urzua-io-id-fallback", true);
+
+        let typed = resolve_identity_with(Some("typed"), &tmp, GH_VERIFIED);
+        let git = resolve_identity_with(None, &tmp, GH_VERIFIED);
+
+        std::env::set_var("PATH", original_path);
+
+        assert_eq!(typed.unwrap().source, IdentitySource::Asserted);
+        let git = git.unwrap();
+        assert_eq!(
+            (git.name.as_str(), git.source),
+            ("test", IdentitySource::GitConfig)
+        );
+    }
+
+    #[test]
+    fn require_verified_refuses_every_fallback_when_gh_does_not_answer() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
+        let tmp = quiet_repo("urzua-io-id-required", true);
+
+        let with_by = resolve_identity_with(Some("typed"), &tmp, GH_REQUIRED);
+        let with_git = resolve_identity_with(None, &tmp, GH_REQUIRED);
+
+        std::env::set_var("PATH", original_path);
+
+        for err in [with_by.unwrap_err(), with_git.unwrap_err()] {
+            assert!(
+                err.contains("require_verified") && err.contains("gh"),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn require_verified_accepts_a_verified_login() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_successful_gh_to_path("gh-login");
+        let tmp = quiet_repo("urzua-io-id-required-ok", true);
+
+        let result = resolve_identity_with(None, &tmp, GH_REQUIRED);
+
+        std::env::set_var("PATH", original_path);
+
+        assert_eq!(result.unwrap().source, IdentitySource::GhVerified);
+    }
+
+    #[test]
+    fn asserted_takes_by_as_given_with_the_verified_login_beside_it() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_successful_gh_to_path("gh-login");
+        let tmp = quiet_repo("urzua-io-id-asserted", true);
+
+        let result = resolve_identity_with(Some("typed"), &tmp, ASSERTED);
+
+        std::env::set_var("PATH", original_path);
+
+        let result = result.unwrap();
+        assert_eq!(result.name, "typed");
+        assert_eq!(result.source, IdentitySource::Asserted);
+        assert_eq!(result.verified_login.as_deref(), Some("gh-login"));
+        assert!(result.replaced_by.is_none());
+        assert!(result.warning.is_none());
+    }
+
+    #[test]
+    fn asserted_without_a_gh_answer_has_no_verified_login_and_without_by_uses_git_config() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_failing_gh_to_path();
+        let tmp = quiet_repo("urzua-io-id-asserted-nogh", true);
+
+        let typed = resolve_identity_with(Some("typed"), &tmp, ASSERTED);
+        let git = resolve_identity_with(None, &tmp, ASSERTED);
+
+        std::env::set_var("PATH", original_path);
+
+        let typed = typed.unwrap();
+        assert!(typed.verified_login.is_none());
+        assert_eq!(typed.source, IdentitySource::Asserted);
+        assert_eq!(git.unwrap().source, IdentitySource::GitConfig);
+    }
+
+    #[test]
+    fn a_verified_login_that_would_break_a_row_is_refused_beside_asserted_too() {
+        let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (_stub_dir, original_path) = prepend_successful_gh_to_path("a|b");
+        let tmp = quiet_repo("urzua-io-id-asserted-pipe", true);
+
+        let result = resolve_identity_with(Some("typed"), &tmp, ASSERTED);
+
+        std::env::set_var("PATH", original_path);
+
+        assert!(result.is_err());
     }
 
     fn commit_all(dir: &Path, message: &str) -> String {

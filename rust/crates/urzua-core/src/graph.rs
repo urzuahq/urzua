@@ -216,6 +216,7 @@ mod tests {
             upgraded_from: None,
             override_log: None,
             block_on: None,
+            attestation: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -235,6 +236,7 @@ mod tests {
             upgraded_from: None,
             override_log: None,
             block_on: None,
+            attestation: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),

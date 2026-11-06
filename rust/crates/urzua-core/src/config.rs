@@ -68,6 +68,39 @@ pub struct Config {
     /// committed file, and any other value is a load error here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub block_on: Option<String>,
+    /// Who an attestation names (`ADR-89` section 5, `MILE-201`, `SPEC-3`):
+    /// where `fix --apply` and `fix --rebaseline --apply` take the attesting
+    /// identity from. Absent means `gh-verified` without `require_verified`,
+    /// today's behaviour.
+    #[serde(default, skip_serializing_if = "AttestationDecl::is_default")]
+    pub attestation: AttestationDecl,
+}
+
+/// The `attestation` key (`ADR-89` section 5, `SPEC-3`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttestationDecl {
+    #[serde(default)]
+    pub identity: AttestationIdentity,
+    #[serde(default)]
+    pub require_verified: bool,
+}
+
+impl AttestationDecl {
+    pub fn is_default(&self) -> bool {
+        *self == AttestationDecl::default()
+    }
+}
+
+/// Where the attesting identity comes from: a verified `gh` login that wins
+/// over `--by` (`gh-verified`, the default), or `--by` as given (`asserted`,
+/// which reverses `RFC-2`'s verified-beats-typed order and is opt-in).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AttestationIdentity {
+    #[default]
+    GhVerified,
+    Asserted,
 }
 
 /// The values `block_on` accepts (`SPEC-3`).
@@ -3066,6 +3099,16 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             ));
         }
     }
+    // `asserted` takes `--by` as given, so there is no verification to require
+    // (`ADR-89` section 5).
+    if config.attestation.require_verified
+        && config.attestation.identity == AttestationIdentity::Asserted
+    {
+        return bad(
+            "attestation.require_verified: true cannot be combined with identity: asserted, which takes --by as given and verifies nothing"
+                .to_string(),
+        );
+    }
     for rule in crate::rules::rule_ids_where(|d| d.requires_override_log) {
         if config.override_log.is_none()
             && config
@@ -5169,6 +5212,58 @@ mod option_table_tests {
             .expect_err("an option the rule does not take")
             .to_string();
         assert!(err.contains("claim_paths"), "{err}");
+    }
+
+    // MILE-201 (ADR-89 section 5): the `attestation` key.
+    const ATT_BASE: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n";
+
+    #[test]
+    fn attestation_absent_is_gh_verified_without_require_verified() {
+        let config = parse(ATT_BASE).unwrap();
+        assert_eq!(config.attestation.identity, AttestationIdentity::GhVerified);
+        assert!(!config.attestation.require_verified);
+    }
+
+    #[test]
+    fn attestation_reads_each_declared_value() {
+        let asserted = parse(&format!("{ATT_BASE}attestation:\n  identity: asserted\n")).unwrap();
+        assert_eq!(asserted.attestation.identity, AttestationIdentity::Asserted);
+        let strict = parse(&format!(
+            "{ATT_BASE}attestation:\n  identity: gh-verified\n  require_verified: true\n"
+        ))
+        .unwrap();
+        assert!(strict.attestation.require_verified);
+    }
+
+    #[test]
+    fn an_unknown_attestation_identity_is_a_load_error_naming_the_allowed_values() {
+        let err = parse(&format!("{ATT_BASE}attestation:\n  identity: signed\n"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("signed") && err.contains("gh-verified") && err.contains("asserted"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn require_verified_with_asserted_is_refused_at_load() {
+        let err = parse(&format!(
+            "{ATT_BASE}attestation:\n  identity: asserted\n  require_verified: true\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("attestation")
+                && err.contains("require_verified")
+                && err.contains("asserted"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_attestation_key_is_a_load_error() {
+        assert!(parse(&format!("{ATT_BASE}attestation:\n  identiy: asserted\n")).is_err());
     }
 
     /// A rule setting reads back through the typed accessor, and a list option

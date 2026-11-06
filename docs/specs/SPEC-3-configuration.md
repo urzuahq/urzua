@@ -1,5 +1,5 @@
 ---
-Version: '0.92'
+Version: '0.93'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -840,6 +840,38 @@ block_on: introduced   # the default
 - The engine reads no other meaning from the key: `urzua check` and `check --stdin-path` report the same
   findings under both values, and the Claude Code adapter passes the hook's verdict through unchanged.
   This repository declares `introduced` (`ADR-78` amendment, item 3).
+
+## Attestation identity: `attestation`
+
+A top-level `attestation` sets where `urzua fix --apply` and `urzua fix --rebaseline --apply` take the
+identity they attest under (`ADR-89` section 5, `MILE-201`):
+
+```yaml
+attestation:
+  identity: gh-verified   # gh-verified | asserted; the default
+  require_verified: false # the default
+```
+
+- **`gh-verified`** (the default, and what an absent key means) keeps the order `RFC-2` and `MILE-66` set: a
+  verified `gh` login wins over `--by`, which wins over `git config user.name`. A `--by` the login replaced
+  is named in the report (`identity.replaced_by`, and the `identity` notice) and never silently dropped.
+  With `require_verified: true` a command that writes an attestation does not run when `gh` cannot verify
+  (`not-run`, exit 2, nothing written): it does not fall back to `--by` or the git configuration.
+- **`asserted`** takes `--by` as given, for a repository whose agents attest on behalf of a named person with
+  no `gh` session. It reverses the verified-beats-typed order of `RFC-2` and `MILE-66`, so it is opt-in,
+  never the default, and the row says `asserted`. The login `gh` verified, when it answers, is recorded
+  beside the name (`identity.verified_login`, and in the row), not instead of it. With no `--by` the git
+  configuration is the name (source `git-config`). `MILE-18` is the longer-term identity binding.
+- **The source and the actor kind are recorded in every tool-authored revision row** (`SPEC-8`). The source
+  is `gh-verified`, `asserted` or `git-config`; the actor kind is `agent`, `human` or `unspecified`, from
+  `fix --actor agent|human`. The actor kind is the caller's claim, not proof, with the standing of `--by`: a
+  verified login names the account whose token ran the command, not whether a person or an agent held it
+  (`RFC-2`, `BUG-16`).
+- **Load errors** (exit 2), never a silent default: an `identity` value other than `gh-verified` and
+  `asserted` (the message names both), an unknown key under `attestation`, and `require_verified: true` with
+  `identity: asserted`, which verifies nothing to require.
+- **Absent means today's behaviour.** A configuration that does not declare the key resolves identity as
+  before; only the row text and the report gain the source and the actor kind.
 
 ## Diff rule path options
 
@@ -1851,3 +1883,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.90`. `urzua index --apply` replaces an artifact through a temporary file and a rename. **Why:** review of the CLI found the write truncated the file first. | **substantive** |
 > | 2026-11-05 | Bumped to `0.91`. `closed_statuses` and `terminal_statuses` are optional once no record type needs them (every type declares `statuses`, or declares no status field); `embodiment.locator-on-back-pointer-path` no longer flags a record of a type declaring `statuses.delivery.back_pointer_evidence: false` and tells a locator whose file already carries the comment to drop the locator. **Why:** hardening review: the lists were required yet never read in a configuration where every type declares `statuses` (`BUG-178`), so they could only drift from the declared vocabulary; and the nudge told a `Fixed` bug to drop its only counted evidence, which `status.delivery-agreement` then reports. | **substantive** |
 > | 2026-11-05 | Bumped to `0.92`. The compiled-in `field.pending` match reads `pending` as a whole word and ignores a path-shaped token, so `spending` and `docs/pending-settlement/x.md` are no longer pending; a type declaring `statuses.pending` is unchanged. **Why:** Phase 0 hardening from an adopter switchover -- a waiver `Scope` path containing `spending` was reported as unfinished work. | **substantive** |
+> | 2026-11-06 | Bumped to `0.93`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |

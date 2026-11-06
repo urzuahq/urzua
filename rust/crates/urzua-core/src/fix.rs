@@ -240,6 +240,87 @@ fn replace_field_value(line: &str, field: &str, stated: &str, computed: &str) ->
     Some(format!("{}{gap}{computed}", &line[..value_start]))
 }
 
+/// Where an attestation's identity came from (`ADR-89` section 5): a verified
+/// `gh` login, a `--by` taken as given, or `git config user.name`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IdentitySource {
+    GhVerified,
+    Asserted,
+    GitConfig,
+}
+
+impl IdentitySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IdentitySource::GhVerified => "gh-verified",
+            IdentitySource::Asserted => "asserted",
+            IdentitySource::GitConfig => "git-config",
+        }
+    }
+}
+
+/// Whether an agent or a person ran the command (`ADR-89` section 5). It is
+/// the caller's claim and not proof, with the same standing as `--by`; a run
+/// that does not say is `unspecified`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ActorKind {
+    Agent,
+    Human,
+    #[default]
+    Unspecified,
+}
+
+impl ActorKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ActorKind::Agent => "agent",
+            ActorKind::Human => "human",
+            ActorKind::Unspecified => "unspecified",
+        }
+    }
+}
+
+/// Who a tool-authored revision row names, and on what footing (`ADR-89`
+/// section 5): the name, where it came from, the caller's claim of who held
+/// the command, and the verified login recorded beside an `asserted` name when
+/// `gh` answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attestation {
+    pub by: String,
+    pub source: IdentitySource,
+    pub actor: ActorKind,
+    pub verified_login: Option<String>,
+}
+
+impl Attestation {
+    pub fn new(by: &str, source: IdentitySource, actor: ActorKind) -> Self {
+        Attestation {
+            by: by.to_string(),
+            source,
+            actor,
+            verified_login: None,
+        }
+    }
+
+    /// The text inside a row's parentheses after `by` or `attested by`: the
+    /// name, the identity source, the actor kind and, beside an `asserted`
+    /// name, the login `gh` verified (`ADR-89` section 5).
+    pub fn label(&self) -> String {
+        let mut label = format!(
+            "{}, identity: {}, actor: {}",
+            self.by,
+            self.source.as_str(),
+            self.actor.as_str()
+        );
+        if let Some(login) = &self.verified_login {
+            label.push_str(&format!(", verified login: {login}"));
+        }
+        label
+    }
+}
+
 /// Computes the new file content for applying one Tier-1 repair. Pure --
 /// returns the new text; the caller performs the actual write, the identity
 /// resolution, and the re-verification-before-write RFC-0008 §4 requires.
@@ -253,7 +334,7 @@ pub fn apply_repair(
     content: &str,
     repair: &Repair,
     today: &str,
-    by: &str,
+    attestation: &Attestation,
     log_id: &crate::config::RevisionLogId,
     log_required: bool,
 ) -> Result<String, String> {
@@ -301,7 +382,8 @@ pub fn apply_repair(
         .unwrap_or("> ")
         .to_string();
     let new_row = format!(
-        "{prefix}| {today} | Tool-authored (by {by}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`. | **structural** |",
+        "{prefix}| {today} | Tool-authored (by {}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`. | **structural** |",
+        attestation.label(),
         repair.field,
         repair.evidence,
         describe_stated(&repair.current_value),
@@ -482,7 +564,7 @@ pub fn apply_rebaseline(
     content: &str,
     rebaseline: &Rebaseline,
     today: &str,
-    by: &str,
+    attestation: &Attestation,
     reason: &str,
     log_id: &crate::config::RevisionLogId,
 ) -> Result<String, String> {
@@ -547,7 +629,8 @@ pub fn apply_rebaseline(
     doc.insert_after(
         last_entry.line,
         format!(
-            "{row_prefix}| {today} | Re-baselined (attested by {by}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |"
+            "{row_prefix}| {today} | Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |",
+            attestation.label()
         ),
     );
     Ok(doc.to_string())
@@ -566,6 +649,67 @@ mod tests {
         Record::parse(PathBuf::from(path), "adr".to_string(), content)
     }
 
+    fn attest(name: &str) -> Attestation {
+        Attestation::new(name, IdentitySource::GhVerified, ActorKind::Unspecified)
+    }
+
+    /// `ADR-89` section 5 pins the row text: the identity source and the actor
+    /// kind follow the name, in both tool-authored row kinds.
+    #[test]
+    fn the_attestation_label_names_the_source_and_the_actor_kind() {
+        let verified = Attestation::new("ana", IdentitySource::GhVerified, ActorKind::Agent);
+        assert_eq!(verified.label(), "ana, identity: gh-verified, actor: agent");
+        let git = Attestation::new("ana", IdentitySource::GitConfig, ActorKind::Human);
+        assert_eq!(git.label(), "ana, identity: git-config, actor: human");
+        let mut asserted =
+            Attestation::new("ana", IdentitySource::Asserted, ActorKind::Unspecified);
+        assert_eq!(
+            asserted.label(),
+            "ana, identity: asserted, actor: unspecified"
+        );
+        asserted.verified_login = Some("octo".to_string());
+        assert_eq!(
+            asserted.label(),
+            "ana, identity: asserted, actor: unspecified, verified login: octo"
+        );
+    }
+
+    #[test]
+    fn a_rebaseline_row_carries_the_source_and_the_actor_kind() {
+        let content = "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:aaaaaaaaaaaaaaaaaaaaaaaa'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+        let rb = Rebaseline {
+            record: PathBuf::from("docs/adr/ADR-1-a.md"),
+            field: "Realized-by".to_string(),
+            line: 3,
+            pins: vec![PinDrift {
+                locator: "code:src/a.rs".to_string(),
+                recorded_hash: "aaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+                current_hash: "bbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+                span: None,
+                files: Vec::new(),
+                spelling: "code:src/a.rs".to_string(),
+            }],
+        };
+        let who = Attestation::new("ana", IdentitySource::Asserted, ActorKind::Agent);
+        let out = apply_rebaseline(
+            content,
+            &rb,
+            "2026-11-06",
+            &who,
+            "Reason.",
+            &Default::default(),
+        )
+        .unwrap();
+        assert!(
+            out.contains(
+                "| 2026-11-06 | Re-baselined (attested by ana, identity: asserted, actor: agent): re-pinned "
+            ),
+            "{out}"
+        );
+        // The existing row is untouched.
+        assert!(out.contains("| 2026-01-01 | Initial. | **structural** |"));
+    }
+
     fn no_relation_field_overrides() -> Config {
         Config {
             schema_version: crate::config::CURRENT_SCHEMA_VERSION,
@@ -577,6 +721,7 @@ mod tests {
             upgraded_from: None,
             override_log: None,
             block_on: None,
+            attestation: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -703,6 +848,7 @@ mod tests {
             upgraded_from: None,
             override_log: None,
             block_on: None,
+            attestation: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),
@@ -785,14 +931,16 @@ mod tests {
             content,
             &sample_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             true,
         )
         .unwrap();
         assert!(result.contains("Embodiment: Verified"));
         assert!(!result.contains("Embodiment: Not started"));
-        assert!(result.contains("Tool-authored (by beau)"));
+        assert!(result.contains(
+            "Tool-authored (by beau, identity: gh-verified, actor: unspecified): recomputed"
+        ));
         assert!(result.contains("**structural**"));
         // the original row survives untouched
         assert!(result.contains("| 2026-08-20 | Initial. | **structural** |"));
@@ -816,7 +964,7 @@ mod tests {
                 &content,
                 &empty_value_repair(),
                 "2026-09-05",
-                "beau",
+                &attest("beau"),
                 &Default::default(),
                 true,
             )
@@ -846,7 +994,7 @@ mod tests {
             content,
             &repair,
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             false,
         )
@@ -864,7 +1012,7 @@ mod tests {
             content,
             &empty_value_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             false,
         )
@@ -879,7 +1027,7 @@ mod tests {
             content,
             &sample_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             true,
         )
@@ -894,7 +1042,7 @@ mod tests {
             content,
             &sample_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             false,
         )
@@ -913,7 +1061,7 @@ mod tests {
             content,
             &sample_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             true,
         )
@@ -928,7 +1076,7 @@ mod tests {
             content,
             &sample_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             true,
         )
@@ -945,7 +1093,7 @@ mod tests {
             content,
             &sample_repair(),
             "2026-09-05",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             true,
         )
@@ -1027,7 +1175,7 @@ mod tests {
             &content,
             &found[0],
             "2026-11-04",
-            "ana",
+            &attest("ana"),
             "Read the diff; the claim holds.",
             &Default::default(),
         )
@@ -1038,7 +1186,15 @@ mod tests {
         assert!(out.contains("attested by ana"));
         assert!(out.contains("Read the diff; the claim holds."));
         // Applying the same rebaseline again finds no pin to move.
-        assert!(apply_rebaseline(&out, &found[0], "d", "ana", "r", &Default::default()).is_err());
+        assert!(apply_rebaseline(
+            &out,
+            &found[0],
+            "d",
+            &attest("ana"),
+            "r",
+            &Default::default()
+        )
+        .is_err());
     }
 
     fn scoped(path: &str, spec: &str, hash: &str) -> Record {
@@ -1086,7 +1242,7 @@ mod tests {
             &content,
             &found[0],
             "2026-11-04",
-            "ana",
+            &attest("ana"),
             "ok.",
             &Default::default(),
         )
@@ -1113,7 +1269,7 @@ mod tests {
             content,
             &repair,
             "2026-11-04",
-            "beau",
+            &attest("beau"),
             &Default::default(),
             true,
         )

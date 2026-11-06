@@ -485,6 +485,13 @@ override_log: .urzua/override-log.md
 # error the edit introduces. CI holds the repository at zero findings, so a record on
 # disk with an error does not reach main; `all` is for a repository without that gate.
 block_on: introduced
+# Who an attestation names (ADR-89 section 5, MILE-201, SPEC-3): a verified gh login wins over
+# --by, as RFC-2 and MILE-66 set. The row records the source and the actor kind. Agents here run
+# under the maintainer's token, so a gh-verified row names the maintainer: pass `--actor agent`.
+# require_verified stays off so a run without a gh session is recorded as `asserted`, not refused.
+attestation:
+  identity: gh-verified
+  require_verified: false
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
 # (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic

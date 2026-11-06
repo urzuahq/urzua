@@ -166,7 +166,9 @@ fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observe
     );
     assert_eq!(rows[0].matches('|').count(), 4, "{}", rows[0]);
     assert!(
-        rows[0].contains("Re-baselined (attested by ana): re-pinned"),
+        rows[0].contains(
+            "Re-baselined (attested by ana, identity: asserted, actor: unspecified): re-pinned"
+        ),
         "{}",
         rows[0]
     );
@@ -291,7 +293,10 @@ fn an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed()
     let parsed = json(&out);
     assert_eq!(parsed["status"], "applied", "{parsed}");
     let a = std::fs::read_to_string(dir.join(A)).unwrap();
-    assert!(a.contains("(attested by gh-login)"), "{a}");
+    assert!(
+        a.contains("(attested by gh-login, identity: gh-verified, actor: unspecified)"),
+        "{a}"
+    );
     assert!(!a.contains("attested by ana"), "{a}");
     assert!(
         parsed["notices"]

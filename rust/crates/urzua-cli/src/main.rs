@@ -239,6 +239,11 @@ enum Command {
         ids: Vec<String>,
         #[arg(long)]
         by: Option<String>,
+        /// Who ran the command: `agent` or `human`. Recorded in the revision
+        /// row beside the identity source (`ADR-89`); a run without it records
+        /// `unspecified`. The caller's claim, not proof.
+        #[arg(long, value_enum)]
+        actor: Option<ActorArg>,
         /// Apply to every detected repair, bypassing --ids. Never the
         /// default.
         #[arg(long)]
@@ -298,6 +303,23 @@ enum MigrateTarget {
         #[arg(long)]
         field: Option<String>,
     },
+}
+
+/// The values `fix --actor` accepts; `unspecified` is what a run without the
+/// flag records, not a value to pass.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ActorArg {
+    Agent,
+    Human,
+}
+
+impl From<ActorArg> for urzua_core::fix::ActorKind {
+    fn from(actor: ActorArg) -> Self {
+        match actor {
+            ActorArg::Agent => urzua_core::fix::ActorKind::Agent,
+            ActorArg::Human => urzua_core::fix::ActorKind::Human,
+        }
+    }
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -407,6 +429,7 @@ fn main() -> ExitCode {
             apply,
             ids,
             by,
+            actor,
             force,
             rebaseline,
             reason,
@@ -419,6 +442,7 @@ fn main() -> ExitCode {
                 apply,
                 ids,
                 by,
+                actor: actor.map_or(urzua_core::fix::ActorKind::Unspecified, Into::into),
                 force,
                 rebaseline,
                 reason,
