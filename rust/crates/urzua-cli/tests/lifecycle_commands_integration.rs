@@ -368,3 +368,33 @@ fn amend_accepts_an_added_dated_section_and_a_row_and_refuses_a_changed_decision
     let out = amend_finish(&dir);
     assert!(!out.status.success());
 }
+
+#[test]
+fn amend_refuses_a_removed_list_item_blank_line_or_rule_in_the_decision() {
+    let decided = "---\nStatus: Open\n---\n# NOTE-1 — N\n\n## Decision\n\n- keep A\n- keep B\n\n----\n\nWe do it this way.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-04 | Filed. | **substantive** |\n";
+    let amendment =
+        "\n## Amendment (2026-11-06): a correction\n\nThe wording was wrong.\n\n> **Revision log**";
+    // Each removal is a change to the Decision text that the amendment must not hide.
+    for (case, from, to) in [
+        ("list-item", "- keep A\n- keep B", "- keep B"),
+        ("blank-line", "- keep B\n\n----", "- keep B\n----"),
+        ("rule", "----\n\nWe do", "We do"),
+    ] {
+        let dir = installed(&format!("amend-removed-{case}"), BASE);
+        std::fs::write(dir.join("docs/notes/NOTE-1-n.md"), decided).unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-qm", "a decided note"]);
+        let edited = decided.replacen(from, to, 1);
+        assert_ne!(edited, decided, "{case}: the fixture must remove something");
+        let edited = edited.replace("\n> **Revision log**", amendment)
+            + "> | 2026-11-06 | Amendment added: a correction. | **substantive** |\n";
+        std::fs::write(dir.join("docs/notes/NOTE-1-n.md"), edited).unwrap();
+        let out = amend_finish(&dir);
+        assert!(!out.status.success(), "{case} was accepted");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("refusing") && stderr.contains("changed or removed"),
+            "{case}: {stderr}"
+        );
+    }
+}

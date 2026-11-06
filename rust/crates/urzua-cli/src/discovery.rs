@@ -72,6 +72,30 @@ pub(crate) fn load_config(path: &PathBuf) -> Result<Config, Failure> {
     })
 }
 
+/// Whether a record type governs the file at `rel_path`: the file sits directly
+/// in one of the type's directories, has a governed record filename and is not
+/// excluded. The one predicate `load_records` and the post-command check share.
+pub(crate) fn type_governs(
+    type_config: &urzua_core::config::RecordTypeConfig,
+    rel_path: &Path,
+) -> bool {
+    if !type_config.owns_dir(rel_path.parent()) {
+        return false;
+    }
+    let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    urzua_core::record::is_governed_record_filename(file_name) && !type_config.excludes(file_name)
+}
+
+/// Whether any record type of `config` governs the file at `rel_path`.
+pub(crate) fn is_governed(config: &Config, rel_path: &Path) -> bool {
+    config
+        .record_types
+        .values()
+        .any(|t| type_governs(t, rel_path))
+}
+
 pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],
@@ -103,15 +127,7 @@ pub(crate) fn load_records(
             // schema rule resolved -- and four heuristics accreted in `init`
             // guessing what an adopter meant by the overlap. A directory is a
             // type; `docs/rfc` holds RFCs.
-            if !type_config.owns_dir(rel_path.parent()) {
-                continue;
-            }
-            let Some(file_name) = rel_path.file_name().and_then(|n| n.to_str()) else {
-                continue;
-            };
-            if !urzua_core::record::is_governed_record_filename(file_name)
-                || type_config.excludes(file_name)
-            {
+            if !type_governs(type_config, rel_path) {
                 continue;
             }
             let full_path = repo_root.join(rel_path);

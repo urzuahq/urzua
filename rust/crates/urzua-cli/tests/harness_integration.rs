@@ -251,27 +251,34 @@ fn an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_i
         "{checks}"
     );
 
-    // A guardrail the adapter cannot provide is installed around and reported.
-    let wants_more = config("").replace(
-        "    session-start",
-        "    post-command: {enabled: true}\n    session-start",
-    );
+    // A guardrail no chosen adapter provides is reported, never skipped. The
+    // bundled adapter provides every guardrail the engine knows, so the fixture
+    // names no adapter: `acceptance` is enabled (with a well-formed authority
+    // table) and nothing can wire it.
+    let wants_more = config("")
+        .replace("  adapters: [claude-code]\n", "  adapters: []\n")
+        .replace(
+            "    required_fields: []\n",
+            "    required_fields: []\n    statuses:\n      values: [Proposed, Accepted]\n",
+        )
+        .replace(
+            "    session-start",
+            "    acceptance: {enabled: true}\n    session-start",
+        )
+        + "authority:\n  deciders:\n    maintainers: {logins: [alice]}\n  gates:\n    - {type: adr, to: [Accepted], by: maintainers}\n";
     let dir = fixture("unprovided", &wants_more);
     let (code, v) = harness(&dir, &["install"]);
     assert_eq!(code, 0, "{v}");
     assert!(
-        v["problems"][0]
-            .as_str()
-            .unwrap()
-            .contains("'post-command'"),
-        "{v}"
+        v.to_string().contains("no adapter is named"),
+        "install says nothing was installed: {v}"
     );
-    assert!(dir.join(LOCK).exists());
+    assert!(!dir.join(LOCK).exists());
     // And doctor says it too.
     let out = urzua(&dir, &["doctor"]).output().unwrap();
     let checks = json(&out)["checks"].to_string();
     assert!(
-        checks.contains("post-command") && checks.contains("harness-config"),
+        checks.contains("acceptance") && checks.contains("harness-config"),
         "{checks}"
     );
 }
@@ -1178,7 +1185,11 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
     let settings = read(&dir, SETTINGS);
     std::fs::write(dir.join(SETTINGS), "{}\n").unwrap();
     let v = session_start(&dir, &ok, true);
-    assert_eq!(checks_of(&v), ["hook-entry", "hook-entry"], "{v}");
+    assert_eq!(
+        checks_of(&v),
+        ["hook-entry", "hook-entry", "hook-entry"],
+        "{v}"
+    );
     std::fs::write(dir.join(SETTINGS), settings).unwrap();
 
     // An unwired git hook.

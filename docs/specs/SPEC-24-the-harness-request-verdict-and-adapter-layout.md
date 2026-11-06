@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.3'
+Version: '0.4'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -19,14 +19,14 @@ configuration keys (`harness`, `authority`) are in `SPEC-3`; the commands are in
 
 ## The request
 
-`urzua harness run edit` and `urzua harness run session-start` read one JSON object from stdin. An
+`urzua harness run edit`, `urzua harness run session-start` and `urzua harness run post-command` read one JSON object from stdin. An
 unreadable one is not a crash: it is a stated verdict (below).
 
 | Field | Type | Meaning |
 |---|---|---|
-| `event` | string | `edit` or `session-start`. Informational: the subcommand decides. |
+| `event` | string | `edit`, `session-start` or `post-command`. Informational: the subcommand decides. |
 | `tool` | string or null | The agent's tool name, informational. |
-| `paths` | list of strings | `edit` requires exactly one path, absolute or relative to `cwd`. |
+| `paths` | list of strings | `edit` requires exactly one path, absolute or relative to `cwd`. `post-command` reads none: git names the changed paths. |
 | `content` | string or null | `edit`: the full proposed content of the file. The adapter computes it from the agent's edit. |
 | `actor` | `agent` or `human` | Who is acting. Absent means `agent`. Only `on_unjudged: deny` reads it. |
 | `cwd` | string or null | The directory the engine enters before it finds the repository. |
@@ -54,6 +54,31 @@ not load, the engine reads `harness.guardrails.editor-hook` from the raw file to
 does not silently turn a denying guardrail into an allowing one; a file that is not valid YAML cannot be read
 and is allowed.
 
+### The post-command verdict
+
+`urzua harness run post-command` (`ADR-78`, amendment; `MILE-202`) runs after a shell command and
+reports; it never blocks and always exits 0. It does not read the command: it lists the changed files with
+`git status --porcelain=v1 -z --no-renames --untracked-files=all` (modified, added and untracked files; a
+deleted file is dropped), keeps those a record type governs, drops those whose content hash is the one last
+reported, and runs `check PATHS` once over the rest, in process, staging nothing. Its verdict carries three
+extra fields:
+
+| Field | Meaning |
+|---|---|
+| `findings` | The unwaived findings the checked records have now and did not have at `HEAD`, as `urzua check` prints them. |
+| `gated_moves` | One line per changed record the command moved to a status the `authority` table gates (a new record, or one whose status at `HEAD` was another), judged against `HEAD` when `acceptance` is enabled. Reported as errors of their own, never blocked; empty when none, and reported even when `check` cannot run. A Bash write to a protected path is not reported here. |
+| `pre_existing` | The unwaived findings the same record already had at `HEAD`, judged from its committed text (a record with no copy at `HEAD` has none). Listed, not new. |
+| `checked` | The records `check` ran on this time. Empty when no check ran: a clean tree, no governed record changed, the guardrail is off, or every changed record's content hash was already reported. |
+
+`allow` is a check that found nothing, or none ran (the message says which). `allow-with-warnings` lists the
+findings with file, line, severity, rule and message, says that the command had already run so nothing was
+prevented, and that pre-commit and CI remain the hard gate. `allow-unjudged` is stated, never a quiet pass,
+for a `git` that cannot be run, a working tree git does not know, a configuration that does not load, an
+unreadable request and a `check` that cannot run; the message contains "NOT judged". The memory of reported
+hashes is `.urzua/cache/post-command.json` (derived, ignored by git): it keeps exactly the records that are
+changed now, so a reverted record is forgotten, and a clean tree removes it. The guardrail takes no
+`on_unjudged`.
+
 ## Adapter layout
 
 The bundle is the directory `rust/crates/urzua-cli/bundle/`, embedded in the binary at build time and
@@ -75,7 +100,7 @@ bundle/
 | Key | Meaning |
 |---|---|
 | `name` | Equals the directory name. |
-| `provides` | The guardrails the adapter can wire (`editor-hook`, `session-start`, ...). A guardrail the repository turns on that no chosen adapter provides is reported at install, by `status` and by `doctor`, never skipped. |
+| `provides` | The guardrails the adapter can wire (`editor-hook`, `post-command`, `session-start`, ...). A guardrail the repository turns on that no chosen adapter provides is reported at install, by `status` and by `doctor`, never skipped. |
 | `commands_dir` | Where the agent looks for slash commands. Absent: the adapter installs none. The install writes `<commands_dir>/<type>.md` for every record type the configuration declares (`{{type}}` and `{{dir}}` of `commands/draft.md` filled in) and `<commands_dir>/<name>.md` for every other file of `commands/`. A record type named like one of those lifecycle commands is refused. |
 | `settings_file` | The agent's project settings file the fragment is merged into. A local settings file and user-level settings are neither read nor written. |
 | `requires.interpreters` | Programs the translator runs under; `session-start` reports one that is not on `PATH`. |
@@ -126,5 +151,6 @@ out of the shared files, and deletes the lock last.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-06 | Initial spec: the neutral request and verdict of `urzua harness run`, the adapter directory layout and the lock file. **Why:** `MILE-198`, decided in `ADR-89` section 6. | **structural** |
-> | 2026-11-06 | Bumped to `0.2`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |
-> | 2026-11-06 | Bumped to `0.3`. The adapter layout gains `commands/` and the manifest key `commands_dir` (`MILE-199`); `status` reports a bundle file the lock does not know yet as `missing`. **Why:** `ADR-89` section 1. | **substantive** |
+> | 2026-11-06 | Bumped to `0.2`. Adds the `post-command` event: its request (no paths, git names them), its verdict fields `findings`, `pre_existing` and `checked`, the stated `allow-unjudged` cases, the `gated_moves` field (a Bash-made move to a gated status, `MILE-200`), and the hash memory under `.urzua/cache`; the Claude Code adapter provides it. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.3`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |
+> | 2026-11-06 | Bumped to `0.4`. The adapter layout gains `commands/` and the manifest key `commands_dir` (`MILE-199`); `status` reports a bundle file the lock does not know yet as `missing`. **Why:** `ADR-89` section 1. | **substantive** |

@@ -85,7 +85,10 @@ amend-finish)
   path="$2"
   [ -f "$path" ] || { echo "urzua-record: $path does not exist" >&2; exit 2; }
   diff="$(git diff -U0 HEAD -- "$path")"
-  removed="$(printf '%s\n' "$diff" | grep -c '^-[^-]' || true)"
+  # Every removed line is a change to existing text: a removed list item (`-- x`), blank
+  # line (`-`) or rule (`----`) included. Only lines after the first hunk header count,
+  # so the `--- a/path` file header is never mistaken for one.
+  removed="$(printf '%s\n' "$diff" | awk '/^@@/ {h = 1} h && /^-/ {n++} END {print n + 0}')"
   if [ "$removed" -ne 0 ]; then
     echo "urzua-record: refusing; an amendment only adds lines, and $removed existing line(s) of $path were changed or removed" >&2
     exit 1

@@ -332,6 +332,9 @@ enum HarnessRun {
     Edit,
     /// Check, at the start of a session, that the harness can do its job.
     SessionStart,
+    /// After a shell command, run `check` on the records git shows as changed
+    /// and report; never blocks.
+    PostCommand,
 }
 
 #[derive(Subcommand)]
@@ -506,6 +509,9 @@ fn main() -> ExitCode {
             HarnessTarget::Run {
                 event: HarnessRun::SessionStart,
             } => harness::run_session_start(cli.config),
+            HarnessTarget::Run {
+                event: HarnessRun::PostCommand,
+            } => harness::run_post_command(cli.config),
         },
         Command::Doctor => commands::doctor::run(cli.config),
         Command::Rules => commands::rules::run(),

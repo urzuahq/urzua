@@ -493,17 +493,21 @@ attestation:
   identity: gh-verified
   require_verified: false
 
-# The agent harness this repository declares (ADR-89 section 3, MILE-200). Only the two gates are
-# turned on here: `urzua harness run edit` refuses an agent's Write, Edit or MultiEdit that moves a
-# record to a gated status or writes a protected path (the override of ADR-78 does not lift it), and
-# a person edits outside the agent harness. Both default to on_unjudged: deny. The editor hook and
-# the installed bundle itself are MILE-204's cutover from scripts/hooks.
+# The agent harness this repository declares and has installed (ADR-89, MILE-200, MILE-202).
+# `urzua harness install` writes the adapter's hook entries and translator; a guardrail is on only
+# when named. `acceptance` and `protected-paths` make `urzua harness run edit` refuse an agent's
+# Write, Edit or MultiEdit that moves a record to a gated status or writes a protected path (the
+# override of ADR-78 does not lift it); a person edits outside the agent harness. Both default to
+# on_unjudged: deny. `post-command` reports, never blocks, what a Bash command changed.
 harness:
   adapters: [claude-code]
   instructions_file: AGENTS.md
   guardrails:
     acceptance: {enabled: true}
     protected-paths: {enabled: true}
+    editor-hook: {enabled: true}
+    post-command: {enabled: true}
+    session-start: {enabled: true}
 # Who may accept a record and change a protected path (ADR-89 section 4, MILE-200, SPEC-3). CI reads
 # this through diff.decider-required and the actors file the gate action writes; the evidence is the
 # pull request's author (`pr-author`, the default: a host bars an author from approving their own
@@ -515,8 +519,8 @@ authority:
   deciders:
     maintainers: {logins: [beauwilliams]}
   gates:
-    - {type: adr, to: [Accepted, Rejected], by: maintainers}
-    - {type: rfc, to: [Accepted, Rejected], by: maintainers}
+    - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
+    - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
     - paths: [".claude", "scripts/hooks", ".git-hooks", ".github/workflows", ".urzua/config.yaml"]
       by: maintainers
 
@@ -712,11 +716,12 @@ rules:
       spec: ["Accepted", "Shipped"]
     fix_types: ["bug"]
     link_fields: ["Implements"]
-  # A gated move (an ADR or RFC to Accepted or Rejected) or a protected path in the diff needs the
+  # A gated move (an ADR or RFC to Accepted, Rejected or Superseded, an ADR also to Retired) or a protected path in the diff needs the
   # pull request's author in the `maintainers` group (ADR-89 section 4, MILE-200). The gate action
   # writes the actors file and passes it as `--actors`; a local run has none and reports `info`. It
   # proves authorship only, and cannot tell an agent under the maintainer's token from the maintainer.
-  # `require_evidence` stays off so a pre-commit run by the maintainer is not an error.
+  # `require_evidence` stays off here (maintainer decision, 2026-11-06): CI records the actors and does
+  # not fail on them, which matches the accepted risk of ADR-89 section 4.
   diff.decider-required: error
   # Prose citations of decision ids resolve (MILE-136). RFC-822 and RFC-4122
   # are public standards that share the RFC prefix, not records (MILE-156).

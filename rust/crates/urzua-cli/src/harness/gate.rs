@@ -102,6 +102,38 @@ pub(super) fn judge(
     None
 }
 
+/// After a command has already run: the report line for a record whose status
+/// on disk is a gated one that `HEAD` did not hold (a new record, or one at
+/// another status), else `None`. It judges the same table as [`judge`] and only
+/// describes; the post-command check reports it and never blocks.
+pub(super) fn gated_move_report(repo_root: &Path, config: &Config, rel: &Path) -> Option<String> {
+    let (harness, authority) = (config.harness.as_ref()?, config.authority.as_ref()?);
+    if !harness.enabled("acceptance") || !authority.has_status_gate() {
+        return None;
+    }
+    let content = std::fs::read_to_string(repo_root.join(rel)).ok()?;
+    let (record_type, status) = status_of(config, rel, &content)?;
+    let gate = authority.status_gates(&record_type, &status).next()?;
+    let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
+    let before = match urzua_io::read_at_commit_if_present(repo_root, "HEAD", rel) {
+        Ok(Some(text)) => match status_of(config, rel, &text) {
+            Some((_, before)) if before == status => return None,
+            Some((_, before)) => format!("moved {} from {field} '{before}' to '{status}'", rel.display()),
+            None => format!("set {} to {field} '{status}'", rel.display()),
+        },
+        Ok(None) => format!("filed {} already at {field} '{status}'", rel.display()),
+        Err(_) => format!(
+            "set {} to {field} '{status}' (its copy at HEAD could not be read, so it is treated as a move)",
+            rel.display()
+        ),
+    };
+    Some(format!(
+        "  {} [acceptance] error: the command {before}, a move the authority table reserves for a decider ({}). It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
+        gate_summary(gate)
+    ))
+}
+
 /// What the raw configuration says about the gates when it does not load, read
 /// leniently so a broken file does not silently turn a denying gate into an
 /// allowing one (`ADR-89` section 3).
