@@ -11,6 +11,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "r=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; t=\"$r/.claude/hooks/urzua-claude-code.py\"; if command -v python3 >/dev/null 2>&1 && [ -f \"$t\" ]; then exec python3 -I \"$t\" post-command -- urzua harness run post-command; fi; printf '%s\\n' '{\"systemMessage\":\"urzua harness: the post-command check could NOT run (python3 or .claude/hooks/urzua-claude-code.py is missing), so the effect of this command on records was NOT judged. Run: urzua harness status\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"urzua harness: the post-command check could NOT run (python3 or .claude/hooks/urzua-claude-code.py is missing), so the effect of this command on records was NOT judged. Run: urzua harness status\"}}'; exit 0"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

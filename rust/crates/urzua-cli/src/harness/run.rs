@@ -282,7 +282,7 @@ struct Judging<'a> {
     rel_text: &'a str,
 }
 
-fn live(report: &CheckReport) -> Vec<&Finding> {
+pub(super) fn live(report: &CheckReport) -> Vec<&Finding> {
     report
         .findings
         .iter()
@@ -290,7 +290,7 @@ fn live(report: &CheckReport) -> Vec<&Finding> {
         .collect()
 }
 
-fn key(f: &Finding) -> String {
+pub(super) fn key(f: &Finding) -> String {
     format!("{}|{}", f.rule, f.message)
 }
 
@@ -320,7 +320,7 @@ fn describe(findings: &[&Finding], hint: bool) -> String {
         .join("\n")
 }
 
-fn to_json(findings: &[&Finding]) -> Vec<serde_json::Value> {
+pub(super) fn to_json(findings: &[&Finding]) -> Vec<serde_json::Value> {
     findings
         .iter()
         .map(|f| serde_json::to_value(f).expect("a finding serializes"))

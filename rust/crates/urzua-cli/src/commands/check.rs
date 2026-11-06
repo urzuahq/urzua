@@ -339,6 +339,21 @@ pub(crate) fn judge_proposed(
     )
 }
 
+/// Runs `check PATHS` in process, as the post-command check does: a named file
+/// is examined whether or not git tracks it (`BUG-24`), and nothing is staged.
+pub(crate) fn check_paths(
+    config_path: Option<PathBuf>,
+    paths: Vec<PathBuf>,
+) -> Result<CheckReport, Failure> {
+    execute(
+        config_path,
+        CheckArgs {
+            paths,
+            ..Default::default()
+        },
+    )
+}
+
 fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
     let CheckArgs {
         paths,

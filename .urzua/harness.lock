@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "bundle_version": "0.3.0",
+  "adapters": [
+    "claude-code"
+  ],
+  "files": {
+    ".claude/hooks/urzua-claude-code.py": "sha256:ae3db934432b86d0414002d7f8d2dad6303dd737374102dc32553b4c919cdbb1"
+  },
+  "entries": [
+    {
+      "file": ".claude/settings.json",
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "handler": "post-command",
+      "hash": "sha256:3b19fcb3c6cfe9b0074757d605028a607d166b9cb82149ac3c0e734e8076460f"
+    },
+    {
+      "file": ".claude/settings.json",
+      "event": "PreToolUse",
+      "matcher": "Write|Edit|MultiEdit",
+      "handler": "edit",
+      "hash": "sha256:9a1ad9d75dc822e170193cb2a8d1f8c77249d5deb08bd0e2171a704fef3d63e4"
+    },
+    {
+      "file": ".claude/settings.json",
+      "event": "SessionStart",
+      "handler": "session-start",
+      "hash": "sha256:4584ed858e35884427b63d15b149262e8affada3da785f470908cd320ff02b90"
+    }
+  ],
+  "blocks": []
+}
