@@ -1,5 +1,5 @@
 ---
-Version: '0.104'
+Version: '0.105'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -675,11 +675,12 @@ note. An edge `A Depends-on B` runs `B -> A`: blocker first.
 | `schema` | Integer, `1`. Adding a key, a note kind or a `reason` does not change it; changing what a number means does. |
 | `pairs` | The declared `roadmap.pairs`, in declaration order. |
 | `waves` | Array of arrays of ids. A record's wave is `0` with no open dependency, else `1 +` the largest wave among its open dependencies; a dependency in a `success` status is ignored. Layer `n` holds wave `n`. |
-| `ready` | Open records that are not derived-blocked and not kept out by `needs_replan`. `blocked` is derived only (`ADR-83`): a record is blocked when a direct dependency is not in a status its own type declares `success`; a written status is never read for it. Ready is wave 0 by construction, and both are emitted. |
+| `ready` | Open records that are not derived-blocked and not kept out by `needs_replan`. `blocked` is derived only (`ADR-83`): a record is blocked when a direct dependency is not in a status its own type declares `success`; a written status is never read for it. With every type work, ready is wave 0 by construction, and both are emitted. With `roadmap.work_types` declared, `ready` is a subset of wave 0: a work record whose only open dependency is a non-work record is in wave 0 and `blocked`, and one that sits behind open work through a finished non-work record is unblocked and in a later wave. |
 | `critical_path` | The longest chain of included records by count, and among the longest the lexicographically smallest id sequence, blocker first. Computed over the whole chain, not greedily. An empty list when no included record has an included dependency, since every record is then a chain of one and none is critical. |
 | `records` | Map keyed by id, in natural order, of every open record, `needs_replan` ones included: `type`, `status` (the written value, `null` when none), `wave` (`null` when kept out), `ready`, `blocked`, `blocked_by` (direct dependencies not in `success`), `blocks` (every open record that transitively depends on this one, never itself). |
 | `groups` | `roadmap.group_by` as nested arrays: `{field, value, groups}` for a non-final field, `{field, value, records}` for the final one. Values sort naturally, the `null` bucket (no value) last. Holds the same set as `records`. `[]` when `group_by` is empty. |
 | `needs_replan` | `{record, reason, via}` per open record kept out of `waves`, `ready` and `critical_path`. |
+| `waiting_on` | Present only when `roadmap.work_types` is declared: `{record, type, status, blocks}` per non-work record not in a `success` status (a `Dropped` one included, since someone must re-point its dependents), in natural id order. `blocks` lists the work records that transitively depend on it. An empty array when every non-work record is finished. |
 | `cycles` | Each strongly connected component of more than one record, or a record with an edge to itself, once, members ascending. |
 | `notes` | `{kind, record, pair, field, message}` from a closed set. |
 
@@ -687,6 +688,21 @@ note. An edge `A Depends-on B` runs `B -> A`: blocker first.
 record whose type declares no status vocabulary, or that states no `Status`, is open and draws a
 `no-status-vocabulary` note. In scope are the records of types that declare a side of a declared
 pair, and every record an edge reaches, whatever its type.
+
+**Work types** (`MILE-196`, `ADR-82` Amendment of 2026-11-05). With `roadmap.work_types` absent every
+type is work and nothing in this section changes, `waiting_on` included. With it declared, a record of
+a type it does not list is non-work: it stays a node of the one graph and gates its dependents as any
+record does (a dependent of an `Open` one is `blocked` and not `ready`, of one in `success` released,
+of one in `failure` in `needs_replan` as `failed-dependency` with `via` the non-work record), but it is
+in no wave, not in `ready` or `critical_path`, not a key of `records`, not in `groups`, not in
+`needs_replan` as a record, not counted by `nothing-open` and not a subject of `unstructured-wait`;
+`no-status-vocabulary` is still raised for it. Exclusion still propagates through it. Waves and the
+critical path count work records only and contract their edges through chains of non-work records,
+whatever those records' status: with work `W`, non-work `C` depending on `W`, and work `R` depending
+on `C`, `W` is in wave 0, `R` in wave 1, and `W`, `R` is a chain of length 2. `blocks` of a work
+record lists work records only and reaches them through non-work ones. `sequence.cycle` and
+`sequence.status-agreement` never read `work_types`, so they give the same findings with and without
+it, and `cycles` lists a loop's members whatever their type.
 
 **Natural order.** Every id list, map key set and `waves` layer is ascending in natural id order: the
 text before a trailing number compared as text, then the number as a number, then the whole as text,
@@ -914,3 +930,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.102`. `check --base` pulls in an unchanged record whose `Realized-by` glob locator covers a changed file (it had compared the glob as a path prefix and missed it); a missing merge base in a shallow clone says so and how to fix it instead of "the histories are unrelated"; `status.transition-allowed` counts a base copy it cannot read as unreadable, with a notice, instead of as a new record (rule-table row regenerated). The `back-pointer-uncovered-path`, `back-pointer-uncovered-test-path` and `decision-uncovered-path` edit-config actions now target the configuration file instead of the declared source path. **Why:** review of the CLI and the core rules found each: `check --base` exited 0 where a full check exits 1, a read error skipped a transition check, and an agent applying the action edited a source path. | **substantive** |
 > | 2026-11-05 | Bumped to `0.103`. The generated description of `embodiment.locator-on-back-pointer-path` states that a record of a type declaring `statuses.delivery.back_pointer_evidence: false` is not flagged and that a locator whose file already carries the comment is told to drop the locator. **Why:** hardening review: the nudge told a `Fixed` bug to drop its only counted evidence, and told a locator to add a comment that was already there. | **substantive** |
 > | 2026-11-05 | Bumped to `0.104`. A path or diff scope computes embodiment drift and claim ages for the records in scope only, since a record's drift reaches no other record's finding; `filename.identity-pattern`'s all-files-mismatch finding names the first five renames and counts the rest. **Why:** Phase 0 hardening from an adopter switchover -- `check <one path>` took as long as the whole corpus, and the finding named 466 renames in one string. | **substantive** |
+> | 2026-11-05 | Bumped to `0.105`. Adds the roadmap output of `roadmap.work_types` (`MILE-196`): a non-work record gates its dependents but is in no wave, `ready`, `critical_path`, `records`, `groups` or `needs_replan`; waves and the critical path contract through non-work records; `ready` is a subset of wave 0; a top-level `waiting_on` lists the non-work records not finished. Absent, the output is unchanged. **Why:** `ADR-82`'s Amendment of 2026-11-05, accepted by the maintainer. | **substantive** |
