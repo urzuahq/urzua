@@ -124,3 +124,6 @@ jobs:
           binary: rust/target/release/urzua
           base-ref: ${{ github.base_ref }}
           pr-number: ${{ github.event.pull_request.number }}
+          # The authority table (ADR-89 section 4): the pull request's author and
+          # current approvers, for diff.decider-required.
+          actors: "true"

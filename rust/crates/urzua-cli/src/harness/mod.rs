@@ -15,6 +15,7 @@
 
 mod block;
 mod bundle;
+mod gate;
 mod json;
 mod lock;
 mod post_command;
@@ -1038,6 +1039,33 @@ pub(crate) enum Level {
     Warn,
 }
 
+/// What `urzua doctor` says about the `authority` table (`ADR-89` section 4):
+/// what it enforces, what it cannot, and that the host's settings are the host's.
+/// Said whenever the table is declared, so it never reads as more protection than
+/// it is.
+fn authority_checks(config: &urzua_core::config::Config) -> Vec<(Level, &'static str, String)> {
+    let mut out = vec![(
+        Level::Ok,
+        "authority-host",
+        "authority is declared. The required status check, branch protection and any CODEOWNERS file are the host's settings, which urzua can neither read nor verify, so it does not claim them. Locally it refuses an agent's edit tools (a Bash command is reported, not stopped); in CI diff.decider-required proves authorship only, so with a single maintainer it cannot tell an agent acting under the maintainer's token from the maintainer (the accepted risk of ADR-89). A distinct agent identity, with CODEOWNERS on the protected paths and branch protection requiring the code owner, is a future option and is not configured here.".to_string(),
+    )];
+    let rule_on = config
+        .rules
+        .get(urzua_core::rules::RULE_DIFF_DECIDER_REQUIRED)
+        .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off);
+    if !rule_on {
+        out.push((
+            Level::Warn,
+            "authority-host",
+            format!(
+                "authority is declared but the rule {} is not enabled, so CI checks no gated change against it",
+                urzua_core::rules::RULE_DIFF_DECIDER_REQUIRED
+            ),
+        ));
+    }
+    out
+}
+
 /// What `urzua doctor` reports about the harness, when `harness` is declared:
 /// unknown keys, guardrails no adapter provides, whether and how well it is
 /// installed, and the escape hatch of a guardrail set to `on_unjudged: deny`.
@@ -1045,14 +1073,17 @@ pub(crate) fn doctor_checks(
     root: &Path,
     config: &urzua_core::config::Config,
 ) -> Vec<(Level, &'static str, String)> {
+    let mut out = Vec::new();
+    if config.authority.is_some() {
+        out.extend(authority_checks(config));
+    }
     let Some(harness) = config.harness.clone() else {
-        return Vec::new();
+        return out;
     };
     let env = Env {
         root: root.to_path_buf(),
         harness: Some(harness.clone()),
     };
-    let mut out = Vec::new();
     let adapters = chosen_adapters(&env, None);
     let (unknown, unprovided) = harness_problems(&env, &adapters);
     if unknown.is_empty() {

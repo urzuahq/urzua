@@ -1,0 +1,5 @@
+[
+  {"user": {"login": "bob"}, "state": "APPROVED", "commit_id": "aaaa111", "submitted_at": "2026-11-05T09:00:00Z"},
+  {"user": {"login": "dave"}, "state": "APPROVED", "commit_id": "bbbb222", "submitted_at": "2026-11-05T09:30:00Z"},
+  {"user": {"login": "dave"}, "state": "CHANGES_REQUESTED", "commit_id": "bbbb222", "submitted_at": "2026-11-05T10:30:00Z"}
+]

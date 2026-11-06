@@ -411,6 +411,11 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_override_log) {
             continue;
         }
+        // The authority table names logins and gates, which no corpus can supply
+        // (`MILE-200`).
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_authority) {
+            continue;
+        }
         // A rule that reads a per-type declaration `init` leaves empty would
         // report `ran` over zero records (BUG-73). `init` infers nothing from
         // the corpus (ADR-33), so the adopter declares it and enables the rule;

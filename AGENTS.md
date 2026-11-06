@@ -243,6 +243,25 @@ decision was reached on someone's behalf (`Supersedes / Superseded-by`, a vacate
 closing a cross-reference) and is not covered by the exceptions above. Distinct from the rule above
 this one: that one guards an already-decided record's content; this one guards the decision itself.
 
+## Who accepts a record, and the accepted risk
+
+`authority` in `.urzua/config.yaml` (`ADR-89` section 4, `SPEC-3`) names the maintainer as the only
+decider for an ADR or RFC moving to `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`) and for the protected paths (`.claude`,
+`scripts/hooks`, `.git-hooks`, `.github/workflows`, `.urzua/config.yaml`). Through `urzua harness run
+edit` the engine refuses an agent's Write, Edit or MultiEdit that does either, and no override lifts it;
+a person edits outside the agent harness. In CI `diff.decider-required` checks that the pull request's
+author is the maintainer. That is **authorship, not who decided**: agents here run under the
+maintainer's token, so it cannot tell an agent from the maintainer.
+
+**Accepted risk (the maintainer, 2026-11-05: "We just need to clearly document this for now and accept
+the risk").** These routes get past the guardrail and are accepted, so the rule that you never accept a
+record or touch a guardrail rests on this file and on the person reading the diff: a Bash command that
+writes a `Status` (`sed -i`, `python -c`, `cp`, `tee`, a heredoc), which the post-command check reports
+(a move to a gated status; a protected path written by shell is not reported) and cannot stop; editing the guardrails by shell, through a local or user-level settings file, or
+skipping the commit hook with `--no-verify`; a pull request that changes its own workflow, since the
+gate runs from the head commit's workflow; and an agent acting as the maintainer. A distinct agent
+identity with `CODEOWNERS` and branch protection is a future option, not configured. Do none of these.
+
 ## Findings, levels and the editor hook
 
 - **Levels.** A rule is `off`, `info`, `warn` or `error` (`ADR-87`). An `info` finding is reported and

@@ -88,6 +88,8 @@ struct Context<'a> {
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
+    /// The identities from `--actors` (`MILE-200`).
+    actors: Option<urzua_core::authority::Actors>,
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
     templates: urzua_core::new_record::TemplateValues,
@@ -246,6 +248,7 @@ impl<'a> Context<'a> {
             base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
             committed_statuses: self.committed_statuses.as_ref(),
+            actors: self.actors.as_ref(),
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
             live_paths: &self.live_paths,
@@ -275,6 +278,8 @@ pub struct CheckArgs {
     pub proposed: Option<String>,
     /// `--rules`: empty means every declared rule.
     pub rules: Vec<String>,
+    /// `--actors`: the file the gate action writes (`MILE-200`).
+    pub actors: Option<PathBuf>,
     /// Notices the invoking command adds to the report (`audit`'s deprecation).
     pub extra_notices: Vec<Notice>,
 }
@@ -362,6 +367,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         stdin_path,
         proposed,
         rules: requested_rules,
+        actors: actors_path,
         extra_notices,
     } = args;
     if stdin_path.is_some() && (!paths.is_empty() || base.is_some()) {
@@ -370,6 +376,13 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
                 .into(),
         );
     }
+    if stdin_path.is_some() && actors_path.is_some() {
+        return Err(
+            "urzua check --actors names who made a --base change: it cannot be combined with --stdin-path"
+                .into(),
+        );
+    }
+    let actors = actors_path.as_deref().map(read_actors).transpose()?;
     let opened = open_session(
         &paths,
         config_path,
@@ -385,7 +398,14 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         opened.changed,
         opened.prospective,
     )?;
-    let (context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    notices.extend(actors_notices(
+        &session.config,
+        actors.is_some(),
+        base.is_some(),
+        selection.as_deref(),
+    ));
+    context.actors = actors;
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
     let why_deferred = if scope.prospective.is_some() {
@@ -865,14 +885,28 @@ fn load_context<'a>(
             // The diff rules judge the changed set itself; `None` without `--base`.
             changed_paths: changes.map(|c| c.changed.iter().cloned().collect()),
             committed_statuses: changes.map(|c| {
+                // The types an authority status gate names are read too, but only
+                // when `diff.decider-required` will use them.
+                let gated = if enabled_setting(config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some()
+                {
+                    config
+                        .authority
+                        .as_ref()
+                        .map(|a| a.gated_types())
+                        .unwrap_or_default()
+                } else {
+                    Default::default()
+                };
                 crate::diff_scope::committed_statuses(
                     repo_root,
                     &session.config,
                     &session.records,
                     c,
+                    &gated,
                     &mut notices,
                 )
             }),
+            actors: None,
             repo_root: repo_root.clone(),
             base_text,
             templates,
@@ -881,6 +915,78 @@ fn load_context<'a>(
         },
         notices,
     ))
+}
+
+/// Reads the actors file the gate action writes (`MILE-200`): JSON,
+/// `{"schema": 1, "pr_author": LOGIN, "approvers": [LOGIN, ...]}`. A file that
+/// cannot be read, is not JSON or does not have that shape is a could-not-run:
+/// a run told who made a change and unable to read it must not pass as if it
+/// had not been told.
+fn read_actors(path: &Path) -> Result<urzua_core::authority::Actors, Failure> {
+    let said = |why: String| -> Failure {
+        format!("urzua check --actors {}: {why}", path.display()).into()
+    };
+    let text =
+        std::fs::read_to_string(path).map_err(|e| said(format!("could not be read: {e}")))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| said(format!("is not valid JSON: {e}")))?;
+    if value.get("schema").and_then(|s| s.as_u64()) != Some(1) {
+        return Err(said("must carry \"schema\": 1".to_string()));
+    }
+    let pr_author = match value.get("pr_author") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(s)) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        Some(_) => return Err(said("pr_author must be a login string or null".to_string())),
+    };
+    let approvers = match value.get("approvers") {
+        None | Some(serde_json::Value::Null) => Vec::new(),
+        Some(serde_json::Value::Array(list)) => list
+            .iter()
+            .map(|v| match v.as_str().map(str::trim) {
+                Some(s) if !s.is_empty() => Ok(s.to_string()),
+                _ => Err(said(
+                    "approvers must be a list of login strings".to_string(),
+                )),
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        Some(_) => {
+            return Err(said(
+                "approvers must be a list of login strings".to_string(),
+            ))
+        }
+    };
+    Ok(urzua_core::authority::Actors {
+        pr_author,
+        approvers,
+    })
+}
+
+/// An actors file nothing reads is said, never ignored (`MILE-200`): the rule is
+/// off, or the run has no `--base` for it to judge.
+fn actors_notices(
+    config: &Config,
+    given: bool,
+    has_base: bool,
+    selection: Option<&[String]>,
+) -> Vec<Notice> {
+    if !given {
+        return Vec::new();
+    }
+    let rule = rules::RULE_DIFF_DECIDER_REQUIRED;
+    let why = if enabled_setting(config, rule).is_none() {
+        format!("{rule} is not enabled in the configuration")
+    } else if selection.is_some_and(|s| !s.iter().any(|r| r == rule)) {
+        format!("--rules leaves {rule} out")
+    } else if !has_base {
+        format!("{rule} judges a --base diff and this run has no --base")
+    } else {
+        return Vec::new();
+    };
+    vec![Notice {
+        severity: NoticeSeverity::Warning,
+        subject: rule.to_string(),
+        message: format!("the --actors file was read by no rule: {why}"),
+    }]
 }
 
 /// Records a source comment cites (`MILE-128`).

@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.14'
+Version: '0.15'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -118,7 +118,9 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   `Bash` and on only when `harness.guardrails.post-command` is named (`ADR-78` amendment, `MILE-202`), runs
   `check` on the records `git status` shows as changed after any Bash command, untracked ones included, and
   reports the unwaived findings to the agent as context. It reads no command, stages nothing, never blocks and
-  always exits 0; pre-commit and CI remain the hard gate. A record failing at `HEAD` is listed as pre-existing,
+  always exits 0; pre-commit and CI remain the hard gate. With `acceptance` enabled it also reports, as an error of
+  its own, a changed record whose status is one the `authority` table gates and that `HEAD` did not hold (a
+  Bash-made acceptance); a Bash write to a protected path is not reported by it. A record failing at `HEAD` is listed as pre-existing,
   a record whose content hash was already reported is not checked again, a deleted record is not judged, and a
   `git` that is absent, a tree git does not know, a configuration that does not load or a `check` that cannot
   run is stated as NOT judged. The request, verdict and memory are in `SPEC-24`. This repository enables it in
@@ -129,10 +131,40 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   reason.
 - **Vendor neutrality.** The engine source names no agent vendor. A test scans every `src/` directory for
   vendor names; the bundle directory, where an adapter names its vendor by design, is outside `src/`.
-- **Not yet.** This repository still has `scripts/hooks/*` on disk, unwired (`MILE-204` deletes it). The acceptance and
-  protected-path guardrails, the generated drafting commands and the post-command check are `MILE-200`,
-  `MILE-199` and `MILE-202`; the agent-instructions block states what an agent must not do and is advisory,
-  only the verdicts bind.
+- **Not yet.** This repository still has `scripts/hooks/*` on disk, unwired (`MILE-204` deletes it). The generated
+  drafting commands are `MILE-199`; the agent-instructions block states what an agent must not do and is
+  advisory, only the verdicts bind.
+
+## Who may accept a record: the acceptance guardrail (`ADR-89` section 4, `MILE-200`)
+
+`authority` in `.urzua/config.yaml` (`SPEC-3`, "Who may accept a record") is one table read in two places,
+and this section claims only what each place does.
+
+- **Locally, the edit tools are refused.** With `harness.guardrails.acceptance` and `protected-paths`
+  enabled, `urzua harness run edit` denies an agent's Write, Edit or MultiEdit that moves an ADR or RFC to
+  `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `scripts/hooks`, `.git-hooks`, `.github/workflows` or
+  `.urzua/config.yaml`. The deny cannot be overridden: the override of `ADR-78` is a name in an environment
+  variable the agent controls, so it is not accepted for this verdict, and the output says so. A person
+  edits outside the agent harness and is not affected; that is also the escape hatch when a denying
+  guardrail cannot judge (a broken `authority` table, a missing binary), and `urzua doctor` and the verdict
+  say so. This repository declares both gates and has the Claude Code bundle installed, so the refusal is
+  wired into an agent session here.
+- **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), fed an `--actors` file the gate
+  action (`.github/actions/urzua-gate`, input `actors: "true"`) writes from the GitHub API, requires the pull
+  request's author, the default `pr-author` evidence, to be in the `maintainers` group for every gated move
+  and path. With a single maintainer it proves authorship only: it cannot tell an agent acting under the
+  maintainer's token from the maintainer. A local run has no file and reports `info`, so the maintainer,
+  working by hand, can still accept a record and commit it.
+- **Accepted risk.** The maintainer decided on 2026-11-05: "We just need to clearly document this for now
+  and accept the risk." These get past the guardrail: (1) a Bash command that writes the status
+  (`sed -i`, `python -c`, `cp`, `tee`, a heredoc), which the post-command check reports (a gated status move; a protected path written by shell is not) and cannot stop;
+  (2) editing the guardrail itself by shell or through a settings file the install does not read, and
+  `git commit --no-verify`; (3) a pull request that changes its own workflow, since the gate runs from the
+  head commit's workflow, which only `CODEOWNERS` and branch protection (the host's settings) could stop;
+  (4) an agent acting as the maintainer, since CI cannot tell them apart. The required status check, branch
+  protection and `CODEOWNERS` are the host's: `urzua doctor` says so and does not verify them. A distinct
+  agent identity with `CODEOWNERS` on the protected paths is a future option and is not configured.
+  `AGENTS.md` and the bundle's instructions block carry the same statement.
 
 ## What's deliberately not built
 
@@ -188,3 +220,4 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
 > | 2026-11-05 | Bumped to `0.12`. `AGENTS.md` catches up with the rules decided since it was last edited: seven record types with `condition` (`SPEC-23`); `Realized-by` as the one evidence field and the retired `Regression-test` (`ADR-84`); permanent waivers with a `Category` (`ADR-86`); the `info` level (`ADR-87`); the editor hook, `block_on`, the override log and never overriding it yourself (`ADR-78`); re-pins with an honest reason listed in the PR body (`SPEC-8`); amending an Accepted decision through a dated `## Amendment` section; and `make ci` runs `make records`, not `urzua check docs/`. **Why:** a review of the agent harness found the file silent on these, so an agent hitting a hook block or a re-pin had no instruction. | **substantive** |
 > | 2026-11-06 | Bumped to `0.13`. Documents the installable harness bundle: `urzua harness install`, `status`, `update`, `uninstall` and `adapters`, the settings-merge and instructions-block rules, the `run edit` and `run session-start` cores, the stated verdict for an unset project-directory variable, and the vendor-neutral engine; this repository still runs `scripts/hooks` until `MILE-204`. **Why:** `MILE-198`, decided in `ADR-89`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.14`. Documents the post-command check: after any Bash command the harness runs `check` on the records git shows as changed (untracked included) and reports, never blocks; this repository enables it and has the Claude Code bundle installed. The editor hook is wired once, through the installed bundle; `scripts/hooks` stays on disk, unwired, until `MILE-204` deletes it, because both wired at once would block twice and write each override twice. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.15`. Documents the acceptance and protected-path guardrails (`MILE-200`): the local refusal of an agent's edit-tool move to a gated status or write to a protected path (final, not liftable by the override), `diff.decider-required` fed by the gate action's actors file as authorship evidence only, and the "Accepted risk" statement (the Bash, shell-edited guardrail, self-modifying workflow and shared-token routes, accepted by the maintainer on 2026-11-05). The post-command check also reports a Bash-made move to a gated status, judged against `HEAD`. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |

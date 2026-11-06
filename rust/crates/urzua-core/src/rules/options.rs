@@ -241,6 +241,21 @@ impl RuleOpts for SourceAndRecordsMixedOpts {
     }
 }
 
+/// `diff.decider-required`: with `require_evidence` a gated change that arrives
+/// with no actors file is an error instead of `info` (`MILE-200`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeciderRequiredOpts {
+    pub require_evidence: bool,
+}
+
+impl RuleOpts for DeciderRequiredOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        DeciderRequiredOpts {
+            require_evidence: s.require_evidence.unwrap_or(false),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::config::{Config, RuleOpts};

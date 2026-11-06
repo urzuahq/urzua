@@ -79,6 +79,9 @@ pub struct RuleCtx<'a> {
     /// Each changed record's `Status` at the merge base, for the types that
     /// declare `transitions`; `None` on a run with no `--base` (`ADR-72`).
     pub committed_statuses: Option<&'a HashMap<PathBuf, CommittedStatus>>,
+    /// The identities the host supplied (`urzua check --actors`); `None` when
+    /// no file was given (`MILE-200`).
+    pub actors: Option<&'a crate::authority::Actors>,
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],

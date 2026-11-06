@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.2'
+Version: '0.3'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -42,7 +42,7 @@ readiness problems, each `{check, message}`.
 |---|---|---|
 | `allow` | 0 | Judged, nothing to report. The message counts the rules that ran and names the enabled rules a single record cannot be judged by. |
 | `allow-with-warnings` | 0 | Judged; warnings (or errors already on disk) are in `message`, nothing blocks. |
-| `block` | 1 | An unwaived error this edit introduced (`block_on`, `SPEC-3`), or an unjudged edit refused by `on_unjudged: deny`. |
+| `block` | 1 | An unwaived error this edit introduced (`block_on`, `SPEC-3`), an unjudged edit refused by `on_unjudged: deny`, or, for an `agent` actor, a move to a status or a write to a path the `authority` table gates (`acceptance`, `protected-paths`). The last is final: a named override is not accepted for it, the message says so, and no override-log row is written. A `human` actor is not affected. |
 | `allow-unjudged` | 0 | The engine could not judge: no rule examined the record, history or configuration unreadable, the guardrail is not enabled, an unreadable request. The message says so and the edit proceeds. |
 | `allow-override` | 0 | A block was overridden by name; with `override_log` declared, one row per overridden finding is appended to it. |
 | `not-governed` | 0 | No record type governs the path. |
@@ -66,6 +66,7 @@ extra fields:
 | Field | Meaning |
 |---|---|
 | `findings` | The unwaived findings the checked records have now and did not have at `HEAD`, as `urzua check` prints them. |
+| `gated_moves` | One line per changed record the command moved to a status the `authority` table gates (a new record, or one whose status at `HEAD` was another), judged against `HEAD` when `acceptance` is enabled. Reported as errors of their own, never blocked; empty when none, and reported even when `check` cannot run. A Bash write to a protected path is not reported here. |
 | `pre_existing` | The unwaived findings the same record already had at `HEAD`, judged from its committed text (a record with no copy at `HEAD` has none). Listed, not new. |
 | `checked` | The records `check` ran on this time. Empty when no check ran: a clean tree, no governed record changed, the guardrail is off, or every changed record's content hash was already reported. |
 
@@ -130,16 +131,15 @@ out of the shared files, and deletes the lock last.
 
 ## What's deliberately not built
 
-- The acceptance and protected-path guardrails, the `authority` table and `diff.decider-required`
-  (`MILE-200`); the generated drafting and lifecycle commands (`MILE-199`); the post-command check
-  (`MILE-202`); the attestation identity source (`MILE-201`). The names are known to `harness.guardrails`
-  and an adapter that does not list them in `provides` is reported, not silently skipped.
+- The generated drafting and lifecycle commands (`MILE-199`) and the post-command check (`MILE-202`).
+  `post-command` is known to `harness.guardrails`, and an adapter that does not list it in `provides` is
+  reported, not silently skipped.
 - Cutting this repository over from `scripts/hooks` to the installed bundle (`MILE-204`).
 - A published bundle (`ADR-89` option C). The layout keeps it open.
 
 ## References
 
-- `ADR-89` (sections 1 to 3 and 6), `ADR-69`, `ADR-71`, `ADR-78`.
+- `ADR-89` (sections 1 to 4 and 6), `ADR-69`, `ADR-71`, `ADR-78`.
 - `SPEC-3` (`harness`, `authority`, `block_on`, `override_log`), `SPEC-19` (the guardrails of this repository).
 - `MILE-198`.
 
@@ -148,4 +148,5 @@ out of the shared files, and deletes the lock last.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-06 | Initial spec: the neutral request and verdict of `urzua harness run`, the adapter directory layout and the lock file. **Why:** `MILE-198`, decided in `ADR-89` section 6. | **structural** |
-> | 2026-11-06 | Bumped to `0.2`. Adds the `post-command` event: its request (no paths, git names them), its verdict fields `findings`, `pre_existing` and `checked`, the stated `allow-unjudged` cases, and the hash memory under `.urzua/cache`; the Claude Code adapter provides it. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.2`. Adds the `post-command` event: its request (no paths, git names them), its verdict fields `findings`, `pre_existing` and `checked`, the stated `allow-unjudged` cases, the `gated_moves` field (a Bash-made move to a gated status, `MILE-200`), and the hash memory under `.urzua/cache`; the Claude Code adapter provides it. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.3`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |

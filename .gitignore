@@ -28,3 +28,6 @@ dist/
 # are tracked; cache/ is derived and never authoritative.
 .urzua/cache/
 build.log
+
+# Local build and test output
+*.log

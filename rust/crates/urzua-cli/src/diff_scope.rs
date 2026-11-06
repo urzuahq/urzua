@@ -204,7 +204,8 @@ fn deleted_by_stable_id(
 }
 
 /// Each changed record's `Status` at the merge base, for the types that declare
-/// `transitions` (`ADR-72`). A path the base does not have is looked up by
+/// `transitions` (`ADR-72`) and the types in `also` (the types an `authority`
+/// status gate names, `MILE-200`, which `diff.decider-required` reads). A path the base does not have is looked up by
 /// `Stable-Id` among the records the diff deleted, because the diff reports a
 /// rename as a deletion plus an addition (`BUG-191`): a renamed record is
 /// judged against the status it had before. One with no match, or no
@@ -218,6 +219,7 @@ pub(crate) fn committed_statuses(
     config: &Config,
     records: &[Record],
     changes: &urzua_io::GitChanges,
+    also: &std::collections::BTreeSet<&str>,
     notices: &mut Vec<Notice>,
 ) -> HashMap<PathBuf, CommittedStatus> {
     let mut out = HashMap::new();
@@ -234,6 +236,7 @@ pub(crate) fn committed_statuses(
         if !type_config
             .status_decl()
             .is_some_and(|d| d.has_transitions())
+            && !also.contains(record.record_type.as_str())
         {
             continue;
         }
@@ -247,7 +250,7 @@ pub(crate) fn committed_statuses(
                     severity: NoticeSeverity::Warning,
                     subject: rules::RULE_STATUS_TRANSITION_ALLOWED.to_string(),
                     message: format!(
-                        "{}: could not read the merge base's copy, so its Status transition is not judged: {e}",
+                        "{}: could not read the merge base's copy, so its Status move is not judged: {e}",
                         record.path.display()
                     ),
                 });

@@ -374,6 +374,24 @@ Resolved on 2026-11-05 and recorded above: `/done` is covered by an amendment to
 the CI evidence default is `pr-author`, with the single-maintainer residual risk accepted by the maintainer
 (section 4); the attestation default stays `gh-verified` with the actor kind added to the row (section 5).
 
+## Amendment (2026-11-06): `require_evidence` is a repository option, and the gated statuses
+
+Accepted by the maintainer on 2026-11-06.
+
+Section 4 says the gate action turns `require_evidence` on. That cannot be: `require_evidence` is an option
+of the rule `diff.decider-required`, set in the repository's `.urzua/config.yaml`, and an action cannot
+set a rule option. The corrected statement is: `require_evidence` is a config option the repository sets;
+the gate action always passes `--actors` (input `actors: "true"`) so the evidence file exists in CI; this
+repository leaves `require_evidence` off. CI therefore records who authored and approved a gated change
+and does not fail on it, which is the accepted risk of section 4 (with a single maintainer the evidence is
+authorship, always the maintainer's). A repository with a second human or a distinct agent identity can
+turn it on.
+
+Open question 1 is answered for this repository: its `authority` table gates `Accepted`, `Rejected`,
+`Superseded` and `Retired` for ADRs and `Accepted`, `Rejected` and `Superseded` for RFCs (an RFC has no
+`Retired` status). An in-place edit of an Accepted ADR's Decision text stays handled by the amendment
+convention and is not gated. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -395,3 +413,4 @@ the CI evidence default is `pr-author`, with the single-maintainer residual risk
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decisions, 2026-11-05 (ship an installable harness bundle in Phase 0; acceptance enforced by the harness and CI; attestation identity source a configuration option); the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Amended after independent review of the Proposed text. The acceptance guardrail now claims only what holds (edit tools refused locally, Bash reported, CI evidence is authorship) and gains an "Accepted risk" section (bypasses accepted by the maintainer); the default `evidence` is `pr-author`; the `ADR-70` question is resolved by an amendment there; actor kind joins the attestation row and `RFC-2`, `BUG-16`, `MILE-18` and `MILE-66` are cited; `harness uninstall`, settings-merge rules, the `on_unjudged: deny` escape hatch and an Open questions section are added; citation and vendor-neutrality corrections. **Why:** Maintainer decisions of 2026-11-05 on the review at pull request 355; `Status` stays Proposed. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-06 | Added an `## Amendment (2026-11-06)`, accepted by the maintainer on 2026-11-06: `require_evidence` is a config option the repository sets, the gate action always passes `--actors`, and this repository leaves it off (an action cannot set a rule option); open question 1 answered (this repository gates `Accepted`, `Rejected`, `Superseded` and `Retired` for ADRs and `Accepted`, `Rejected` and `Superseded` for RFCs). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-06, on the review of pull request 374. | **substantive** |
