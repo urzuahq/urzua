@@ -1038,7 +1038,7 @@ fn init_flags_headerless_numbered_pages_and_finds_a_slug_named_record_directory(
     for n in ["alpha.md", "beta.md", "gamma.md"] {
         std::fs::write(
             dir.join("docs/specs").join(n),
-            "# Thing\n\n> Status: Draft\n> Owner: someone\n\n## Body\n",
+            "---\nStatus: Draft\nOwner: someone\n---\n# Thing\n\n## Body\n",
         )
         .unwrap();
     }
@@ -1056,13 +1056,17 @@ fn init_flags_headerless_numbered_pages_and_finds_a_slug_named_record_directory(
         .collect();
     assert!(dirs.contains(&"docs/adr"), "{dirs:?}");
     assert!(dirs.contains(&"docs/specs"), "{dirs:?}");
+    assert!(
+        !dirs.contains(&"docs/pages"),
+        "a directory with no header is not proposed: {dirs:?}"
+    );
     let notices = parsed["notices"].to_string();
     assert!(
-        notices.contains("may hold pages rather than records: docs/pages"),
-        "the headerless directory is flagged: {notices}"
+        notices.contains("hold pages rather than records: docs/pages"),
+        "the headerless directory is named: {notices}"
     );
     assert!(
-        !notices.contains("may hold pages rather than records: docs/adr"),
+        !notices.contains("hold pages rather than records: docs/adr"),
         "{notices}"
     );
 }
@@ -2092,8 +2096,11 @@ fn a_config_scoped_rule_alone_discloses_that_it_read_no_record() {
     );
 }
 
+/// N7: a tracked record missing from the working tree (an `rm`, or a `mv`
+/// before `git add`) is judged as removed and named in a notice; it no longer
+/// turns every check into `not-run`.
 #[test]
-fn an_unstaged_deletion_of_a_tracked_record_stops_the_run() {
+fn an_unstaged_deletion_of_a_tracked_record_is_judged_as_removed_and_named() {
     let dir = one_adr_repo(
         "unstaged-deletion",
         "{header.required-fields: error}",
@@ -2108,13 +2115,23 @@ fn an_unstaged_deletion_of_a_tracked_record_stops_the_run() {
 
     // Deleted from the worktree, not staged: git still tracks it.
     std::fs::remove_file(dir.join("docs/adr/ADR-2-y.md")).unwrap();
+    for args in [
+        vec!["check"],
+        vec!["check", "--rules", "header.required-fields"],
+        vec!["check", "docs/adr/ADR-1-x.md"],
+    ] {
+        let out = run_urzua(&dir, &args);
+        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+        let parsed = assert_valid_json_object(&stdout);
+        assert_ne!(parsed["status"], "not-run", "{args:?}: {stdout}");
+        assert_eq!(out.status.code(), Some(0), "{args:?}: {stdout}");
+    }
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(
-        stdout.contains("ADR-2-y.md"),
+        stdout.contains("ADR-2-y.md") && stdout.contains("missing from the working tree"),
         "the missing record must be named: {stdout}"
     );
-    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
 
     // Staged, it is a deletion the corpus has accounted for.
     std::process::Command::new("git")
@@ -3153,10 +3170,10 @@ fn init_on_a_mixed_removed_shape_type_counts_each_form() {
     );
 }
 
-/// BUG-151: records that parse under no shape keep the destination shape,
-/// with a notice rather than a silent default.
+/// A directory whose records parse under no shape is not proposed (a type with
+/// nothing to read is noise); adopt names it instead of writing it.
 #[test]
-fn init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so() {
+fn init_on_records_with_no_readable_header_does_not_propose_them_and_says_so() {
     let dir = fixture_repo("init-no-header");
     std::fs::write(
         dir.join("docs/adr/0001-x.md"),
@@ -3166,21 +3183,11 @@ fn init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so() 
     commit_all(&dir);
 
     let out = run_urzua(&dir, &["init", "--dry-run"]);
+    assert_eq!(out.status.code(), Some(2));
     let stdout = String::from_utf8_lossy(&out.stdout);
     let parsed = assert_valid_json_object(&stdout);
-    assert_eq!(
-        parsed["proposed"][0]["header_shape"], "yaml-frontmatter",
-        "stdout: {stdout}"
-    );
-    assert!(
-        parsed["notices"]
-            .as_array()
-            .map(|a| a
-                .iter()
-                .any(|n| n["message"].as_str().unwrap_or("").contains("docs/adr")))
-            .unwrap_or(false),
-        "stdout: {stdout}"
-    );
+    assert_eq!(parsed["status"], "not-run", "stdout: {stdout}");
+    assert!(stdout.contains("docs/adr"), "stdout: {stdout}");
 }
 
 /// BUG-151 review: valid frontmatter at the start of the document is the

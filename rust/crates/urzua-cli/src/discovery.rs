@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use urzua_core::config::{Config, LocatorKind};
 use urzua_core::record::Record;
-use urzua_core::report::{Failure, ScopeSource};
+use urzua_core::report::{Failure, Notice, NoticeSeverity, ScopeSource};
 use urzua_core::rules;
 
 /// The contract value for how a run selected its records. The adapter lives
@@ -172,6 +172,28 @@ pub(crate) fn load_records(
     }
 
     Ok((records, full_text))
+}
+
+/// One warning naming the tracked records that are missing from the working
+/// tree and not staged for deletion. They are judged as removed; the notice is
+/// what keeps that from being silent.
+pub(crate) fn missing_record_notices(missing: &std::collections::HashSet<PathBuf>) -> Vec<Notice> {
+    if missing.is_empty() {
+        return Vec::new();
+    }
+    let mut paths: Vec<String> = missing.iter().map(|p| p.display().to_string()).collect();
+    paths.sort();
+    let shown = paths.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+    let more = paths.len().saturating_sub(5);
+    vec![Notice {
+        severity: NoticeSeverity::Warning,
+        subject: crate::NOTICE_MISSING_RECORD.to_string(),
+        message: format!(
+            "{} tracked record(s) are missing from the working tree and not staged for deletion, so they are judged as removed: {shown}{}; `git rm` them to record the deletion, or `git checkout` them to restore",
+            paths.len(),
+            if more > 0 { format!(" and {more} more") } else { String::new() }
+        ),
+    }]
 }
 
 /// Record files that exist on disk directly in a record type's directories but

@@ -43,6 +43,11 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
         let Some(parent) = rel_path.parent() else {
             continue;
         };
+        // A hidden directory (`.changeset`, `.github`) holds tool state, never
+        // a record type, and a leading dot is not a legal type name or prefix.
+        if is_hidden_path(rel_path) {
+            continue;
+        }
         // A record at the repository root has no directory that identifies its
         // type, and proposing "" would claim every file in the repository.
         if parent.as_os_str().is_empty() {
@@ -79,10 +84,12 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
             // `docs/adr`). A duplicated type name is a config that cannot load,
             // so qualify it rather than emit one.
             let name = if names.get(&base).copied().unwrap_or(0) > 1 {
-                dir.components()
-                    .map(|c| c.as_os_str().to_string_lossy().to_string())
-                    .collect::<Vec<_>>()
-                    .join("-")
+                legal_type_name(
+                    &dir.components()
+                        .map(|c| c.as_os_str().to_string_lossy().to_string())
+                        .collect::<Vec<_>>()
+                        .join("-"),
+                )
             } else {
                 base
             };
@@ -196,42 +203,57 @@ fn nested_either_way(a: &Path, b: &Path) -> bool {
     a.starts_with(b) || b.starts_with(a)
 }
 
-/// Name each proposed type none of whose record-shaped files carries a header.
-/// Such a directory may hold numbered pages (site content, requirement
-/// documents) rather than records, or Nygard-style records whose metadata is
-/// prose, and the file names cannot tell the two apart; so it stays proposed
-/// (`BUG-151`) and the notice tells the adopter to look. Reads only.
-pub fn flag_headerless(
+/// Split off each proposed type none of whose record-shaped files carries a
+/// header. Such a directory holds numbered pages (site content, requirement
+/// documents) far more often than records, and a type with nothing to read is
+/// noise in the config, so it is not proposed; the notice names it so the
+/// adopter can declare it by hand. Reads only.
+pub fn drop_headerless(
     repo_root: &Path,
     discovered: &[PathBuf],
-    proposed: &[ProposedRecordType],
-) -> Vec<Notice> {
-    let headerless: Vec<String> = proposed
-        .iter()
-        .filter(|rt| {
-            !discovered.iter().any(|rel| {
-                rel.parent() == Some(Path::new(&rt.dir))
-                    && rel
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(is_record_shaped)
-                    && std::fs::read_to_string(repo_root.join(rel))
-                        .is_ok_and(|content| has_header(&content))
-            })
+    proposed: Vec<ProposedRecordType>,
+) -> (Vec<ProposedRecordType>, Vec<Notice>) {
+    let (kept, dropped): (Vec<_>, Vec<_>) = proposed.into_iter().partition(|rt| {
+        discovered.iter().any(|rel| {
+            rel.parent() == Some(Path::new(&rt.dir))
+                && rel
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(is_record_shaped)
+                && std::fs::read_to_string(repo_root.join(rel))
+                    .is_ok_and(|content| has_header(&content))
         })
+    });
+    if dropped.is_empty() {
+        return (kept, Vec::new());
+    }
+    let listed: Vec<String> = dropped
+        .iter()
         .map(|rt| format!("{} ({} file(s))", rt.dir, rt.record_count))
         .collect();
-    if headerless.is_empty() {
-        return Vec::new();
-    }
-    vec![Notice {
+    let notice = Notice {
         severity: NoticeSeverity::Warning,
         subject: NOTICE_INIT_SCAN.to_string(),
         message: format!(
-            "no file in these proposed directories has a header, so they may hold pages rather than records: {}; remove a type from the proposed config if it is not a record directory",
-            headerless.join(", ")
+            "not proposed, because no file in these directories has a header, so they hold pages rather than records: {}; declare a record type by hand if one of them is a record directory",
+            listed.join(", ")
         ),
-    }]
+    };
+    (kept, vec![notice])
+}
+
+fn is_hidden_path(rel: &Path) -> bool {
+    rel.components()
+        .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+}
+
+/// A header field that reads as a lifecycle state, the one thing numbered
+/// file names would otherwise have told us makes a file a record.
+fn has_status_like_field(content: &str) -> bool {
+    header::parse_with_shape(content, HeaderShape::YamlFrontmatter)
+        .fields
+        .iter()
+        .any(|f| f.key.as_str().eq_ignore_ascii_case("status"))
 }
 
 /// Propose directories whose files are not numbered records but do carry
@@ -239,13 +261,17 @@ pub fn flag_headerless(
 /// qualifies when at least two of its markdown files have a header and those
 /// are at least half of the directory's markdown files. A directory nested in,
 /// or containing, an already proposed one is skipped: discovery matches by path
-/// prefix, so the outer type would already cover it.
+/// prefix, so the outer type would already cover it. Headers alone are not
+/// enough (every docs-site page has front matter): at least two headed files
+/// must carry a status-like field. The directories that had headers but no
+/// status are returned second, so the notice can name them.
 pub fn detect_unnumbered_record_types(
     repo_root: &Path,
     discovered: &[PathBuf],
     proposed: &[ProposedRecordType],
-) -> Vec<ProposedRecordType> {
-    let mut dirs: std::collections::BTreeMap<PathBuf, (usize, usize)> =
+) -> (Vec<ProposedRecordType>, Vec<String>) {
+    // (markdown files, with a header, with a status-like field)
+    let mut dirs: std::collections::BTreeMap<PathBuf, (usize, usize, usize)> =
         std::collections::BTreeMap::new();
     for rel in discovered {
         let Some(file_name) = rel.file_name().and_then(|n| n.to_str()) else {
@@ -263,31 +289,46 @@ pub fn detect_unnumbered_record_types(
         let Some(parent) = rel.parent().filter(|p| !p.as_os_str().is_empty()) else {
             continue;
         };
+        if is_hidden_path(rel) {
+            continue;
+        }
         if proposed
             .iter()
             .any(|rt| nested_either_way(parent, Path::new(&rt.dir)))
         {
             continue;
         }
-        let entry = dirs.entry(parent.to_path_buf()).or_insert((0, 0));
+        let entry = dirs.entry(parent.to_path_buf()).or_insert((0, 0, 0));
         entry.0 += 1;
-        if std::fs::read_to_string(repo_root.join(rel)).is_ok_and(|c| has_header(&c)) {
-            entry.1 += 1;
+        if let Ok(content) = std::fs::read_to_string(repo_root.join(rel)) {
+            if has_header(&content) {
+                entry.1 += 1;
+            }
+            if has_status_like_field(&content) {
+                entry.2 += 1;
+            }
         }
     }
     let mut taken: std::collections::BTreeSet<String> =
         proposed.iter().map(|rt| rt.name.clone()).collect();
     let mut out = Vec::new();
-    for (dir, (total, headed)) in dirs {
+    let mut headers_only = Vec::new();
+    for (dir, (total, headed, with_status)) in dirs {
         if headed < 2 || headed * 2 < total {
+            continue;
+        }
+        if with_status < 2 {
+            headers_only.push(dir.to_string_lossy().to_string());
             continue;
         }
         let base = proposed_name(&dir);
         let name = if taken.contains(&base) {
-            dir.components()
-                .map(|c| c.as_os_str().to_string_lossy().to_string())
-                .collect::<Vec<_>>()
-                .join("-")
+            legal_type_name(
+                &dir.components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join("-"),
+            )
         } else {
             base
         };
@@ -302,7 +343,7 @@ pub fn detect_unnumbered_record_types(
             header_shape: HeaderShape::YamlFrontmatter,
         });
     }
-    out
+    (out, headers_only)
 }
 
 fn proposed_name(dir: &Path) -> String {
@@ -310,7 +351,72 @@ fn proposed_name(dir: &Path) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    singular_type_name(&last)
+    legal_type_name(&singular_type_name(&last))
+}
+
+/// A type name whose upper-cased form is a legal default prefix: lower-case
+/// ASCII letters and digits in hyphen-separated segments, none all digits.
+/// Whatever the directory is called, the config written for it must load.
+fn legal_type_name(raw: &str) -> String {
+    let mut segments: Vec<String> = Vec::new();
+    for seg in raw
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+    {
+        segments.push(if seg.chars().all(|c| c.is_ascii_digit()) {
+            format!("n{seg}")
+        } else {
+            seg.to_string()
+        });
+    }
+    if segments.is_empty() {
+        "records".to_string()
+    } else {
+        segments.join("-")
+    }
+}
+
+/// The prefix a type would load with: the declared one, else its upper-cased
+/// name.
+fn effective_prefix(rt: &ProposedRecordType) -> String {
+    rt.prefix
+        .clone()
+        .unwrap_or_else(|| rt.name.to_ascii_uppercase())
+}
+
+/// Two types may not share a prefix, so a later directory whose prefix an
+/// earlier one holds is not proposed (the config would not load). Named in a
+/// notice, never dropped silently.
+fn drop_prefix_clashes(
+    proposed: Vec<ProposedRecordType>,
+) -> (Vec<ProposedRecordType>, Vec<Notice>) {
+    let mut taken: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut kept = Vec::new();
+    let mut clashes = Vec::new();
+    for rt in proposed {
+        let prefix = effective_prefix(&rt);
+        match taken.get(&prefix) {
+            Some(owner) => clashes.push(format!("{} (prefix {prefix}, held by {owner})", rt.dir)),
+            None => {
+                taken.insert(prefix, rt.dir.clone());
+                kept.push(rt);
+            }
+        }
+    }
+    let notices = if clashes.is_empty() {
+        Vec::new()
+    } else {
+        vec![Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_INIT_SCAN.to_string(),
+            message: format!(
+                "not proposed, because two record types may not share a prefix: {}; declare it by hand with a prefix of its own",
+                clashes.join(", ")
+            ),
+        }]
+    };
+    (kept, notices)
 }
 
 /// A leading underscore is a template, never a record. Everything else defers
@@ -494,7 +600,10 @@ pub fn run(dry_run: bool) -> ExitCode {
     };
 
     let config_path = crate::discovery::default_config_path(&repo_root);
-    if config_path.exists() {
+    let config_exists = config_path.exists();
+    // `--dry-run` writes nothing, so an existing config is no reason to refuse
+    // it: it shows what adopt would propose today.
+    if config_exists && !dry_run {
         return emit(&CouldNotRun::from(format!(
             "{} already exists -- refusing to overwrite. Edit it directly, or remove it to re-run adopt.",
             config_path.display()
@@ -506,9 +615,33 @@ pub fn run(dry_run: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
-    let mut proposed = detect_record_types(&discovered.paths);
-    let mut notices = flag_headerless(&repo_root, &discovered.paths, &proposed);
-    let unnumbered = detect_unnumbered_record_types(&repo_root, &discovered.paths, &proposed);
+    let (mut proposed, mut notices) = drop_headerless(
+        &repo_root,
+        &discovered.paths,
+        detect_record_types(&discovered.paths),
+    );
+    if config_exists {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: NOTICE_INIT_SCAN.to_string(),
+            message: format!(
+                "{} already exists; this dry run shows what adopt would propose and nothing was written",
+                config_path.display()
+            ),
+        });
+    }
+    let (unnumbered, headers_only) =
+        detect_unnumbered_record_types(&repo_root, &discovered.paths, &proposed);
+    if !headers_only.is_empty() {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: NOTICE_INIT_SCAN.to_string(),
+            message: format!(
+                "not proposed, because their files carry headers but no status field, so they look like pages rather than records: {}; declare a record type by hand if one of them is a record directory",
+                headers_only.join(", ")
+            ),
+        });
+    }
     if !unnumbered.is_empty() {
         notices.push(Notice {
             severity: NoticeSeverity::Info,
@@ -524,18 +657,6 @@ pub fn run(dry_run: bool) -> ExitCode {
         });
         proposed.extend(unnumbered);
     }
-    if proposed.is_empty() {
-        let scanned = notices
-            .iter()
-            .map(|n| n.message.as_str())
-            .collect::<Vec<_>>()
-            .join("; ");
-        return emit(&CouldNotRun::from(format!(
-            "no record directory found in the tracked set -- nothing to adopt{}{scanned}",
-            if scanned.is_empty() { "" } else { ": " }
-        )));
-    }
-
     // Disambiguation (above, on base name only) can still collide: a
     // disambiguated name can match an unrelated directory that already
     // proposes it (BUG-132). `render_config_yaml`'s `Mapping::insert` would
@@ -553,6 +674,21 @@ pub fn run(dry_run: bool) -> ExitCode {
         }
     }
 
+    let (proposed, clash_notices) = drop_prefix_clashes(proposed);
+    let mut proposed = proposed;
+    notices.extend(clash_notices);
+    if proposed.is_empty() {
+        let scanned = notices
+            .iter()
+            .map(|n| n.message.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return emit(&CouldNotRun::from(format!(
+            "no record directory found in the tracked set -- nothing to adopt{}{scanned}",
+            if scanned.is_empty() { "" } else { ": " }
+        )));
+    }
+
     let relative_config_path = config_path
         .strip_prefix(&repo_root)
         .unwrap_or(&config_path)
@@ -566,6 +702,13 @@ pub fn run(dry_run: bool) -> ExitCode {
     notices.extend(withheld_rule_notices());
 
     let rendered = render_config_yaml(&proposed);
+    // Whatever was proposed, the file written must load: a config `init` calls
+    // ready that `check` then refuses is the worst outcome adopt can have.
+    if let Err(e) = urzua_core::config::parse(&rendered) {
+        return emit(&CouldNotRun::from(format!(
+            "adopt generated a config that does not load ({e}); this is a bug in `urzua init`, nothing was written"
+        )));
+    }
 
     if dry_run {
         return emit(&InitReport {

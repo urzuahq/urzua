@@ -34,6 +34,8 @@ pub(crate) const NOTICE_IDENTITY: &str = "identity";
 pub(crate) const NOTICE_PERMANENT_WAIVERS: &str = "permanent-waivers";
 /// `init` notice that a type's records disagree on, or parse under none of,
 /// the header shapes (`BUG-151`).
+/// `check` notice that tracked records are missing from the working tree.
+pub(crate) const NOTICE_MISSING_RECORD: &str = "missing-record";
 pub(crate) const NOTICE_HEADER_SHAPE: &str = "header-shape";
 /// `init` warning that a proposed config leaves a command's rule set entirely
 /// undeclared (`BUG-99`).

@@ -78,6 +78,27 @@ impl Session {
         let mut discovered =
             urzua_io::discover_tracked_files(&repo_root).map_err(|e| e.to_string())?;
         adjust(&repo_root, &config, &mut discovered)?;
+        // A tracked record missing from the working tree is a removed record,
+        // not a reason to refuse the whole run: it is the ordinary mid-rename
+        // state. It is remembered so `check` can name it (BUG-82's concern is
+        // a record vanishing in silence, which a notice answers).
+        let missing: Vec<PathBuf> = discovered
+            .paths
+            .iter()
+            .filter(|p| {
+                crate::discovery::is_governed(&config, p)
+                    && !discovered.staged_deletions.contains(*p)
+                    && matches!(
+                        std::fs::symlink_metadata(repo_root.join(p)),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound
+                    )
+            })
+            .cloned()
+            .collect();
+        for p in missing {
+            discovered.staged_deletions.insert(p.clone());
+            discovered.unstaged_deletions.insert(p);
+        }
         let (records, full_text) = load_records(
             &repo_root,
             &discovered.paths,

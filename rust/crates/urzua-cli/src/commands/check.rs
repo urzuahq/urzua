@@ -751,6 +751,12 @@ fn load_drift(
     (drift, ages)
 }
 
+/// Whether a run with this `--rules` selection (`None`: every enabled rule) runs
+/// any of `ids`.
+fn selection_wants(selection: Option<&[String]>, ids: &[&str]) -> bool {
+    selection.is_none_or(|s| s.iter().any(|r| ids.contains(&r.as_str())))
+}
+
 /// Stage 2: read everything the rules are handed.
 fn load_context<'a>(
     session: &'a Session,
@@ -760,6 +766,12 @@ fn load_context<'a>(
     let (repo_root, config, discovered) =
         (&session.repo_root, &session.config, &session.discovered);
     let mut notices: Vec<Notice> = Vec::new();
+    // A `--rules` selection reads only what its rules read: the source files
+    // under `back_pointer_paths` and the published boundary files are most of a
+    // narrow run's cost on a large tree, and a rule that was not selected
+    // never looks at them.
+    let wanted =
+        |ids: &[&str]| selection.is_none_or(|s| s.iter().any(|r| ids.contains(&r.as_str())));
 
     let claim_opts =
         config.enabled_rule_opts::<rules::ClaimOpts>(rules::RULE_CLAIM_STATUS_AGREEMENT);
@@ -782,12 +794,16 @@ fn load_context<'a>(
         .iter()
         .flat_map(|b| b.paths.iter().cloned())
         .collect();
-    let published_files = crate::discovery::read_files_matching(
-        repo_root,
-        discovered,
-        &boundary_paths,
-        rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
-    )?;
+    let published_files = if wanted(&[rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE]) {
+        crate::discovery::read_files_matching(
+            repo_root,
+            discovered,
+            &boundary_paths,
+            rules::RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        )?
+    } else {
+        Vec::new()
+    };
     let (boundaries, ignore_marker) = (boundary_opts.boundaries, boundary_opts.ignore_marker);
 
     let index_specs: Vec<urzua_core::config::IndexSpec> = config
@@ -796,10 +812,23 @@ fn load_context<'a>(
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
     let override_log = crate::discovery::read_override_log(repo_root, config)?;
 
-    let back_pointer_sources =
-        crate::discovery::read_back_pointer_sources(repo_root, discovered, config)?;
-    let decision_gate_sources =
-        crate::discovery::read_decision_gate_sources(repo_root, discovered, config)?;
+    // The back-pointer evidence also feeds `embodiment.consistency` and
+    // `status.delivery-agreement` (`back_pointed`).
+    let back_pointer_sources = if wanted(&[
+        rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        rules::RULE_EMBODIMENT_CONSISTENCY,
+        rules::RULE_STATUS_DELIVERY_AGREEMENT,
+    ]) {
+        crate::discovery::read_back_pointer_sources(repo_root, discovered, config)?
+    } else {
+        None
+    };
+    let decision_gate_sources = if wanted(&[rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED])
+    {
+        crate::discovery::read_decision_gate_sources(repo_root, discovered, config)?
+    } else {
+        None
+    };
 
     // Drift is read only by `embodiment.consistency`, so a selection that leaves
     // it out skips the git history it would cost.
@@ -810,6 +839,9 @@ fn load_context<'a>(
     } else {
         (Default::default(), HashMap::new())
     };
+    notices.extend(crate::discovery::missing_record_notices(
+        &discovered.unstaged_deletions,
+    ));
     notices.extend(crate::discovery::drift_notices(
         drift.shallow,
         &drift.git_problems,
@@ -1261,4 +1293,23 @@ fn load_refs_snapshot(
         .map_err(|e| format!("{} is not a valid snapshot: {e}", refs.snapshot))?;
     urzua_core::refs_snapshot::validate_snapshot(parsed, &refs.repository)
         .map_err(|why| format!("{} {why}", refs.snapshot))
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::selection_wants as wanted;
+
+    #[test]
+    fn a_selection_wants_only_the_rules_it_names_and_no_selection_wants_all() {
+        let only = vec!["header.required-fields".to_string()];
+        assert!(wanted(None, &["embodiment.back-pointer-resolution"]));
+        assert!(!wanted(
+            Some(&only),
+            &[
+                "embodiment.back-pointer-resolution",
+                "embodiment.consistency"
+            ]
+        ));
+        assert!(wanted(Some(&only), &["header.required-fields"]));
+    }
 }
