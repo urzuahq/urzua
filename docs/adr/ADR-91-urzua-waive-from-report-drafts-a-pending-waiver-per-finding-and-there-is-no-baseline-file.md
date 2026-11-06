@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6PZ7CBKS3SY50FX92SA221S
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-06
 Date: 2026-11-05
 Author: beauwilliams
 Deciders: beauwilliams
@@ -210,3 +211,4 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | The milestone that builds this is `MILE-205`, renumbered from `MILE-204` after a numbering collision. | **structural** |
 > | 2026-11-05 | Records-only amendment after review (PR #364). Relaxing `statuses` needs both `status_model.rs:35` and `:368`, and the readers of `values` (`config.rs:1597` and others) are named. The command refuses when a repository declares no `permanent` and does not require `Expires` (point 9). Recorded as decided: fall back to `Pending`, plain `--path`, info findings skipped, one waiver per rule and file. `ADR-73` cited as compatible. **Why:** independent review found the serde failure and an accidental-permanent-waiver gap. Status stays Proposed. | **substantive** |
+> | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
