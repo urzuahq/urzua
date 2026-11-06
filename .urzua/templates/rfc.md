@@ -6,7 +6,8 @@
 > Supersedes / Superseded-by: —
 
 ## Summary
-One paragraph — the proposal in brief.
+One paragraph — the proposal in brief. An RFC is a direction proposed but not settled, with real
+tradeoffs and still open for comment; a choice already made is an ADR.
 
 ## Motivation
 What problem this solves. Cite concrete evidence — an incident, a measurement, a real corpus —

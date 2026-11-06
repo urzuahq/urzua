@@ -21,7 +21,7 @@ the record's revision log saying an amendment was added and why. Do not change a
    revision-log row, stages the record, and runs `urzua check` on it with its examined count.
 
    ```bash step
-   .claude/hooks/urzua-record.sh amend-finish "$RECORD"
+   bash .claude/hooks/urzua-record.sh amend-finish "$RECORD"
    ```
 
 3. If `check` reports findings, fix the added text and run step 2 again. Report the path, the amendment

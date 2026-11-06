@@ -7,7 +7,9 @@
 
 ## What
 
-What this milestone actually delivers, in one or two sentences. Concrete, not aspirational.
+What this milestone actually delivers, in one or two sentences. Concrete, not aspirational. A
+milestone is planned work: decided, deferred or unrouted. Point it at the RFC or ADR it realizes
+only through a reference that resolves.
 
 ## Why
 

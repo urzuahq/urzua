@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.16'
+Version: '0.17'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -134,19 +134,24 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
 - **Commands (`MILE-199`).** The install generates `.claude/commands/<type>.md` for every record type the
   configuration declares from one generic template (the type name and directory are the only things filled
   in; no command names a field, status or section), and installs `/amend`, `/repin` and `/done` and the
-  helper `.claude/hooks/urzua-record.sh` they call. `/amend` only adds: it refuses any change to the Decision
+  helper `.claude/hooks/urzua-record.sh` they call (through `bash`, because the install does not set an executable bit). `/amend` only adds: it refuses any change to the Decision
   text, a removed list item or blank line included, and requires an added `## Amendment (date)` section and
   revision-log row. `/repin` refuses an empty reason, lists the stale pins, runs
   `urzua fix --rebaseline --apply --actor agent` and prints the `Re-pin:` line for the pull request body.
   `/done` runs `urzua fix --apply --actor agent` and never writes a state itself (`ADR-70`, amendment of
   2026-11-05); it stops when the engine computes nothing, and `fix` refuses a state an `authority` gate names.
   A type named like a lifecycle command is refused at install, and `urzua harness status` reports a command
-  not yet installed as missing; `update` writes it. In this repository the commands for the types it had no
-  command for, `/amend`, `/repin`, `/done` and the helper are committed; `/adr`, `/rfc` and `/milestone` stay
-  hand-written (they carry type-specific guidance and differ from the generated text, so an install would
-  report them as modified) until `MILE-204`.
-- **Not yet.** This repository still has `scripts/hooks/*` on disk, unwired (`MILE-204` deletes it). The
-  agent-instructions block states what an agent must not do and is advisory, only the verdicts bind.
+  not yet installed as missing; `update` writes it. This repository runs entirely on the installed bundle
+  (`MILE-204`): every command in `.claude/commands/` is generated, including `/adr`, `/rfc` and `/milestone`,
+  and `urzua harness status` reports no drift. The guidance those three used to carry by hand lives where
+  the engine already reads type-specific text: in the body of the type's template under `.urzua/templates/`
+  (the `Decision` section of an ADR says a still-open direction is an RFC, the `Summary` of an RFC says a
+  settled choice is an ADR, the `What` and `Done means` sections of a milestone say what a milestone is and
+  how its criteria are written), so the generated text stays free of schema knowledge (`ADR-70`).
+- **Nothing hand-wired remains.** `scripts/hooks/*` and `scripts/draft-record.sh` are deleted; the tests that
+  pinned their verdicts (`record_edit_hook_integration.rs`, `block_on_integration.rs`) run the same planted
+  cases against `urzua harness run edit` and the installed translator. The agent-instructions block states
+  what an agent must not do and is advisory, only the verdicts bind.
 
 ## Who may accept a record: the acceptance guardrail (`ADR-89` section 4, `MILE-200`)
 
@@ -155,7 +160,7 @@ and this section claims only what each place does.
 
 - **Locally, the edit tools are refused.** With `harness.guardrails.acceptance` and `protected-paths`
   enabled, `urzua harness run edit` denies an agent's Write, Edit or MultiEdit that moves an ADR or RFC to
-  `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `scripts/hooks`, `.git-hooks`, `.github/workflows` or
+  `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `.git-hooks`, `.github/workflows` or
   `.urzua/config.yaml`. The deny cannot be overridden: the override of `ADR-78` is a name in an environment
   variable the agent controls, so it is not accepted for this verdict, and the output says so. A person
   edits outside the agent harness and is not affected; that is also the escape hatch when a denying
@@ -235,3 +240,4 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.14`. Documents the post-command check: after any Bash command the harness runs `check` on the records git shows as changed (untracked included) and reports, never blocks; this repository enables it and has the Claude Code bundle installed. The editor hook is wired once, through the installed bundle; `scripts/hooks` stays on disk, unwired, until `MILE-204` deletes it, because both wired at once would block twice and write each override twice. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.15`. Documents the acceptance and protected-path guardrails (`MILE-200`): the local refusal of an agent's edit-tool move to a gated status or write to a protected path (final, not liftable by the override), `diff.decider-required` fed by the gate action's actors file as authorship evidence only, and the "Accepted risk" statement (the Bash, shell-edited guardrail, self-modifying workflow and shared-token routes, accepted by the maintainer on 2026-11-05). The post-command check also reports a Bash-made move to a gated status, judged against `HEAD`. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |
 > | 2026-11-06 | Bumped to `0.16`. Documents the generated drafting command for every record type, `/amend`, `/repin` and `/done` and the helper they call (`MILE-199`): what each refuses, that `/done` sets a state only through `urzua fix --apply` and `fix` refuses a state an `authority` gate names, and that this repository commits the commands for the types it lacked while `/adr`, `/rfc` and `/milestone` stay hand-written until `MILE-204`. **Why:** `ADR-89` section 1, `ADR-70` amendment of 2026-11-05. | **substantive** |
+> | 2026-11-06 | Bumped to `0.17`. This repository runs on the installed bundle: `/adr`, `/rfc` and `/milestone` are generated (their type-specific guidance moved into the type templates), `scripts/hooks` and `scripts/draft-record.sh` are deleted, the protected-path list no longer names `scripts/hooks`, and the commands run the helper through `bash` (a file the install writes carries no executable bit, so the direct call was denied). **Why:** `MILE-204`, `ADR-89` section 6. | **substantive** |

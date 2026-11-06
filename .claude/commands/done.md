@@ -23,7 +23,7 @@ evidence has nothing computed, and the command says so and stops.
    `urzua check` on it with its examined count.
 
    ```bash step
-   .claude/hooks/urzua-record.sh done "$RECORD"
+   bash .claude/hooks/urzua-record.sh done "$RECORD"
    ```
 
 3. If the command reports the engine computed nothing, the evidence is missing or does not reach the tier

@@ -521,7 +521,7 @@ authority:
   gates:
     - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
-    - paths: [".claude", "scripts/hooks", ".git-hooks", ".github/workflows", ".urzua/config.yaml"]
+    - paths: [".claude", ".git-hooks", ".github/workflows", ".urzua/config.yaml"]
       by: maintainers
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records

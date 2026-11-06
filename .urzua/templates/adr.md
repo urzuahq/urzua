@@ -22,7 +22,7 @@ is evidence-backed rather than asserted.
 
 ## Decision
 
-The choice, in a Y-statement: *In the context of X, facing Y, we decided Z, to achieve W, accepting
+The choice, already made (a direction still open for comment is an RFC, not an ADR), in a Y-statement: *In the context of X, facing Y, we decided Z, to achieve W, accepting
 the downside V.*
 
 ## Reversibility

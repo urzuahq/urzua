@@ -17,7 +17,7 @@ Record what the conversation actually supplies. You may draft a record; you may 
 1. Scaffold. Run this and keep the printed `path`; every later step names it as `RECORD`.
 
    ```bash step
-   .claude/hooks/urzua-record.sh new {{type}} "$TITLE"
+   bash .claude/hooks/urzua-record.sh new {{type}} "$TITLE"
    ```
 
 2. Read the scaffolded file and `.urzua/config.yaml` for this type. Fill the body sections and the
@@ -34,7 +34,7 @@ Record what the conversation actually supplies. You may draft a record; you may 
    record and prints how many records it examined.
 
    ```bash step
-   .claude/hooks/urzua-record.sh finish "$RECORD"
+   bash .claude/hooks/urzua-record.sh finish "$RECORD"
    ```
 
 5. If `check` reports findings, fix the record's content (not the config, not a waiver) and run step 4

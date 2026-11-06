@@ -1,5 +1,5 @@
 ---
-Version: '0.98'
+Version: '0.99'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -888,7 +888,7 @@ authority:
   gates:
     - {type: adr, to: [Accepted, Rejected], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected], by: maintainers}
-    - {paths: [".claude", "scripts/hooks", ".git-hooks", ".github/workflows", ".urzua/config.yaml"], by: maintainers}
+    - {paths: [".claude", ".git-hooks", ".github/workflows", ".urzua/config.yaml"], by: maintainers}
 ```
 
 - **`deciders`** maps a group name to `{logins: [...]}`. A group with no login, a bare login or a list of
@@ -2064,3 +2064,4 @@ proves this configuration produces the three findings.
 > | 2026-11-06 | Bumped to `0.96`. Documents the top-level `harness` key (`adapters`, `instructions_file`, `guardrails` with `enabled` and `on_unjudged`) and `authority`: an absent key installs and enables nothing, an unknown key or guardrail and a guardrail no chosen adapter provides are reported and never skipped, `acceptance` or `protected-paths` enabled with no `authority` is a load error, and `on_unjudged: deny` refuses an agent and allows a person. **Why:** `MILE-198`, decided in `ADR-89` section 3. | **substantive** |
 > | 2026-11-06 | Bumped to `0.97`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
 > | 2026-11-06 | Bumped to `0.98`. Documents the top-level `authority` table (`deciders` groups of `logins`, `evidence` defaulting to `pr-author`, `gates` by type and status and by path) with its load errors, the local refusal of an agent's edit-tool move to a gated status or write to a gated path (final, not liftable by the override), the rule option `require_evidence`, the actors file and the accepted risk; an enabled `acceptance` or `protected-paths` guardrail with no gate of its kind is a load error. **Why:** `MILE-200`, decided in `ADR-89` section 4, accepted by the maintainer. | **substantive** |
+> | 2026-11-06 | Bumped to `0.99`. The `authority` example's protected paths no longer list `scripts/hooks`, which this repository deleted. **Why:** `MILE-204`. | **substantive** |

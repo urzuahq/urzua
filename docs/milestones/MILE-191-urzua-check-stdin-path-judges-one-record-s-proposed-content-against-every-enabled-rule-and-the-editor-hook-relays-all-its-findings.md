@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: ADR-78
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules/runner.rs, code:scripts/hooks/record-edit-hook.sh, code:scripts/hooks/claude-code-record-edit.py, test:rust/crates/urzua-cli/tests/check_stdin_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules/runner.rs, code:rust/crates/urzua-cli/src/harness/run.rs, code:.claude/hooks/urzua-claude-code.py, test:rust/crates/urzua-cli/tests/check_stdin_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
 ---
 # 191 — urzua check --stdin-path judges one record's proposed content against every enabled rule, and the editor hook relays all its findings
 
@@ -36,3 +36,4 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/
 > | 2026-11-05 | Renumbered from `MILE-187` to `MILE-191`: another milestone took `MILE-187` on `main` first, and every reference here, in the specs and in the code now says `MILE-191`. **Why:** two records claimed one identifier (`identity.collision`). | **structural** |
 > | 2026-11-05 | Removed the allowance for an edit whose only errors were already on the file on disk, and the fixed sub-second budget is now a measurement to record, since no ADR sets either. **Why:** `ADR-78` item 2 says an error blocks the edit and only the named override passes it; a pre-existing-error allowance is a new policy, to be decided by an ADR amendment if wanted. | **substantive** |
 > | 2026-11-05 | Restored the allowance for an error the record on disk already has, as the hook's default behaviour (`block_on: introduced`), in Done means. The code is unchanged: `scripts/hooks/record-edit-hook.sh` already behaves this way and `SPEC-8` already describes it. `MILE-195` files the `all` option. **Why:** the 2026-11-05 row above removed it because no ADR set it; `ADR-78`'s amendment of 2026-11-05 (proposed, pending maintainer acceptance) now records it, and the merged code and the record disagreed. | **substantive** |
+> | 2026-11-06 | `Realized-by` now names `rust/crates/urzua-cli/src/harness/run.rs` and `.claude/hooks/urzua-claude-code.py` in place of the two deleted scripts. **Why:** `MILE-204` deleted the script this record cited; the engine core and the installed translator are the code that now carries the behavior. | **substantive** |

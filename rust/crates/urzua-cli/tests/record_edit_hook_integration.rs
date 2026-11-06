@@ -1,7 +1,8 @@
-//! MILE-178: the record-edit hook (ADR-69). Recorded Claude Code PreToolUse
-//! payloads (`tests/fixtures/hook-payloads`) go through the adapter and the
-//! harness-neutral core against the real urzua binary in a git fixture. Needs
-//! `bash`, `jq` and `python3`; a missing tool fails the test, never skips it.
+//! MILE-178, MILE-204: the record-edit hook (ADR-69, ADR-89). Recorded Claude Code
+//! PreToolUse payloads (`tests/fixtures/hook-payloads`) go through the installed
+//! translator and the engine core (`urzua harness run edit`) against the real urzua
+//! binary in a git fixture. Needs `python3` and `sh`; a missing tool fails the test,
+//! never skips it.
 
 mod common;
 
@@ -39,6 +40,13 @@ fn fixture_with(name: &str, record: &str, config: &str) -> common::TempDir {
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "t@example.com"]);
     git(&dir, &["config", "user.name", "t"]);
+    let harness =
+        "harness:\n  adapters: [claude-code]\n  guardrails:\n    editor-hook: {enabled: true}\n";
+    let config = if config.contains("harness:") {
+        config.to_string()
+    } else {
+        format!("{config}{harness}")
+    };
     std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
     std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
     std::fs::write(dir.join("docs/adr/ADR-1-a.md"), record).unwrap();
@@ -73,11 +81,26 @@ fn run(cmd: &mut Command, root: &Path, stdin: &str) -> Output {
     child.wait_with_output().unwrap()
 }
 
-/// The adapter's stdout as JSON (null when it printed nothing).
+/// The installed translator's stdout as JSON (null when it printed nothing): the hook
+/// command the installed settings carry, run the way the agent runs it.
 fn adapter(root: &Path, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
-    let script = repo_root().join("scripts/hooks/claude-code-record-edit.py");
-    let mut c = Command::new("python3");
-    c.arg("-I").arg(script);
+    if !root.join(".claude/settings.json").exists() {
+        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+            .args(["harness", "install"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{out:?}");
+    }
+    let settings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join(".claude/settings.json")).unwrap())
+            .unwrap();
+    let cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mut c = Command::new("sh");
+    c.args(["-c", &cmd]);
     c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
         .env_remove("URZUA_HOOK_OVERRIDE");
     for (k, v) in env {
@@ -91,16 +114,37 @@ fn adapter(root: &Path, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
     serde_json::from_slice(&out.stdout).unwrap()
 }
 
+/// The engine core, as the translator calls it: a request on stdin, a verdict on stdout.
+/// `args` are `[--override NAME [--reason TEXT]] <record-path>`.
 fn core(root: &Path, args: &[&str], env: &[(&str, &str)], stdin: &str) -> (i32, serde_json::Value) {
-    let mut c = Command::new("bash");
-    c.arg(repo_root().join("scripts/hooks/record-edit-hook.sh"))
-        .args(args);
-    c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
-        .env_remove("URZUA_HOOK_OVERRIDE");
+    let mut request = serde_json::json!({
+        "event": "edit", "tool": "Write", "actor": "agent", "cwd": root.to_string_lossy(),
+        "content": stdin,
+    });
+    let mut it = args.iter();
+    let mut ovr = serde_json::Map::new();
+    while let Some(a) = it.next() {
+        match *a {
+            "--override" => {
+                ovr.insert("name".into(), it.next().unwrap().to_string().into());
+            }
+            "--reason" => {
+                ovr.insert("reason".into(), it.next().unwrap().to_string().into());
+            }
+            path => request["paths"] = serde_json::json!([path]),
+        }
+    }
+    if !ovr.is_empty() {
+        request["override"] = ovr.into();
+    }
+    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    c.args(["harness", "run", "edit"])
+        .env_remove("URZUA_HOOK_OVERRIDE")
+        .env_remove("URZUA_HOOK_REASON");
     for (k, v) in env {
         c.env(k, v);
     }
-    let out = run(&mut c, root, stdin);
+    let out = run(&mut c, root, &request.to_string());
     let v = serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("core stdout is not JSON ({e}): {out:?}"));
     (out.status.code().unwrap(), v)
