@@ -1,7 +1,7 @@
 {
   "name": "claude-code",
-  "description": "Hook entries and a translator for Claude Code: the editor hook (Write, Edit, MultiEdit) and the session-start readiness check.",
-  "provides": ["editor-hook", "session-start"],
+  "description": "Hook entries and a translator for Claude Code: the editor hook (Write, Edit, MultiEdit), the post-command check (Bash) and the session-start readiness check.",
+  "provides": ["editor-hook", "post-command", "session-start"],
   "settings_file": ".claude/settings.json",
   "requires": {
     "interpreters": ["python3"],

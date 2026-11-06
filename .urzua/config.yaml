@@ -734,3 +734,11 @@ rules:
         format: "- [{id}]({file}) \u2014 {Status}, {Date}\n  {title}"
         begin: "<!-- urzua:index:begin -->"
         end: "<!-- urzua:index:end -->"
+# The installed agent harness (ADR-89, MILE-202). `urzua harness install` writes
+# the adapter's hook entries and translator; a guardrail is on only when named.
+harness:
+  adapters: [claude-code]
+  guardrails:
+    editor-hook: {enabled: true}
+    post-command: {enabled: true}
+    session-start: {enabled: true}

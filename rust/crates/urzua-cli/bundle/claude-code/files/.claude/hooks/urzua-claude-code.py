@@ -32,7 +32,7 @@ def out(obj):
 def stated(message, event):
     """The engine could not give a verdict: say so, loudly, and let the call proceed."""
     sys.stderr.write(message + "\n")
-    hook = "SessionStart" if event == "session-start" else "PreToolUse"
+    hook = {"session-start": "SessionStart", "post-command": "PostToolUse"}.get(event, "PreToolUse")
     out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": hook, "additionalContext": message}})
     return 0
 
@@ -73,7 +73,7 @@ def main():
         return stated("urzua harness: the translator was called without an event and an engine command; run `urzua harness status`", "edit")
     event = args[0]
     argv = args[args.index("--") + 1:]
-    if event not in ("edit", "session-start") or not argv:
+    if event not in ("edit", "session-start", "post-command") or not argv:
         return stated("urzua harness: the translator does not know the event '%s'; run `urzua harness update`" % event, "edit")
     try:
         payload = json.load(sys.stdin)
@@ -82,6 +82,11 @@ def main():
     cwd = payload.get("cwd") or None
     if event == "session-start":
         request = {"event": "session-start", "tool": None, "paths": [], "content": None, "actor": "agent", "cwd": cwd}
+    elif event == "post-command":
+        # Any Bash command. The engine reads git, never the command.
+        if payload.get("tool_name") != "Bash":
+            return 0
+        request = {"event": "post-command", "tool": "Bash", "paths": [], "content": None, "actor": "agent", "cwd": cwd}
     else:
         tool = payload.get("tool_name")
         inp = payload.get("tool_input") or {}
@@ -101,6 +106,11 @@ def main():
     if event == "session-start":
         if kind != "allow" and message:
             out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": message}})
+        return 0
+    if event == "post-command":
+        # Context for the agent, never a decision: the command has already run.
+        if kind != "allow" and message:
+            out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message}})
         return 0
     if kind == "block":
         out({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": message}})

@@ -254,16 +254,13 @@ fn an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_i
     // A guardrail the adapter cannot provide is installed around and reported.
     let wants_more = config("").replace(
         "    session-start",
-        "    post-command: {enabled: true}\n    session-start",
-    );
+        "    acceptance: {enabled: true}\n    session-start",
+    ) + "authority:\n  gates: []\n";
     let dir = fixture("unprovided", &wants_more);
     let (code, v) = harness(&dir, &["install"]);
     assert_eq!(code, 0, "{v}");
     assert!(
-        v["problems"][0]
-            .as_str()
-            .unwrap()
-            .contains("'post-command'"),
+        v["problems"][0].as_str().unwrap().contains("'acceptance'"),
         "{v}"
     );
     assert!(dir.join(LOCK).exists());
@@ -271,7 +268,7 @@ fn an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_i
     let out = urzua(&dir, &["doctor"]).output().unwrap();
     let checks = json(&out)["checks"].to_string();
     assert!(
-        checks.contains("post-command") && checks.contains("harness-config"),
+        checks.contains("acceptance") && checks.contains("harness-config"),
         "{checks}"
     );
 }
@@ -1178,7 +1175,11 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
     let settings = read(&dir, SETTINGS);
     std::fs::write(dir.join(SETTINGS), "{}\n").unwrap();
     let v = session_start(&dir, &ok, true);
-    assert_eq!(checks_of(&v), ["hook-entry", "hook-entry"], "{v}");
+    assert_eq!(
+        checks_of(&v),
+        ["hook-entry", "hook-entry", "hook-entry"],
+        "{v}"
+    );
     std::fs::write(dir.join(SETTINGS), settings).unwrap();
 
     // An unwired git hook.
