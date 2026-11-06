@@ -258,9 +258,13 @@ this one: that one guards an already-decided record's content; this one guards t
   `override.unreviewed` reports it until a person fills `Reviewed-by`. Don't fill `Reviewed-by`
   yourself either.
 - **Re-pinning evidence.** A stale `@sha256:` pin on `Realized-by` is repaired with `urzua fix
-  --rebaseline --apply --ids <record> --by <name> --reason "<delta>"` (`SPEC-8`). `--by` is
-  attribution, not authentication, so it names the human who authorised the re-pin and only with
-  that person's authorisation. The reason must say what actually changed in the pinned code, not
+  --rebaseline --apply --ids <record> --by <name> --actor agent --reason "<delta>"` (`SPEC-8`). `--by`
+  is attribution, not authentication, so it names the human who authorised the re-pin and only with
+  that person's authorisation. A verified `gh` login replaces `--by` (`attestation` in
+  `.urzua/config.yaml`; the report's `identity.replaced_by` names what it replaced), and under the
+  maintainer's token the row would otherwise name the maintainer as the attester of an agent's work,
+  so always pass `--actor agent` (the row records the source and the actor kind; the label is your
+  claim, not proof). The reason must say what actually changed in the pinned code, not
   that the pin was stale. Look at the diff of the pinned file before re-pinning, list every re-pin
   and its reason in the PR body so a reviewer can check it, and never re-pin to quiet drift you have
   not read.

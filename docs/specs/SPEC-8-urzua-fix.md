@@ -1,5 +1,5 @@
 ---
-Version: '0.25'
+Version: '0.26'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -191,12 +191,24 @@ Every one of the following is a hard gate — none are optional, none are defaul
 - **An `--ids` entry that matches no pending repair is a failure.** It is reported in `failed` naming
   the entry (`partial-failure`, exit 1) and writes nothing, never a clean `ok` (`BUG-166`). An entry is
   matched against a record's repo-relative path; accepting a record id is not defined here.
-- **Identity is required**, resolved via `urzua-io::resolve_identity` (`gh api user` wins even over
-  an explicit `--by`, which wins over `git config user.name` -- ADR-31's amendment); none resolving
-  is a hard error, never a placeholder author. An identity containing `|` or a control character
-  (a line break) is refused, whichever tier supplied it, because it is written into a revision-log
-  table row (`--reason` is refused for the same reason). A `--by` that diverges from an authenticated `gh`
-  login surfaces as a `notices` entry (ADR-46) rather than being silently overridden or discarded.
+- **Identity is required**, resolved via `urzua-io::resolve_identity_with` under the configuration's
+  `attestation` (`SPEC-3`, `ADR-89` section 5). Under `identity: gh-verified`, the default and what an
+  absent key means, `gh api user` wins even over an explicit `--by`, which wins over `git config
+  user.name` (`ADR-31`'s amendment); with `require_verified: true` and no `gh` answer the command is
+  `not-run` (exit 2) and writes nothing, the lock included. Under `identity: asserted`, `--by` is taken as
+  given and the verified login, when `gh` answers, is recorded beside it. None resolving is a hard error,
+  never a placeholder author. An identity containing `|` or a control character (a line break) is refused,
+  whichever tier supplied it, because it is written into a revision-log table row (`--reason` is refused
+  for the same reason). A `--by` that a verified `gh` login replaced surfaces as the report's
+  `identity.replaced_by` and as a `notices` entry (`ADR-46`), never silently overridden or discarded.
+- **The report names the identity.** An apply report carries `identity`: `name`, `source`
+  (`gh-verified`, `asserted` or `git-config`), `actor` (`agent`, `human` or `unspecified`), and
+  `replaced_by` and `verified_login` when they apply. Detect mode carries none.
+- **`--actor agent|human`** states who ran the command and is recorded in the row; a run without it
+  records `unspecified`, and any other value is `not-run`. It is the caller's claim and not proof, with the
+  standing of `--by` (a verified login names the account whose token ran the command, not whether a
+  person or an agent held it: `RFC-2`, `BUG-16`). An agent passes `--actor agent` (`AGENTS.md`); the lifecycle
+  commands `ADR-89` section 1 adds (`MILE-199`) are to pass it when built.
 - **A missing Revision log section refuses that record's write outright, where the log is required.**
   A type declares `revision_log: {required: false}` (`MILE-159`, SPEC-3) to be written without a row;
   `true` is the default. The error names the record and the identity looked for. ADR-14's reversibility
@@ -225,6 +237,11 @@ Every one of the following is a hard gate — none are optional, none are defaul
 Every applied write appends a `structural` revision-log entry naming the computation and the
 evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
 
+The entry names who wrote it, where the name came from and who held the command (`ADR-89` section 5):
+`Tool-authored (by NAME, identity: SOURCE, actor: ACTOR): recomputed ...`, with `, verified login: LOGIN`
+before the closing parenthesis when an `asserted` name has a verified login beside it. Rows written
+before the identity source existed read `Tool-authored (by NAME): ...` and are left as they are.
+
 ## Re-baselining pinned evidence (`--rebaseline`)
 
 `urzua fix --rebaseline` is the review-then-apply refresh `RFC-2` proposed, for the opt-in
@@ -242,7 +259,10 @@ the same `PATHS` scoping.
 - **What is written.** For each chosen record, every stale pin on the `Realized-by` line becomes the
   current hash and nothing else on the line, in the file or in any other record, moves. One
   `structural` revision row names who attested (`RFC-25`: attribution, not cryptographic
-  attestation), the old and new hash prefixes and the reason.
+  attestation), the identity source and the actor kind, the old and new hash prefixes and the reason:
+  `Re-baselined (attested by NAME, identity: SOURCE, actor: ACTOR): re-pinned ...`, with the same
+  optional `, verified login: LOGIN`. Earlier rows, `Re-baselined (attested by NAME): ...`, are left
+  as they are.
 - **The record is the selector.** All of a record's stale pins move together; per-locator selection
   is not offered. A second run finds nothing to re-pin.
 - **Scope of the baseline.** Only pinned locators are re-baselined. Drift on an unpinned locator
@@ -297,6 +317,8 @@ asserted by test, not assumed by convention.
 - ADR-20 — apply mode's hard gates, once those dependencies existed.
 - ADR-14 — the revision-log shape every applied write appends to.
 - RFC-2 §2 — the identity-resolution tiering apply mode reuses.
+- ADR-89 section 5 — the configurable identity source and the actor kind in the row; BUG-16 and MILE-66
+  — why a verified login is not proof of who acted, and why it beats a typed name by default.
 - RFC-12 §5 — why Embodiment is excluded from auto-repair despite satisfying every eligibility clause.
 
 > **Revision log**
@@ -329,3 +351,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.23`. The record-edit hook reads `block_on: introduced \| all`: `all` blocks on any unwaived error in the proposed content and skips the baseline run; the default and an absent key keep today's verdicts and messages; an unrecognised value is `allow-unjudged` naming the value; the Claude Code adapter passes the verdict through unchanged. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.24`. `--apply` and `--rebaseline --apply` refuse an identity (`--by`, `git config user.name`, the `gh` login) containing `|` or a line break instead of writing a row with an extra cell or a split row, and write each record through a temporary file and a rename instead of truncating it first. **Why:** review of the CLI found both: a crafted `--by` corrupted the revision log, and a failed write could leave a record empty (`BUG-192` class). | **substantive** |
 > | 2026-11-05 | Bumped to `0.25`. The record-edit hook no longer answers `allow-unjudged` for an `embodiment-drift-git` notice: it judges and blocks on what needs no history and discloses the skipped drift rule; it omits the `run:` repair hint from findings the edit introduced. **Why:** Phase 0 hardening from an adopter switchover -- every edit in a shallow clone went unjudged, and the hint answered `matched no pending repair`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.26`. `--apply` and `--rebaseline --apply` resolve identity under the configuration's `attestation` (`SPEC-3`): `require_verified` makes a missing `gh` answer `not-run` with nothing written, `asserted` takes `--by` as given beside the verified login; the report gains `identity` (name, source, actor, the replaced `--by`); `--actor agent\|human` is accepted; and every tool-authored row names the identity source and the actor kind. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |

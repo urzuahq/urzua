@@ -1,16 +1,17 @@
 ---
 Stable-Id: 01M6NX37Q0DCD64ASZAX6Y9DSA
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-89
 Blocked-on: null
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-io/src/lib.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/attestation_integration.rs
 ---
 # 201 — Make the attestation identity source a configuration option and record it in the revision row
 
 ## What
 
-Add the top-level `attestation` configuration (`identity: gh-verified | asserted`, `require_verified`) and make `urzua fix --apply` and `fix --rebaseline --apply` follow it, recording the identity source (`gh-verified`, `asserted` or `git-config`) and the actor kind (`agent`, `human` or `unspecified`, from a new `--actor` option) in the revision row. It is blocked until the maintainer accepts `ADR-89`.
+Add the top-level `attestation` configuration (`identity: gh-verified | asserted`, `require_verified`) and make `urzua fix --apply` and `fix --rebaseline --apply` follow it, recording the identity source (`gh-verified`, `asserted` or `git-config`) and the actor kind (`agent`, `human` or `unspecified`, from a new `--actor` option) in the revision row. `ADR-89` is Accepted.
 
 ## Why
 
@@ -31,3 +32,4 @@ Add the top-level `attestation` configuration (`identity: gh-verified | asserted
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-89` (Proposed) decides the installable agent harness bundle on maintainer decisions of 2026-11-05 and no milestone builds this part; blocked on the maintainer accepting it. | **substantive** |
 > | 2026-11-05 | Actor kind added to the attestation row and `RFC-2`, `BUG-16`, `MILE-18` and `MILE-66` cited, so an agent's re-pin under the maintainer's token is distinguishable from a person's; `asserted` is named as reversing the `RFC-2` and `MILE-66` order. **Why:** Independent review of pull request 355. Still `Planned`. | **substantive** |
+> | 2026-11-06 | Built. `attestation` (`identity: gh-verified \| asserted`, `require_verified`) is read by `fix --apply` and `fix --rebaseline --apply`; every tool-authored row records the identity source and the actor kind from the new `--actor agent\|human` (`unspecified` when absent); the report gains `identity` naming a replaced `--by`; the invalid values are load errors; `SPEC-3` and `SPEC-8` document it and this repository declares `attestation`. `AGENTS.md` tells an agent to pass `--actor agent`; the lifecycle commands `/repin` and `/done` do not exist yet and are `MILE-199`'s, which is to pass it. `urzua new` still resolves its author under the default policy. **Why:** `ADR-89` section 5 (Accepted 2026-11-05); the PR delivers the `fix` side of every item of Done means. | **substantive** |

@@ -217,6 +217,7 @@ mod tests {
                 upgraded_from: None,
                 override_log: None,
                 block_on: None,
+                attestation: Default::default(),
                 harness: None,
                 authority: None,
                 rules: std::collections::BTreeMap::new(),
@@ -351,6 +352,7 @@ mod tests {
             upgraded_from: None,
             override_log: None,
             block_on: None,
+            attestation: Default::default(),
             harness: None,
             authority: None,
             relation_pairs: vec![crate::config::RelationPair {
@@ -612,6 +614,7 @@ mod tests {
                 upgraded_from: None,
                 override_log: None,
                 block_on: None,
+                attestation: Default::default(),
                 harness: None,
                 authority: None,
                 rules: std::collections::BTreeMap::new(),

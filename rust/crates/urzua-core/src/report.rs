@@ -1063,8 +1063,26 @@ pub struct FixReport {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub failed_pins: Vec<crate::fix::FailedPin>,
     pub failed: Vec<FixFailure>,
+    /// Who the written rows name and on what footing (`ADR-89` section 5);
+    /// absent when nothing was applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<AttestationReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// The identity `fix --apply` wrote under (`ADR-89` section 5).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AttestationReport {
+    pub name: String,
+    pub source: crate::fix::IdentitySource,
+    pub actor: crate::fix::ActorKind,
+    /// The `--by` a verified `gh` login replaced, when they differ.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
+    /// The login `gh` verified, beside an `asserted` name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_login: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

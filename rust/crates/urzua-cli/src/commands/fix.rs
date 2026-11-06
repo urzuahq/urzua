@@ -18,6 +18,7 @@ pub struct FixArgs {
     pub apply: bool,
     pub ids: Vec<String>,
     pub by: Option<String>,
+    pub actor: urzua_core::fix::ActorKind,
     pub force: bool,
     pub rebaseline: bool,
     pub reason: Option<String>,
@@ -31,6 +32,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         apply,
         ids,
         by,
+        actor,
         force,
         rebaseline,
         reason,
@@ -136,7 +138,8 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     }
     if rebaseline {
         return run_rebaseline(
-            &repo_root, &config, &records, &scoped, unmatched, apply, &ids, force, by, &reason,
+            &repo_root, &config, &records, &scoped, unmatched, apply, &ids, force, by, actor,
+            &reason,
         );
     }
     let drift = if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY) {
@@ -189,7 +192,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         ));
     }
 
-    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
+    let identity = match resolve_attestation(by.as_deref(), actor, &repo_root, &config) {
         Ok(id) => id,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
@@ -251,7 +254,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             &fresh_content,
             &repair,
             &today,
-            &identity.name,
+            &identity.attestation,
             &log_id,
             log_required,
         ) {
@@ -267,10 +270,54 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         population,
         applied,
         failed,
-        identity.warning,
+        Some(identity),
         true,
         drift_notices,
     ))
+}
+
+/// The identity an apply writes under: the attestation the revision rows
+/// carry, the report's account of it, and the notice for a replaced `--by`.
+struct ResolvedAttestation {
+    attestation: urzua_core::fix::Attestation,
+    report: urzua_core::report::AttestationReport,
+    warning: Option<String>,
+}
+
+/// Resolve who attests under the configuration's `attestation` (`ADR-89`
+/// section 5, `MILE-201`). Runs before the lock and any write, so a refusal
+/// (`require_verified` with no `gh` answer) writes nothing.
+fn resolve_attestation(
+    by: Option<&str>,
+    actor: urzua_core::fix::ActorKind,
+    repo_root: &std::path::Path,
+    config: &urzua_core::config::Config,
+) -> Result<ResolvedAttestation, String> {
+    use urzua_core::fix::IdentitySource as Source;
+    let policy = urzua_io::IdentityPolicy {
+        asserted: config.attestation.identity == urzua_core::config::AttestationIdentity::Asserted,
+        require_verified: config.attestation.require_verified,
+    };
+    let resolved = urzua_io::resolve_identity_with(by, repo_root, policy)?;
+    let source = match resolved.source {
+        urzua_io::IdentitySource::GhVerified => Source::GhVerified,
+        urzua_io::IdentitySource::Asserted => Source::Asserted,
+        urzua_io::IdentitySource::GitConfig => Source::GitConfig,
+    };
+    let mut attestation = urzua_core::fix::Attestation::new(&resolved.name, source, actor);
+    attestation.verified_login = resolved.verified_login.clone();
+    let report = urzua_core::report::AttestationReport {
+        name: resolved.name,
+        source,
+        actor,
+        replaced_by: resolved.replaced_by,
+        verified_login: resolved.verified_login,
+    };
+    Ok(ResolvedAttestation {
+        attestation,
+        report,
+        warning: resolved.warning,
+    })
 }
 
 /// The records `PATHS` select: a record whose repo-relative path equals a
@@ -322,7 +369,7 @@ fn build_fix_report(
     population: urzua_core::report::Population,
     repairs: Vec<urzua_core::fix::Repair>,
     failed: Vec<(PathBuf, String)>,
-    warning: Option<String>,
+    identity: Option<ResolvedAttestation>,
     ran_apply: bool,
     extra_notices: Vec<Notice>,
 ) -> FixReport {
@@ -332,7 +379,7 @@ fn build_fix_report(
         Vec::new(),
         Vec::new(),
         failed,
-        warning,
+        identity,
         ran_apply,
         extra_notices,
     )
@@ -345,7 +392,7 @@ fn build_report(
     rebaselines: Vec<urzua_core::fix::Rebaseline>,
     failed_pins: Vec<urzua_core::fix::FailedPin>,
     failed: Vec<(PathBuf, String)>,
-    warning: Option<String>,
+    identity: Option<ResolvedAttestation>,
     ran_apply: bool,
     extra_notices: Vec<Notice>,
 ) -> FixReport {
@@ -371,7 +418,9 @@ fn build_report(
             .into_iter()
             .map(|(record, error)| FixFailure { record, error })
             .collect(),
-        notices: warning
+        identity: identity.as_ref().map(|i| i.report.clone()),
+        notices: identity
+            .and_then(|i| i.warning)
             .into_iter()
             .map(|message| Notice {
                 severity: NoticeSeverity::Warning,
@@ -400,6 +449,7 @@ fn run_rebaseline(
     ids: &[String],
     force: bool,
     by: Option<String>,
+    actor: urzua_core::fix::ActorKind,
     reason: &str,
 ) -> ExitCode {
     let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
@@ -420,7 +470,7 @@ fn run_rebaseline(
             Vec::new(),
         ));
     }
-    let identity = match urzua_io::resolve_identity(by.as_deref(), repo_root) {
+    let identity = match resolve_attestation(by.as_deref(), actor, repo_root, config) {
         Ok(id) => id,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
@@ -464,7 +514,7 @@ fn run_rebaseline(
             &fresh,
             &rb,
             &today,
-            &identity.name,
+            &identity.attestation,
             reason,
             &log_id,
         ) {
@@ -481,7 +531,7 @@ fn run_rebaseline(
         applied,
         failed_pins,
         failed,
-        identity.warning,
+        Some(identity),
         true,
         Vec::new(),
     ))

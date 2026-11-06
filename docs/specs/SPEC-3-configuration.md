@@ -1,5 +1,5 @@
 ---
-Version: '0.96'
+Version: '0.97'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -896,6 +896,38 @@ block_on: introduced   # the default
 - The engine reads no other meaning from the key: `urzua check` and `check --stdin-path` report the same
   findings under both values, and the Claude Code adapter passes the hook's verdict through unchanged.
   This repository declares `introduced` (`ADR-78` amendment, item 3).
+
+## Attestation identity: `attestation`
+
+A top-level `attestation` sets where `urzua fix --apply` and `urzua fix --rebaseline --apply` take the
+identity they attest under (`ADR-89` section 5, `MILE-201`):
+
+```yaml
+attestation:
+  identity: gh-verified   # gh-verified | asserted; the default
+  require_verified: false # the default
+```
+
+- **`gh-verified`** (the default, and what an absent key means) keeps the order `RFC-2` and `MILE-66` set: a
+  verified `gh` login wins over `--by`, which wins over `git config user.name`. A `--by` the login replaced
+  is named in the report (`identity.replaced_by`, and the `identity` notice) and never silently dropped.
+  With `require_verified: true` a command that writes an attestation does not run when `gh` cannot verify
+  (`not-run`, exit 2, nothing written): it does not fall back to `--by` or the git configuration.
+- **`asserted`** takes `--by` as given, for a repository whose agents attest on behalf of a named person with
+  no `gh` session. It reverses the verified-beats-typed order of `RFC-2` and `MILE-66`, so it is opt-in,
+  never the default, and the row says `asserted`. The login `gh` verified, when it answers, is recorded
+  beside the name (`identity.verified_login`, and in the row), not instead of it. With no `--by` the git
+  configuration is the name (source `git-config`). `MILE-18` is the longer-term identity binding.
+- **The source and the actor kind are recorded in every tool-authored revision row** (`SPEC-8`). The source
+  is `gh-verified`, `asserted` or `git-config`; the actor kind is `agent`, `human` or `unspecified`, from
+  `fix --actor agent|human`. The actor kind is the caller's claim, not proof, with the standing of `--by`: a
+  verified login names the account whose token ran the command, not whether a person or an agent held it
+  (`RFC-2`, `BUG-16`).
+- **Load errors** (exit 2), never a silent default: an `identity` value other than `gh-verified` and
+  `asserted` (the message names both), an unknown key under `attestation`, and `require_verified: true` with
+  `identity: asserted`, which verifies nothing to require.
+- **Absent means today's behaviour.** A configuration that does not declare the key resolves identity as
+  before; only the row text and the report gain the source and the actor kind.
 
 ## Diff rule path options
 
@@ -1966,3 +1998,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.94`. Documents the `verb_claims` option of `claim.status-agreement` (`MILE-197`): `false` turns the closing-verb reading off so only `closes` is a claim; default `true`; a load error without `closes` (either value) or on any other rule; a notice when set without `strict`. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
 > | 2026-11-05 | Bumped to `0.95`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.96`. Documents the top-level `harness` key (`adapters`, `instructions_file`, `guardrails` with `enabled` and `on_unjudged`) and `authority`: an absent key installs and enables nothing, an unknown key or guardrail and a guardrail no chosen adapter provides are reported and never skipped, `acceptance` or `protected-paths` enabled with no `authority` is a load error, and `on_unjudged: deny` refuses an agent and allows a person. **Why:** `MILE-198`, decided in `ADR-89` section 3. | **substantive** |
+> | 2026-11-06 | Bumped to `0.97`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
