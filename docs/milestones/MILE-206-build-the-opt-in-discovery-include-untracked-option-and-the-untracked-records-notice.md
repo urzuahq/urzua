@@ -27,7 +27,7 @@ and the gate must not be clean about files it never read.
 
 - A `discovery` object with a boolean `include_untracked` (default `false`) loads, is documented in `SPEC-3`,
   and an unknown key under it is reported as for any other config object.
-- With the option on, `discover_tracked_files` also returns untracked, non-ignored files directly under a
+- With the option on, `discover_tracked_files` (whose signature and contract change: it gains config input and its doc comment is rewritten) also returns untracked, non-ignored files directly under a
   declared record directory that the type owns, and no file outside one; a file matched by `.gitignore` is
   not returned. `file_texts.rs`, `session.rs` and `init.rs` see the same set. Tests plant an untracked record,
   an ignored one and a scratch file outside every record directory, and assert the first only is examined.
@@ -46,6 +46,8 @@ and the gate must not be clean about files it never read.
 - `.urzua/config.yaml` sets `discovery.include_untracked: true`, and with an untracked record planted in
   `docs/` in a scratch copy `urzua check` examines it and `check --base origin/main` reports it as added.
   `urzua check` and `check --base origin/main` show 0 unwaived findings on the merged tree.
+- `ADR-56` carries its dated `## Amendment (2026-11-06)` (`ADR-92` clause 9), and a reviewer confirms it still
+  matches the built behavior.
 - `SPEC-2`, `SPEC-3` and the notice table describe the option and both notices; `make records` and
   `make rule-table-check` pass.
 
@@ -54,3 +56,4 @@ and the gate must not be clean about files it never read.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-06 | Initial milestone. **Why:** maintainer decision of 2026-11-06 to add an opt-in untracked-records discovery option in Phase 0; implements `ADR-92`. | **structural** |
+> | 2026-11-06 | Done means amended: `discover_tracked_files` changes signature and contract, and the `ADR-56` amendment is checked. `Status` unchanged. **Why:** independent review of 2026-11-06 of `ADR-92`, whose clauses 3 and 9 now state both. | **structural** |
