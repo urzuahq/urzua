@@ -229,6 +229,11 @@ pub struct RuleSetting {
     /// needs `closes`, and `false` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strict: Option<bool>,
+    /// `false` turns the closing-verb reading of `claim.status-agreement` off,
+    /// so only the `closes` field is a claim (`ADR-88`). Only meaningful to that
+    /// rule, needs `closes`, and `true` by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verb_claims: Option<bool>,
     /// Statuses that mean a referenced record's work is over. Only meaningful
     /// to `narrative-field.stale`. Declared per repository rather than compiled
     /// in: a built-in table keyed on this repository's own type names is how the
@@ -2146,6 +2151,7 @@ pub fn parse_with_document_models(
         for (option, present) in [
             ("closes", setting.closes.is_some()),
             ("strict", setting.strict.is_some()),
+            ("verb_claims", setting.verb_claims.is_some()),
         ] {
             if present && !crate::rules::rule_accepts_option(name, option) {
                 return Err(ConfigError::OptionNotApplicable {
@@ -2595,6 +2601,12 @@ pub fn parse_with_document_models(
             return Err(bad(
                 "strict",
                 "needs `closes`: it judges whether a claim file carries that key",
+            ));
+        }
+        if setting.verb_claims.is_some() && setting.closes.is_none() {
+            return Err(bad(
+                "verb_claims",
+                "needs `closes`: it only has meaning beside the structured field, and with no field turning the closing-verb reading off would leave the rule no claim to read",
             ));
         }
     }
@@ -5114,6 +5126,7 @@ mod option_table_tests {
         "non_reference_field",
         "closes",
         "strict",
+        "verb_claims",
         "field_levels",
         "drift_grace_days",
         "drift_audit_field",

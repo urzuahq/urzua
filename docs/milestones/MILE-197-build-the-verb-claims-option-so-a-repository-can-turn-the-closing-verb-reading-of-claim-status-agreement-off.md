@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6NW0AXBH6FNEBXF1DQT25T2
-Status: Planned
+Status: Done
+Realized-by: code:rust/crates/urzua-core/src/rules/claim.rs, code:rust/crates/urzua-core/src/rules/options.rs, code:rust/crates/urzua-core/src/config.rs, code:.urzua/config.yaml, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, test:rust/crates/urzua-cli/tests/claim_field_integration.rs
 Phase: '0'
 Track: governance-process
 Implements: ADR-88
@@ -53,3 +54,4 @@ for prose, which is what the Phase 1 adopters do, so it sits with them.
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-88` (Proposed) decides the option on a maintainer decision of 2026-11-05 and no milestone builds it; blocked on the maintainer accepting it. | **substantive** |
 > | 2026-11-05 | `Phase` 1 -> 0, and Done means gains the notice when `verb_claims: false` is set without `strict`. **Why:** maintainer decision, 2026-11-05, on accepting `ADR-88`: it sets this repository's own config, which Phase 0 covers. | **substantive** |
+> | 2026-11-05 | `Status` Planned -> Done; `Realized-by` added. **Why:** Done means is met and `ADR-88` is Accepted. `verb_claims: false` on `claim.status-agreement` loads with `closes`; without `closes` it is an `InvalidClaimField` load error naming `verb_claims` and `closes` for `true` as well as `false`, and on another rule `OptionNotApplicable`; with it off a body saying `Fixes BUG-n` raises no finding and counts nothing while the same fragment's `closes: [BUG-n]` is `claim-closes-open`, and the notice says the reading is off; absent or `true` is byte-identical (a test compares the reports); set without `strict` a second notice says a fragment without the key carries no claim. This repository sets `verb_claims: false`. `SPEC-2` and `SPEC-3` have revision rows and the rule table is regenerated. Removing the reading from the engine stays a separate decision. | **substantive** |
