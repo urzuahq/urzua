@@ -111,7 +111,7 @@ fn known_fields_source(
 /// `config.relation-field-not-known`).
 fn undeclared_alias_finding(
     rule_id: &str,
-    action_source: ActionSource,
+    source: ActionSource,
     config_path: &std::path::Path,
     message: String,
 ) -> Finding {
@@ -123,7 +123,7 @@ fn undeclared_alias_finding(
         waived: None,
         declared_severity: None,
         suggested_action: None,
-        action_source,
+        action_source: source,
         message,
     }
 }
