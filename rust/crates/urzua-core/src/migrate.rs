@@ -108,6 +108,8 @@ mod tests {
             upgraded_from: None,
             override_log: None,
             block_on: None,
+            harness: None,
+            authority: None,
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 record_type.to_string(),

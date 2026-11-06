@@ -108,6 +108,16 @@ fn hook_state(path: &std::path::Path) -> Result<HookState, String> {
     )
 }
 
+/// What is wrong with the local git hook layers, as plain messages: the
+/// session-start check of the harness reads the same wiring `doctor` does.
+pub(crate) fn git_hook_problems(repo_root: &std::path::Path) -> Vec<String> {
+    hook_checks(repo_root)
+        .into_iter()
+        .filter(|c| c.status != DoctorStatus::Ok)
+        .map(|c| c.message)
+        .collect()
+}
+
 fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
     let dir = match hooks_dir(repo_root) {
         Ok(d) => d,
@@ -419,6 +429,20 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     // without hooks is reported but does not fail doctor. A hook directory
     // that cannot be read is an error: not-knowing is not the same as absent.
     checks.extend(hook_checks(&repo_root));
+
+    // The agent harness (ADR-89), when the configuration declares one.
+    for (level, check, message) in crate::harness::doctor_checks(&repo_root, &config) {
+        checks.push(DoctorCheck {
+            check: check.to_string(),
+            layer: None,
+            state: None,
+            status: match level {
+                crate::harness::Level::Ok => DoctorStatus::Ok,
+                crate::harness::Level::Warn => DoctorStatus::Warn,
+            },
+            message,
+        });
+    }
 
     let has_error = checks.iter().any(|c| c.status == DoctorStatus::Error);
     let has_warn = checks.iter().any(|c| c.status == DoctorStatus::Warn);
