@@ -8,10 +8,18 @@
 //! harness and is not asked.
 //!
 //! This is the whole claim: the edit tools are refused. A shell command that
-//! writes the same file is not seen here (the post-command check reports it),
-//! and in CI the evidence is authorship, not who decided (`diff.decider-required`).
+//! writes the same file is not seen here: the post-command check reports a
+//! gated status move and a changed protected path afterwards, as a report only,
+//! including a change the same command committed. In CI the evidence is
+//! authorship, not who decided (`diff.decider-required`).
+//!
+//! Paths are matched ASCII case-insensitively, always, on every filesystem: on
+//! a case-insensitive one (the macOS default) `.Hooks/x` is the same file as
+//! `.hooks/x`, and a gate that read the two as different would be bypassed by changing a letter's case. The cost on a
+//! case-sensitive filesystem is that a differently-cased sibling of a
+//! protected path is protected too, which is the safe direction.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use urzua_core::authority::Gate;
 use urzua_core::config::{Config, RelationRole};
@@ -49,6 +57,51 @@ fn status_before(repo_root: &Path, config: &Config, rel: &Path) -> Option<Option
     }
 }
 
+/// The path gate that covers `rel`, compared ASCII case-insensitively.
+pub(super) fn protected_gate<'a>(
+    authority: &'a urzua_core::authority::AuthorityDecl,
+    rel: &Path,
+) -> Option<&'a Gate> {
+    let folded = fold_path(&rel.to_string_lossy());
+    authority
+        .gates
+        .iter()
+        .filter(|g| g.is_path_gate())
+        .find(|g| {
+            g.paths
+                .iter()
+                .any(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))
+        })
+}
+
+/// ASCII lower case, for comparing a path with a gate entry.
+fn fold_path(text: &str) -> String {
+    text.to_ascii_lowercase()
+}
+
+/// `rel` with a leading record directory spelled as the configuration spells
+/// it, when `rel` spells it in another ASCII case: `Docs/adr/x.md` is
+/// `docs/adr/x.md` on a case-insensitive filesystem. A path under no declared
+/// directory is returned as it is.
+pub(super) fn fold_to_declared_dir(config: &Config, rel: &Path) -> PathBuf {
+    let text = rel.to_string_lossy();
+    for t in config.record_types.values() {
+        for dir in std::iter::once(&t.dir).chain(t.extra_dirs.iter()) {
+            let dir = dir.trim_end_matches('/');
+            let n = dir.len();
+            if n > 0
+                && text.len() > n
+                && text.is_char_boundary(n)
+                && text[..n].eq_ignore_ascii_case(dir)
+                && text[n..].starts_with('/')
+            {
+                return PathBuf::from(format!("{dir}{}", &text[n..]));
+            }
+        }
+    }
+    rel.to_path_buf()
+}
+
 fn gate_summary(gate: &Gate) -> String {
     format!("gate: {}, by '{}'", gate.describe(), gate.by)
 }
@@ -63,20 +116,20 @@ pub(super) fn judge(
 ) -> Option<Denial> {
     let (harness, authority) = (config.harness.as_ref()?, config.authority.as_ref()?);
     if harness.enabled("protected-paths") {
-        for gate in authority.gates.iter().filter(|g| g.is_path_gate()) {
-            if gate.paths.iter().any(|e| rules::path_matches_entry(rel, e)) {
-                return Some(Denial {
-                    guardrail: "protected-paths",
-                    reason: format!(
-                        "{} is a protected path ({}); only that decider group may change it, and an agent's edit through the edit tools is refused",
-                        rel.display(),
-                        gate_summary(gate)
-                    ),
-                });
-            }
+        if let Some(gate) = protected_gate(authority, rel) {
+            return Some(Denial {
+                guardrail: "protected-paths",
+                reason: format!(
+                    "{} is a protected path ({}); only that decider group may change it, and an agent's edit through the edit tools is refused",
+                    rel.display(),
+                    gate_summary(gate)
+                ),
+            });
         }
     }
     if harness.enabled("acceptance") && authority.has_status_gate() {
+        let folded = fold_to_declared_dir(config, rel);
+        let rel = folded.as_path();
         let (record_type, status) = status_of(config, rel, content)?;
         let gate = authority.status_gates(&record_type, &status).next()?;
         let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
@@ -103,19 +156,28 @@ pub(super) fn judge(
 }
 
 /// After a command has already run: the report line for a record whose status
-/// on disk is a gated one that `HEAD` did not hold (a new record, or one at
-/// another status), else `None`. It judges the same table as [`judge`] and only
-/// describes; the post-command check reports it and never blocks.
-pub(super) fn gated_move_report(repo_root: &Path, config: &Config, rel: &Path) -> Option<String> {
+/// on disk is a gated one that `base` did not hold (a new record, or one at
+/// another status), else `None`. `base` is `HEAD`, or the commit the last
+/// post-command check saw when the command committed. It judges the same table
+/// as [`judge`] and only describes; the post-command check reports it and never
+/// blocks.
+pub(super) fn gated_move_report(
+    repo_root: &Path,
+    config: &Config,
+    rel: &Path,
+    base: &str,
+) -> Option<String> {
     let (harness, authority) = (config.harness.as_ref()?, config.authority.as_ref()?);
     if !harness.enabled("acceptance") || !authority.has_status_gate() {
         return None;
     }
+    let folded = fold_to_declared_dir(config, rel);
+    let rel = folded.as_path();
     let content = std::fs::read_to_string(repo_root.join(rel)).ok()?;
     let (record_type, status) = status_of(config, rel, &content)?;
     let gate = authority.status_gates(&record_type, &status).next()?;
     let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
-    let before = match urzua_io::read_at_commit_if_present(repo_root, "HEAD", rel) {
+    let before = match urzua_io::read_at_commit_if_present(repo_root, base, rel) {
         Ok(Some(text)) => match status_of(config, rel, &text) {
             Some((_, before)) if before == status => return None,
             Some((_, before)) => format!("moved {} from {field} '{before}' to '{status}'", rel.display()),
@@ -123,13 +185,35 @@ pub(super) fn gated_move_report(repo_root: &Path, config: &Config, rel: &Path) -
         },
         Ok(None) => format!("filed {} already at {field} '{status}'", rel.display()),
         Err(_) => format!(
-            "set {} to {field} '{status}' (its copy at HEAD could not be read, so it is treated as a move)",
+            "set {} to {field} '{status}' (its copy at {base} could not be read, so it is treated as a move)",
             rel.display()
         ),
     };
     Some(format!(
         "  {} [acceptance] error: the command {before}, a move the authority table reserves for a decider ({}). It was not prevented; CI's diff.decider-required checks who made it.",
         rel.display(),
+        gate_summary(gate)
+    ))
+}
+
+/// After a command has already run: the report line for a path under a
+/// protected-paths gate that the command changed (written, created, deleted or
+/// committed), else `None`. A report only, like [`gated_move_report`]; the
+/// command was not prevented.
+pub(super) fn protected_change_report(
+    config: &Config,
+    rel: &Path,
+    deleted: bool,
+) -> Option<String> {
+    let (harness, authority) = (config.harness.as_ref()?, config.authority.as_ref()?);
+    if !harness.enabled("protected-paths") {
+        return None;
+    }
+    let gate = protected_gate(authority, rel)?;
+    Some(format!(
+        "  {} [protected-paths] error: the command {} a protected path ({}). It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
+        if deleted { "deleted" } else { "changed" },
         gate_summary(gate)
     ))
 }
@@ -197,15 +281,21 @@ impl RawGates {
     /// to allow: a gated path, the configuration itself, or a record in a gated
     /// type's directory.
     pub fn covers(&self, rel: &Path, config_rel: Option<&Path>) -> Option<&'static str> {
+        let folded = fold_path(&rel.to_string_lossy());
+        let folded = Path::new(&folded);
         if self.protected
-            && (config_rel.is_some_and(|c| c == rel)
-                || self.paths.iter().any(|e| rules::path_matches_entry(rel, e)))
+            && (config_rel
+                .is_some_and(|c| fold_path(&c.to_string_lossy()) == folded.to_string_lossy())
+                || self
+                    .paths
+                    .iter()
+                    .any(|e| rules::path_matches_entry(folded, &fold_path(e))))
         {
             return Some("protected-paths");
         }
         if self.acceptance {
-            let parent = rel.parent().map(|p| p.to_string_lossy().to_string());
-            if parent.is_some_and(|p| self.gated_dirs.contains(&p)) {
+            let parent = rel.parent().map(|p| fold_path(&p.to_string_lossy()));
+            if parent.is_some_and(|p| self.gated_dirs.iter().any(|d| fold_path(d) == p)) {
                 return Some("acceptance");
             }
         }

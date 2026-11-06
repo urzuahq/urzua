@@ -16,14 +16,15 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 
-bin="${URZUA:-}"
+# URZUA_BIN is the name the translator and the docs use; URZUA is still accepted.
+bin="${URZUA_BIN:-${URZUA:-}}"
 if [ -z "$bin" ]; then
   if [ -x "$root/rust/target/release/urzua" ]; then
     bin="$root/rust/target/release/urzua"
   elif command -v urzua >/dev/null 2>&1; then
     bin="$(command -v urzua)"
   else
-    echo "urzua-record: no urzua binary on PATH; install urzua or set URZUA" >&2
+    echo "urzua-record: no urzua binary on PATH; install urzua or set URZUA_BIN" >&2
     exit 2
   fi
 fi
