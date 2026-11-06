@@ -387,6 +387,13 @@ pub enum Outcome {
     /// and the reason a configurable engine needs this distinction at all --
     /// a linter with compiled-in rules cannot reach it.
     OutOfScope,
+    /// The rule declares `scope: changed` (`ADR-90`) and the candidate's record
+    /// is not in the diff's changed set (or there is no diff): the slot is
+    /// there, the rule chose not to judge it. Counted apart from `OutOfScope`
+    /// so `config.scope-matches-nothing`, which reads a configuration that
+    /// reaches nothing, does not warn about a rule that was told to wait for a
+    /// diff.
+    DeferredByScope,
 }
 
 /// Run `body` over a population and report what it judged.
@@ -404,15 +411,22 @@ pub fn census<T>(
     let mut examined = 0;
     let mut out_of_scope = 0;
     let mut unreadable = 0;
+    let mut deferred_by_scope = 0;
     for candidate in &candidates {
         match body(candidate) {
             Outcome::Examined => examined += 1,
             Outcome::OutOfScope => out_of_scope += 1,
             Outcome::Unreadable => unreadable += 1,
+            Outcome::DeferredByScope => deferred_by_scope += 1,
             Outcome::Absent => {}
         }
     }
-    Population::detailed(unit, eligible, examined, out_of_scope, unreadable)
+    Population::build(
+        unit,
+        eligible,
+        examined,
+        (out_of_scope, unreadable, deferred_by_scope),
+    )
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -478,6 +492,20 @@ pub struct Population {
     /// on a *different*, independently opt-in rule also being enabled to
     /// surface it (`ADR-53`, `BUG-125`, `ADR-63`).
     unreadable: usize,
+    /// Candidates a rule that declares `scope: changed` (`ADR-90`) left
+    /// unjudged because their record is not in the diff's changed set, or
+    /// because there is no diff. Eligible and not examined, like every other
+    /// unexamined candidate, but with its own cause: nothing about the
+    /// configuration or the corpus is wrong. Serialized only when non-zero, so
+    /// a rule that does not declare the option reports exactly what it did
+    /// before; a consumer that does not know the field ignores it
+    /// (`config.scope-matches-nothing` does not read it).
+    #[serde(skip_serializing_if = "is_zero")]
+    deferred_by_scope: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 impl Population {
@@ -508,6 +536,12 @@ impl Population {
         self.unreadable
     }
 
+    /// How many candidates a `scope: changed` rule did not judge because their
+    /// record is not in the diff's changed set (`ADR-90`).
+    pub fn deferred_by_scope(&self) -> usize {
+        self.deferred_by_scope
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
         Population::detailed(unit, eligible, examined, 0, 0)
     }
@@ -519,6 +553,15 @@ impl Population {
         examined: usize,
         out_of_scope: usize,
         unreadable: usize,
+    ) -> Self {
+        Population::build(unit, eligible, examined, (out_of_scope, unreadable, 0))
+    }
+
+    fn build(
+        unit: PopulationUnit,
+        eligible: usize,
+        examined: usize,
+        (out_of_scope, unreadable, deferred_by_scope): (usize, usize, usize),
     ) -> Self {
         // A real `assert!`, not `debug_assert!` (`BUG-113`): this runs once
         // per rule per invocation, not a hot-path cost worth trading away,
@@ -539,6 +582,7 @@ impl Population {
             examined,
             out_of_scope,
             unreadable,
+            deferred_by_scope,
         }
     }
 }
@@ -1234,6 +1278,49 @@ mod tests {
             2,
             "two records, however many rules and units judged them"
         );
+    }
+
+    /// `ADR-90`: a candidate a `scope: changed` rule did not judge has its own
+    /// counter, apart from `out_of_scope` (which `config.scope-matches-nothing`
+    /// reads) and from `Absent`.
+    #[test]
+    fn a_deferred_candidate_is_counted_apart_from_out_of_scope_and_absent() {
+        let outcomes = [
+            Outcome::Examined,
+            Outcome::DeferredByScope,
+            Outcome::DeferredByScope,
+            Outcome::Absent,
+            Outcome::OutOfScope,
+            Outcome::Unreadable,
+        ];
+        let p = census(PopulationUnit::Field, outcomes.to_vec(), |o| *o);
+        assert_eq!(
+            (
+                p.eligible(),
+                p.examined(),
+                p.out_of_scope(),
+                p.unreadable(),
+                p.deferred_by_scope()
+            ),
+            (6, 1, 1, 1, 2)
+        );
+    }
+
+    /// Additive on the wire: absent when zero, so a rule that does not declare
+    /// the option reports byte for byte what it did before.
+    #[test]
+    fn deferred_by_scope_is_serialized_only_when_it_is_non_zero() {
+        let none = census(PopulationUnit::Field, vec![Outcome::Examined], |o| *o);
+        let json = serde_json::to_value(none).unwrap();
+        assert!(json.get("deferred_by_scope").is_none(), "{json}");
+        assert_eq!(json["out_of_scope"], 0, "out_of_scope stays always-present");
+        let some = census(PopulationUnit::Field, vec![Outcome::DeferredByScope], |o| {
+            *o
+        });
+        let json = serde_json::to_value(some).unwrap();
+        assert_eq!(json["deferred_by_scope"], 1, "{json}");
+        assert_eq!(json["eligible"], 1);
+        assert_eq!(json["examined"], 0);
     }
 
     #[test]

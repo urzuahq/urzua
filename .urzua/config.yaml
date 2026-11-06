@@ -630,9 +630,13 @@ rules:
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # Advisory (MILE-189, ADR-87): a `Realized-by` locator on a file under these paths
   # could be an `Implements:` or `Verifies:` comment in that file. At `info` the
-  # findings are reported and counted but never fail `fail_on: warning`.
+  # findings are reported and counted but never fail `fail_on: warning`. `scope:
+  # changed` (ADR-90, MILE-203) judges only the records a `--base` diff adds or
+  # changes: the closed records that cite source files here are nobody's to edit,
+  # so the nudge appears when someone touches one.
   embodiment.locator-on-back-pointer-path:
     level: info
+    scope: changed
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with

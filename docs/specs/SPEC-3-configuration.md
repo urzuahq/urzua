@@ -1,5 +1,5 @@
 ---
-Version: '0.94'
+Version: '0.95'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1647,6 +1647,51 @@ rules:
   `embodiment.back-pointer-*`). The author adds the `Implements:` or `Verifies:` comment first, then
   removes the locator from `Realized-by`.
 - `back_pointer_paths` is required (a load error without it); `test_paths` is optional.
+- `scope: changed` is optional (`ADR-90`, `MILE-203`; see "Judging only the changed records" below).
+
+### Judging only the changed records: `scope: changed` (`ADR-90`, `MILE-203`)
+
+A nudge says "while you are here, do this", so it is useful only at the moment someone touches the
+record. A rule that takes the `scope` option can be told to judge only the records a diff adds or changes.
+
+```yaml
+rules:
+  embodiment.locator-on-back-pointer-path:
+    level: info
+    back_pointer_paths: ["src"]
+    scope: changed
+```
+
+- `scope` is a rule option with one value, `changed`. There is no `scope: all`; omitting the option is
+  that. Any other value (including a list, a number or a boolean) is a load error that names `changed`.
+  A key with no value is refused like every other option.
+- With the option, a rule judges (reaches a verdict on, and may report a finding for) only the records in
+  the diff's changed set: added, modified or the new name of a rename, working-tree edits included. Its
+  candidates are all still eligible. The others are counted in the population's `deferred_by_scope`
+  (`SPEC-2`), and the report carries one `info` notice for the rule saying how many slots were not judged
+  and why (`no --base`, or `unchanged since <base>`).
+- On a plain `check` there is no diff, so such a rule judges none of its candidates: it is `ran`, with
+  `examined` 0. `check --stdin-path` treats the proposed record as the one changed record, so the editor
+  hook is where the nudge fires without `--base`. A path argument narrows further, as for every rule.
+- A dependent is not changed. The diff scope's dependents (a record that cites a changed file, or shares
+  an id with a changed record) are still examined by the rules that do not declare the option; for a rule
+  that does, only the records the diff itself touches are judged. A change to the configuration file does
+  not make a record changed.
+- Which rules take it is a column of the rule table (`urzua rules` prints it as `judges`). Only a rule
+  whose verdict on a record depends on that record alone (`one-record`) lists `scope`; today that is
+  `embodiment.locator-on-back-pointer-path`. A cross-record rule (id collision, reference resolution,
+  reciprocity, sequencing, which can leave a defect in an unchanged record that a change caused), a rule
+  that already judges only the changed set (`status.transition-allowed`,
+  `revision-log.version-bump-required`) and a rule that is not record-level (configuration, files, diff,
+  run, directory-anchored) do not take it: declaring it is the usual "rule 'x' does not take the option
+  'scope'" load error.
+- `config.scope-matches-nothing` does not read `deferred_by_scope`: a rule told to wait for a diff is not a
+  configuration that reaches nothing, so a plain `check` raises no warning for it, while a real
+  `out_of_scope` still does. `waiver.matches-nothing` leaves a waiver on such a rule eligible and
+  unexamined, because a whole-corpus run of the rule looked at almost nothing. The actions of `ADR-73` are
+  unchanged.
+- A rule with the option is silent on a plain `check` by design, so it cannot be a gate over the whole
+  corpus. Remove the option to see the full backlog.
 
 ### Sticky Embodiment states (`MILE-148`)
 
@@ -1873,3 +1918,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.92`. The compiled-in `field.pending` match reads `pending` as a whole word and ignores a path-shaped token, so `spending` and `docs/pending-settlement/x.md` are no longer pending; a type declaring `statuses.pending` is unchanged. **Why:** Phase 0 hardening from an adopter switchover -- a waiver `Scope` path containing `spending` was reported as unfinished work. | **substantive** |
 > | 2026-11-05 | Bumped to `0.93`. Documents `roadmap.work_types` (`MILE-196`): the optional list of record types that are work, its effect on `urzua roadmap`, and its `roadmap: ...` load errors (an unknown, repeated or blank name, and an empty list). **Why:** `ADR-82`'s Amendment of 2026-11-05, accepted by the maintainer. | **substantive** |
 > | 2026-11-05 | Bumped to `0.94`. Documents the `verb_claims` option of `claim.status-agreement` (`MILE-197`): `false` turns the closing-verb reading off so only `closes` is a claim; default `true`; a load error without `closes` (either value) or on any other rule; a notice when set without `strict`. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
+> | 2026-11-05 | Bumped to `0.95`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |

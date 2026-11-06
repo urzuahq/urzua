@@ -1,0 +1,11 @@
+id: a-scope-changed-rule-judges-nothing-on-a-plain-check-and-says-why
+corpus: corpus-g
+# With no diff a `scope: changed` rule judges none of its slots, exits 0 and says
+# why in a notice, rather than reporting a clean run over nothing (`ADR-90`).
+invocation: [--config, .urzua/nudge.yaml, check]
+expect_exit: 0
+expect_notices:
+  - {subject: embodiment.locator-on-back-pointer-path, message_contains: no --base}
+expect_no_findings:
+  - {rule: embodiment.locator-on-back-pointer-path}
+proves: [embodiment.locator-on-back-pointer-path]
