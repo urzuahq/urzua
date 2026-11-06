@@ -282,3 +282,127 @@ fn strict_reports_a_fence_the_release_tool_cannot_read_observed_failing() {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+// ---- `verb_claims` (ADR-88, MILE-197)
+
+const VERB_OFF: &str = "    closes: closes\n    strict: true\n    verb_claims: false\n";
+
+fn load_error(dir: &Path) -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .arg("check")
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
+
+/// With the reading off, prose is never a claim: `Fixes BUG-1` in the body
+/// raises nothing and counts nothing, while the same fragment's `closes`
+/// still decides.
+#[test]
+fn verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_failing() {
+    let prose = "---\ndefault: patch\ncloses: [BUG-2]\n---\n\nFixes BUG-1.\n";
+    let dir = repo("verb-off", VERB_OFF, &[("a.md", prose)]);
+    let (code, report) = check(&dir);
+    assert!(claim_findings(&report).is_empty(), "{report}");
+    assert_eq!(code, 0, "{report}");
+    let notices = report["notices"].to_string();
+    assert!(notices.contains("closing-verb reading is off"), "{notices}");
+    assert!(!notices.contains("0 closing-verb"), "no count: {notices}");
+    std::fs::remove_dir_all(&dir).ok();
+
+    let listed = "---\ndefault: patch\ncloses: [BUG-1]\n---\n\nFixes BUG-1.\n";
+    let dir = repo("verb-off-listed", VERB_OFF, &[("a.md", listed)]);
+    let (code, report) = check(&dir);
+    let found = claim_findings(&report);
+    assert_eq!(found.len(), 1, "only the field claims: {report}");
+    assert!(found[0]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("claim.closes-open"));
+    assert_eq!(code, 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Absent and `true` read prose exactly as before, byte for byte.
+#[test]
+fn verb_claims_absent_or_true_is_the_reading_as_it_was_observed_failing() {
+    let prose = "---\ndefault: patch\ncloses: [BUG-2]\n---\n\nFixes BUG-1.\n";
+    let dir_absent = repo("verb-absent", OPTIONS, &[("a.md", prose)]);
+    let dir_on = repo(
+        "verb-on",
+        "    closes: closes\n    strict: true\n    verb_claims: true\n",
+        &[("a.md", prose)],
+    );
+    let absent = check(&dir_absent);
+    let on = check(&dir_on);
+    assert_eq!(absent.0, 1);
+    assert_eq!(claim_findings(&absent.1).len(), 1, "{}", absent.1);
+    assert_eq!(absent, on);
+    std::fs::remove_dir_all(&dir_absent).ok();
+    std::fs::remove_dir_all(&dir_on).ok();
+}
+
+#[test]
+fn verb_claims_needs_closes_whether_true_or_false_observed_failing() {
+    for value in ["true", "false"] {
+        let dir = repo("verb-alone", &format!("    verb_claims: {value}\n"), &[]);
+        let text = load_error(&dir);
+        assert!(
+            text.contains("verb_claims") && text.contains("needs `closes`"),
+            "{value}: {text}"
+        );
+        assert!(!text.contains("does not take"), "{text}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[test]
+fn verb_claims_on_another_rule_is_not_applicable_observed_failing() {
+    let dir = repo("verb-other", "", &[]);
+    let path = dir.join(".urzua/config.yaml");
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    text = text.replace(
+        "rules:\n",
+        "rules:\n  field.quality:\n    level: error\n    verb_claims: false\n",
+    );
+    std::fs::write(&path, text).unwrap();
+    let text = load_error(&dir);
+    assert!(
+        text.contains("does not take the option 'verb_claims'"),
+        "{text}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Off without `strict`: a fragment lacking the key then has no claim at all,
+/// and the run says so instead of leaving the gap silent.
+#[test]
+fn verb_claims_false_without_strict_carries_a_notice_observed_failing() {
+    let bare = "---\ndefault: patch\n---\n\nFixes BUG-1.\n";
+    let dir = repo(
+        "verb-off-lax",
+        "    closes: closes\n    verb_claims: false\n",
+        &[("a.md", bare)],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 0, "{report}");
+    assert!(claim_findings(&report).is_empty(), "{report}");
+    let notices = report["notices"].to_string();
+    assert!(
+        notices.contains("without `strict`") && notices.contains("no claim"),
+        "{notices}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+
+    // With `strict` the gap is a finding, so no such notice.
+    let dir = repo("verb-off-strict", VERB_OFF, &[("a.md", bare)]);
+    let (_, report) = check(&dir);
+    assert!(!report["notices"].to_string().contains("without `strict`"));
+    std::fs::remove_dir_all(&dir).ok();
+}

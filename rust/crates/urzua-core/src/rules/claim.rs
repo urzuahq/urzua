@@ -71,7 +71,8 @@ fn claimed_closed(line: &str) -> Vec<String> {
 /// has each claim file list, in a frontmatter key, the records it closes, and
 /// the rule checks that data: each id resolves, and is at a status its type
 /// declares terminal. Prose is never read for that claim; the closing-verb
-/// reading above stays as it was, over the body of the file.
+/// reading above stays as it was, over the body of the file, unless `verb_claims: false` turns
+/// it off (`ADR-88`).
 pub fn claim_status_agreement(
     claims: &[(String, String)],
     opts: &ClaimOpts,
@@ -294,11 +295,13 @@ fn field_finding(path: &str, line: usize, variant: &'static str, message: String
 /// The lines the closing-verb reading looks at: every line of the file, less
 /// the frontmatter block once the structured field is declared. A frontmatter
 /// line is data, not prose, and `closes: [BUG-1]` would otherwise be read a
-/// second time as the verb "closes".
+/// second time as the verb "closes". With `verb_claims: false` (`ADR-88`) no
+/// line is read: prose is never a claim, and every caller goes through here.
 fn verb_claim_lines<'a>(
     content: &'a str,
     opts: &ClaimOpts,
 ) -> impl Iterator<Item = (usize, &'a str)> {
+    let read = opts.verb_claims;
     let skip = opts
         .closes
         .as_ref()
@@ -307,7 +310,7 @@ fn verb_claim_lines<'a>(
     content
         .lines()
         .enumerate()
-        .filter(move |(idx, _)| !skip.contains(idx))
+        .filter(move |(idx, _)| read && !skip.contains(idx))
 }
 
 /// What `check` tells a reader about the claim files the rule could not
@@ -337,6 +340,25 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
                 not_fragments.join(", ")
             ),
         });
+    }
+    if !opts.verb_claims {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
+            message: format!(
+                "the closing-verb reading is off (`verb_claims: false`): only `{key}` is read for claims and no prose is"
+            ),
+        });
+        if !opts.strict {
+            notices.push(Notice {
+                severity: NoticeSeverity::Info,
+                subject: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
+                message: format!(
+                    "`verb_claims: false` is set without `strict`, so a fragment that lacks `{key}` carries no claim and nothing reports it; set `strict: true` to require the key"
+                ),
+            });
+        }
+        return notices;
     }
     let verb_claims: usize = claims
         .iter()

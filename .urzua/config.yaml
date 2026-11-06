@@ -490,9 +490,14 @@ block_on: introduced
 # (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic
 # pair, and a containment pair declared acyclic would not order work or block
 # its children, so only the sequencing pair is named. The engine names no grouping field.
+# work_types (ADR-82, Amendment of 2026-11-05, MILE-196) lists every type the roadmap
+# orders. A condition is a fact that is met or dropped, never built, so it is left out:
+# it still blocks its dependents and is listed under waiting_on, but it is in no wave,
+# not in the ready set and not on the critical path.
 roadmap:
   pairs: ["sequencing"]
   group_by: ["Phase", "Track"]
+  work_types: ["adr", "rfc", "spec", "milestone", "bug", "waiver"]
 
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
@@ -600,6 +605,9 @@ rules:
     # is not listed.
     closes: closes
     strict: true
+    # Prose is not read for a claim (ADR-88, MILE-197): `strict` is on and every
+    # fragment carries `closes:`, so the field is the only claim.
+    verb_claims: false
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]
@@ -622,9 +630,13 @@ rules:
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # Advisory (MILE-189, ADR-87): a `Realized-by` locator on a file under these paths
   # could be an `Implements:` or `Verifies:` comment in that file. At `info` the
-  # findings are reported and counted but never fail `fail_on: warning`.
+  # findings are reported and counted but never fail `fail_on: warning`. `scope:
+  # changed` (ADR-90, MILE-203) judges only the records a `--base` diff adds or
+  # changes: the closed records that cite source files here are nobody's to edit,
+  # so the nudge appears when someone touches one.
   embodiment.locator-on-back-pointer-path:
     level: info
+    scope: changed
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
   # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with

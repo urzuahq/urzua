@@ -373,6 +373,13 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     let (context, mut notices) = load_context(session, &scope, selection.as_deref())?;
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
+    let why_deferred = if scope.prospective.is_some() {
+        "not the proposed record".to_string()
+    } else {
+        base.as_deref()
+            .map_or("no --base".to_string(), |b| format!("unchanged since {b}"))
+    };
+    notices.extend(scope_changed_notices(&executions, &why_deferred));
     scope_findings(session, &scope, &mut findings);
     let suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
     let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
@@ -426,6 +433,27 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         // The flag wins over the configuration; either only moves the exit code.
         fail_on: fail_on.unwrap_or(session.config.fail_on),
     })
+}
+
+// ADR-90: a rule that declares scope: changed says how many slots it did not judge, and why.
+/// One info notice per rule that declared `scope: changed` and left slots
+/// unjudged (`ADR-90`): the rule, the option, how many slots and why. Without
+/// it a plain `check` would show a nudge rule examining nothing with no cause.
+fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice> {
+    executions
+        .iter()
+        .filter_map(|e| {
+            let deferred = e.population.as_ref()?.deferred_by_scope();
+            (deferred > 0).then(|| Notice {
+                severity: NoticeSeverity::Info,
+                subject: e.rule.clone(),
+                message: format!(
+                    "scope: changed -- {deferred} slot{} not judged ({why}); this rule judges only the records a --base diff adds or changes",
+                    if deferred == 1 { "" } else { "s" }
+                ),
+            })
+        })
+        .collect()
 }
 
 // Implements: ADR-86 (the report counts permanent waivers by category)

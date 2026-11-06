@@ -13,7 +13,7 @@ use crate::config::{BoundaryKind, IndexSpec, LocatorKind, RuleOpts, RuleSetting}
 
 /// `claim.status-agreement`: the paths scanned and the statuses that count as
 /// closed.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaimOpts {
     pub claim_paths: Vec<String>,
     pub closed_statuses: Vec<String>,
@@ -22,6 +22,21 @@ pub struct ClaimOpts {
     pub closes: Option<String>,
     /// A claim file with frontmatter and without that key is a finding.
     pub strict: bool,
+    /// `false` stops closing verbs in prose being read as claims (`ADR-88`);
+    /// `true` unless declared.
+    pub verb_claims: bool,
+}
+
+impl Default for ClaimOpts {
+    fn default() -> Self {
+        ClaimOpts {
+            claim_paths: Vec::new(),
+            closed_statuses: Vec::new(),
+            closes: None,
+            strict: false,
+            verb_claims: true,
+        }
+    }
 }
 
 impl RuleOpts for ClaimOpts {
@@ -31,6 +46,7 @@ impl RuleOpts for ClaimOpts {
             closed_statuses: s.closed_statuses.clone().unwrap_or_default(),
             closes: s.closes.clone(),
             strict: s.strict.unwrap_or(false),
+            verb_claims: s.verb_claims.unwrap_or(true),
         }
     }
 }
@@ -252,6 +268,17 @@ mod tests {
         let o: ClaimOpts = c.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
         assert_eq!(o.closes.as_deref(), Some("closes"));
         assert!(o.strict);
+    }
+
+    #[test]
+    fn verb_claims_defaults_to_true_and_reads_false() {
+        let on = config("  claim.status-agreement:\n    level: error\n    claim_paths: [a]\n    closed_statuses: [Done]\n    closes: closes\n");
+        let o: ClaimOpts = on.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
+        assert!(o.verb_claims);
+        let off = config("  claim.status-agreement:\n    level: error\n    claim_paths: [a]\n    closed_statuses: [Done]\n    closes: closes\n    verb_claims: false\n");
+        let o: ClaimOpts = off.enabled_rule_opts(RULE_CLAIM_STATUS_AGREEMENT).unwrap();
+        assert!(!o.verb_claims);
+        assert!(ClaimOpts::default().verb_claims);
     }
 
     #[test]

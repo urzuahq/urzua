@@ -28,11 +28,16 @@ use crate::locator::realized_by_locators;
 /// A type whose `statuses.delivery.back_pointer_evidence` is `false` counts no
 /// back-pointer as evidence (`ADR-84`), so a comment cannot replace its locator
 /// and its records are not nudged.
+///
+/// With `scope: changed` (`ADR-90`) the rule is a nudge for the moment someone
+/// touches the record: it judges only the records the diff adds or changes, and
+/// the rest are counted in the population's `deferred_by_scope`.
 pub fn embodiment_locator_on_back_pointer_path(
     records: &[Record],
     config: &Config,
     back_pointer_paths: &[String],
     test_paths: &[String],
+    scope: Option<&ChangedOnly>,
     read_text: &dyn Fn(&str) -> crate::locator::SharedText,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH;
@@ -58,6 +63,12 @@ pub fn embodiment_locator_on_back_pointer_path(
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
+            // `scope: changed` (`ADR-90`): a slot that is there but belongs to a
+            // record the diff did not change is eligible and not judged. An
+            // absent slot was counted absent above, so there is nothing to defer.
+            if scope.is_some_and(|s| s.defers(record)) {
+                return Outcome::DeferredByScope;
+            }
             // A comment is no evidence for this type, so it cannot replace the locator.
             let comments_count = config
                 .record_types
