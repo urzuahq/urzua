@@ -1,5 +1,5 @@
 ---
-Version: '0.27'
+Version: '0.28'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -110,12 +110,13 @@ uses it is described under "The record-edit hook" below.
 
 ### The record-edit hook
 
-`scripts/hooks/record-edit-hook.sh <path>` (`MILE-178`, `ADR-69`, `MILE-191`, `ADR-78`) is the
-harness-neutral core that relays `urzua check --stdin-path` (`SPEC-2`) to a coding-agent harness before
-a record edit is written, so the editor judges every enabled rule on the edited record and not only the
-computed fields `fix` repairs. Its contract: stdin is the proposed full content, argv the record path
-(absolute or repo-relative); stdout is one JSON object `{verdict, path, message, findings, override?}`;
-exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findings` from `check`.
+`urzua harness run edit` (`MILE-178`, `ADR-69`, `MILE-191`, `ADR-78`, `MILE-198`, `ADR-89`; the request
+and verdict are in `SPEC-24`) is the harness-neutral core that judges a record edit before it is written,
+the way `urzua check --stdin-path` (`SPEC-2`) does, so the editor judges every enabled rule on the edited
+record and not only the computed fields `fix` repairs. Its contract: stdin is a request carrying the
+proposed full content and the record path (absolute or repo-relative); stdout is one JSON object
+`{verdict, path, message, findings, override?}`; exit 0 lets the edit proceed and 1 blocks it. It holds no
+rule of its own: it reports the findings of the enabled rules.
 
 - `block`: by default (`block_on: introduced`, `SPEC-3`), an unwaived error finding the edit introduced. An error is introduced when the record as it
   is on disk, judged the same way, does not already report it (same rule and message). The message
@@ -134,25 +135,24 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
 - `allow-unjudged`: urzua is missing, answers `not-run` (including a configuration in which no enabled
   rule can look at the record), or exits otherwise than 0 or 1, or prints non-JSON. The edit proceeds and the message says plainly that it was not judged. An `embodiment-drift-git` notice (a shallow clone, a failing git call) is not one of these: the hook still judges every finding that needs no history and blocks on them, and the message names the drift rule it could not judge (`allow-with-warnings` when nothing else is found).
 - `not-governed`: urzua reports that no record type governs the path (silent, the file is not a record).
-- `allow-override` / `block`: `--override NAME` (or `URZUA_HOOK_OVERRIDE=NAME`) lets a block through and
+- `allow-override` / `block`: an override named in the request (or `URZUA_HOOK_OVERRIDE=NAME`) lets a block through and
   puts the name in the output; an override without a name keeps the block. When the configuration
   declares `override_log` (`SPEC-3`, `ADR-78` item 1, `MILE-188`), the override also needs a reason
-  (`--reason TEXT` or `URZUA_HOOK_REASON=TEXT`; the Claude Code adapter passes the environment) and the
+  (a reason in the request or `URZUA_HOOK_REASON=TEXT`; the Claude Code translator passes the environment) and the
   hook appends one row to that committed log for each finding it let through: date, name, record, field
   (the field a finding's suggested action targets, else `-`), rule, reason, and a blank `Reviewed-by`
   for a person to fill in. `override.unreviewed` (`SPEC-2`) then reports the row until they do. A log
   that cannot be written blocks the edit, since an override that is not recorded is not allowed. With no
-  `override_log` declared the override is let through and the message says it was NOT recorded. The hook
-  reads two lines of the configuration, the top-level `override_log:` and `block_on:` scalars, and nothing
-  else.
+  `override_log` declared the override is let through and the message says it was NOT recorded. The core
+  reads the configuration's top-level `override_log:` and `block_on:` scalars for this.
 
-The Claude Code adapter `scripts/hooks/claude-code-record-edit.py`, wired in `.claude/settings.json` for
-`Write|Edit|MultiEdit`, rebuilds the proposed content from the payload and maps the verdict to Claude
-Code's hook output; a second harness is a second adapter over the same core. Measured on this corpus
-(`MILE-191`, release build, 522 records, best of 20 runs on a loaded 4-core machine): about 0.43s per
-record through the core when the edit has no errors, which is one `check --stdin-path` run, and about
-0.77s when it has errors, which pays for the second, baseline run; the Claude Code adapter adds about
-0.04s. Compiling each pending pattern once per process, instead of on every field, took a single run
+The Claude Code translator `.claude/hooks/urzua-claude-code.py`, installed by `urzua harness install`
+(`SPEC-19`) and wired in `.claude/settings.json` for `Write|Edit|MultiEdit`, rebuilds the proposed
+content from the payload and maps the verdict to Claude Code's hook output; a second harness is a second
+adapter over the same core. Measured on this corpus before the core moved into the engine (`MILE-191`,
+release build, 522 records, best of 20 runs on a loaded 4-core machine, through the shell chain): about
+0.43s per record when the edit has no errors, which is one `check --stdin-path` run, and about 0.77s when
+it has errors, which pays for the second, baseline run. Compiling each pending pattern once per process, instead of on every field, took a single run
 from about 0.55s to about 0.42s. `fix --stdin-path` alone is about 0.2s.
 
 `--tier` defaults to `1` and is currently locked there — no other tier is implemented, so accepting
@@ -359,3 +359,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.25`. The record-edit hook no longer answers `allow-unjudged` for an `embodiment-drift-git` notice: it judges and blocks on what needs no history and discloses the skipped drift rule; it omits the `run:` repair hint from findings the edit introduced. **Why:** Phase 0 hardening from an adopter switchover -- every edit in a shallow clone went unjudged, and the hint answered `matched no pending repair`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.26`. `--apply` and `--rebaseline --apply` resolve identity under the configuration's `attestation` (`SPEC-3`): `require_verified` makes a missing `gh` answer `not-run` with nothing written, `asserted` takes `--by` as given beside the verified login; the report gains `identity` (name, source, actor, the replaced `--by`); `--actor agent\|human` is accepted; and every tool-authored row names the identity source and the actor kind. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
 > | 2026-11-06 | Bumped to `0.27`. `fix --apply` refuses to write a status an `authority` gate names for the record's type and reports it in `failed`. **Why:** `MILE-199`, the `ADR-70` amendment of 2026-11-05: a lifecycle command sets a status only when the engine computes it, never one reserved to a decider. | **substantive** |
+> | 2026-11-06 | Bumped to `0.28`. The record-edit hook section describes the engine core `urzua harness run edit` and the installed translator, not the deleted `scripts/hooks` shell and Python chain; the verdicts are unchanged. **Why:** `MILE-204` deletes the scripts, `ADR-89` section 6. | **substantive** |

@@ -19,7 +19,7 @@ that an agent ran it, and it refuses an empty reason.
    non-empty reason, and prints a `Re-pin:` line.
 
    ```bash step
-   .claude/hooks/urzua-record.sh repin "$RECORD" "$REASON"
+   bash .claude/hooks/urzua-record.sh repin "$RECORD" "$REASON"
    ```
 
 2. Put every `Re-pin:` line this command printed in the pull request body, so a reviewer can check that

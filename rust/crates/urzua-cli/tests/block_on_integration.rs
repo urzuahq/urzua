@@ -1,6 +1,7 @@
-//! MILE-195: the editor hook's `block_on: introduced | all` option (`ADR-78`
-//! amendment of 2026-11-05, `SPEC-3`, `SPEC-8`). Needs `bash`, `jq` and
-//! `python3`; a missing tool fails the test, never skips it.
+//! MILE-195, MILE-204: the editor hook's `block_on: introduced | all` option (`ADR-78`
+//! amendment of 2026-11-05, `SPEC-3`, `SPEC-8`), run through the engine core
+//! (`urzua harness run edit`) and the installed translator. Needs `python3` and `sh`;
+//! a missing tool fails the test, never skips it.
 
 mod common;
 
@@ -21,7 +22,7 @@ fn git(dir: &Path, args: &[&str]) {
         .success());
 }
 
-const CONFIG: &str = "schema_version: 2\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\nrules: {embodiment.consistency: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - [embodiment_state, embodiment_locator]\n";
+const CONFIG: &str = "schema_version: 2\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\nrules: {embodiment.consistency: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    companion_fields:\n      - [embodiment_state, embodiment_locator]\nharness:\n  adapters: [claude-code]\n  guardrails:\n    editor-hook: {enabled: true}\n";
 /// `Realized-by: code:` computes `Implemented`, so the on-disk record already
 /// carries an `embodiment.consistency` error.
 const RECORD: &str =
@@ -69,39 +70,34 @@ fn run(cmd: &mut Command, root: &Path, stdin: &str) -> Output {
     child.wait_with_output().unwrap()
 }
 
-/// A urzua wrapper that appends one line to `calls` per `check` run.
-fn counting_bin(root: &Path) -> (String, PathBuf) {
-    let calls = root.join("calls.log");
-    let wrapper = root.join("urzua-counting.sh");
-    std::fs::write(
-        &wrapper,
-        format!(
-            "#!/bin/sh\n[ \"$1\" = check ] && echo run >> '{}'\nexec '{}' \"$@\"\n",
-            calls.display(),
-            env!("CARGO_BIN_EXE_urzua")
-        ),
-    )
-    .unwrap();
-    assert!(Command::new("chmod")
-        .arg("+x")
-        .arg(&wrapper)
-        .status()
-        .unwrap()
-        .success());
-    (wrapper.to_str().unwrap().to_string(), calls)
-}
-
-fn runs(calls: &Path) -> usize {
-    std::fs::read_to_string(calls).map_or(0, |s| s.lines().count())
-}
-
-fn core(root: &Path, args: &[&str], bin: &str, stdin: &str) -> (i32, serde_json::Value) {
-    let mut c = Command::new("bash");
-    c.arg(repo_root().join("scripts/hooks/record-edit-hook.sh"))
-        .args(args)
-        .env("URZUA_BIN", bin)
-        .env_remove("URZUA_HOOK_OVERRIDE");
-    let out = run(&mut c, root, stdin);
+/// The engine core, as the translator calls it: a request on stdin, a verdict on stdout.
+/// `args` are `[--override NAME [--reason TEXT]] <record-path>`.
+fn core(root: &Path, args: &[&str], stdin: &str) -> (i32, serde_json::Value) {
+    let mut request = serde_json::json!({
+        "event": "edit", "tool": "Write", "actor": "agent", "cwd": root.to_string_lossy(),
+        "content": stdin,
+    });
+    let mut it = args.iter();
+    let mut ovr = serde_json::Map::new();
+    while let Some(a) = it.next() {
+        match *a {
+            "--override" => {
+                ovr.insert("name".into(), it.next().unwrap().to_string().into());
+            }
+            "--reason" => {
+                ovr.insert("reason".into(), it.next().unwrap().to_string().into());
+            }
+            path => request["paths"] = serde_json::json!([path]),
+        }
+    }
+    if !ovr.is_empty() {
+        request["override"] = ovr.into();
+    }
+    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    c.args(["harness", "run", "edit"])
+        .env_remove("URZUA_HOOK_OVERRIDE")
+        .env_remove("URZUA_HOOK_REASON");
+    let out = run(&mut c, root, &request.to_string());
     let v = serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("core stdout is not JSON ({e}): {out:?}"));
     (out.status.code().unwrap(), v)
@@ -119,14 +115,13 @@ fn check(root: &Path) -> (i32, serde_json::Value) {
 }
 
 #[test]
-fn introduced_does_not_block_an_error_already_on_disk_and_runs_the_baseline() {
+fn introduced_does_not_block_an_error_already_on_disk_and_lists_it_as_existing() {
     for (name, config) in [
         ("absent", CONFIG.to_string()),
         ("explicit", with_key("block_on: introduced")),
     ] {
         let root = fixture(name, &config);
-        let (bin, calls) = counting_bin(&root);
-        let (code, v) = core(&root, &[PATH], &bin, RECORD);
+        let (code, v) = core(&root, &[PATH], RECORD);
         assert_eq!(
             (code, v["verdict"].as_str()),
             (0, Some("allow-with-warnings")),
@@ -139,7 +134,6 @@ fn introduced_does_not_block_an_error_already_on_disk_and_runs_the_baseline() {
                 .contains("Already failing on disk"),
             "{name}: {v}"
         );
-        assert_eq!(runs(&calls), 2, "{name}: proposed run plus baseline run");
     }
 }
 
@@ -147,24 +141,22 @@ fn introduced_does_not_block_an_error_already_on_disk_and_runs_the_baseline() {
 fn an_explicit_introduced_is_byte_identical_to_an_absent_key() {
     let absent = fixture("same-absent", CONFIG);
     let explicit = fixture("same-explicit", &with_key("block_on: introduced"));
-    let bin = env!("CARGO_BIN_EXE_urzua");
-    let a = core(&absent, &[PATH], bin, RECORD);
-    let b = core(&explicit, &[PATH], bin, RECORD);
+    let a = core(&absent, &[PATH], RECORD);
+    let b = core(&explicit, &[PATH], RECORD);
     assert_eq!(a, b);
     let wrong = RECORD.replace(
         "Realized-by: code:src/a.rs",
         "Realized-by: code:src/a.rs\nEmbodiment: Verified",
     );
-    let a = core(&absent, &[PATH], bin, &wrong);
-    let b = core(&explicit, &[PATH], bin, &wrong);
+    let a = core(&absent, &[PATH], &wrong);
+    let b = core(&explicit, &[PATH], &wrong);
     assert_eq!(a, b);
 }
 
 #[test]
-fn all_blocks_an_error_already_on_disk_and_skips_the_baseline_run() {
+fn all_blocks_an_error_already_on_disk_and_lists_no_existing_set() {
     let root = fixture("all", &with_key("block_on: all"));
-    let (bin, calls) = counting_bin(&root);
-    let (code, v) = core(&root, &[PATH], &bin, RECORD);
+    let (code, v) = core(&root, &[PATH], RECORD);
     assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
     let msg = v["message"].as_str().unwrap();
     assert!(
@@ -173,15 +165,36 @@ fn all_blocks_an_error_already_on_disk_and_skips_the_baseline_run() {
     );
     assert!(!msg.contains("Already failing"), "no existing set: {msg}");
     assert_eq!(v["findings"].as_array().unwrap().len(), 1, "{v}");
-    assert_eq!(runs(&calls), 1, "the baseline run is skipped");
 }
 
 #[test]
 fn all_lets_a_clean_proposal_through() {
     let root = fixture("all-clean", &with_key("block_on: all"));
     let fixed = RECORD.replace("Not started", "Implemented");
-    let (code, v) = core(&root, &[PATH], env!("CARGO_BIN_EXE_urzua"), &fixed);
+    let (code, v) = core(&root, &[PATH], &fixed);
     assert_eq!((code, v["verdict"].as_str()), (0, Some("allow")), "{v}");
+}
+
+/// The hook command the installed settings carry for an edit, run the way the agent runs it.
+fn translator(root: &Path) -> Command {
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "install"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let settings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join(".claude/settings.json")).unwrap())
+            .unwrap();
+    let cmd = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mut c = Command::new("sh");
+    c.args(["-c", &cmd])
+        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .env_remove("URZUA_HOOK_OVERRIDE");
+    c
 }
 
 #[test]
@@ -192,11 +205,7 @@ fn all_is_relayed_unchanged_by_the_claude_code_adapter() {
     )
     .unwrap()
     .replace("@ROOT@", root.to_str().unwrap());
-    let mut c = Command::new("python3");
-    c.arg("-I")
-        .arg(repo_root().join("scripts/hooks/claude-code-record-edit.py"))
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
-        .env_remove("URZUA_HOOK_OVERRIDE");
+    let mut c = translator(&root);
     let out = run(&mut c, &root, &payload);
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "deny", "{v}");
@@ -204,6 +213,7 @@ fn all_is_relayed_unchanged_by_the_claude_code_adapter() {
     // The same edit passes under the default.
     let default = fixture("all-adapter-default", CONFIG);
     let payload = payload.replace(root.to_str().unwrap(), default.to_str().unwrap());
+    let mut c = translator(&default);
     let out = run(&mut c, &default, &payload);
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_ne!(v["hookSpecificOutput"]["permissionDecision"], "deny", "{v}");
@@ -220,7 +230,6 @@ fn the_named_override_works_under_all_and_is_recorded() {
     let (code, v) = core(
         &root,
         &["--override", "erin", "--reason", "legacy record", PATH],
-        env!("CARGO_BIN_EXE_urzua"),
         RECORD,
     );
     assert_eq!(
@@ -252,7 +261,7 @@ fn an_invalid_value_is_a_load_error_naming_the_key_and_the_value() {
 #[test]
 fn the_hook_names_an_invalid_value_and_says_it_did_not_judge() {
     let root = fixture("invalid-hook", &with_key("block_on: sometimes"));
-    let (code, v) = core(&root, &[PATH], env!("CARGO_BIN_EXE_urzua"), RECORD);
+    let (code, v) = core(&root, &[PATH], RECORD);
     assert_eq!(
         (code, v["verdict"].as_str()),
         (0, Some("allow-unjudged")),

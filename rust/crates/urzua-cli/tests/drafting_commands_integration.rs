@@ -305,7 +305,7 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
         let d = fixture(&format!("vocab-{t}"));
         let out = run_step(
             &d,
-            &format!("scripts/draft-record.sh new {t} Vocab"),
+            &format!("bash .claude/hooks/urzua-record.sh new {t} Vocab"),
             "",
             "",
         );
@@ -325,9 +325,10 @@ fn commands_carry_no_schema_knowledge_of_their_own() {
             assert!(!text.contains(word.as_str()), "{file} restates `{word}`");
         }
     }
-    let script = std::fs::read_to_string(repo_root().join("scripts/draft-record.sh")).unwrap();
+    let script =
+        std::fs::read_to_string(repo_root().join(".claude/hooks/urzua-record.sh")).unwrap();
     for word in ["Status", "Accepted", "Proposed", "Deciders", "Implements"] {
-        assert!(!script.contains(word), "draft-record.sh restates `{word}`");
+        assert!(!script.contains(word), "urzua-record.sh restates `{word}`");
     }
 }
 
@@ -365,4 +366,30 @@ fn a_milestone_draft_carries_the_required_section_and_check_refuses_one_without_
         "{}",
         String::from_utf8_lossy(&out.stdout)
     );
+}
+
+/// MILE-204: this repository runs on the installed bundle. Every drafting command in
+/// `.claude/commands/` is the one `urzua harness install` generates for its record type
+/// (so `harness status` reports no drift and the lock names it), and the hand-wired
+/// hook scripts the bundle replaced are gone.
+#[test]
+fn this_repository_runs_on_the_installed_bundle_with_no_drift_and_no_hook_scripts() {
+    let root = repo_root();
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["harness", "status"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(out.status.success(), "harness status drifted: {report}");
+    assert_eq!(report["status"], "ok", "{report}");
+    let lock = std::fs::read_to_string(root.join(".urzua/harness.lock")).unwrap();
+    for ty in ["adr", "rfc", "milestone"] {
+        assert!(
+            lock.contains(&format!(".claude/commands/{ty}.md")),
+            "{ty}: the drafting command is generated, so the lock names it"
+        );
+    }
+    assert!(!root.join("scripts/hooks").exists());
+    assert!(!root.join("scripts/draft-record.sh").exists());
 }

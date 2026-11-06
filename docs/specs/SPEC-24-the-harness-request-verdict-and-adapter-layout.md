@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.4'
+Version: '0.5'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -137,7 +137,6 @@ out of the shared files, and deletes the lock last.
 - The generated drafting and lifecycle commands (`MILE-199`) and the post-command check (`MILE-202`).
   `post-command` is known to `harness.guardrails`, and an adapter that does not list it in `provides` is
   reported, not silently skipped.
-- Cutting this repository over from `scripts/hooks` to the installed bundle (`MILE-204`).
 - A published bundle (`ADR-89` option C). The layout keeps it open.
 
 ## References
@@ -154,3 +153,4 @@ out of the shared files, and deletes the lock last.
 > | 2026-11-06 | Bumped to `0.2`. Adds the `post-command` event: its request (no paths, git names them), its verdict fields `findings`, `pre_existing` and `checked`, the stated `allow-unjudged` cases, the `gated_moves` field (a Bash-made move to a gated status, `MILE-200`), and the hash memory under `.urzua/cache`; the Claude Code adapter provides it. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.3`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |
 > | 2026-11-06 | Bumped to `0.4`. The adapter layout gains `commands/` and the manifest key `commands_dir` (`MILE-199`); `status` reports a bundle file the lock does not know yet as `missing`. **Why:** `ADR-89` section 1. | **substantive** |
+> | 2026-11-06 | Bumped to `0.5`. Drops the not-covered entry for cutting this repository over: it runs on the installed bundle (`SPEC-19`). **Why:** `MILE-204`. | **substantive** |

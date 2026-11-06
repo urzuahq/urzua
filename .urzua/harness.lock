@@ -5,13 +5,16 @@
     "claude-code"
   ],
   "files": {
-    ".claude/commands/amend.md": "sha256:7460af1838cc9d732a9d98755d5da175d691603dbebea1acd1254d8a4bd32883",
-    ".claude/commands/bug.md": "sha256:60c9e2f2836b5d1fd7f31e6bdb529dd9a7ba674b738c9e1008a3ae986f388c4c",
-    ".claude/commands/condition.md": "sha256:a4d51dfd1f05529e8ca0e404093277a6b0038c67402a6eae58029a19439c052f",
-    ".claude/commands/done.md": "sha256:9a278a1c87335abab3aaa712dbc7714bbde7f0ff40aae6e5ca9cd0c4999dbc50",
-    ".claude/commands/repin.md": "sha256:bfabc5543c4c92bba5668061fa20e13397cfbaa261e408878b9ea2d80403a037",
-    ".claude/commands/spec.md": "sha256:50ea63003b4d73a66d02a347a2249ae6d194d131797feffdb6b25d6c1d7d16c9",
-    ".claude/commands/waiver.md": "sha256:8a789ed858dcc75f0849f3a529b5cf4fa007f91eff0c5d87e31386c04edc5140",
+    ".claude/commands/adr.md": "sha256:d1910ceeda678a8ebd1f3566c9c77202a2c058c122ca003e2794effb7c8b4f06",
+    ".claude/commands/amend.md": "sha256:42d7a14788d5e790224cd7c94fc94055bf52d8fe016b480c5683c889736c7f2e",
+    ".claude/commands/bug.md": "sha256:ed7c505e45cb03e9a693326ba4d566d4f50381a5880f68196fbcd4311101f3ff",
+    ".claude/commands/condition.md": "sha256:f8aaac2dc435015549385db4142b3910a210b9cb00a604006b794e6e462c6033",
+    ".claude/commands/done.md": "sha256:335e0e372bf91bdb34e8bf4e7ecc8105b1e2fcffed840580247428460ca870fe",
+    ".claude/commands/milestone.md": "sha256:2161bb31386a73e1c5550878e98578721160aeb5efd0881b49c07fd96ec9d129",
+    ".claude/commands/repin.md": "sha256:6371aa2831adb7a491ad46467abf987bdd28e1523906c8b4e8700cdae24c006b",
+    ".claude/commands/rfc.md": "sha256:d8b3308af758e3e4e7835d8bae793811c585aad0fb64f312c0f2f1a087f83fca",
+    ".claude/commands/spec.md": "sha256:3b7fcb49f0893a3b6388c75406ac5f8d1be5ccb5ca2dc9c59fc3dee08079a96c",
+    ".claude/commands/waiver.md": "sha256:188690a392b5a9734644b848814b5c569d436dcd6dbdd8e68087c8d13304b287",
     ".claude/hooks/urzua-claude-code.py": "sha256:ae3db934432b86d0414002d7f8d2dad6303dd737374102dc32553b4c919cdbb1",
     ".claude/hooks/urzua-record.sh": "sha256:11b063331dbb6ddea9898466c9cf4a98539bb7c8e2340185f446afdd714ef642"
   },
@@ -37,5 +40,10 @@
       "hash": "sha256:4584ed858e35884427b63d15b149262e8affada3da785f470908cd320ff02b90"
     }
   ],
-  "blocks": []
+  "blocks": [
+    {
+      "file": "AGENTS.md",
+      "hash": "sha256:d8d2cf4f6afb05e9834e7c36ac073efd9f0ec75bb470e765316c9c662d309ec3"
+    }
+  ]
 }

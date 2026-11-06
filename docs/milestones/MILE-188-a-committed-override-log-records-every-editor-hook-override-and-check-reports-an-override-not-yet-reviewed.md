@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: ADR-78
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/rules/override_log.rs, code:rust/crates/urzua-core/src/rules/table.rs, code:scripts/hooks/record-edit-hook.sh, test:rust/crates/urzua-cli/tests/override_log_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/override_log.rs, code:rust/crates/urzua-core/src/rules/table.rs, code:rust/crates/urzua-cli/src/harness/run.rs, test:rust/crates/urzua-cli/tests/override_log_integration.rs, test:rust/crates/urzua-cli/tests/record_edit_hook_integration.rs
 ---
 # 188 — A committed override log records every editor-hook override, and check reports an override not yet reviewed
 
@@ -32,3 +32,4 @@ A committed log of editor-hook overrides, declared in `.urzua/config.yaml`, with
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
 > | 2026-11-05 | Built in #309: top-level `override_log` and the opt-in `override.unreviewed` rule (`SPEC-2`, `SPEC-3`), the hook recording a named override and requiring a reason (`SPEC-8`), and both enabled in this repository's configuration with an empty log. `Realized-by` added and `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's configuration. | **substantive** |
 > | 2026-11-05 | Fixed after review of #309: `Reviewed-by` counts as a review only when it names a person (a blank cell, a placeholder such as `TBD` or `-`, and a value the record types declare as pending are not a review, using the field-state vocabulary of `field.quality` and `field.pending`), and a declared log that does not exist is reported with the variant `override-log-missing` instead of read as empty, which is what the third item of Done means asks for. **Why:** the reviewer showed the warning cleared by `TBD`, `-` and `Pending`, and found the missing-log item of Done means unmet while the milestone read `Done`; both are now met and exercised by tests. | **substantive** |
+> | 2026-11-06 | `Realized-by` now names `rust/crates/urzua-cli/src/harness/run.rs`, the engine core that appends the override-log rows, in place of the deleted script. **Why:** `MILE-204` deleted the script this record cited; the engine core and the installed translator are the code that now carries the behavior. | **substantive** |

@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: ADR-78
 Blocked-on: null
-Realized-by: code:scripts/hooks/record-edit-hook.sh, code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/block_on_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/harness/run.rs, code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/block_on_integration.rs
 ---
 # 195 — The editor hook offers block_on all: block on any error in the edited record, not only the ones the edit introduces
 
@@ -30,3 +30,4 @@ A hook option `block_on: introduced | all` (`ADR-78`'s amendment of 2026-11-05, 
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-78`'s amendment of 2026-11-05 (proposed, pending maintainer acceptance) adds `block_on` to the editor hook; nothing builds it. | **substantive** |
 > | 2026-11-05 | Built. The hook reads the top-level `block_on` scalar the way it reads `override_log`: absent or `introduced` keeps today's verdicts and messages byte-identical, `all` blocks on any unwaived error in the proposed content and skips the baseline run, an unrecognised value is `allow-unjudged` naming it, and `urzua check` refuses the same value as a load error. The Claude Code adapter is unchanged. `SPEC-3` and `SPEC-8` describe the option, and this repository declares `introduced`. **Why:** the maintainer accepted the `ADR-78` amendment on 2026-11-05 (#342); `MILE-195` is its build and the PR delivers every item of Done means. | **substantive** |
+> | 2026-11-06 | `Realized-by` now names `rust/crates/urzua-cli/src/harness/run.rs`, the engine core that reads `block_on`, in place of the deleted script. **Why:** `MILE-204` deleted the script this record cited; the engine core and the installed translator are the code that now carries the behavior. | **substantive** |
