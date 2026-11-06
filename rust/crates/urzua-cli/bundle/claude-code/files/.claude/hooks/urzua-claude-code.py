@@ -13,11 +13,17 @@ output. It holds no rule knowledge, and it takes the project directory from the
 payload's `cwd`, never from CLAUDE_PROJECT_DIR: an unset variable must not become
 an opaque blocking exit 2.
 
-It always exits 0 after printing a stated message when the engine cannot be run:
-the edit proceeds, and the message says it was not judged.
+When it cannot build a request or the engine cannot be run, it exits 0 after
+printing a stated message and the edit proceeds, with one exception: where the
+configuration turns on the acceptance or protected-paths guardrail and leaves
+`on_unjudged: deny`, an edit that was not judged is refused. The engine decides
+that when it can be run (the translator sends it the failure); when it cannot,
+the translator looks for the same two settings in .urzua/config.yaml as text.
+An adapter failure never blocks when the configuration allows.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -35,6 +41,60 @@ def stated(message, event):
     hook = {"session-start": "SessionStart", "post-command": "PostToolUse"}.get(event, "PreToolUse")
     out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": hook, "additionalContext": message}})
     return 0
+
+
+def deny(message):
+    out({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": message}})
+    return 0
+
+
+def closed_by_config_text(cwd):
+    """Last resort, only when the engine cannot be run: whether .urzua/config.yaml
+    turns on acceptance or protected-paths without `on_unjudged: allow`. A text
+    scan, so a configuration it cannot read is read as not closed."""
+    d = os.path.abspath(cwd or os.getcwd())
+    while True:
+        try:
+            with open(os.path.join(d, ".urzua", "config.yaml"), encoding="utf-8") as f:
+                lines = f.read().splitlines()
+            break
+        except OSError:
+            parent = os.path.dirname(d)
+            if parent == d:
+                return False
+            d = parent
+    for i, line in enumerate(lines):
+        m = re.match(r"^(\s*)(acceptance|protected-paths)\s*:\s*(.*)$", line)
+        if not m:
+            continue
+        indent, body = len(m.group(1)), m.group(3)
+        if body == "" or body.startswith("#"):
+            body = ""
+            for nxt in lines[i + 1:]:
+                if nxt.strip() and len(nxt) - len(nxt.lstrip()) <= indent:
+                    break
+                body += " " + nxt
+        if re.search(r"\benabled\s*:\s*true\b", body) and not re.search(r"\bon_unjudged\s*:\s*[\"']?allow\b", body):
+            return True
+    return False
+
+
+def unjudged_edit(message, argv, cwd, path, engine_failed):
+    """An edit the translator could not judge: the engine says whether the
+    configuration refuses it (acceptance or protected-paths with
+    on_unjudged: deny); the engine being unrunnable falls back to the config text."""
+    if not engine_failed and argv:
+        request = {"event": "edit", "tool": None, "paths": [path] if path else [], "content": None, "actor": "agent", "cwd": cwd, "adapter_error": message}
+        try:
+            verdict = engine(argv, request, cwd)
+            if verdict.get("verdict") == "block":
+                return deny(verdict.get("message", message))
+            return stated(verdict.get("message") or message, "edit")
+        except (OSError, ValueError):
+            pass
+    if closed_by_config_text(cwd):
+        return deny(message + " The configuration sets on_unjudged: deny for acceptance or protected-paths, so an agent's edit that was not judged is refused. A person edits outside the agent harness, or sets on_unjudged: allow in .urzua/config.yaml.")
+    return stated(message, "edit")
 
 
 def proposed(tool, inp, path):
@@ -64,7 +124,10 @@ def engine(argv, request, cwd):
     if argv and argv[0] == "urzua" and os.environ.get("URZUA_BIN"):
         argv[0] = os.environ["URZUA_BIN"]
     p = subprocess.run(argv, input=json.dumps(request), capture_output=True, text=True, cwd=cwd or None)
-    return json.loads(p.stdout)
+    verdict = json.loads(p.stdout)
+    if not isinstance(verdict, dict) or "verdict" not in verdict:
+        raise ValueError("the engine did not answer with a verdict")
+    return verdict
 
 
 def main():
@@ -77,8 +140,13 @@ def main():
         return stated("urzua harness: the translator does not know the event '%s'; run `urzua harness update`" % event, "edit")
     try:
         payload = json.load(sys.stdin)
+        if not isinstance(payload, dict):
+            raise ValueError("not an object")
     except ValueError:
-        return stated("urzua harness: the hook payload was unreadable, so this call was NOT judged", event)
+        message = "urzua harness: the hook payload was unreadable, so this call was NOT judged"
+        if event == "edit":
+            return unjudged_edit(message, argv, None, None, False)
+        return stated(message, event)
     cwd = payload.get("cwd") or None
     if event == "session-start":
         request = {"event": "session-start", "tool": None, "paths": [], "content": None, "actor": "agent", "cwd": cwd}
@@ -96,12 +164,15 @@ def main():
         try:
             content = proposed(tool, inp, path)
         except ValueError as e:
-            return stated("urzua harness: urzua did NOT judge this edit (%s of %s: %s). It is allowed; run 'urzua check' before committing." % (tool, path, e), event)
+            return unjudged_edit("urzua harness: urzua did NOT judge this edit (%s of %s: %s). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, path, e), argv, cwd, path, False)
         request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd}
     try:
         verdict = engine(argv, request, cwd)
-    except (OSError, ValueError):
-        return stated("urzua harness: urzua did NOT judge this call (the engine command `%s` could not be run or answered with something that is not a verdict). It is allowed; run `urzua harness status`." % " ".join(argv), event)
+    except (OSError, ValueError, AttributeError):
+        message = "urzua harness: urzua did NOT judge this call (the engine command `%s` could not be run or answered with something that is not a verdict). It is allowed unless the configuration refuses an edit that was not judged; run `urzua harness status`." % " ".join(argv)
+        if event == "edit":
+            return unjudged_edit(message, argv, cwd, request["paths"][0], True)
+        return stated(message, event)
     kind, message = verdict.get("verdict"), verdict.get("message", "")
     if event == "session-start":
         if kind != "allow" and message:
@@ -123,4 +194,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as e:  # never a bare traceback and a blocking exit
-        sys.exit(stated("urzua harness: the translator failed (%s), so this call was NOT judged" % e, "edit"))
+        message = "urzua harness: the translator failed (%s), so this call was NOT judged" % e
+        try:
+            sys.exit(unjudged_edit(message, None, None, None, True) if "edit" in sys.argv[1:2] else stated(message, "edit"))
+        except Exception:
+            sys.exit(stated(message, "edit"))
