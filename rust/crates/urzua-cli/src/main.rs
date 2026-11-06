@@ -176,15 +176,17 @@ enum Command {
         target: MigrateTarget,
     },
 
-    /// Emit records in another format. Warns rather than silently dropping fields.
+    /// Emit records in another format. `--format json` is implemented; `agdr`
+    /// is not. The format must be named: there is no default.
     Export {
-        #[arg(long, value_enum, default_value = "agdr")]
+        #[arg(long, value_enum, required = true)]
         format: ExportFormat,
     },
 
-    /// Read records from another format.
+    /// Read records from another format. Not implemented yet. The format must
+    /// be named: there is no default.
     Import {
-        #[arg(long, value_enum, default_value = "agdr")]
+        #[arg(long, value_enum, required = true)]
         format: ExportFormat,
         paths: Vec<PathBuf>,
     },
@@ -238,8 +240,9 @@ enum Command {
     },
 
     /// Detect fields whose stated value disagrees with what the tool
-    /// computes (ADR-0015). Read-only by default. Only Tier 1 (Embodiment)
-    /// exists.
+    /// computes (ADR-0015). Read-only by default. Tier 1 (Embodiment) is the
+    /// only drift tier implemented: any other `--tier` exits 2. `--rebaseline`
+    /// instead re-pins stale evidence pins.
     Fix {
         /// Examine and repair only these records: a record file, or a
         /// directory holding records. A path that matches no record is
@@ -401,8 +404,9 @@ impl From<ActorArg> for urzua_core::fix::ActorKind {
 
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum ExportFormat {
+    /// Not implemented: exits 2.
     Agdr,
-    /// Every record as plain JSON data (SPEC-1). Must be named explicitly.
+    /// Every record as plain JSON data (SPEC-1).
     Json,
 }
 
