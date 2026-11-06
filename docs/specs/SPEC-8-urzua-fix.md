@@ -1,5 +1,5 @@
 ---
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -119,7 +119,7 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
 
 - `block`: by default (`block_on: introduced`, `SPEC-3`), an unwaived error finding the edit introduced. An error is introduced when the record as it
   is on disk, judged the same way, does not already report it (same rule and message). The message
-  lists each as `file:line: [rule] message`, with the command a `run-command` suggested action offers.
+  lists each as `file:line: [rule] message`. A `run-command` suggested action's command is shown only for an error already on disk or a warning, never for one this edit introduced, since the command repairs the record on disk and answers `matched no pending repair` for a proposed edit.
   An error already on disk is listed as "Already failing on disk", not blocked, so the edit that fixes
   something else is not refused. A baseline that cannot be judged leaves every error introduced. With
   the configuration's top-level `block_on: all` (`MILE-195`), `block` is any unwaived error in the
@@ -132,8 +132,7 @@ exit 0 lets the edit proceed and 1 blocks it. It holds no rule: it reads `findin
   that cannot judge a single-record edit (`not-applicable` in the report), so an agent is never told
   "every rule" when some were not run. Those rules run at commit and in CI.
 - `allow-unjudged`: urzua is missing, answers `not-run` (including a configuration in which no enabled
-  rule can look at the record), exits otherwise than 0 or 1, prints non-JSON, or reports an
-  `embodiment-drift-git` notice. The edit proceeds and the message says plainly that it was not judged.
+  rule can look at the record), or exits otherwise than 0 or 1, or prints non-JSON. The edit proceeds and the message says plainly that it was not judged. An `embodiment-drift-git` notice (a shallow clone, a failing git call) is not one of these: the hook still judges every finding that needs no history and blocks on them, and the message names the drift rule it could not judge (`allow-with-warnings` when nothing else is found).
 - `not-governed`: urzua reports that no record type governs the path (silent, the file is not a record).
 - `allow-override` / `block`: `--override NAME` (or `URZUA_HOOK_OVERRIDE=NAME`) lets a block through and
   puts the name in the output; an override without a name keeps the block. When the configuration
@@ -329,3 +328,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.22`. `--rebaseline` lists and re-pins a directory or glob pin of a kind the repository declares pinnable, each listed pin carrying the `files` it covers. **Why:** `BUG-176` -- a pin on a tree is attested over the files it covers, which the reviewer must be able to read. | **substantive** |
 > | 2026-11-05 | Bumped to `0.23`. The record-edit hook reads `block_on: introduced \| all`: `all` blocks on any unwaived error in the proposed content and skips the baseline run; the default and an absent key keep today's verdicts and messages; an unrecognised value is `allow-unjudged` naming the value; the Claude Code adapter passes the verdict through unchanged. **Why:** `MILE-195`, `ADR-78` amendment of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.24`. `--apply` and `--rebaseline --apply` refuse an identity (`--by`, `git config user.name`, the `gh` login) containing `|` or a line break instead of writing a row with an extra cell or a split row, and write each record through a temporary file and a rename instead of truncating it first. **Why:** review of the CLI found both: a crafted `--by` corrupted the revision log, and a failed write could leave a record empty (`BUG-192` class). | **substantive** |
+> | 2026-11-05 | Bumped to `0.25`. The record-edit hook no longer answers `allow-unjudged` for an `embodiment-drift-git` notice: it judges and blocks on what needs no history and discloses the skipped drift rule; it omits the `run:` repair hint from findings the edit introduced. **Why:** Phase 0 hardening from an adopter switchover -- every edit in a shallow clone went unjudged, and the hint answered `matched no pending repair`. | **substantive** |

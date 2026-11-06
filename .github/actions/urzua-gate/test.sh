@@ -55,6 +55,16 @@ expect "render: a run that did not run is NOT RUN with its reason, never clean" 
 grep -q 'NOT RUN' "$tmp/c.md"
 expect "render: a missing report is NOT RUN, not clean" $?
 
+# A report over the 128 KB single-argument limit: generated here, mostly waived
+# findings (which a report lists in full), plus two live ones.
+jq -c '.findings = ([range(0; 700) | {rule: "example.rule", severity: "warning", file: "docs/example/\(.).md", line: 1, message: ("a waived finding with a long message " + ("x" * 150)), waived: "docs/waiver/W-1.md"}] + [.findings[0:2][]])' \
+  "$here/fixtures/whole-findings.json" >"$tmp/large.json"
+[ "$(wc -c <"$tmp/large.json")" -gt 200000 ]
+expect "render: the large-report fixture is over 200 KB" $?
+"$here/render.sh" "$tmp/c.md" check "$tmp/large.json" 1 >"$tmp/ann.txt"
+{ ! grep -q 'NOT RUN' "$tmp/c.md" && grep -q '701 waived' "$tmp/c.md" && grep -q '^::' "$tmp/ann.txt"; }
+expect "render: a report over 200 KB renders its findings, not NOT RUN" $?
+
 # ---- post-comment ----
 export REPO=o/r PR_NUMBER=7 GH_TOKEN=x
 "$here/render.sh" "$tmp/findings.md" check "$here/fixtures/whole-findings.json" 1 >/dev/null
