@@ -74,16 +74,45 @@ pub fn config_known_fields_declaration_missing(
     )
 }
 
+/// What a record type's `known_fields` should become once `field` joins it,
+/// as the suggested action's source. With `known_fields` declared, `field` is
+/// appended to it. With none declared, appending would create a one-item list,
+/// which switches `header.field-set-consistency` on for the type and flags every
+/// other optional field its records use; the suggestion instead sets the full
+/// set: every field the type's records use beyond `required_fields`, plus
+/// `field` (SPEC-3, `known_fields`).
+fn known_fields_source(
+    variant: &'static str,
+    set_variant: &'static str,
+    type_name: &str,
+    type_config: &crate::config::RecordTypeConfig,
+    records: &[Record],
+    field: &str,
+) -> ActionSource {
+    let key_path = ["record_types", type_name, "known_fields"];
+    if type_config.known_fields.is_some() {
+        return ActionSource::new(variant).key_path(key_path).text(field);
+    }
+    let required = type_config.declared_fields();
+    let mut full: std::collections::BTreeSet<String> = records
+        .iter()
+        .filter(|r| r.record_type == type_name)
+        .flat_map(|r| r.header.fields.iter())
+        .filter(|f| !required.contains(&f.key))
+        .map(|f| f.key.as_str().to_string())
+        .collect();
+    full.insert(field.to_string());
+    ActionSource::new(set_variant).key_path(key_path).list(full)
+}
+
 /// A declared alias not present in a type's own `required_fields`/
 /// `known_fields`, shared by every "config declares a field name nothing
 /// else knows about" rule (`config.pointer-field-not-known`,
 /// `config.relation-field-not-known`).
 fn undeclared_alias_finding(
     rule_id: &str,
-    variant: &'static str,
+    action_source: ActionSource,
     config_path: &std::path::Path,
-    type_name: &str,
-    field: &str,
     message: String,
 ) -> Finding {
     Finding {
@@ -94,9 +123,7 @@ fn undeclared_alias_finding(
         waived: None,
         declared_severity: None,
         suggested_action: None,
-        action_source: ActionSource::new(variant)
-            .key_path(["record_types", type_name, "known_fields"])
-            .text(field),
+        action_source,
         message,
     }
 }
@@ -109,6 +136,7 @@ fn undeclared_alias_finding(
 pub fn config_pointer_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
+    records: &[Record],
 ) -> (RuleExecution, Vec<Finding>) {
     schema_inventory_rule(
         config,
@@ -128,10 +156,15 @@ pub fn config_pointer_field_not_known(
                 if !declared.contains(field.as_str()) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
-                        "pointer-field-not-known",
+                        known_fields_source(
+                            "pointer-field-not-known",
+                            "pointer-field-not-known-declare-set",
+                            type_name,
+                            type_config,
+                            records,
+                            field,
+                        ),
                         config_path,
-                        type_name,
-                        field,
                         format!(
                             "record type '{type_name}' declares '{field}' as a pointer/narrative field, but it isn't in required_fields or known_fields"
                         ),
@@ -150,6 +183,7 @@ pub fn config_pointer_field_not_known(
 pub fn config_relation_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
+    records: &[Record],
 ) -> (RuleExecution, Vec<Finding>) {
     schema_inventory_rule(
         config,
@@ -163,10 +197,15 @@ pub fn config_relation_field_not_known(
                 if !declared.contains(field) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
-                        "relation-field-not-known",
+                        known_fields_source(
+                            "relation-field-not-known",
+                            "relation-field-not-known-declare-set",
+                            type_name,
+                            type_config,
+                            records,
+                            field,
+                        ),
                         config_path,
-                        type_name,
-                        field,
                         format!(
                             "record type '{type_name}' declares '{field}' for relation_fields.{key}, but it isn't in required_fields or known_fields"
                         ),
@@ -568,8 +607,11 @@ mod tests {
                 Some(&[]),
             ),
         )]);
-        let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_pointer_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Derives-From"));
@@ -588,8 +630,11 @@ mod tests {
                 ..type_config_pointer(&["Date"], None, None, None)
             },
         )]);
-        let (exec, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("State"));
@@ -609,8 +654,11 @@ mod tests {
                 ..type_config_pointer(&["Status"], None, None, None)
             },
         )]);
-        let (_, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (_, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(findings.len(), 2, "{findings:?}");
         assert!(findings[0].message.contains("relation_fields.date"));
         assert!(findings[0].message.contains("Created"));
@@ -631,8 +679,11 @@ mod tests {
                 ..type_config_pointer(&["Created", "Owner"], None, None, None)
             },
         )]);
-        let (_, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (_, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -649,8 +700,11 @@ mod tests {
                 ..type_config_pointer(&["State"], None, None, None)
             },
         )]);
-        let (exec, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "{findings:?}");
     }
@@ -661,8 +715,11 @@ mod tests {
             "rfc",
             type_config_pointer(&["Status"], None, None, None),
         )]);
-        let (exec, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
@@ -693,8 +750,11 @@ mod tests {
             "spec",
             type_config_pointer(&["Status"], None, Some(&["Feeds-into"]), Some(&[])),
         )]);
-        let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_pointer_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Feeds-into"));
@@ -711,8 +771,11 @@ mod tests {
                 Some(&[]),
             ),
         )]);
-        let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_pointer_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }

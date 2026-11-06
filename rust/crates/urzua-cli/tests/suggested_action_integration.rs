@@ -184,6 +184,106 @@ fn a_configuration_edit_names_the_repository_relative_config_and_a_key_path() {
     );
 }
 
+/// Applies one `edit-config` suggested action to the configuration file, the
+/// way an agent following it would: `set` replaces the value at the key path,
+/// `append` pushes onto the list there (creating it when absent).
+fn apply_config_action(dir: &Path, action: &serde_json::Value) {
+    let path = dir.join(".urzua/config.yaml");
+    let mut doc: yaml_serde::Value =
+        yaml_serde::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let key_path: Vec<&str> = action["target"]["key_path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k.as_str().unwrap())
+        .collect();
+    let (last, parents) = key_path.split_last().unwrap();
+    let mut node = &mut doc;
+    for key in parents {
+        node = node.get_mut(*key).expect("the key path resolves");
+    }
+    let map = node.as_mapping_mut().unwrap();
+    let value: yaml_serde::Value = yaml_serde::to_value(&action["value"]).unwrap();
+    match action["op"].as_str().unwrap() {
+        "set" => {
+            map.insert(yaml_serde::Value::from(*last), value);
+        }
+        "append" => {
+            let entry = map
+                .entry(yaml_serde::Value::from(*last))
+                .or_insert_with(|| yaml_serde::Value::Sequence(Vec::new()));
+            entry.as_sequence_mut().unwrap().push(value);
+        }
+        other => panic!("unexpected op {other}"),
+    }
+    std::fs::write(&path, yaml_serde::to_string(&doc).unwrap()).unwrap();
+}
+
+#[test]
+fn a_known_fields_suggestion_for_a_type_declaring_none_leaves_the_config_clean() {
+    let dir = common::TempDir::new("urzua-action-known-fields");
+    for d in ["docs/notes", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    // `note` declares no `known_fields`; its records use `Owner` and `Tags`
+    // beyond the required `Status`, and the pointer field `Feeds-into` is
+    // declared nowhere.
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2
+rules:
+  config.pointer-field-not-known: error
+  header.field-set-consistency: error
+record_types:
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    pointer_fields: [Feeds-into]
+    narrative_fields: []
+",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/notes/NOTE-1-a.md"),
+        "---\nStatus: Open\nOwner: a\nFeeds-into: NOTE-2\n---\n# 1 - A\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/notes/NOTE-2-b.md"),
+        "---\nStatus: Open\nTags: x\n---\n# 2 - B\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "init"]);
+
+    let report = parsed(&urzua(&dir, &["check"]));
+    let missing = findings(&report, "config.pointer-field-not-known");
+    assert_eq!(missing.len(), 1, "{report}");
+    let action = &missing[0]["suggested_action"];
+    assert_eq!(
+        *action,
+        serde_json::json!({
+            "kind": "edit-config",
+            "op": "set",
+            "target": {
+                "file": ".urzua/config.yaml",
+                "key_path": ["record_types", "note", "known_fields"]
+            },
+            "value": ["Feeds-into", "Owner", "Tags"]
+        }),
+        "{report}"
+    );
+
+    apply_config_action(&dir, action);
+    let after = parsed(&urzua(&dir, &["check"]));
+    assert_eq!(after["findings"], serde_json::json!([]), "{after}");
+}
+
 #[test]
 fn an_exempt_variant_omits_the_key_and_no_action_holds_a_null() {
     let dir = shape_repo("an_exempt_va");

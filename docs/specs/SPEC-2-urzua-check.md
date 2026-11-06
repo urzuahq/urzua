@@ -1,5 +1,6 @@
 ---
-Version: '0.108'
+Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
+Version: '0.109'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -545,6 +546,13 @@ rule table as the table above (`urzua rules` lists it as each rule's `actions`; 
 its `exempt` reason), so this section and the rule table cannot disagree. Regenerate with
 `make rule-table`.
 
+When `config.pointer-field-not-known` or `config.relation-field-not-known` names a type that declares
+no `known_fields`, appending the one field would create a one-item list and switch
+`header.field-set-consistency` on for every other optional field the type's records use. The
+`-declare-set` variants therefore carry `edit-config` `set` with the full list: every field the type's
+records use beyond its `required_fields`, plus the field in question, sorted. A type that already
+declares `known_fields` keeps the `append` variant.
+
 <!-- action-table:start -->
 | Rule id | Variant | Declared action |
 |---|---|---|
@@ -618,9 +626,11 @@ its `exempt` reason), so this section and the rule table cannot disagree. Regene
 | `config.companion-declaration-missing` | `companion-pair-undeclared` | `edit-config` `append` |
 | `config.pointer-declaration-missing` | `pointer-declaration-missing` | `edit-config` `set` |
 | `config.pointer-field-not-known` | `pointer-field-not-known` | `edit-config` `append` |
+| `config.pointer-field-not-known` | `pointer-field-not-known-declare-set` | `edit-config` `set` |
 | `config.pointer-narrative-overlap` | `pointer-narrative-overlap` | exempt: a field named in both lists could belong in either, and which list should keep it is the author's decision, not a computable repair |
 | `config.header-none-has-no-required-fields` | `header-none-field` | `edit-config` `remove` |
 | `config.relation-field-not-known` | `relation-field-not-known` | `edit-config` `append` |
+| `config.relation-field-not-known` | `relation-field-not-known-declare-set` | `edit-config` `set` |
 | `config.known-fields-declaration-missing` | `known-fields-declaration-missing` | `edit-config` `set` |
 | `config.schema-version-outdated` | `schema-version-outdated` | `run-command` |
 | `filename.identity-pattern` | `identity-pattern-none-match` | exempt: the fix is a rename, and no action kind addresses a rename yet |
@@ -969,3 +979,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-05 | Bumped to `0.106`. The `claim.status-agreement` rule description and notice cover `verb_claims` (`MILE-197`): with it `false` no prose is read for a claim and `check` states that the reading is off instead of counting, and adds a notice when `strict` is off. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
 > | 2026-11-05 | Bumped to `0.107`. A population gains the additive `deferred_by_scope` counter (present only when non-zero) for a rule that declares `scope: changed`, separate from `out_of_scope`, with one `info` notice per such rule; `waiver.matches-nothing` leaves a waiver on such a rule eligible and unexamined; `urzua rules` prints each rule's `options` and `judges`. The `embodiment.locator-on-back-pointer-path` rule-table row is regenerated. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.108`. Adds the opt-in rule `diff.decider-required` and `check --actors FILE` (`MILE-200`): a gated status move or protected-path change in a `--base` diff needs the pull request's author or a current approver in the gate's decider group, read from an actors file the caller supplies; `info` locally and an error under `require_evidence` with no file, `not-applicable` with no `--base`; it proves authorship only. A rule table row and two finding variants (exempt) are generated. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |
+> | 2026-11-06 | Bumped to `0.109`. For a type declaring no `known_fields`, the `edit-config` suggested by `config.pointer-field-not-known` and `config.relation-field-not-known` sets the full list the type's records use plus the field in question, instead of appending one field; two variants (`pointer-field-not-known-declare-set`, `relation-field-not-known-declare-set`) are added. **Why:** maintainer decision of 2026-11-05: applying the one-field append switched `header.field-set-consistency` on and flagged every other optional field. | **substantive** |

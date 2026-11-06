@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
 Version: '0.10'
 Date: 2026-08-20
 Status: Accepted

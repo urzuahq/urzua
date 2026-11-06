@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4TA9Q1295W1E10MVXK
 Status: Accepted
 Embodiment: Implemented
 Realized-by: code:rust/crates/urzua-core/src/header.rs

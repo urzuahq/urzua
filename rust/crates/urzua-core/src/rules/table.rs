@@ -1104,11 +1104,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pointer-field-not-known", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("pointer-field-not-known-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            config_pointer_field_not_known(c.config, c.config_path)
+            config_pointer_field_not_known(c.config, c.config_path, c.records)
         },
     },
     RuleDef {
@@ -1169,11 +1170,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("relation-field-not-known", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("relation-field-not-known-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            config_relation_field_not_known(c.config, c.config_path)
+            config_relation_field_not_known(c.config, c.config_path, c.records)
         },
     },
     RuleDef {

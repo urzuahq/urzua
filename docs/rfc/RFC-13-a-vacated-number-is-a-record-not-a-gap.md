@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK51C4KXK4FR0YQJB4NP
 Status: Draft
 Date: 2026-08-18
 Author: beauwilliams

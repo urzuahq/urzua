@@ -1,5 +1,6 @@
 ---
-Version: '0.25'
+Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
+Version: '0.26'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -159,9 +160,10 @@ commit, never a flaky run.
 - Pages of 100 are requested by `page=N` until the listing's `Link` header has no `rel="next"`; the
   `Link` URL itself is never followed, so the token only goes to the configured origin. An entry
   with a `pull_request` key is a pull request, any other an issue.
-- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}`, both lists
+- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}` (`generated_at`
+  is the current UTC date), both lists
   ascending and de-duplicated, pretty-printed with a final newline, so the same answers give the
-  same bytes and a refresh that learns nothing new on the same day leaves the file untouched
+  same bytes and a refresh that learns nothing new on the same UTC day leaves the file untouched
   (`outcome: current`; otherwise `created` or `written`). The file is replaced only after every
   page was fetched.
 - Stdout is one JSON report (`status`, `snapshot`, `repository`, `generated_at`, `outcome`,
@@ -349,3 +351,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-06 | Bumped to `0.24`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-278) d0015ed73762 -> 6f77c3055678. Reason: The pinned Command enum span in main.rs, which already carries the Harness variant from the harness install change, gained only the optional --actor argument (agent or human) with its doc comment on the Fix variant (MILE-201, ADR-89); the ActorArg enum sits outside the pinned span. No existing variant or option changed, so the command surface this spec cites is intact. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-06 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-285) 6f77c3055678 -> 6be4a09f031d. Reason: The Command enum span changed only to add check's --actors FILE flag (the identities diff.decider-required reads), which SPEC-1 now names under urzua check; every other subcommand in the pinned span is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-06 | Bumped to `0.25`. Names `urzua check --base REF --actors FILE` under `urzua check`, the host identities `diff.decider-required` reads (`SPEC-2`). **Why:** `MILE-200`, `ADR-89` section 4. | **substantive** |
+> | 2026-11-06 | Bumped to `0.26`. `urzua refs refresh` dates the snapshot with the current UTC date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the date was the machine's local date. | **substantive** |

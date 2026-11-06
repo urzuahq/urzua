@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
 Version: '0.6'
 Date: 2026-09-07
 Status: Shipped

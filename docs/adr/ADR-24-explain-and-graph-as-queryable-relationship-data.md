@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4DZVCS8MKRDA7V53NZ
 Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/graph.rs@sha256:c54bd827556265c9e1132b1c469424a71d73228c053c76099b4fd8f881e5ea67, code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:b8bc8e59f92624247bca1d5c8bf899ed6038569b0293d743f63bbdd0a323c445, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:41be294e4e7cf37f0df56bc57456c97a40d9332a2de7f001ab98254d87326c2b, test:rust/crates/urzua-core/src/graph.rs@sha256:c54bd827556265c9e1132b1c469424a71d73228c053c76099b4fd8f881e5ea67
