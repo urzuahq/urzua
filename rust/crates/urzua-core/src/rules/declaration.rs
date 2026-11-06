@@ -81,7 +81,7 @@ pub fn config_known_fields_declaration_missing(
 /// other optional field its records use; the suggestion instead sets the full
 /// set: every field the type's records use beyond `required_fields`, plus
 /// `field` (SPEC-3, `known_fields`).
-fn known_fields_source(
+pub(super) fn known_fields_source(
     variant: &'static str,
     set_variant: &'static str,
     type_name: &str,

@@ -284,6 +284,145 @@ record_types:
     assert_eq!(after["findings"], serde_json::json!([]), "{after}");
 }
 
+fn notes_repo(prefix: &str, config: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(prefix);
+    for d in ["docs/notes", "docs/refs", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    for (path, body) in records {
+        std::fs::write(dir.join(path), body).unwrap();
+    }
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+#[test]
+fn a_target_status_suggestion_for_a_type_declaring_no_known_fields_leaves_the_config_clean() {
+    let dir = notes_repo(
+        "urzua-action-target-status",
+        "schema_version: 2
+rules:
+  relation.target-status-undeclared: error
+  header.field-set-consistency: error
+record_types:
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Date]
+    pointer_fields: [Feeds-into]
+    narrative_fields: []
+    known_fields: [Feeds-into]
+  ref:
+    dir: docs/refs
+    prefix: REF
+    header_shape: yaml-frontmatter
+    required_fields: [Date]
+    pointer_fields: []
+    narrative_fields: []
+",
+        &[
+            (
+                "docs/notes/NOTE-1-a.md",
+                "---\nDate: 2026-01-01\nFeeds-into: REF-1\n---\n# 1 - A\n",
+            ),
+            (
+                "docs/refs/REF-1-b.md",
+                "---\nDate: 2026-01-01\nOwner: a\n---\n# 1 - B\n",
+            ),
+            (
+                "docs/refs/REF-2-c.md",
+                "---\nDate: 2026-01-01\nTags: x\n---\n# 2 - C\n",
+            ),
+        ],
+    );
+    let report = parsed(&urzua(&dir, &["check"]));
+    let missing = findings(&report, "relation.target-status-undeclared");
+    assert_eq!(missing.len(), 1, "{report}");
+    let action = &missing[0]["suggested_action"];
+    assert_eq!(
+        *action,
+        serde_json::json!({
+            "kind": "edit-config",
+            "op": "set",
+            "target": {
+                "file": ".urzua/config.yaml",
+                "key_path": ["record_types", "ref", "known_fields"]
+            },
+            "value": ["Owner", "Status", "Tags"]
+        }),
+        "{report}"
+    );
+    apply_config_action(&dir, action);
+    let after = parsed(&urzua(&dir, &["check"]));
+    assert!(
+        findings(&after, "header.field-set-consistency").is_empty()
+            && findings(&after, "relation.target-status-undeclared").is_empty(),
+        "{after}"
+    );
+}
+
+#[test]
+fn a_companion_suggestion_for_a_type_declaring_no_known_fields_leaves_the_config_clean() {
+    let dir = notes_repo(
+        "urzua-action-companion",
+        "schema_version: 2
+rules:
+  config.companion-declaration-missing: error
+  header.field-set-consistency: error
+record_types:
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Status, Embodiment]
+    pointer_fields: []
+    narrative_fields: []
+    companion_fields:
+      - [embodiment_state, embodiment_locator]
+",
+        &[
+            (
+                "docs/notes/NOTE-1-a.md",
+                "---\nStatus: Open\nEmbodiment: Not started\nOwner: a\n---\n# 1 - A\n",
+            ),
+            (
+                "docs/notes/NOTE-2-b.md",
+                "---\nStatus: Open\nEmbodiment: Not started\nTags: x\n---\n# 2 - B\n",
+            ),
+        ],
+    );
+    let report = parsed(&urzua(&dir, &["check"]));
+    let missing = findings(&report, "config.companion-declaration-missing");
+    assert_eq!(missing.len(), 1, "{report}");
+    let action = &missing[0]["suggested_action"];
+    assert_eq!(
+        *action,
+        serde_json::json!({
+            "kind": "edit-config",
+            "op": "set",
+            "target": {
+                "file": ".urzua/config.yaml",
+                "key_path": ["record_types", "note", "known_fields"]
+            },
+            "value": ["Owner", "Realized-by", "Tags"]
+        }),
+        "{report}"
+    );
+    apply_config_action(&dir, action);
+    let after = parsed(&urzua(&dir, &["check"]));
+    assert!(
+        findings(&after, "header.field-set-consistency").is_empty()
+            && findings(&after, "config.companion-declaration-missing").is_empty(),
+        "{after}"
+    );
+}
+
 #[test]
 fn an_exempt_variant_omits_the_key_and_no_action_holds_a_null() {
     let dir = shape_repo("an_exempt_va");

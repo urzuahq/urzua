@@ -173,7 +173,21 @@ pub fn relation_target_status_undeclared(
                             waived: None,
                             declared_severity: None,
                             suggested_action: None,
-                            action_source: ActionSource::new("target-status-undeclared").file(config_path).key_path(["record_types", target.record_type.as_str(), "known_fields"]),
+                            action_source: match config.record_types.get(&target.record_type) {
+                                Some(target_config) => super::declaration::known_fields_source(
+                                    "target-status-undeclared",
+                                    "target-status-undeclared-declare-set",
+                                    target.record_type.as_str(),
+                                    target_config,
+                                    records,
+                                    target_status_field,
+                                )
+                                .file(config_path),
+                                None => ActionSource::new("target-status-undeclared-declare-set")
+                                    .file(config_path)
+                                    .key_path(["record_types", target.record_type.as_str(), "known_fields"])
+                                    .list([target_status_field.to_string()]),
+                            },
                             message: format!(
                                 "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
                                 target.record_type
