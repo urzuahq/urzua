@@ -1,9 +1,10 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M1YN84QAGGE2RJG9DFN0MB59
 Phase: '1'
 Track: schema-governance
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-core/src/rules/runner.rs, test:rust/crates/urzua-cli/tests/info_level_integration.rs, code:.urzua/config.yaml
 ---
 # 46 — Add an info severity level alongside error and warning
 
@@ -30,3 +31,4 @@ config-surface question. Resolve which comes first when either is picked up.
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-06 | Built by `MILE-194` (`Severity::Info` as `FindingSeverity::Info`, never blocking and never tripping `fail_on`, with a test for each; `info_level_integration.rs`), and `embodiment.locator-promotion-candidate` is now declared `level: info` in `.urzua/config.yaml` (no `scope: changed`: this rule does not take the option). `Realized-by` added and `Status` set to `Done`. **Why:** every clause of Done means is met; maintainer decision of 2026-11-06 to enable the rule at `info` here, which closes the one clause the earlier build left open (the config declared it `off`). | **substantive** |

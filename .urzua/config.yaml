@@ -521,7 +521,7 @@ authority:
   gates:
     - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
-    - paths: [".claude", ".git-hooks", ".github/workflows", ".urzua/config.yaml"]
+    - paths: [".claude", ".git-hooks", ".github/workflows", ".github/actions", ".github/scripts", "knope.toml", ".urzua/config.yaml"]
       by: maintainers
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
@@ -624,9 +624,11 @@ rules:
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]
   embodiment.locator-exists: error
-  # Off: an advisory suggestion, and several ADRs citing one rule module is
-  # expected now that the rule engine is split into modules (MILE-131).
-  embodiment.locator-promotion-candidate: off
+  # Advisory (MILE-46, ADR-87): several ADRs citing one rule module is expected now that
+  # the rule engine is split into modules (MILE-131), so the nudge is reported and counted
+  # but never fails `fail_on: warning`.
+  embodiment.locator-promotion-candidate:
+    level: info
   # Superseded only, for now. Draft is available and deliberately not enabled:
   # 28 records point at a Draft target today, and turning it on before deciding
   # whether that is acceptable here would be adopting a policy by accident.

@@ -85,8 +85,9 @@ rust-clean: ## Remove the Rust target directory
 
 # -------------------------------------------------------------------- records
 
-records: rust-build ## Validate this repo's own governance records
+records: rust-build ## Validate this repo's own governance records and the installed harness bundle
 	@$(RUST_DIR)/target/release/urzua check
+	@$(RUST_DIR)/target/release/urzua harness status
 
 roadmap: rust-build ## Print this repo's computed roadmap (waves, ready set, critical path) as JSON
 	@$(RUST_DIR)/target/release/urzua roadmap
