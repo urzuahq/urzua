@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
 Version: '0.9'
 Date: 2026-08-20
 Status: Draft

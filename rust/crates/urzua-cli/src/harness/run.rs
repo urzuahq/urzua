@@ -59,6 +59,11 @@ struct Request {
     cwd: Option<String>,
     #[serde(rename = "override")]
     override_request: Option<OverrideRequest>,
+    /// Set by an adapter whose translator could not build a request (an
+    /// unreadable payload, an edit it could not place): the engine decides what
+    /// the guardrails do about a call nobody judged.
+    #[serde(default)]
+    adapter_error: Option<String>,
 }
 
 impl Request {
@@ -256,6 +261,95 @@ pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
     emit(&verdict)
 }
 
+/// The verdict for a call the adapter could not turn into a request: refused
+/// for an agent under `on_unjudged: deny`, else allowed with the adapter's loud
+/// message. An adapter's own failure never blocks when the configuration says
+/// allow. With no file named (an unreadable payload) any denying `acceptance` or
+/// `protected-paths` guardrail refuses. With a file named (an edit the
+/// translator could not place) the call is refused only when that file is a
+/// protected path or a record of a gated type: the edit tool's own failure
+/// handles an absent `old_string` anywhere else, and the loud message stays.
+fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdict {
+    let here = std::env::current_dir().unwrap_or_default();
+    let root = crate::discovery::find_repo_root(&[PathBuf::from(".")]).unwrap_or(here);
+    let path = request.paths.first().map(String::as_str);
+    let guardrail = match path {
+        None => ["protected-paths", "acceptance"]
+            .into_iter()
+            .find(|g| matches!(raw_policy(config, &root, g), (true, OnUnjudged::Deny))),
+        Some(p) => targeted_guardrail(config, &root, Path::new(p)),
+    };
+    if let Some(guardrail) = guardrail {
+        return unjudged_as(guardrail, OnUnjudged::Deny, Actor::Agent, path, why);
+    }
+    Verdict::new(
+        "allow-unjudged",
+        path,
+        format!("urzua harness: urzua did NOT judge this call ({why}). It is allowed; run 'urzua harness status' and 'urzua check' before committing."),
+    )
+}
+
+/// The denying guardrail that covers `path`, read from the raw configuration
+/// (a protected path, the configuration itself, or a record directory of a
+/// gated type), judging the path as written and as it resolves.
+fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option<&'static str> {
+    let config_path = config
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| crate::discovery::default_config_path(root));
+    let raw = gate::raw_gates(&std::fs::read_to_string(&config_path).ok()?)?;
+    let config_rel = crate::discovery::relative_to_root(root, &config_path).ok();
+    let lexical = crate::discovery::relative_to_root(root, path).ok();
+    let resolved = resolved_rel(root, path);
+    lexical
+        .iter()
+        .chain(resolved.iter())
+        .find_map(|rel| raw.covers(rel, config_rel.as_deref()))
+}
+
+/// Enters the repository that holds the file being edited when the request
+/// names it by an absolute path: an agent working in an added directory has a
+/// `cwd` outside the repository, and the edit is still the repository's.
+fn enter_file_repo(request: &Request) {
+    let [path] = request.paths.as_slice() else {
+        return;
+    };
+    let path = Path::new(path);
+    if !path.is_absolute() {
+        return;
+    }
+    let Some(dir) = path.ancestors().skip(1).find(|d| d.is_dir()) else {
+        return;
+    };
+    if let Ok(root) = crate::discovery::find_repo_root(&[dir.to_path_buf()]) {
+        let _ = std::env::set_current_dir(root);
+    }
+}
+
+/// `path` relative to the repository root with symlinks resolved, so an edit
+/// through a link is judged as the file it writes. `None` when the path cannot
+/// be resolved or resolves outside the repository.
+fn resolved_rel(repo_root: &Path, path: &Path) -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    };
+    let root = repo_root.canonicalize().ok()?;
+    let mut tail = Vec::new();
+    let mut cur = abs.as_path();
+    loop {
+        if let Ok(mut full) = cur.canonicalize() {
+            for part in tail.iter().rev() {
+                full.push(part);
+            }
+            return full.strip_prefix(&root).ok().map(PathBuf::from);
+        }
+        tail.push(cur.file_name()?.to_owned());
+        cur = cur.parent()?;
+    }
+}
+
 fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
     let actor = request.actor();
     if let Some(cwd) = &request.cwd {
@@ -268,6 +362,10 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
                 &format!("the request's cwd '{cwd}' cannot be entered"),
             );
         }
+    }
+    enter_file_repo(&request);
+    if let Some(why) = &request.adapter_error {
+        return adapter_failure(config.as_deref(), &request, why);
     }
     let cwd_here = std::env::current_dir().unwrap_or_default();
     let ws = match Workspace::open(&[PathBuf::from(".")], config.clone()) {
@@ -302,8 +400,13 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
     // path, is refused outright (`ADR-89` section 4).
     if actor == Actor::Agent {
         if let ([path], Some(content)) = (request.paths.as_slice(), request.content.as_deref()) {
-            if let Ok(rel) = crate::discovery::relative_to_root(&repo_root, Path::new(path)) {
-                if let Some(denial) = gate::judge(&repo_root, &loaded, &rel, content) {
+            let lexical = crate::discovery::relative_to_root(&repo_root, Path::new(path)).ok();
+            let resolved = resolved_rel(&repo_root, Path::new(path));
+            for rel in lexical
+                .iter()
+                .chain(resolved.iter().filter(|r| Some(*r) != lexical.as_ref()))
+            {
+                if let Some(denial) = gate::judge(&repo_root, &loaded, rel, content) {
                     return denied(&denial, &rel.to_string_lossy(), &request);
                 }
             }
@@ -330,7 +433,8 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
         );
     };
     let rel = match crate::discovery::relative_to_root(&repo_root, Path::new(path)) {
-        Ok(r) => r,
+        // An edit through a link is the file the link resolves to.
+        Ok(r) => resolved_rel(&repo_root, Path::new(path)).unwrap_or(r),
         Err(e) => return unjudged(on, actor, Some(path), &e),
     };
     let rel_text = rel.to_string_lossy().to_string();
@@ -724,6 +828,10 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
         );
     }
     let harness = harness.expect("checked above");
+    if harness.enabled("post-command") {
+        // The commit the first post-command check of the session starts from.
+        super::post_command::seed_head(&ws.repo_root);
+    }
     let mut problems: Vec<Problem> = Vec::new();
     for p in &harness.problems {
         problems.push(Problem {

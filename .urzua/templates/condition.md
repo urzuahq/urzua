@@ -1,5 +1,6 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Status: Open | Met | Dropped
 
 ## Signal

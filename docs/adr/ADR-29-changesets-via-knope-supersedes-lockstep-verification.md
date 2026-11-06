@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4HGKZHG8ZTJND9V61E
 Status: Superseded
 Embodiment: Deprecated
 Realized-by: code:knope.toml, code:.github/workflows/ci.yml, code:.github/workflows/prepare-release.yml

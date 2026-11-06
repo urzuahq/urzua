@@ -1,5 +1,6 @@
 ---
-Version: '0.15'
+Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
+Version: '0.16'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -61,6 +62,8 @@ without an edit:
   ADR-21 and `header.field-set-consistency` will report the new record; `new` does not hide that by
   omitting the identity. It writes the `Stable-Id` anyway and adds a warning notice naming the
   inconsistency and the fix (add `Stable-Id` to the type's `known_fields`).
+  A type that lists `Stable-Id` under `required_fields` gets the generated value there, once; it is
+  never written as a blank required field.
 
 ## Display-number assignment
 
@@ -142,3 +145,4 @@ take content and parameters, returning a string.
 > | 2026-11-05 | Bumped to `0.13`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.14`. `urzua new` reports a could-not-run when the highest existing number is the largest a `u32` holds, instead of overflowing and reissuing a number. **Why:** Phase 0 hardening of the core model. | **substantive** |
 > | 2026-11-05 | Bumped to `0.15`. `new` creates the type's directory for its first record instead of failing with `could not read`. **Why:** Phase 0 hardening from an adopter switchover -- the first `urzua new waiver` failed. | **substantive** |
+> | 2026-11-06 | Bumped to `0.16`. A type that requires `Stable-Id` gets the generated value in that field instead of a blank. **Why:** maintainer decision of 2026-11-05 made `Stable-Id` required on every record type in this repository, and the blank required field overwrote the generated identity. | **substantive** |

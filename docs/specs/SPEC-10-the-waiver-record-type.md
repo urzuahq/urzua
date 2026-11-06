@@ -1,5 +1,6 @@
 ---
-Version: '0.11'
+Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
+Version: '0.12'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -75,7 +76,9 @@ A waiver **covers** a finding when `Rule` matches the finding's rule id exactly,
 is `*` or matches the finding's file path exactly (`urzua-core::waiver::Waiver::covers`). A waiver
 with a passed `Expires` is treated as though it doesn't exist (`is_active`) — comparison is a plain
 ISO-8601 string comparison against wall-clock "today," which RFC-15 §1 notes as the first place this
-schema reads real time rather than only corpus content.
+schema reads real time rather than only corpus content. "Today" is the current date in UTC, whatever
+the machine's time zone, so a waiver lapses at the same instant for every contributor and in CI; a
+waiver whose `Expires` is today's UTC date is still in force.
 
 `check` calls `load_suppressions` (filters discovered records to the type declaring `role: suppression`, else the type named `waiver`, skipping any
 missing `Rule` or `Scope` rather than crashing the run — an unparseable waiver waives nothing, which
@@ -147,3 +150,4 @@ record is edited later.
 > | 2026-11-05 | Bumped to `0.9`. The suppression type is declared with `role: suppression` rather than recognised by the name `waiver`, which remains the fallback only when no type declares the role. **Why:** `BUG-74`, maintainer decision of 2026-11-05. | **substantive** |
 > | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.11`. The type may declare `permanent` (`SPEC-3`): a waiver without `Expires` takes effect only for a listed rule, under a declared category and, where the category requires it, a resolving `Justified-by`; declaring it closes permanence for unlisted rules, and `check` counts permanent waivers by category. Added the `Category` and `Justified-by` fields; the statement that the type has no relationship fields is amended, `Justified-by` being declared in `pointer_fields`. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.12`. States that `Expires` is compared against the current UTC date, not the machine's local date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the engine had read local time here and UTC for the claim-age clock. | **substantive** |

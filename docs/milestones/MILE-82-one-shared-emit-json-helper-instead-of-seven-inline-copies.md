@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4WA4F3ZX0G8W2S81CK
 Status: Done
 Phase: '1'
 Track: schema-governance

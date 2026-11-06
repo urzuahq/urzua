@@ -1,5 +1,6 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Status: Planned | InProgress | Done | WontDo
 > Phase: the phase number this milestone belongs to
 > Track: track-name

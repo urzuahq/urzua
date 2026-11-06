@@ -1,5 +1,6 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Status: Proposed | Accepted | Rejected | Superseded | Retired
 > Embodiment: Not started | Specified | Implemented | Verified | Drift detected | Inactive
 > Date: YYYY-MM-DD
