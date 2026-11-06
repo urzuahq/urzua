@@ -38,15 +38,19 @@ Matching `ADR-93`:
 - With `new.check_open_prs: true`, `urzua new` fetches pull-request head refs with plain git into
   `refs/urzua/pr/*` (patterns from `new.pull_ref_patterns`, default `refs/pull/*/head`; no `gh`, no GraphQL),
   skips every number held there or on any fetched branch, and reports `pull_refs` with the skipped numbers and
-  the refs that held them. A fixture with a number claimed only on a pull ref shows it skipped; with the option
+  the refs that held them. Each pattern has its own namespace, `refs/urzua/pr/<remote-or-index>/*`: a test with
+  two patterns that both yield `123` shows neither overwrites the other. A fixture with a number claimed only on a pull ref shows it skipped; with the option
   off no remote is touched.
 - Concurrent `new` runs are serialized by a lock under the git common directory: two runs started together
   take two different numbers (a test), a stale lock whose pid is gone is removed, and a held lock times out
-  with its path named.
+  with its path named. Numbering also scans the trees listed by `git worktree list`, untracked files included:
+  a test with an untracked record of the next number in a sibling worktree shows that number skipped. Separate
+  clones are an undetectable limit and the report says so.
 - Offline is never a failure: with no remote, an unreachable one or a timeout, `new` exits 0, numbers from the
   local refs it has, and adds a `notices` entry saying a number claimed on an unfetched pull request will not
   be seen. Each case is a test.
-- With the rule configured, `identity.open-pr-collision` under `--base` reports an error for an added record
+- With the rule configured, `identity.open-pr-collision` under `--base` reports a warning (its default
+  severity; `ADR-93` documents waiving it for a closed unmerged head) for an added record
   whose type and number a pull ref holds with a different `Stable-Id`, and not for a record whose own
   `Stable-Id` is on the ref; without `--base` it says so; with no pull refs fetched it notices and counts zero
   refs. `check` itself never fetches. Tests cover each.
@@ -72,3 +76,4 @@ Matching `ADR-93`:
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** `urzua new` skips numbers claimed on every local and remote-tracking ref (`new_record.rs`, `new_integration.rs`, merged in #135); a number claimed on a branch never fetched is still invisible and the remote-aware alternative the Done means weighs was not built. `Status` stays Planned. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-06 | Re-phased from Phase 1 to Phase 0; `Implements` `ADR-93`; Done means replaced to match it. Built so far is unchanged: the local-ref scan. **Why:** maintainer decision of 2026-11-06 moving this milestone to Phase 0 and deciding the remote-aware path, plain git fetch of pull-request head refs, opt in, with a lock, an offline fallback and an opt-in `check` rule (`ADR-93`); the earlier open choice between a local scan and a `gh` query is closed, and the stated-limit alternative in the old Done means is dropped. | **substantive** |
+> | 2026-11-06 | Done means amended to match `ADR-93` as reviewed: numbering scans `git worktree list` trees, each pull-ref pattern has its own namespace, and `identity.open-pr-collision` defaults to warning. `Status` unchanged. **Why:** independent review of 2026-11-06 found the lock did not cover worktrees, patterns shared one namespace and an error rule could fire forever against a closed head. | **structural** |

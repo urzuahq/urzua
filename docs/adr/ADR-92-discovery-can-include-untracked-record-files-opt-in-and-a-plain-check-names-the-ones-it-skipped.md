@@ -81,8 +81,12 @@ governed by default, accepting a second discovery path and a stated limit on dri
    "Non-ignored" is git's own rule: `.gitignore`, `.git/info/exclude` and the global excludes. A file outside
    every declared record directory is never added; an untracked file a `Realized-by` locator names stays a
    `locator-untracked` finding.
-3. **One function.** The untracked set joins `discover_tracked_files`' result so `file_texts.rs:34`,
-   `session.rs:79` and `init.rs:504` cannot see a different corpus from `check`. The scope source stays
+3. **One function, with a new signature and contract.** The untracked set joins `discover_tracked_files`'
+   result so `file_texts.rs:34`, `session.rs:79` and `init.rs:504` cannot see a different corpus from
+   `check`. Today the function takes no config and its doc comment (`lib.rs:68-70`) forbids this; it now
+   gains config input (the option and the declared record directories and ownership rules), so its signature
+   changes, every caller is updated, and its doc comment is rewritten: tracked and staged files, plus
+   untracked non-ignored record files when the option is on, and still never a raw filesystem walk. The scope source stays
    `GitTracked`; the report's `scope` gains an always-present boolean `include_untracked` and the count of
    untracked records included (`untracked_included`), so a consumer can tell the two corpora apart.
 4. **Without the option, nothing is silent.** A plain `check` emits one info notice
@@ -108,9 +112,14 @@ governed by default, accepting a second discovery path and a stated limit on dri
    too, since it is the same fact. A record becomes judged by drift once it has a commit.
 8. **This repository turns it on.** `.urzua/config.yaml` sets `discovery.include_untracked: true`, and the
    change is exercised in the repository's own corpus (`MILE-206`).
-9. **`ADR-56` stands for the default.** Its decision (untracked is ungoverned and the diagnostic names the
-   file) is the behavior of a repository that does not opt in. This decision adds the opt-in; it does not
-   reverse `ADR-56`. If the maintainer prefers, `ADR-56` gains a revision row pointing here.
+9. **`ADR-56` stands for the default, and gains an amendment.** Its decision (untracked is ungoverned and
+   the diagnostic names the file) is the behavior of a repository that does not opt in. This decision adds
+   the opt-in; it does not reverse `ADR-56`. But `ADR-56` says "untracked-means-ungoverned stands unchanged"
+   and "nothing about discovery ... moves", and this decision makes both conditional and adds a default
+   notice, so a revision row alone is not enough. `ADR-56` therefore carries a dated
+   `## Amendment (2026-11-06)` recording that untracked-means-ungoverned is now the default only, in the
+   form of the `ADR-27` and `ADR-74` amendments. It is proposed, pending maintainer acceptance, and
+   `ADR-56`'s `Status` stays `Accepted`. This is a requirement of this decision, not an option.
 
 ## Reversibility
 
@@ -139,7 +148,7 @@ that consumers may come to read, and the notice subjects are names a repository 
 
 ## References
 
-- `ADR-56` -- how an untracked record-shaped file is surfaced; this adds the opt-in and the default notice.
+- `ADR-56` -- how an untracked record-shaped file is surfaced; this adds the opt-in and the default notice, and `ADR-56`'s `## Amendment (2026-11-06)` records the effect (clause 9).
 - `ADR-6` -- shell out to git; `ls-files --others` is the same dependency.
 - `ADR-55` -- the tool says what it knows; the notice is that obligation applied to discovery.
 - `ADR-64` -- structured config in, structured output out.
@@ -154,3 +163,4 @@ that consumers may come to read, and the notice subjects are names a repository 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-06 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-06: an opt-in `discovery.include_untracked`, a plain `check` that names the untracked records it skips, `--base` treating them as added, and drift not judging them (disclosed). The maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-06 | Clause 3 states that `discover_tracked_files` changes signature and contract (it gains config input) and its doc comment is rewritten; clause 9 requires the `ADR-56` amendment instead of leaving it to the maintainer; `ADR-56` cited. Both records stay Proposed. **Why:** independent review of 2026-11-06 found the function takes no config and its doc forbids this, and that `ADR-56`'s "stands unchanged" needs a dated amendment, as `ADR-27`'s precedent shows. | **substantive** |

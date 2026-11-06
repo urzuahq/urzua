@@ -70,8 +70,30 @@ expensive or noisy it is deleted without consequence.
 - `MILE-103` gains auto-staging as a candidate, with this session as the evidence that the
   hand-authoring path and the `urzua new` path have different failure modes.
 
+## Amendment (2026-11-06): untracked-means-ungoverned is the default, not the rule
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-06 with `ADR-92`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The Decision says "untracked-means-ungoverned stands unchanged" and the Reversibility section says
+"Nothing about discovery, the record set, or `files_examined` moves". `ADR-92` (Proposed) makes both
+conditional, so this amendment records what stays true and what no longer does, in the form of the `ADR-27`
+amendments.
+
+- **The default is unchanged.** A repository that sets nothing governs tracked files only, an untracked
+  scratch file is not examined, and the pinned `an_untracked_scratch_file_is_never_examined` still holds.
+- **An opt-in setting includes untracked records.** `discovery.include_untracked: true` makes discovery
+  include untracked, non-ignored files under declared record directories. For such a repository,
+  untracked-means-ungoverned no longer holds, and `files_examined` counts those records.
+- **The default is no longer silent.** A plain `check` reports an info notice (`discovery.untracked-skipped`)
+  listing the untracked records under declared directories that it skipped. This adds to the Decision's
+  naming of the untracked file in a failing diagnostic; it does not replace it.
+
+The decision that the diagnostic names the untracked file when one would resolve the reference, and that
+staging by `urzua new` is left to `MILE-103`, is unchanged.
+
 ## References
 
+- `ADR-92` (Proposed) -- adds the opt-in and the default notice; the amendment above records its effect here.
 - `MILE-103`, on `urzua new` being the faster path.
 - `BUG-24`, on explicit argv paths and untracked records.
 - `ADR-55`, on the tool saying what it knows.
@@ -81,3 +103,4 @@ expensive or noisy it is deleted without consequence.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-06 | Amendment added: untracked-means-ungoverned is now the default only; an opt-in `discovery.include_untracked` includes untracked records and a default notice lists the ones skipped (`ADR-92`); proposed, pending maintainer acceptance. **Why:** `ADR-92` makes the Decision's "stands unchanged" and the Reversibility claim conditional, and a revision row alone would leave the Accepted text contradicting it; the Decision is unchanged and `Status` stays `Accepted`. | **substantive** |
