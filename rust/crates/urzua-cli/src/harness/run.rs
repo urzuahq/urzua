@@ -277,7 +277,10 @@ fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdi
         None => ["protected-paths", "acceptance"]
             .into_iter()
             .find(|g| matches!(raw_policy(config, &root, g), (true, OnUnjudged::Deny))),
-        Some(p) => targeted_guardrail(config, &root, Path::new(p)),
+        Some(_) => request
+            .paths
+            .iter()
+            .find_map(|p| targeted_guardrail(config, &root, Path::new(p))),
     };
     if let Some(guardrail) = guardrail {
         return unjudged_as(guardrail, OnUnjudged::Deny, Actor::Agent, path, why);
@@ -300,9 +303,11 @@ fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option
     let config_rel = crate::discovery::relative_to_root(root, &config_path).ok();
     let lexical = crate::discovery::relative_to_root(root, path).ok();
     let resolved = resolved_rel(root, path);
+    let linked = gate::hardlink_aliases(root, path, &raw.paths, &raw.gated_dirs);
     lexical
         .iter()
         .chain(resolved.iter())
+        .chain(linked.iter())
         .find_map(|rel| raw.covers(rel, config_rel.as_deref()))
 }
 
@@ -402,9 +407,17 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
         if let ([path], Some(content)) = (request.paths.as_slice(), request.content.as_deref()) {
             let lexical = crate::discovery::relative_to_root(&repo_root, Path::new(path)).ok();
             let resolved = resolved_rel(&repo_root, Path::new(path));
+            // A hard link is the file it shares an inode with (Unix).
+            let linked = gate::hardlink_aliases(
+                &repo_root,
+                Path::new(path),
+                &gate::protected_entries(&loaded),
+                &gate::gated_record_dirs(&loaded),
+            );
             for rel in lexical
                 .iter()
                 .chain(resolved.iter().filter(|r| Some(*r) != lexical.as_ref()))
+                .chain(linked.iter())
             {
                 if let Some(denial) = gate::judge(&repo_root, &loaded, rel, content) {
                     return denied(&denial, &rel.to_string_lossy(), &request);
@@ -831,6 +844,7 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     if harness.enabled("post-command") {
         // The commit the first post-command check of the session starts from.
         super::post_command::seed_head(&ws.repo_root);
+        super::post_command::seed_protected(&ws.repo_root, &ws.config_path, &ws.config);
     }
     let mut problems: Vec<Problem> = Vec::new();
     for p in &harness.problems {

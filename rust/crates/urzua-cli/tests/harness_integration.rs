@@ -346,7 +346,7 @@ fn a_settings_file_that_is_not_json_or_holds_an_edited_entry_is_refused() {
         v["problems"][0]
             .as_str()
             .unwrap()
-            .contains("PreToolUse|Write|Edit|MultiEdit|edit"),
+            .contains("PreToolUse|Write|Edit|MultiEdit|NotebookEdit|mcp__.*|edit"),
         "{v}"
     );
     assert_eq!(
