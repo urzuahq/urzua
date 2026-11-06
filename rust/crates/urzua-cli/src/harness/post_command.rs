@@ -50,6 +50,9 @@ struct PostVerdict {
     findings: Vec<serde_json::Value>,
     /// Unwaived findings the same record already had at `HEAD`.
     pre_existing: Vec<serde_json::Value>,
+    /// Records the command moved to a status the `authority` table gates
+    /// (reported as errors of their own; never blocked).
+    gated_moves: Vec<String>,
     /// The records `check` ran on this time. Empty when no check ran.
     checked: Vec<String>,
 }
@@ -61,6 +64,7 @@ impl PostVerdict {
             message: message.into(),
             findings: Vec::new(),
             pre_existing: Vec::new(),
+            gated_moves: Vec::new(),
             checked: Vec::new(),
         }
     }
@@ -73,6 +77,7 @@ impl PostVerdict {
             ),
             findings: Vec::new(),
             pre_existing: Vec::new(),
+            gated_moves: Vec::new(),
             checked: Vec::new(),
         }
     }
@@ -171,15 +176,27 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
         ));
     }
 
-    let report = match check_paths(config.clone(), fresh.iter().map(PathBuf::from).collect()) {
-        Ok(r) => r,
-        Err(e) => return PostVerdict::unjudged(&format!("check could not run: {}", e.message)),
-    };
-    if report.status == ReportStatus::NotRun {
-        return PostVerdict::unjudged("check could not run: no enabled rule examined the records");
-    }
+    // A gated move is judged on the same records, against HEAD: the command has
+    // already run, so this reports and never blocks. It does not depend on `check`
+    // being able to run.
+    let gated: Vec<String> = fresh
+        .iter()
+        .filter_map(|rel| super::gate::gated_move_report(&repo_root, &loaded, Path::new(rel)))
+        .collect();
 
-    let all = live(&report);
+    let report = match check_paths(config.clone(), fresh.iter().map(PathBuf::from).collect()) {
+        Ok(r) if r.status != ReportStatus::NotRun => Some(r),
+        Ok(_) if gated.is_empty() => {
+            return PostVerdict::unjudged(
+                "check could not run: no enabled rule examined the records",
+            )
+        }
+        Err(e) if gated.is_empty() => {
+            return PostVerdict::unjudged(&format!("check could not run: {}", e.message))
+        }
+        _ => None,
+    };
+    let all = report.as_ref().map(live).unwrap_or_default();
     let (old, new) = partition_by_head(&config, &all);
     write_memory(&repo_root, &candidates);
 
@@ -187,7 +204,8 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
     v.checked = fresh.clone();
     v.findings = to_json(&new);
     v.pre_existing = to_json(&old);
-    if new.is_empty() && old.is_empty() {
+    v.gated_moves = gated.clone();
+    if new.is_empty() && old.is_empty() && gated.is_empty() {
         v.message = format!(
             "{P}: checked {} changed record(s); no findings",
             fresh.len()
@@ -199,11 +217,22 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
         .iter()
         .filter(|f| f.severity == FindingSeverity::Error)
         .count();
+    let gated_note = if gated.is_empty() {
+        String::new()
+    } else {
+        format!(", and {} gated move(s)", gated.len())
+    };
     let mut m = format!(
-        "{P}: urzua checked {} record(s) the command changed (git status, untracked included) and found {} finding(s), {errors} of them errors. The command had already run, so this was not prevented and nothing was blocked; pre-commit and CI remain the hard gate.",
+        "{P}: urzua checked {} record(s) the command changed (git status, untracked included) and found {} finding(s), {errors} of them errors{gated_note}. The command had already run, so this was not prevented and nothing was blocked; pre-commit and CI remain the hard gate.",
         fresh.len(),
         new.len()
     );
+    if !gated.is_empty() {
+        m.push_str(&format!(
+            "\nGated move(s) to a status the authority table reserves for a decider:\n{}",
+            gated.join("\n")
+        ));
+    }
     if !new.is_empty() {
         m.push_str(&format!("\n{}", describe(&new)));
     }

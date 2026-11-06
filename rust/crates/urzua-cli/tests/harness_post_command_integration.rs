@@ -132,6 +132,38 @@ fn assert_reports_the_bad_record(v: &serde_json::Value, path: &str) {
     assert_eq!(checked(v), [path], "{v}");
 }
 
+// ------------------------------------------------- a gated move by shell
+
+/// MILE-200, ADR-89 section 4: a Bash command that moves a record to a status
+/// the `authority` table gates is reported, as an error of its own, and never
+/// blocked. `check` has no rule to run here, so the report does not depend on it.
+#[test]
+fn a_bash_edit_that_moves_a_record_to_a_gated_status_is_reported_and_not_blocked() {
+    let config = "schema_version: 2\nrules: {embodiment.consistency: error}\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\nharness:\n  adapters: [claude-code]\n  guardrails:\n    acceptance: {enabled: true}\n    post-command: {enabled: true}\nauthority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n";
+    let proposed = "---\nStatus: Proposed\n---\n# ADR-1: T\n\nprose\n";
+    let dir = fixture("gated", config, proposed);
+    bash(
+        &dir,
+        &format!("sed -i 's/^Status: Proposed/Status: Accepted/' {PATH_1}"),
+    );
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let moves = v["gated_moves"].as_array().unwrap();
+    assert_eq!(moves.len(), 1, "{v}");
+    let line = moves[0].as_str().unwrap();
+    assert!(
+        line.contains(PATH_1)
+            && line.contains("'Proposed'")
+            && line.contains("'Accepted'")
+            && line.contains("[acceptance] error"),
+        "{line}"
+    );
+    assert!(
+        msg(&v).contains("1 gated move(s)") && msg(&v).contains("was not prevented"),
+        "{v}"
+    );
+}
+
 // ----------------------------------------------------- the three writers
 
 #[test]

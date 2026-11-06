@@ -519,8 +519,8 @@ authority:
   deciders:
     maintainers: {logins: [beauwilliams]}
   gates:
-    - {type: adr, to: [Accepted, Rejected], by: maintainers}
-    - {type: rfc, to: [Accepted, Rejected], by: maintainers}
+    - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
+    - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
     - paths: [".claude", "scripts/hooks", ".git-hooks", ".github/workflows", ".urzua/config.yaml"]
       by: maintainers
 
@@ -716,11 +716,12 @@ rules:
       spec: ["Accepted", "Shipped"]
     fix_types: ["bug"]
     link_fields: ["Implements"]
-  # A gated move (an ADR or RFC to Accepted or Rejected) or a protected path in the diff needs the
+  # A gated move (an ADR or RFC to Accepted, Rejected or Superseded, an ADR also to Retired) or a protected path in the diff needs the
   # pull request's author in the `maintainers` group (ADR-89 section 4, MILE-200). The gate action
   # writes the actors file and passes it as `--actors`; a local run has none and reports `info`. It
   # proves authorship only, and cannot tell an agent under the maintainer's token from the maintainer.
-  # `require_evidence` stays off so a pre-commit run by the maintainer is not an error.
+  # `require_evidence` stays off here (maintainer decision, 2026-11-06): CI records the actors and does
+  # not fail on them, which matches the accepted risk of ADR-89 section 4.
   diff.decider-required: error
   # Prose citations of decision ids resolve (MILE-136). RFC-822 and RFC-4122
   # are public standards that share the RFC prefix, not records (MILE-156).

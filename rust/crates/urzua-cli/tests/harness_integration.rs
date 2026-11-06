@@ -251,19 +251,29 @@ fn an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_i
         "{checks}"
     );
 
-    // A guardrail the adapter cannot provide is installed around and reported.
-    let wants_more = config("").replace(
-        "    session-start",
-        "    acceptance: {enabled: true}\n    session-start",
-    ) + "authority:\n  gates: []\n";
+    // A guardrail no chosen adapter provides is reported, never skipped. The
+    // bundled adapter provides every guardrail the engine knows, so the fixture
+    // names no adapter: `acceptance` is enabled (with a well-formed authority
+    // table) and nothing can wire it.
+    let wants_more = config("")
+        .replace("  adapters: [claude-code]\n", "  adapters: []\n")
+        .replace(
+            "    required_fields: []\n",
+            "    required_fields: []\n    statuses:\n      values: [Proposed, Accepted]\n",
+        )
+        .replace(
+            "    session-start",
+            "    acceptance: {enabled: true}\n    session-start",
+        )
+        + "authority:\n  deciders:\n    maintainers: {logins: [alice]}\n  gates:\n    - {type: adr, to: [Accepted], by: maintainers}\n";
     let dir = fixture("unprovided", &wants_more);
     let (code, v) = harness(&dir, &["install"]);
     assert_eq!(code, 0, "{v}");
     assert!(
-        v["problems"][0].as_str().unwrap().contains("'acceptance'"),
-        "{v}"
+        v.to_string().contains("no adapter is named"),
+        "install says nothing was installed: {v}"
     );
-    assert!(dir.join(LOCK).exists());
+    assert!(!dir.join(LOCK).exists());
     // And doctor says it too.
     let out = urzua(&dir, &["doctor"]).output().unwrap();
     let checks = json(&out)["checks"].to_string();

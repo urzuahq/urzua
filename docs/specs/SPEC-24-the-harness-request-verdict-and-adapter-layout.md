@@ -66,6 +66,7 @@ extra fields:
 | Field | Meaning |
 |---|---|
 | `findings` | The unwaived findings the checked records have now and did not have at `HEAD`, as `urzua check` prints them. |
+| `gated_moves` | One line per changed record the command moved to a status the `authority` table gates (a new record, or one whose status at `HEAD` was another), judged against `HEAD` when `acceptance` is enabled. Reported as errors of their own, never blocked; empty when none, and reported even when `check` cannot run. A Bash write to a protected path is not reported here. |
 | `pre_existing` | The unwaived findings the same record already had at `HEAD`, judged from its committed text (a record with no copy at `HEAD` has none). Listed, not new. |
 | `checked` | The records `check` ran on this time. Empty when no check ran: a clean tree, no governed record changed, the guardrail is off, or every changed record's content hash was already reported. |
 
@@ -147,5 +148,5 @@ out of the shared files, and deletes the lock last.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-06 | Initial spec: the neutral request and verdict of `urzua harness run`, the adapter directory layout and the lock file. **Why:** `MILE-198`, decided in `ADR-89` section 6. | **structural** |
-> | 2026-11-06 | Bumped to `0.2`. Adds the `post-command` event: its request (no paths, git names them), its verdict fields `findings`, `pre_existing` and `checked`, the stated `allow-unjudged` cases, and the hash memory under `.urzua/cache`; the Claude Code adapter provides it. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.2`. Adds the `post-command` event: its request (no paths, git names them), its verdict fields `findings`, `pre_existing` and `checked`, the stated `allow-unjudged` cases, the `gated_moves` field (a Bash-made move to a gated status, `MILE-200`), and the hash memory under `.urzua/cache`; the Claude Code adapter provides it. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.3`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |
