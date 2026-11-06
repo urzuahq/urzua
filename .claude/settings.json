@@ -6,10 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "d=\"${CLAUDE_PROJECT_DIR:-}\"; h=\"$d/scripts/hooks\"; if [ -n \"$d\" ] && command -v python3 >/dev/null 2>&1; then exec python3 -I \"$h/claude-code-record-edit.py\"; fi; why=\"python3 is not installed\"; [ -n \"$d\" ] || { why=\"CLAUDE_PROJECT_DIR is unset\"; h=\"$(git rev-parse --show-toplevel 2>/dev/null)/scripts/hooks\"; }; bash \"$h/record-edit-not-judged.sh\" \"$why\" >/dev/null; exit 0"
-          },
-          {
-            "type": "command",
             "command": "r=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; t=\"$r/.claude/hooks/urzua-claude-code.py\"; if command -v python3 >/dev/null 2>&1 && [ -f \"$t\" ]; then exec python3 -I \"$t\" edit -- urzua harness run edit; fi; printf '%s\\n' '{\"systemMessage\":\"urzua harness: the editor hook could NOT run (python3 or .claude/hooks/urzua-claude-code.py is missing), so this edit was not judged. Run: urzua harness status\"}'; exit 0"
           }
         ]

@@ -247,7 +247,7 @@ this one: that one guards an already-decided record's content; this one guards t
 
 - **Levels.** A rule is `off`, `info`, `warn` or `error` (`ADR-87`). An `info` finding is reported and
   counted but never trips `fail_on` or sets `blocking`; it is not a finding to silence.
-- **The editor hook** (`.claude/settings.json`, `scripts/hooks/`, `ADR-69`, `ADR-78`) judges a
+- **The editor hook** (`.claude/settings.json` via the installed bundle, `ADR-69`, `ADR-78`) judges a
   `Write`, `Edit` or `MultiEdit` of a governed record before it is written, by running `urzua check
   --stdin-path`. It blocks an unwaived error the edit introduced (`block_on: introduced`; `block_on:
   all` in `.urzua/config.yaml` blocks any). Warnings are shown, not blocking. It does not cover
