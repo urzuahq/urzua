@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
 Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:206e1e3374db33dc9bc28c82a7f8f27ccd44aa509b3c74aba5f2d22a3386235f, spec:docs/specs/SPEC-2-urzua-check.md

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK57NMN5N96GJDVN8QG0
 Status: Accepted
 Date: 2026-07-30
 Accepted-on: 2026-09-05

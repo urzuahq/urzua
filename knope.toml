@@ -51,6 +51,18 @@ command = "cargo check --manifest-path rust/Cargo.toml --workspace"
 type = "Command"
 command = "git add rust/Cargo.lock"
 
+# .urzua/harness.lock records the bundle_version the harness was installed from,
+# which is the crate version, so the bump above leaves `urzua harness status`
+# reporting the lock out of date and the release PR's own checks red. Re-pin the
+# lock to the bumped version, in the same commit.
+[[workflows.steps]]
+type = "Command"
+command = "cargo run --manifest-path rust/Cargo.toml -p urzua-cli -- harness update"
+
+[[workflows.steps]]
+type = "Command"
+command = "git add .urzua/harness.lock"
+
 [[workflows.steps]]
 type = "Command"
 command = "git commit -m \"chore: prepare release $version\""

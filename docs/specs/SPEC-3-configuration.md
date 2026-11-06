@@ -1,5 +1,6 @@
 ---
-Version: '0.99'
+Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
+Version: '0.100'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1505,7 +1506,9 @@ rules:
   and falls back the same way. A blank name, an undeclared field, or the option without
   `drift_grace_days` is a load error.
 - `claim_max_age_days` (whole days): a warning when the commit that last touched the record's
-  `Realized-by` line is older than the limit, whether or not the evidence changed. It reports in
+  `Realized-by` line is older than the limit, whether or not the evidence changed. Age is counted in
+  whole 24-hour days from the commit's timestamp to the current time, the same in every time zone;
+  every date this engine compares, a suppression's `Expires` included, is a UTC date. It reports in
   addition to any disagreement, and a record whose line git cannot date is not warned.
 - A locator written `code:path/to/file.rs@sha256:<64 lowercase hex>` is pinned to that content hash
   (`sha256sum path/to/file.rs`). A pinned locator drifts exactly when the file's current hash
@@ -2065,3 +2068,4 @@ proves this configuration produces the three findings.
 > | 2026-11-06 | Bumped to `0.97`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
 > | 2026-11-06 | Bumped to `0.98`. Documents the top-level `authority` table (`deciders` groups of `logins`, `evidence` defaulting to `pr-author`, `gates` by type and status and by path) with its load errors, the local refusal of an agent's edit-tool move to a gated status or write to a gated path (final, not liftable by the override), the rule option `require_evidence`, the actors file and the accepted risk; an enabled `acceptance` or `protected-paths` guardrail with no gate of its kind is a load error. **Why:** `MILE-200`, decided in `ADR-89` section 4, accepted by the maintainer. | **substantive** |
 > | 2026-11-06 | Bumped to `0.99`. The `authority` example's protected paths no longer list `scripts/hooks`, which this repository deleted. **Why:** `MILE-204`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.100`. States that claim ages and every date comparison use UTC. **Why:** maintainer decision of 2026-11-05: UTC everywhere. | **substantive** |

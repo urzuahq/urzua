@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4BH2MNF8X30WYHNAYR
 Status: Accepted
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-core/src/migrate.rs@sha256:f827b2b8365313046f42016e8bd47c59d13f2c55396038fba592c293fc800be4, code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:0d031cec31058a8e148fc646d12dde0c0e9323a2068db9e41dba6a2c3431d448, test:rust/crates/urzua-core/src/migrate.rs@sha256:f827b2b8365313046f42016e8bd47c59d13f2c55396038fba592c293fc800be4

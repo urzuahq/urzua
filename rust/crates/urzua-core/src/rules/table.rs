@@ -520,7 +520,8 @@ pub const RULE_TABLE: &[RuleDef] = &[
         header_none: HeaderNone::OutOfScope,
         options: &[],
         actions: &[
-            VariantAction::new("target-status-undeclared", ActionDecl::CONFIG_SET),
+            VariantAction::new("target-status-undeclared", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("target-status-undeclared-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
@@ -762,7 +763,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
-        description: "The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18).",
+        description: "The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18). The optional `scope: changed` option (`ADR-90`) makes it a nudge for the moment someone touches a record that shares a locator: a locator is reported only when a record a `--base` diff adds or changes cites it, with the finding on that changed record and every citer (changed or not) named in the message; none on a plain `check`, and the slots it did not judge are counted in the population's `deferred_by_scope`, with one `info` notice saying why.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -773,13 +774,24 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_authority: false,
         reads_declaration: None,
         header_none: HeaderNone::OutOfScope,
-        options: &[],
+        options: &["scope"],
         actions: &[
             VariantAction::new("locator-promotion-candidate", ActionDecl::Exempt("an advisory nudge that is never auto-promoted")),
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| embodiment_locator_promotion_candidate(c.records, c.config),
+        run: |c| {
+            embodiment_locator_promotion_candidate(
+                c.records,
+                c.config,
+                changed_only(
+                    c.config,
+                    RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+                    c.changed_paths,
+                )
+                .as_ref(),
+            )
+        },
     },
     RuleDef {
         id: RULE_HEADER_FIELD_SET_CONSISTENCY,
@@ -1062,10 +1074,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("companion-field-missing", ActionDecl::CONFIG_APPEND),
             VariantAction::new("companion-pair-undeclared", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("companion-field-missing-declare-set", ActionDecl::CONFIG_SET),
+            VariantAction::new("companion-pair-undeclared-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| config_companion_declaration_missing(c.config, c.config_path),
+        run: |c| config_companion_declaration_missing(c.config, c.config_path, c.records),
     },
     RuleDef {
         id: RULE_CONFIG_POINTER_DECLARATION_MISSING,
@@ -1104,11 +1118,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("pointer-field-not-known", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("pointer-field-not-known-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            config_pointer_field_not_known(c.config, c.config_path)
+            config_pointer_field_not_known(c.config, c.config_path, c.records)
         },
     },
     RuleDef {
@@ -1169,11 +1184,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         actions: &[
             VariantAction::new("relation-field-not-known", ActionDecl::CONFIG_APPEND),
+            VariantAction::new("relation-field-not-known-declare-set", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            config_relation_field_not_known(c.config, c.config_path)
+            config_relation_field_not_known(c.config, c.config_path, c.records)
         },
     },
     RuleDef {
@@ -2047,7 +2063,13 @@ mod tests {
                 listing.push(def.id);
             }
         }
-        assert_eq!(listing, vec![RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH]);
+        assert_eq!(
+            listing,
+            vec![
+                RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+                RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH
+            ]
+        );
     }
 
     #[test]

@@ -96,4 +96,6 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [urzua ships an installable agent harness bundle](ADR-89-urzua-ships-an-installable-agent-harness-bundle.md)
 - [A rule may declare scope: changed so it judges only the records a --base diff adds or changes](ADR-90-a-rule-may-declare-scope-changed-so-it-judges-only-the-records-a-base-diff-adds-or-changes.md)
 - [urzua waive --from-report drafts a pending waiver per finding, and there is no baseline file](ADR-91-urzua-waive-from-report-drafts-a-pending-waiver-per-finding-and-there-is-no-baseline-file.md)
+- [Discovery can include untracked record files, opt in, and a plain check names the ones it skipped](ADR-92-discovery-can-include-untracked-record-files-opt-in-and-a-plain-check-names-the-ones-it-skipped.md)
+- [urzua new skips a number an open pull request already took, from fetched pull refs, opt in, and check flags a shared id](ADR-93-urzua-new-skips-a-number-an-open-pull-request-already-took-from-fetched-pull-refs-opt-in-and-check-flags-a-shared-id.md)
 <!-- urzua:index:end -->

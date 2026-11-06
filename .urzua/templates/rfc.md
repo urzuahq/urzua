@@ -1,5 +1,6 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Status: Draft | Discussion | Accepted | Rejected | Superseded
 > Date: YYYY-MM-DD
 > Author: name

@@ -67,11 +67,11 @@ record_types:
       - "Date"
       - "Author"
       - "Deciders"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
       - "Embodiment"
       - "Realized-by"
-      - "Stable-Id"
       - "Accepted-on"
       - "Derives-from"
       - "Supersedes / Superseded-by"
@@ -136,9 +136,9 @@ record_types:
       - "Status"
       - "Date"
       - "Author"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Accepted-on"
       - "Supersedes / Superseded-by"
       - "Amends"
@@ -194,9 +194,9 @@ record_types:
       - "Version"
       - "Author"
       - "Subject"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Embodiment"
       - "Realized-by"
       - "Derives-from"
@@ -248,9 +248,9 @@ record_types:
       - "Status"
       - "Phase"
       - "Track"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Implements"
       - "Blocked-on"
       - "Depends-on"
@@ -311,10 +311,10 @@ record_types:
     required_fields:
       - "Status"
       - "Found-in"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
       - "Realized-by"
-      - "Stable-Id"
       - "Implements"
       - "Blocked-on"
     statuses:
@@ -382,9 +382,9 @@ record_types:
       - "Rule"
       - "Scope"
       - "Reason"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Expires"
       - "Category"
       - "Justified-by"
@@ -419,9 +419,9 @@ record_types:
     revision_log: {marker: "**Revision log**", required: true}
     required_fields:
       - "Status"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Met-by"
     statuses:
       values: ["Open", "Met", "Dropped"]
@@ -521,7 +521,7 @@ authority:
   gates:
     - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
-    - paths: [".claude", ".git-hooks", ".github/workflows", ".urzua/config.yaml", ".urzua/templates"]
+    - paths: [".claude", ".git-hooks", ".github/workflows", ".github/actions", ".github/scripts", "knope.toml", ".urzua/config.yaml", ".urzua/templates"]
       by: maintainers
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
@@ -624,9 +624,13 @@ rules:
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]
   embodiment.locator-exists: error
-  # Off: an advisory suggestion, and several ADRs citing one rule module is
-  # expected now that the rule engine is split into modules (MILE-131).
-  embodiment.locator-promotion-candidate: off
+  # Advisory (MILE-46, ADR-87): several ADRs citing one rule module is expected now that
+  # the rule engine is split into modules (MILE-131), so the nudge is reported and counted
+  # but never fails `fail_on: warning`. `scope: changed` (ADR-90) keeps it to the moment a
+  # record that cites a shared locator is touched, so it does not list records nobody edited.
+  embodiment.locator-promotion-candidate:
+    level: info
+    scope: changed
   # Superseded only, for now. Draft is available and deliberately not enabled:
   # 28 records point at a Draft target today, and turning it on before deciding
   # whether that is acceptable here would be adopting a policy by accident.

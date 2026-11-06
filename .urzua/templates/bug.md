@@ -1,5 +1,6 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Status: Open | Fixed | WontFix
 > Found-in: how/where this was actually discovered
 > Realized-by: test:path/to/test.rs#test_name (the test proving this is fixed; several: test:a.rs#one, test:b.rs#two)

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK48R3KZZ3SZE3FYKSXA
 Status: Accepted
 Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-core/src/fix.rs

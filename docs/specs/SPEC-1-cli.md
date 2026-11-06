@@ -1,5 +1,6 @@
 ---
-Version: '0.26'
+Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
+Version: '0.27'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -159,9 +160,10 @@ commit, never a flaky run.
 - Pages of 100 are requested by `page=N` until the listing's `Link` header has no `rel="next"`; the
   `Link` URL itself is never followed, so the token only goes to the configured origin. An entry
   with a `pull_request` key is a pull request, any other an issue.
-- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}`, both lists
+- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}` (`generated_at`
+  is the current UTC date), both lists
   ascending and de-duplicated, pretty-printed with a final newline, so the same answers give the
-  same bytes and a refresh that learns nothing new on the same day leaves the file untouched
+  same bytes and a refresh that learns nothing new on the same UTC day leaves the file untouched
   (`outcome: current`; otherwise `created` or `written`). The file is replaced only after every
   page was fetched.
 - Stdout is one JSON report (`status`, `snapshot`, `repository`, `generated_at`, `outcome`,
@@ -351,3 +353,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-06 | Bumped to `0.25`. Names `urzua check --base REF --actors FILE` under `urzua check`, the host identities `diff.decider-required` reads (`SPEC-2`). **Why:** `MILE-200`, `ADR-89` section 4. | **substantive** |
 > | 2026-11-06 | Bumped to `0.26`. `urzua export` and `urzua import` require `--format`; the `agdr` default is gone, so a bare `urzua export` says a format is required instead of reporting an unimplemented one. `urzua fix --help` says what is implemented (tier 1 and `--rebaseline`). **Why:** the second-pass review (`cli.md` #11): the defaults named a format that is not implemented and the help text no longer matched `fix`. | **substantive** |
 > | 2026-11-06 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-288) 6be4a09f031d -> c61774c9d4cb, `rust/crates/urzua-cli/tests/export_integration.rs` ffeb24dfae4a -> 188eded0b56a. Reason: main.rs#Command: export and import now require --format (the agdr default is removed) and the fix help text names what fix does; no change to any other command, flag or output; export_integration.rs: the bare `export` case now asserts the `--format` required error instead of the not-implemented one, and the `agdr` case is kept **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-06 | Bumped to `0.27`. `urzua refs refresh` dates the snapshot with the current UTC date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the date was the machine's local date. | **substantive** |

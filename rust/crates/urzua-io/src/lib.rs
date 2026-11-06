@@ -269,11 +269,14 @@ pub fn read_to_string(path: &Path) -> std::io::Result<String> {
     std::fs::read_to_string(path)
 }
 
-/// Today's date, `YYYY-MM-DD`, local time. The one piece of wall-clock I/O
-/// waiver expiry needs (ADR-0011) -- `urzua-core`'s expiry comparison itself
-/// takes this as a plain string argument and stays pure.
+/// Today's date, `YYYY-MM-DD`, in UTC, whatever the machine's time zone. The
+/// one piece of wall-clock I/O waiver expiry needs (ADR-0011) --
+/// `urzua-core`'s expiry comparison itself takes this as a plain string
+/// argument and stays pure. Every date comparison uses UTC: a waiver's
+/// `Expires`, a snapshot's date, and (through `now_unix`) a claim's age, so a
+/// waiver lapses at the same instant for every contributor and in CI.
 pub fn today() -> String {
-    chrono::Local::now()
+    chrono::Utc::now()
         .date_naive()
         .format("%Y-%m-%d")
         .to_string()
@@ -846,6 +849,46 @@ mod tests {
     /// Serializes PATH-stubbing tests -- `std::env::set_var("PATH", ...)` is
     /// process-wide and Rust runs tests in parallel threads.
     static PATH_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Runs only inside the child process `today_is_the_utc_date_in_every_time_zone`
+    /// starts, where `TZ` is set before the process reads the clock.
+    #[test]
+    fn today_child() {
+        if std::env::var_os("URZUA_TODAY_CHILD").is_none() {
+            return;
+        }
+        let before = chrono::Utc::now().date_naive().to_string();
+        let got = today();
+        let after = chrono::Utc::now().date_naive().to_string();
+        assert!(
+            got == before || got == after,
+            "TZ={:?}: today() gave {got}, the UTC date is {before}",
+            std::env::var("TZ")
+        );
+    }
+
+    /// `today()` is the UTC date whatever the machine's time zone is. Two zones
+    /// 26 hours apart cannot both share the UTC date, so one of them fails a
+    /// local-time implementation at any instant. Each zone runs in its own
+    /// process, since the C library reads `TZ` once.
+    #[test]
+    fn today_is_the_utc_date_in_every_time_zone() {
+        let exe = std::env::current_exe().unwrap();
+        for zone in ["Pacific/Kiritimati", "Etc/GMT+12", "UTC"] {
+            let out = Command::new(&exe)
+                .args(["tests::today_child", "--exact", "--nocapture"])
+                .env("TZ", zone)
+                .env("URZUA_TODAY_CHILD", "1")
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "TZ={zone}: {}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
 
     fn init_repo(dir: &Path) {
         let run = |args: &[&str]| {
