@@ -68,6 +68,21 @@ pub struct Config {
     /// committed file, and any other value is a load error here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub block_on: Option<String>,
+    /// The agent harness a repository installs (`ADR-89`, `MILE-198`): its
+    /// adapters, the agent-instructions file and which guardrails are on.
+    /// Absent installs and enables nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<crate::harness::HarnessDecl>,
+    /// Who may accept a record (`ADR-89` section 4). Kept as written: the
+    /// acceptance and protected-path guardrails that read it are built by
+    /// `MILE-200`, which also validates its content. Declared here so a gate
+    /// enabled without it is refused at load.
+    #[serde(
+        default,
+        deserialize_with = "keep_raw",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub authority: Option<yaml_serde::Value>,
 }
 
 /// The values `block_on` accepts (`SPEC-3`).
@@ -3155,6 +3170,14 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
                 "block_on '{value}' is not one of {}",
                 BLOCK_ON_VALUES.join(", ")
             ));
+        }
+    }
+    // A gate with nothing to enforce is not left to read as protection
+    // (`ADR-89` section 3).
+    if let Some(harness) = &config.harness {
+        let authority_declared = config.authority.as_ref().is_some_and(|a| !a.is_null());
+        if let Some(message) = crate::harness::authority_problem(harness, authority_declared) {
+            return bad(message);
         }
     }
     for rule in crate::rules::rule_ids_where(|d| d.requires_override_log) {

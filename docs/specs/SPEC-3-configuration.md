@@ -1,5 +1,5 @@
 ---
-Version: '0.95'
+Version: '0.96'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -827,6 +827,52 @@ rules:
   `override_log` without the rule is allowed: the hook still records overrides, and nothing reports them.
 - The hook (`SPEC-8`) is the only other reader of the key: it takes the top-level `override_log:` line
   from `.urzua/config.yaml`, and when it is absent it says the override is not recorded.
+
+## The agent harness: `harness` and `authority`
+
+A top-level `harness` declares the agent harness bundle a repository installs (`ADR-89`, `MILE-198`;
+`urzua harness`, `SPEC-19`; the request, verdict and adapter layout are `SPEC-24`). An absent key installs
+and enables nothing: `urzua harness install` with no `--adapter` writes nothing and says so in a notice.
+
+```yaml
+harness:
+  adapters: [claude-code]            # installed when --adapter is not given
+  instructions_file: AGENTS.md       # carries the marked block; the engine assumes no file name
+  guardrails:
+    editor-hook:    {enabled: true, on_unjudged: allow}   # allow | deny
+    session-start:  {enabled: true}
+    post-command:   {enabled: false}
+    acceptance:     {enabled: false, on_unjudged: deny}
+    protected-paths: {enabled: false, on_unjudged: deny}
+```
+
+- **`adapters`** is a list of adapter names, each a directory of the bundle embedded in the binary
+  (`urzua harness adapters` lists them). An adapter this build does not embed is refused at install.
+- **`instructions_file`** is a repository-relative path. The install writes one block between
+  `<!-- urzua-harness:begin -->` and `<!-- urzua-harness:end -->`, adds the markers once at the end of the
+  file when absent, never touches the text outside them and, run twice, yields identical bytes. Without
+  the key no block is written and the install says so.
+- **`guardrails`** names which guardrails are on: a guardrail is on only when named with `enabled: true`.
+  The names are `editor-hook`, `post-command`, `session-start`, `acceptance` and `protected-paths`. Only
+  `editor-hook`, `acceptance` and `protected-paths` take `on_unjudged`: `allow` (the default for
+  `editor-hook`; the edit proceeds with a loud message, `ADR-71`) or `deny` (the default for the other two,
+  because an unjudged gate is not a gate; an agent's edit is refused while the guardrail cannot judge, a
+  person's is allowed). A denying guardrail that cannot judge refuses an agent's edit to the protected
+  paths too, including this file; a person repairs it by editing outside the agent harness (a plain editor
+  or a terminal), where no hook runs. `urzua doctor` and the verdict's message say so.
+- **A key or guardrail the build does not know, and a guardrail the chosen adapter cannot provide, are
+  reported, never skipped.** The configuration still loads with an unknown key or guardrail, so a typo does
+  not stop every command; `urzua harness install` refuses (exit 2, nothing written) and `urzua doctor`
+  warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`,
+  `acceptance` and `protected-paths` until their milestones land) is installed around and reported by
+  `install`, `status` and `doctor`. A value of the wrong type (`enabled: yes-please`, `on_unjudged:
+  sometimes`, `adapters: claude-code`) is a load error.
+- **`authority`** is the top-level table that says who may accept a record (`ADR-89` section 4,
+  `MILE-200`). Until that milestone it is read as written and not validated. `acceptance` or
+  `protected-paths` enabled with no `authority` key is a load error (exit 2) naming the guardrail: a gate
+  with nothing to enforce is not left to read as protection.
+- The editor hook also reads `block_on` and `override_log` (above); the harness cores read them from this
+  file, so the shell scripts that used to read them by line are no longer needed.
 
 ## Editor hook blocking: `block_on`
 
@@ -1919,3 +1965,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.93`. Documents `roadmap.work_types` (`MILE-196`): the optional list of record types that are work, its effect on `urzua roadmap`, and its `roadmap: ...` load errors (an unknown, repeated or blank name, and an empty list). **Why:** `ADR-82`'s Amendment of 2026-11-05, accepted by the maintainer. | **substantive** |
 > | 2026-11-05 | Bumped to `0.94`. Documents the `verb_claims` option of `claim.status-agreement` (`MILE-197`): `false` turns the closing-verb reading off so only `closes` is a claim; default `true`; a load error without `closes` (either value) or on any other rule; a notice when set without `strict`. **Why:** `ADR-88`, accepted by the maintainer. | **substantive** |
 > | 2026-11-05 | Bumped to `0.95`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.96`. Documents the top-level `harness` key (`adapters`, `instructions_file`, `guardrails` with `enabled` and `on_unjudged`) and `authority`: an absent key installs and enables nothing, an unknown key or guardrail and a guardrail no chosen adapter provides are reported and never skipped, `acceptance` or `protected-paths` enabled with no `authority` is a load error, and `on_unjudged: deny` refuses an agent and allows a person. **Why:** `MILE-198`, decided in `ADR-89` section 3. | **substantive** |

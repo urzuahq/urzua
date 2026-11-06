@@ -269,6 +269,10 @@ pub struct CheckArgs {
     pub base: Option<String>,
     pub fail_on: Option<urzua_core::config::FailOn>,
     pub stdin_path: Option<PathBuf>,
+    /// The proposed content for `stdin_path`, when the caller has it already
+    /// (`urzua harness run edit` judges in process); otherwise it is read from
+    /// stdin.
+    pub proposed: Option<String>,
     /// `--rules`: empty means every declared rule.
     pub rules: Vec<String>,
     /// Notices the invoking command adds to the report (`audit`'s deprecation).
@@ -318,12 +322,30 @@ fn validate_selection(
     Ok(Some(out))
 }
 
+/// Judges one record's proposed content in process, as `check --stdin-path`
+/// does, for the harness cores. The path is relative to the repository root.
+pub(crate) fn judge_proposed(
+    config_path: Option<PathBuf>,
+    path: PathBuf,
+    content: String,
+) -> Result<CheckReport, Failure> {
+    execute(
+        config_path,
+        CheckArgs {
+            stdin_path: Some(path),
+            proposed: Some(content),
+            ..Default::default()
+        },
+    )
+}
+
 fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
     let CheckArgs {
         paths,
         base,
         fail_on,
         stdin_path,
+        proposed,
         rules: requested_rules,
         extra_notices,
     } = args;
@@ -333,7 +355,13 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
                 .into(),
         );
     }
-    let opened = open_session(&paths, config_path, base.as_deref(), stdin_path.as_deref())?;
+    let opened = open_session(
+        &paths,
+        config_path,
+        base.as_deref(),
+        stdin_path.as_deref(),
+        proposed,
+    )?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;
     let scope = narrow(
@@ -469,6 +497,7 @@ fn open_session(
     config_path: Option<PathBuf>,
     base: Option<&str>,
     stdin_path: Option<&Path>,
+    proposed: Option<String>,
 ) -> Result<Opened, Failure> {
     let mut requested_scopes = Vec::new();
     let mut changed = None;
@@ -506,7 +535,7 @@ fn open_session(
     })?;
     let mut session = session;
     let prospective = match stdin_path {
-        Some(p) => Some(propose(&mut session, p)?),
+        Some(p) => Some(propose(&mut session, p, proposed)?),
         None => None,
     };
     if let Some(p) = &prospective {
@@ -523,11 +552,21 @@ fn open_session(
 /// Reads the proposed content from stdin and puts it in the session in place of
 /// the record's on-disk copy, adding the record (and its path) when the file
 /// does not exist yet. A path no record type governs is a could-not-run.
-fn propose(session: &mut Session, stdin_path: &Path) -> Result<Prospective, String> {
+fn propose(
+    session: &mut Session,
+    stdin_path: &Path,
+    proposed: Option<String>,
+) -> Result<Prospective, String> {
     let rel = crate::discovery::relative_to_root(&session.repo_root, stdin_path)?;
-    let mut content = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut content)
-        .map_err(|e| format!("could not read the proposed content from stdin: {e}"))?;
+    let content = match proposed {
+        Some(content) => content,
+        None => {
+            let mut content = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut content)
+                .map_err(|e| format!("could not read the proposed content from stdin: {e}"))?;
+            content
+        }
+    };
     let record = crate::discovery::parse_prospective_record(&session.config, &rel, &content)?;
     session.records.retain(|r| r.path != rel);
     session.records.push(record);
