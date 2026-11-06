@@ -188,4 +188,10 @@ inst >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'not the pinned' "$tmp/err.txt"; }
 expect "install: a binary that reports another version fails" $?
 
+# A reported version that merely contains the pinned one as a substring is another version.
+mk_release 11.2.35
+inst >/dev/null 2>"$tmp/err.txt"; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'not the pinned' "$tmp/err.txt"; }
+expect "install: a reported version that only contains the pinned one fails" $?
+
 [ "$fails" -eq 0 ] && echo "urzua-gate: all tests passed" || { echo "urzua-gate: $fails test(s) failed" >&2; exit 1; }

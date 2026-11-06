@@ -368,3 +368,121 @@ fn a_bad_value_or_a_rule_that_does_not_take_it_fails_to_load() {
         "{v}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// embodiment.locator-promotion-candidate: the second rule that takes the option.
+// A promotion candidate is a locator cited by two or more records, so the unchanged
+// citers still count toward the candidate; the finding sits on a changed citer.
+// ---------------------------------------------------------------------------
+
+const PROMO: &str = "embodiment.locator-promotion-candidate";
+
+fn promo_config(scope: &str) -> String {
+    config("").replace(
+        &format!("  {RULE}:\n    level: warn\n    back_pointer_paths: [src]\n"),
+        &format!("  {PROMO}:\n    level: warn\n{scope}"),
+    )
+}
+
+fn promo_findings(v: &serde_json::Value) -> Vec<&serde_json::Value> {
+    v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == PROMO)
+        .collect()
+}
+
+#[test]
+fn the_promotion_nudge_without_the_option_reports_the_shared_locator_on_every_run() {
+    let dir = fixture("promo-plain", &promo_config(""));
+    let (_, v) = urzua(&dir, &["check"]);
+    let found = promo_findings(&v);
+    assert_eq!(found.len(), 1, "{v}");
+    assert_eq!(found[0]["file"], PATH_1, "{v}");
+    let p = &execution(&v, PROMO)["population"];
+    assert_eq!(p["examined"], 3, "{p}");
+    assert!(
+        p.as_object().unwrap().get("deferred_by_scope").is_none(),
+        "{p}"
+    );
+}
+
+#[test]
+fn the_promotion_nudge_with_scope_changed_says_nothing_on_a_plain_check_and_why() {
+    let dir = fixture("promo-scope-plain", &promo_config("    scope: changed\n"));
+    let (code, v) = urzua(&dir, &["check"]);
+    assert_eq!(code, 0, "{v}");
+    assert!(promo_findings(&v).is_empty(), "{v}");
+    let p = &execution(&v, PROMO)["population"];
+    assert_eq!(p["examined"], 0, "{p}");
+    assert_eq!(p["deferred_by_scope"], 3, "{p}");
+    let notices: Vec<_> = v
+        .get("notices")
+        .and_then(|n| n.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|n| n["subject"] == PROMO)
+        .collect();
+    assert_eq!(notices.len(), 1, "{v}");
+    assert!(notices[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("scope: changed"));
+}
+
+#[test]
+fn the_promotion_nudge_with_scope_changed_fires_on_the_changed_citer_and_names_all_citers() {
+    let dir = fixture("promo-scope-changed", &promo_config("    scope: changed\n"));
+    std::fs::write(
+        dir.join(PATH_2),
+        format!("{}\nMore.\n", record(2, Some("code:src/a.rs"))),
+    )
+    .unwrap();
+    let (code, v) = urzua(&dir, &["check", "--base", "HEAD"]);
+    assert_eq!(code, 0, "{v}");
+    let found = promo_findings(&v);
+    assert_eq!(found.len(), 1, "{v}");
+    assert_eq!(
+        found[0]["file"], PATH_2,
+        "the finding sits on the changed record: {v}"
+    );
+    let message = found[0]["message"].as_str().unwrap();
+    for path in [PATH_1, PATH_2, "docs/adr/ADR-3-c.md"] {
+        assert!(message.contains(path), "{message}");
+    }
+    let p = &execution(&v, PROMO)["population"];
+    assert_eq!(p["examined"], 1, "{p}");
+    assert_eq!(p["deferred_by_scope"], 2, "{p}");
+}
+
+#[test]
+fn the_promotion_nudge_with_scope_changed_is_silent_when_the_changed_record_cites_no_shared_locator(
+) {
+    let dir = fixture(
+        "promo-scope-unrelated",
+        &promo_config("    scope: changed\n"),
+    );
+    std::fs::write(
+        dir.join("docs/adr/ADR-4-d.md"),
+        format!("{}\nMore.\n", record(4, None)),
+    )
+    .unwrap();
+    let (_, v) = urzua(&dir, &["check", "--base", "HEAD"]);
+    assert!(promo_findings(&v).is_empty(), "{v}");
+}
+
+#[test]
+fn the_promotion_nudge_with_scope_changed_does_not_fire_for_a_locator_with_one_citer() {
+    let dir = fixture("promo-scope-single", &promo_config("    scope: changed\n"));
+    std::fs::write(dir.join(PATH_2), record(2, Some("code:src/only-here.rs"))).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "ADR-2 cites its own file"]);
+    std::fs::write(
+        dir.join(PATH_2),
+        format!("{}\nMore.\n", record(2, Some("code:src/only-here.rs"))),
+    )
+    .unwrap();
+    let (_, v) = urzua(&dir, &["check", "--base", "HEAD"]);
+    assert!(promo_findings(&v).is_empty(), "{v}");
+}

@@ -127,3 +127,10 @@ jobs:
           # The authority table (ADR-89 section 4): the pull request's author and
           # current approvers, for diff.decider-required.
           actors: "true"
+
+      # The installed agent-harness bundle (hooks, commands, lock) has not drifted from
+      # what `urzua harness install` generates: a deleted hook entry or an edited
+      # translator fails here, not only in a cargo test.
+      - name: urzua harness status (no drift)
+        working-directory: .
+        run: rust/target/release/urzua harness status
