@@ -26,6 +26,12 @@ struct ActionEntry {
 struct RuleEntry {
     id: String,
     description: String,
+    /// What the rule's verdict on a record depends on (`ADR-90`): whether it
+    /// may list the `scope` option.
+    judges: &'static str,
+    /// The options the rule accepts, by name; omitted when it takes none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    options: Vec<&'static str>,
     actions: Vec<ActionEntry>,
 }
 
@@ -51,6 +57,8 @@ pub fn run() -> ExitCode {
         .map(|d| RuleEntry {
             id: d.id.to_string(),
             description: d.description.to_string(),
+            judges: d.judges.as_str(),
+            options: d.options.to_vec(),
             actions: d
                 .actions
                 .iter()

@@ -23,6 +23,7 @@ mod diff_scope;
 mod discovery;
 mod file_texts;
 mod gate;
+mod harness;
 mod pins;
 mod session;
 
@@ -188,6 +189,20 @@ enum Command {
         dry_run: bool,
     },
 
+    /// Install and run the agent harness bundle: hook entries, a translator for
+    /// the agent, and the guardrail cores they call (`ADR-89`).
+    ///
+    /// The bundle is embedded in this binary and versioned with it. `install`
+    /// writes it and `.urzua/harness.lock`; `status` compares the lock with the
+    /// files (exit 1 on drift); `update` rewrites files a person has not changed;
+    /// `uninstall` removes what the lock says is unchanged. `run` is what the
+    /// agent's hooks call: it reads a neutral request on stdin and prints a
+    /// verdict. Nothing is enabled unless `harness.guardrails` names it.
+    Harness {
+        #[command(subcommand)]
+        target: HarnessTarget,
+    },
+
     /// Report on the tool's own configuration and invocation health: is
     /// there a config, does it parse, is it wired into a real gate. An
     /// unrecognized config key is an error here, not a warning.
@@ -260,6 +275,56 @@ enum Command {
         #[arg(long)]
         reason: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum HarnessTarget {
+    /// Write the bundle's files for an adapter, merge its hook entries into the
+    /// agent's project settings, write the marked block into the instructions
+    /// file `harness.instructions_file` names, and write `.urzua/harness.lock`.
+    /// Never overwrites a file that differs; refuses a settings file it cannot
+    /// merge into (exit 2).
+    Install {
+        /// The adapter to install. Defaults to `harness.adapters`.
+        #[arg(long)]
+        adapter: Option<String>,
+        /// List what would change and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Compare the lock with the files, the hook entries, the instructions
+    /// block and the binary: missing, modified and out-of-date. Exit 1 on any.
+    Status,
+    /// Rewrite the files whose hash still matches the lock; report a file a
+    /// person changed and leave it unless `--force`.
+    Update {
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Remove the files whose hash matches the lock, take the hook entries and
+    /// the marked block out of the shared files, report what a person changed
+    /// and leave it, and delete the lock last.
+    Uninstall {
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// List the adapters this binary embeds.
+    Adapters,
+    /// Run a guardrail core: a neutral request on stdin, a verdict on stdout.
+    Run {
+        #[command(subcommand)]
+        event: HarnessRun,
+    },
+}
+
+#[derive(Subcommand)]
+enum HarnessRun {
+    /// Judge a proposed edit to a record (the editor hook).
+    Edit,
+    /// Check, at the start of a session, that the harness can do its job.
+    SessionStart,
 }
 
 #[derive(Subcommand)]
@@ -416,6 +481,23 @@ fn main() -> ExitCode {
         } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => commands::init::run(dry_run),
+        Command::Harness { target } => match target {
+            HarnessTarget::Install { adapter, dry_run } => {
+                harness::run_install(cli.config, adapter, dry_run)
+            }
+            HarnessTarget::Status => harness::run_status(cli.config),
+            HarnessTarget::Update { force, dry_run } => {
+                harness::run_update(cli.config, force, dry_run)
+            }
+            HarnessTarget::Uninstall { dry_run } => harness::run_uninstall(cli.config, dry_run),
+            HarnessTarget::Adapters => harness::run_adapters(),
+            HarnessTarget::Run {
+                event: HarnessRun::Edit,
+            } => harness::run_edit(cli.config),
+            HarnessTarget::Run {
+                event: HarnessRun::SessionStart,
+            } => harness::run_session_start(cli.config),
+        },
         Command::Doctor => commands::doctor::run(cli.config),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(cli.config, apply),

@@ -38,6 +38,44 @@ pub(super) fn scoped_census_records<'a, T>(
     )
 }
 
+/// A rule's `scope: changed` applied to one run (`ADR-90`): the records the
+/// rule judges are the ones the diff adds or changes, and none when there is no
+/// diff. Built by [`changed_only`] only for a rule that declares the option, so
+/// a rule that does not has no value of this type and cannot defer anything.
+/// The set is the diff's *changed* paths, never its dependents: a nudge is not
+/// a defect a change caused in a record it did not touch.
+pub struct ChangedOnly {
+    changed: Option<HashSet<PathBuf>>,
+}
+
+impl ChangedOnly {
+    /// Whether `record` is left unjudged: it is not in the changed set, or
+    /// there is no diff at all.
+    pub fn defers(&self, record: &Record) -> bool {
+        self.changed
+            .as_ref()
+            .is_none_or(|changed| !changed.contains(&record.path))
+    }
+}
+
+/// `scope: changed` for `rule`, when the repository declared it. `changed_paths`
+/// is the run's changed set (`None` without `--base`; the one proposed record
+/// for `--stdin-path`).
+pub fn changed_only(
+    config: &Config,
+    rule: &str,
+    changed_paths: Option<&[PathBuf]>,
+) -> Option<ChangedOnly> {
+    config
+        .rules
+        .get(rule)
+        .filter(|s| s.level != crate::config::RuleLevel::Off)
+        .and_then(|s| s.scope)
+        .map(|crate::config::RuleScope::Changed| ChangedOnly {
+            changed: changed_paths.map(|p| p.iter().cloned().collect()),
+        })
+}
+
 /// One `(record, field)` candidate per field a record's type declares in
 /// `fields_by_type` (`BUG-105`): the same construction four rules duplicated,
 /// against `HashMap`s of either `Vec<String>` or `HashSet<String>`.

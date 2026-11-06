@@ -1,0 +1,16 @@
+id: a-scope-changed-nudge-fires-only-on-a-changed-record
+corpus: corpus-g
+# ADR-0002 is edited; ADR-0003 cites the same file and ADR-0001 cites another,
+# and neither is changed. A rule that declares `scope: changed` (`ADR-90`) judges
+# only the record the diff touches, so a dependent that shares a locator with a
+# changed record is not nudged, and the exempt variant carries no action.
+commits:
+  - write:
+      records/ADR-0002-cache.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs\n---\n# ADR-0002 — Cache\n\nThe cache, edited.\n"
+invocation: [--config, .urzua/nudge.yaml, check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.locator-on-back-pointer-path, file: records/ADR-0002-cache.md, no_suggested_action: true}
+expect_no_findings:
+  - {rule: embodiment.locator-on-back-pointer-path, file: records/ADR-0003-spool.md}
+  - {rule: embodiment.locator-on-back-pointer-path, file: records/ADR-0001-queue.md}

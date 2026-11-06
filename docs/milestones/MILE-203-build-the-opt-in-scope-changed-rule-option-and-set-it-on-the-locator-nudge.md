@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6PYDB5CJ8TYKF2ZF9K004JW
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-90
 Blocked-on: null
+Realized-by: code:rust/crates/urzua-core/src/rules/shared.rs, code:rust/crates/urzua-core/src/rules/locator_mechanism.rs, code:rust/crates/urzua-core/src/rules/table.rs, code:rust/crates/urzua-core/src/rules/waiver.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/commands/check.rs, code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/scope_changed_integration.rs, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-3-configuration.md
 ---
 # 203 — Build the opt-in scope: changed rule option and set it on the locator nudge
 
@@ -39,3 +40,4 @@ Sequence this after PR #357, which also edits `rules/table.rs` and `locator_mech
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** Maintainer decision, 2026-11-05, recorded in `ADR-90` (Proposed). | **substantive** |
 > | 2026-11-05 | Amended after independent review of PR #360: separate `deferred_by_scope` counter, scalar validation, slot units, cross-record rules, sequencing after #357. **Why:** Reusing `out_of_scope` would make `config.scope-matches-nothing` warn on every plain `check`. | **substantive** |
+> | 2026-11-05 | Built and marked Done. `scope: changed` loads as a rule option (`RuleScope`, one value; a rule that does not list it, and any other value, fail to load); the rule table marks each rule `one-record`, `cross-record`, `changed-set` or `not-record-level` and only `embodiment.locator-on-back-pointer-path` lists `scope`; `deferred_by_scope` is a separate population counter (present only when non-zero) that `config.scope-matches-nothing` does not read; one `info` notice per rule says how many slots were not judged and why; dependents are not changed; `--stdin-path` treats the proposed record as changed; `waiver.matches-nothing` skips a waiver on such a rule. `.urzua/config.yaml` sets it on the locator nudge. `SPEC-2` is `0.107` and `SPEC-3` `0.95`. **Why:** the delivering change for `ADR-90`; the `Done means` above are each a test in `scope_changed_integration.rs`, `config.rs`, `report.rs`, `table.rs` and `waiver.rs`. | **substantive** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.12'
+Version: '0.13'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -85,6 +85,46 @@ the kind of gap this project's own history keeps finding elsewhere (a decision l
 spec describing its mechanism getting updated in the same pass — see `MILE-90`'s own `Why` for the
 same pattern applied to a different feature area).
 
+## The installable harness bundle (`ADR-89`, `MILE-198`)
+
+The mechanisms above are this repository's own. `urzua harness` ships the same kind of mechanism to a
+repository that adopts urzua, as one versioned bundle embedded in the binary, with the guardrail logic in
+the engine and an adapter per agent that only translates. The contract is `SPEC-24`; the configuration is
+`SPEC-3` ("The agent harness").
+
+- **Commands.** `urzua harness install [--adapter NAME] [--dry-run]` writes the adapter's files, merges
+  its hook entries into the agent's project settings file, writes the marked block into
+  `harness.instructions_file` and writes `.urzua/harness.lock`. `status` compares the lock with the files,
+  the merged entries, the block and the binary (missing, modified, out-of-date) and exits 1 on any drift,
+  so a CI step can run it; it is a separate step and not part of `urzua check`. `update` rewrites an item
+  whose hash still matches the lock and reports, without overwriting, one a person changed unless
+  `--force`. `uninstall` removes what matches the lock, takes only urzua's hook entries and the marked
+  block out of the shared files, reports and leaves what a person changed, and deletes the lock last.
+  `adapters` lists the adapter directories of the bundle.
+- **Shared files are merged, never replaced.** The settings merge adds the bundle's entries, keyed by
+  event, matcher and handler, and leaves every other key and entry as written; a second install changes
+  nothing. A file that is not valid JSON, or that holds an entry with a key of ours that a person edited,
+  is refused (`not-run`, exit 2) and the entry named. A settings file that is not in the two-space JSON
+  form is re-indented when written, and the install says so; its keys and entries are unchanged. The local
+  settings file and the user-level settings are neither read nor written, and `status` says so.
+- **The cores.** `urzua harness run edit` judges a proposed edit to a record as `ADR-69` and `ADR-78`
+  describe (every enabled rule that can judge one record, `block_on`, the named override and `override_log`)
+  and replaces the `jq`, `bash` and `python3` chain: no binary, no `jq` and an unreadable payload are
+  verdicts the engine or the translator states. `urzua harness run session-start` reports, at the start of a
+  session, a binary that is not on `PATH`, a bundle older or newer than the binary, a translator
+  interpreter that is not on `PATH`, an unset project-directory variable the adapter expects, a hook entry
+  that is not wired and a git hook that is not wired (`urzua doctor`, `MILE-179`).
+- **An unset project-directory variable is a stated verdict.** The adapter's command finds the translator
+  from the repository root and the translator takes the project directory from the request's `cwd`, so the
+  command no longer becomes `python3 -I "/scripts/hooks/..."` and exits 2, which blocks every edit with no
+  reason.
+- **Vendor neutrality.** The engine source names no agent vendor. A test scans every `src/` directory for
+  vendor names; the bundle directory, where an adapter names its vendor by design, is outside `src/`.
+- **Not yet.** This repository still runs `scripts/hooks/*` (`MILE-204` cuts it over). The acceptance and
+  protected-path guardrails, the generated drafting commands and the post-command check are `MILE-200`,
+  `MILE-199` and `MILE-202`; the agent-instructions block states what an agent must not do and is advisory,
+  only the verdicts bind.
+
 ## What's deliberately not built
 
 - **Making `AGENTS.md` itself a governed record type** — it would need a home directory, a header,
@@ -137,3 +177,4 @@ same pattern applied to a different feature area).
 > | 2026-11-04 | `AGENTS.md`'s Status rule now says who sets it: the PR that fully delivers a milestone sets its `Realized-by` and `Status: Done` in that PR (`status.delivery-agreement` fails when they disagree), while an ADR's or RFC's `Status` stays the maintainer's; `Version` `0.8` -> `0.9`. **Why:** maintainer decision of 2026-11-04, `MILE-183`: about thirty built milestones still read `Planned` because agents were told never to move a `Status`. | **substantive** |
 > | 2026-11-05 | `AGENTS.md`'s "The review loop" now names the REST check-runs endpoint (`gh api repos/{owner}/{repo}/commits/<sha>/check-runs`) for polling CI instead of `gh pr checks`; `Version` `0.10` -> `0.11`. **Why:** `gh pr checks` uses GraphQL, which agent sandboxes can block. | **substantive** |
 > | 2026-11-05 | Bumped to `0.12`. `AGENTS.md` catches up with the rules decided since it was last edited: seven record types with `condition` (`SPEC-23`); `Realized-by` as the one evidence field and the retired `Regression-test` (`ADR-84`); permanent waivers with a `Category` (`ADR-86`); the `info` level (`ADR-87`); the editor hook, `block_on`, the override log and never overriding it yourself (`ADR-78`); re-pins with an honest reason listed in the PR body (`SPEC-8`); amending an Accepted decision through a dated `## Amendment` section; and `make ci` runs `make records`, not `urzua check docs/`. **Why:** a review of the agent harness found the file silent on these, so an agent hitting a hook block or a re-pin had no instruction. | **substantive** |
+> | 2026-11-06 | Bumped to `0.13`. Documents the installable harness bundle: `urzua harness install`, `status`, `update`, `uninstall` and `adapters`, the settings-merge and instructions-block rules, the `run edit` and `run session-start` cores, the stated verdict for an unset project-directory variable, and the vendor-neutral engine; this repository still runs `scripts/hooks` until `MILE-204`. **Why:** `MILE-198`, decided in `ADR-89`. | **substantive** |

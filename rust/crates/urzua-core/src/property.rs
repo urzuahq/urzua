@@ -218,6 +218,8 @@ mod tests {
                 override_log: None,
                 block_on: None,
                 attestation: Default::default(),
+                harness: None,
+                authority: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -351,6 +353,8 @@ mod tests {
             override_log: None,
             block_on: None,
             attestation: Default::default(),
+            harness: None,
+            authority: None,
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -611,6 +615,8 @@ mod tests {
                 override_log: None,
                 block_on: None,
                 attestation: Default::default(),
+                harness: None,
+                authority: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

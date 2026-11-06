@@ -74,6 +74,21 @@ pub struct Config {
     /// today's behaviour.
     #[serde(default, skip_serializing_if = "AttestationDecl::is_default")]
     pub attestation: AttestationDecl,
+    /// The agent harness a repository installs (`ADR-89`, `MILE-198`): its
+    /// adapters, the agent-instructions file and which guardrails are on.
+    /// Absent installs and enables nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<crate::harness::HarnessDecl>,
+    /// Who may accept a record (`ADR-89` section 4). Kept as written: the
+    /// acceptance and protected-path guardrails that read it are built by
+    /// `MILE-200`, which also validates its content. Declared here so a gate
+    /// enabled without it is refused at load.
+    #[serde(
+        default,
+        deserialize_with = "keep_raw",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub authority: Option<yaml_serde::Value>,
 }
 
 /// The `attestation` key (`ADR-89` section 5, `SPEC-3`).
@@ -178,6 +193,41 @@ impl std::fmt::Display for LocatorKind {
     }
 }
 
+/// The value of the `scope` rule option (`ADR-90`): the rule judges only the
+/// records a `--base` diff adds or changes. `changed` is the one value; there
+/// is no `scope: all`, because omitting the option is that. Any other value is
+/// refused at load, naming `changed`. `scope` is a scalar, which the
+/// list-option reader (`option_field`) never sees, so the value is validated
+/// here and the rule's acceptance of the option at load.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RuleScope {
+    Changed,
+}
+
+impl<'de> Deserialize<'de> for RuleScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = yaml_serde::Value::deserialize(deserializer)?;
+        match value.as_str() {
+            Some("changed") => Ok(RuleScope::Changed),
+            _ => {
+                let shown = match &value {
+                    yaml_serde::Value::String(s) => format!("'{s}'"),
+                    other => yaml_serde::to_string(other)
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_else(|_| "?".to_string()),
+                };
+                Err(serde::de::Error::custom(format!(
+                    "rule option 'scope' is {shown}; its only value is 'changed' (omit the option to judge every record)"
+                )))
+            }
+        }
+    }
+}
+
 /// A rule's options as a typed value, built from its `RuleSetting` in one
 /// place (`crate::rules::options`). Implemented per rule that reads options.
 pub trait RuleOpts: Sized {
@@ -238,6 +288,12 @@ impl Config {
 #[serde(remote = "Self", deny_unknown_fields)]
 pub struct RuleSetting {
     pub level: RuleLevel,
+    /// `changed`: the rule judges only the records a `--base` diff adds or
+    /// changes, none on a plain `check` (`ADR-90`). Only meaningful to a rule
+    /// whose verdict on a record depends on that record alone; declaring it on
+    /// any other rule is a load-time error. Omitted means every record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<RuleScope>,
     /// Statuses a reference's target may not be in. Only meaningful to
     /// `pointer.target-status`; declaring it on any other rule is a load-time
     /// error, because a silently-ignored option is a check that never fires.
@@ -2173,6 +2229,15 @@ pub fn parse_with_document_models(
                 });
             }
         }
+        // `scope` is a scalar, which `option_field` does not read, so its
+        // acceptance is checked here (`ADR-90`). The value was validated when
+        // the setting was read.
+        if setting.scope.is_some() && !crate::rules::rule_accepts_option(name, "scope") {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "scope".to_string(),
+            });
+        }
         if setting.non_reference_field.is_some()
             && !crate::rules::rule_accepts_option(name, "non_reference_field")
         {
@@ -3149,6 +3214,14 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             "attestation.require_verified: true cannot be combined with identity: asserted, which takes --by as given and verifies nothing"
                 .to_string(),
         );
+    }
+    // A gate with nothing to enforce is not left to read as protection
+    // (`ADR-89` section 3).
+    if let Some(harness) = &config.harness {
+        let authority_declared = config.authority.as_ref().is_some_and(|a| !a.is_null());
+        if let Some(message) = crate::harness::authority_problem(harness, authority_declared) {
+            return bad(message);
+        }
     }
     for rule in crate::rules::rule_ids_where(|d| d.requires_override_log) {
         if config.override_log.is_none()
@@ -5149,6 +5222,96 @@ mod exclude_files_tests {
     }
 }
 
+/// `ADR-90`, `MILE-203`: the `scope` rule option is a scalar, so it is
+/// validated by its own checks, not by the list-option reader.
+#[cfg(test)]
+mod scope_option_tests {
+    use super::*;
+
+    const BASE: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n";
+    const LOCATOR: &str = "embodiment.locator-on-back-pointer-path";
+
+    fn locator(extra: &str) -> String {
+        format!("{BASE}  {LOCATOR}:\n    level: info\n    back_pointer_paths: [src]\n{extra}")
+    }
+
+    #[test]
+    fn scope_changed_loads_on_a_rule_that_lists_it() {
+        let config = parse(&locator("    scope: changed\n")).unwrap();
+        assert_eq!(config.rules[LOCATOR].scope, Some(RuleScope::Changed));
+        let without = parse(&locator("")).unwrap();
+        assert_eq!(without.rules[LOCATOR].scope, None);
+    }
+
+    #[test]
+    fn a_value_other_than_changed_is_refused_naming_changed() {
+        for value in [
+            "all",
+            "\"Changed\"",
+            "3",
+            "true",
+            "[changed]",
+            "{a: b}",
+            "\"\"",
+        ] {
+            let err = parse(&locator(&format!("    scope: {value}\n")))
+                .expect_err(value)
+                .to_string();
+            assert!(err.contains("'changed'"), "{value}: {err}");
+            assert!(err.contains("scope"), "{value}: {err}");
+        }
+        // A key with no value is refused like every other option.
+        let err = parse(&locator("    scope:\n")).unwrap_err().to_string();
+        assert!(err.contains("scope"), "{err}");
+    }
+
+    #[test]
+    fn scope_on_a_rule_that_does_not_list_it_is_refused_at_load() {
+        // A config-level rule, a files rule, a diff rule, a run rule, the
+        // directory-anchored rule, a cross-record rule and the two rules that
+        // already judge only the changed set.
+        for rule in [
+            "type.dir-matches-nothing",
+            "claim.status-agreement",
+            "diff.source-requires-record",
+            "waiver.matches-nothing",
+            "config.scope-matches-nothing",
+            "filename.identity-pattern",
+            "identity.collision",
+            "pointer.resolution",
+            "header.required-fields",
+        ] {
+            let cfg = format!("{BASE}  {rule}:\n    level: warn\n    scope: changed\n");
+            let err = parse(&cfg).expect_err(rule).to_string();
+            assert!(
+                err.contains(&format!("rule '{rule}' does not take the option 'scope'")),
+                "{rule}: {err}"
+            );
+        }
+    }
+
+    /// The two rules that already judge only the changed set refuse the option
+    /// (they need their own declarations to load, so the table is what is read).
+    #[test]
+    fn the_rules_that_already_judge_only_the_changed_set_do_not_take_scope() {
+        for rule in [
+            "status.transition-allowed",
+            "revision-log.version-bump-required",
+        ] {
+            assert!(!crate::rules::rule_accepts_option(rule, "scope"), "{rule}");
+        }
+    }
+
+    #[test]
+    fn scope_survives_a_serialization_round_trip() {
+        let config = parse(&locator("    scope: changed\n")).unwrap();
+        let yaml = yaml_serde::to_string(&config.rules[LOCATOR]).unwrap();
+        assert!(yaml.contains("scope: changed"), "{yaml}");
+        let again: RuleSetting = yaml_serde::from_str(&yaml).unwrap();
+        assert_eq!(again.scope, Some(RuleScope::Changed));
+    }
+}
+
 #[cfg(test)]
 mod option_table_tests {
     use super::*;
@@ -5176,6 +5339,7 @@ mod option_table_tests {
         "claim_max_age_days",
         "boundaries",
         "ignore_marker",
+        "scope",
     ];
 
     /// The option names `RuleSetting` accepts, read from the derived

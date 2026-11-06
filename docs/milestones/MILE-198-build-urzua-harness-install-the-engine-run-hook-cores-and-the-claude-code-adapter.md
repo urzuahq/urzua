@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6NX35EBXRAW2CHPRYHBZ6AF
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-89
 Blocked-on: null
+Realized-by: code:rust/crates/urzua-core/src/harness.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-cli/src/harness/mod.rs, code:rust/crates/urzua-cli/src/harness/run.rs, code:rust/crates/urzua-cli/src/harness/settings.rs, code:rust/crates/urzua-cli/src/harness/block.rs, code:rust/crates/urzua-cli/src/harness/lock.rs, code:rust/crates/urzua-cli/src/harness/bundle.rs, code:rust/crates/urzua-cli/src/harness/json.rs, code:rust/crates/urzua-cli/build.rs, code:rust/crates/urzua-cli/bundle/claude-code/files/.claude/hooks/urzua-claude-code.py, code:rust/crates/urzua-cli/bundle/claude-code/settings.fragment.json, code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/harness_integration.rs, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-19-repository-agent-guardrails.md, spec:docs/specs/SPEC-24-the-harness-request-verdict-and-adapter-layout.md
 ---
 # 198 — Build urzua harness install, the engine-run hook cores and the Claude Code adapter
 
@@ -32,3 +33,4 @@ The editor hook today is a `jq`, `bash` and `python3` chain with several paths t
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-89` (Proposed) decides the installable agent harness bundle on maintainer decisions of 2026-11-05 and no milestone builds this part; blocked on the maintainer accepting it. | **substantive** |
 > | 2026-11-05 | Split and corrected after review. The cutover of this repository (delete `scripts/hooks`, run the installed bundle) moves to `MILE-204`; `uninstall`, the settings-merge rules, the `CLAUDE_PROJECT_DIR` fix, the `on_unjudged: deny` escape hatch, the `authority` load error and the vendor-scan exclusion for the bundle are added; code citations corrected (`record-edit-hook.sh:71`, `:86`). **Why:** Independent review of pull request 355; the Done means were too large for one change and several were untestable as written. Still `Planned`, blocked on `ADR-89`. | **substantive** |
+> | 2026-11-06 | Built and marked Done. `urzua harness install`, `status`, `update`, `uninstall` and `adapters` manage a bundle embedded in the binary (one directory per adapter, generated into the binary by `build.rs`) with `.urzua/harness.lock`; `harness` loads from the configuration (an unknown key or guardrail is reported by `install` and `doctor`, `acceptance` or `protected-paths` without `authority` is a load error); `urzua harness run edit` reproduces every verdict of `scripts/hooks/record-edit-hook.sh` on its planted cases in the engine; `run session-start` reports the binary, version, interpreter, project-directory variable, hook entry and git hook; the Claude Code adapter is a settings fragment and one translator whose command no longer depends on `CLAUDE_PROJECT_DIR`; `on_unjudged: deny` refuses an agent and allows a person. `SPEC-3` is `0.96`, `SPEC-19` `0.13` and the new `SPEC-24` records the neutral request, verdict and adapter layout. This repository still runs `scripts/hooks` (`MILE-204`). **Why:** the delivering change for `ADR-89` sections 1 to 3 and 6; the `Done means` above are each a test in `harness_integration.rs`, `harness.rs`, `settings.rs`, `block.rs`, `json.rs`, `lock.rs` and `bundle.rs`. | **substantive** |

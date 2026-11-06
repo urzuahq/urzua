@@ -269,6 +269,10 @@ pub struct CheckArgs {
     pub base: Option<String>,
     pub fail_on: Option<urzua_core::config::FailOn>,
     pub stdin_path: Option<PathBuf>,
+    /// The proposed content for `stdin_path`, when the caller has it already
+    /// (`urzua harness run edit` judges in process); otherwise it is read from
+    /// stdin.
+    pub proposed: Option<String>,
     /// `--rules`: empty means every declared rule.
     pub rules: Vec<String>,
     /// Notices the invoking command adds to the report (`audit`'s deprecation).
@@ -318,12 +322,30 @@ fn validate_selection(
     Ok(Some(out))
 }
 
+/// Judges one record's proposed content in process, as `check --stdin-path`
+/// does, for the harness cores. The path is relative to the repository root.
+pub(crate) fn judge_proposed(
+    config_path: Option<PathBuf>,
+    path: PathBuf,
+    content: String,
+) -> Result<CheckReport, Failure> {
+    execute(
+        config_path,
+        CheckArgs {
+            stdin_path: Some(path),
+            proposed: Some(content),
+            ..Default::default()
+        },
+    )
+}
+
 fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
     let CheckArgs {
         paths,
         base,
         fail_on,
         stdin_path,
+        proposed,
         rules: requested_rules,
         extra_notices,
     } = args;
@@ -333,7 +355,13 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
                 .into(),
         );
     }
-    let opened = open_session(&paths, config_path, base.as_deref(), stdin_path.as_deref())?;
+    let opened = open_session(
+        &paths,
+        config_path,
+        base.as_deref(),
+        stdin_path.as_deref(),
+        proposed,
+    )?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;
     let scope = narrow(
@@ -345,6 +373,13 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     let (context, mut notices) = load_context(session, &scope, selection.as_deref())?;
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
+    let why_deferred = if scope.prospective.is_some() {
+        "not the proposed record".to_string()
+    } else {
+        base.as_deref()
+            .map_or("no --base".to_string(), |b| format!("unchanged since {b}"))
+    };
+    notices.extend(scope_changed_notices(&executions, &why_deferred));
     scope_findings(session, &scope, &mut findings);
     let suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
     let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
@@ -400,6 +435,27 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     })
 }
 
+// ADR-90: a rule that declares scope: changed says how many slots it did not judge, and why.
+/// One info notice per rule that declared `scope: changed` and left slots
+/// unjudged (`ADR-90`): the rule, the option, how many slots and why. Without
+/// it a plain `check` would show a nudge rule examining nothing with no cause.
+fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice> {
+    executions
+        .iter()
+        .filter_map(|e| {
+            let deferred = e.population.as_ref()?.deferred_by_scope();
+            (deferred > 0).then(|| Notice {
+                severity: NoticeSeverity::Info,
+                subject: e.rule.clone(),
+                message: format!(
+                    "scope: changed -- {deferred} slot{} not judged ({why}); this rule judges only the records a --base diff adds or changes",
+                    if deferred == 1 { "" } else { "s" }
+                ),
+            })
+        })
+        .collect()
+}
+
 // Implements: ADR-86 (the report counts permanent waivers by category)
 /// The permanent waivers in effect, counted by category (`ADR-86`), when the
 /// suppression type declares `permanent`. Said on every run, including with
@@ -441,6 +497,7 @@ fn open_session(
     config_path: Option<PathBuf>,
     base: Option<&str>,
     stdin_path: Option<&Path>,
+    proposed: Option<String>,
 ) -> Result<Opened, Failure> {
     let mut requested_scopes = Vec::new();
     let mut changed = None;
@@ -478,7 +535,7 @@ fn open_session(
     })?;
     let mut session = session;
     let prospective = match stdin_path {
-        Some(p) => Some(propose(&mut session, p)?),
+        Some(p) => Some(propose(&mut session, p, proposed)?),
         None => None,
     };
     if let Some(p) = &prospective {
@@ -495,11 +552,21 @@ fn open_session(
 /// Reads the proposed content from stdin and puts it in the session in place of
 /// the record's on-disk copy, adding the record (and its path) when the file
 /// does not exist yet. A path no record type governs is a could-not-run.
-fn propose(session: &mut Session, stdin_path: &Path) -> Result<Prospective, String> {
+fn propose(
+    session: &mut Session,
+    stdin_path: &Path,
+    proposed: Option<String>,
+) -> Result<Prospective, String> {
     let rel = crate::discovery::relative_to_root(&session.repo_root, stdin_path)?;
-    let mut content = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut content)
-        .map_err(|e| format!("could not read the proposed content from stdin: {e}"))?;
+    let content = match proposed {
+        Some(content) => content,
+        None => {
+            let mut content = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut content)
+                .map_err(|e| format!("could not read the proposed content from stdin: {e}"))?;
+            content
+        }
+    };
     let record = crate::discovery::parse_prospective_record(&session.config, &rel, &content)?;
     session.records.retain(|r| r.path != rel);
     session.records.push(record);

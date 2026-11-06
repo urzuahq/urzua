@@ -49,4 +49,6 @@ regenerates the list below from the records.
   Rust coding standards
 - [SPEC-23](SPEC-23-the-condition-record-type.md) — Draft, 2026-11-05
   The condition record type
+- [SPEC-24](SPEC-24-the-harness-request-verdict-and-adapter-layout.md) — Draft, 2026-11-06
+  The harness request, verdict and adapter layout
 <!-- urzua:index:end -->
