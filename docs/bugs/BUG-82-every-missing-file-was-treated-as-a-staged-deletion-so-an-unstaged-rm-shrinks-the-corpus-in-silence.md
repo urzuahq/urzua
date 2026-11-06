@@ -2,7 +2,7 @@
 Stable-Id: 01M2YPPQY0H0CZX2ECQY9CPME2
 Status: Fixed
 Found-in: "Round 9 of the 0.4.0 review, reproduced against a scratch repository"
-Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_unstaged_deletion_of_a_tracked_record_stops_the_run@sha256:518faffdda85ef709789029d68136e5ddf08dff2c8943fb38d4af06fe538eb89
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_unstaged_deletion_of_a_tracked_record_is_judged_as_removed_and_named@sha256:0000000000000000000000000000000000000000000000000000000000000000
 ---
 # 82 — Every missing file was treated as a staged deletion so an unstaged rm shrinks the corpus in silence
 
@@ -48,3 +48,4 @@ the value being tested carried that information. It did not.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-06 | The `Realized-by` test is now `an_unstaged_deletion_of_a_tracked_record_is_judged_as_removed_and_named`. **Why:** a second adopter switchover showed that stopping the whole run on one unstaged `rm` left the editor hook unable to judge anything in the ordinary mid-rename state, so an unstaged deletion is now judged as removed and named in a `missing-record` warning notice. The defect this record fixed -- a record vanishing from the corpus with nothing in the report -- stays fixed, by the notice rather than by stopping the run. | **substantive** |
