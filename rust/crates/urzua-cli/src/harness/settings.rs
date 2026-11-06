@@ -48,11 +48,11 @@ pub fn handler_of(hook: &J) -> Option<String> {
     (!handler.is_empty()).then_some(handler)
 }
 
-/// The scripts of the first-generation editor guardrail, which a repository
-/// copied by hand before the bundle existed. Wired beside the bundle's own
-/// hook, each record edit runs both: a block is raised twice and an override
-/// is logged twice.
-const LEGACY_SCRIPTS: [&str; 2] = ["record-edit-hook.sh", "claude-code-record-edit.py"];
+/// What the scripts of the first-generation editor guardrail have in their
+/// names (a shell hook and its adapter), which a repository copied by hand
+/// before the bundle existed. Wired beside the bundle's own hook, each record
+/// edit runs both: a block is raised twice and an override is logged twice.
+const LEGACY_SCRIPTS: [&str; 1] = ["record-edit"];
 
 /// The hook commands in `settings` that run a first-generation editor hook.
 pub fn legacy_commands(settings: &J) -> Vec<String> {

@@ -770,8 +770,7 @@ fn load_context<'a>(
     // under `back_pointer_paths` and the published boundary files are most of a
     // narrow run's cost on a large tree, and a rule that was not selected
     // never looks at them.
-    let wanted =
-        |ids: &[&str]| selection.is_none_or(|s| s.iter().any(|r| ids.contains(&r.as_str())));
+    let wanted = |ids: &[&str]| selection_wants(selection, ids);
 
     let claim_opts =
         config.enabled_rule_opts::<rules::ClaimOpts>(rules::RULE_CLAIM_STATUS_AGREEMENT);

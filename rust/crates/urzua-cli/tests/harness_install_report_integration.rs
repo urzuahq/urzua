@@ -91,13 +91,14 @@ fn a_hand_copied_first_generation_editor_hook_is_warned_about_by_install_and_doc
     write(
         &dir,
         ".claude/settings.json",
-        "{\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Write|Edit\",\n        \"hooks\": [\n          {\"type\": \"command\", \"command\": \"scripts/hooks/record-edit-hook.sh\"}\n        ]\n      }\n    ]\n  }\n}\n",
+        "{\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Write|Edit\",\n        \"hooks\": [\n          {\"type\": \"command\", \"command\": \"scripts/hooks/record-edit-hook.sh\"},\n          {\"type\": \"command\", \"command\": \"python3 scripts/hooks/agent-record-edit.py\"}\n        ]\n      }\n    ]\n  }\n}\n",
     );
 
     let (code, v) = urzua(&dir, &["harness", "install"]);
     assert_eq!(code, 0, "{v}");
     let notices = v["notices"].to_string();
     assert!(notices.contains("record-edit-hook.sh"), "{notices}");
+    assert!(notices.contains("agent-record-edit.py"), "{notices}");
     assert!(notices.contains("first-generation"), "{notices}");
 
     let (_, d) = urzua(&dir, &["doctor"]);
