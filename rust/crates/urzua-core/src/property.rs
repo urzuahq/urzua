@@ -545,7 +545,7 @@ mod tests {
             ),
             (
                 "embodiment.locator-promotion-candidate",
-                rules::embodiment_locator_promotion_candidate(&records, &config),
+                rules::embodiment_locator_promotion_candidate(&records, &config, None),
             ),
         ];
 

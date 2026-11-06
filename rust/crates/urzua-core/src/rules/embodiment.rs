@@ -563,14 +563,28 @@ pub(crate) fn evidence_description(
 /// drift independently on what is really one piece of shared evidence (the
 /// ADR-0072/0073/0074 shape RFC-0005 names). Reports only; a human runs the
 /// actual promotion into a `claim` record, never this rule.
+///
+/// With `scope: changed` (`ADR-90`) the rule is a nudge for the moment someone
+/// touches a record that shares a locator: a locator is reported only when a
+/// record the diff adds or changes cites it, and the finding sits on that
+/// changed record. The unchanged citers still count toward "cited by more than
+/// one record" and are named in the message, so a changed record is nudged when
+/// it joins a shared locator; the unchanged records are counted in the
+/// population's `deferred_by_scope` and carry no finding.
 pub fn embodiment_locator_promotion_candidate(
     records: &[Record],
     config: &Config,
+    scope: Option<&ChangedOnly>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE;
     let mut findings = Vec::new();
 
     let mut citers: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeSet<std::path::PathBuf>,
+    > = std::collections::BTreeMap::new();
+    // `scope: changed`: the citers that are changed records, per locator.
+    let mut changed_citers: std::collections::BTreeMap<
         String,
         std::collections::BTreeSet<std::path::PathBuf>,
     > = std::collections::BTreeMap::new();
@@ -614,6 +628,17 @@ pub fn embodiment_locator_promotion_candidate(
                     .entry(locator.clone())
                     .or_default()
                     .insert(record.path.clone());
+                if scope.is_some_and(|s| !s.defers(record)) {
+                    changed_citers
+                        .entry(locator.clone())
+                        .or_default()
+                        .insert(record.path.clone());
+                }
+            }
+            // `scope: changed` (`ADR-90`): the slot is eligible and counted as a
+            // citer above, and not judged for a record the diff did not change.
+            if scope.is_some_and(|s| s.defers(record)) {
+                return Outcome::DeferredByScope;
             }
             Outcome::Examined
         },
@@ -624,7 +649,16 @@ pub fn embodiment_locator_promotion_candidate(
             continue;
         }
         let names: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
-        let first_path = paths.iter().next().expect("checked len >= 2 above").clone();
+        // Under `scope: changed` the finding sits on a changed citer, and a
+        // locator no changed record cites is not reported.
+        let first_path = if scope.is_some() {
+            match changed_citers.get(&locator).and_then(|c| c.iter().next()) {
+                Some(path) => path.clone(),
+                None => continue,
+            }
+        } else {
+            paths.iter().next().expect("checked len >= 2 above").clone()
+        };
         findings.push(Finding {
             rule: RULE_ID.to_string(),
             severity: FindingSeverity::Warning,
@@ -1335,7 +1369,7 @@ end: brace_balanced
             "---\nRealized-by: code:src/shared.rs\n---\n",
         );
         let (exec, findings) =
-            embodiment_locator_promotion_candidate(&[a, b], &embodiment_config());
+            embodiment_locator_promotion_candidate(&[a, b], &embodiment_config(), None);
         assert_eq!(examined(&exec), 2);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("src/shared.rs"));
@@ -1352,7 +1386,7 @@ end: brace_balanced
             "adr",
             "---\nRealized-by: code:src/shared.rs, test:src/shared.rs\n---\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config(), None);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
 
@@ -1363,7 +1397,7 @@ end: brace_balanced
             "adr",
             "---\nRealized-by: code:src/a.rs\n---\n",
         );
-        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config());
+        let (_, findings) = embodiment_locator_promotion_candidate(&[a], &embodiment_config(), None);
         assert!(findings.is_empty());
     }
 
