@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6SK9J9JPGS00G7E3FHKRCGC
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-06
 Date: 2026-11-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -164,3 +165,4 @@ that consumers may come to read, and the notice subjects are names a repository 
 > |---|---|---|
 > | 2026-11-06 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-06: an opt-in `discovery.include_untracked`, a plain `check` that names the untracked records it skips, `--base` treating them as added, and drift not judging them (disclosed). The maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-06 | Clause 3 states that `discover_tracked_files` changes signature and contract (it gains config input) and its doc comment is rewritten; clause 9 requires the `ADR-56` amendment instead of leaving it to the maintainer; `ADR-56` cited. Both records stay Proposed. **Why:** independent review of 2026-11-06 found the function takes no config and its doc forbids this, and that `ADR-56`'s "stands unchanged" needs a dated amendment, as `ADR-27`'s precedent shows. | **substantive** |
+> | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
