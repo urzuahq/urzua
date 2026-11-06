@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.6'
+Version: '0.7'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -30,7 +30,7 @@ unreadable one is not a crash: it is a stated verdict (below).
 | `content` | string or null | `edit`: the full proposed content of the file. The adapter computes it from the agent's edit. |
 | `actor` | `agent` or `human` | Who is acting. Absent means `agent`. Only `on_unjudged: deny` reads it. |
 | `cwd` | string or null | The directory the engine enters before it finds the repository. For `edit` with an absolute path, the repository that holds the file is used when it differs, so a `cwd` outside the repository still finds it. |
-| `adapter_error` | string or absent | `edit`: set by a translator that could not build a request (an unreadable payload, an edit it could not place). The engine builds no judgement from it: it refuses the call for an agent when `acceptance` or `protected-paths` is enabled with `on_unjudged: deny` (read from the raw configuration), and otherwise returns `allow-unjudged` with a message. |
+| `adapter_error` | string or absent | `edit`: set by a translator that could not build a request (an unreadable payload, an edit it could not place). The engine builds no judgement from it. With no `paths` (an unreadable payload) it refuses the call for an agent when `acceptance` or `protected-paths` is enabled with `on_unjudged: deny` (read from the raw configuration). With a path (an edit the translator could not place, such as an `old_string` that is not in the file) it refuses only when that path is a protected path, the configuration, or a record of a type a status gate names (matched as for the gates), judged as written and as resolved. For any other file it returns `allow-unjudged` with a message: the edit tool's own failure handles an absent `old_string`. |
 | `override` | `{name, reason}` or absent | A named override of the editor hook (`ADR-78`). The environment variables `URZUA_HOOK_OVERRIDE` and `URZUA_HOOK_REASON` mean the same when the field is absent. |
 
 ## The verdict
@@ -59,7 +59,9 @@ A failure of the adapter itself fails the same way, by the same two guardrails: 
 sends `adapter_error` for an unreadable payload or an edit it cannot place, and refuses the edit itself, from
 the configuration's text, when the engine command cannot be run or answers with something that is not a
 verdict. It does so only where `acceptance` or `protected-paths` is enabled and not set to `on_unjudged: allow`;
-under any other configuration the call proceeds with a stated notice.
+under any other configuration the call proceeds with a stated notice. An edit the translator cannot place is
+refused only when its file is a protected path or a gated record (the table above); for any other file it
+proceeds with the notice, since the edit tool fails by itself when its `old_string` is absent.
 
 Gate matching (`acceptance`, `protected-paths`) compares paths ASCII case-insensitively on every filesystem, and
 judges an edit through a symlink as the file it resolves to.
@@ -170,3 +172,4 @@ out of the shared files, and deletes the lock last.
 > | 2026-11-06 | Bumped to `0.4`. The adapter layout gains `commands/` and the manifest key `commands_dir` (`MILE-199`); `status` reports a bundle file the lock does not know yet as `missing`. **Why:** `ADR-89` section 1. | **substantive** |
 > | 2026-11-06 | Bumped to `0.5`. Drops the not-covered entry for cutting this repository over: it runs on the installed bundle (`SPEC-19`). **Why:** `MILE-204`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.6`. Adds the request field `adapter_error` and the adapter-failure rule for `on_unjudged: deny` (`acceptance`, `protected-paths`), the post-command verdict field `protected_changes`, the commit range and `post-command-head` memory, and the case-insensitive and symlink-resolving gate matching. **Why:** the second-pass review of the harness. | **substantive** |
+> | 2026-11-06 | Bumped to `0.7`. An edit the translator cannot place is refused under `on_unjudged: deny` only when its file is a protected path or a gated record; any other file is allowed with a notice. An unreadable payload, which names no file, is still refused. **Why:** review of pull request 378: refusing every unplaceable edit overreached onto files no gate covers, where the edit tool fails by itself. | **substantive** |

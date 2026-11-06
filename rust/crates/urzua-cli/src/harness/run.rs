@@ -262,24 +262,48 @@ pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
 }
 
 /// The verdict for a call the adapter could not turn into a request: refused
-/// for an agent when the acceptance or protected-paths guardrail is on and set
-/// to `on_unjudged: deny` (read from the raw configuration, which needs no
-/// request), else allowed with the adapter's loud message. An adapter's own
-/// failure never blocks when the configuration says allow.
+/// for an agent under `on_unjudged: deny`, else allowed with the adapter's loud
+/// message. An adapter's own failure never blocks when the configuration says
+/// allow. With no file named (an unreadable payload) any denying `acceptance` or
+/// `protected-paths` guardrail refuses. With a file named (an edit the
+/// translator could not place) the call is refused only when that file is a
+/// protected path or a record of a gated type: the edit tool's own failure
+/// handles an absent `old_string` anywhere else, and the loud message stays.
 fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdict {
     let here = std::env::current_dir().unwrap_or_default();
     let root = crate::discovery::find_repo_root(&[PathBuf::from(".")]).unwrap_or(here);
     let path = request.paths.first().map(String::as_str);
-    for guardrail in ["protected-paths", "acceptance"] {
-        if let (true, OnUnjudged::Deny) = raw_policy(config, &root, guardrail) {
-            return unjudged_as(guardrail, OnUnjudged::Deny, Actor::Agent, path, why);
-        }
+    let guardrail = match path {
+        None => ["protected-paths", "acceptance"]
+            .into_iter()
+            .find(|g| matches!(raw_policy(config, &root, g), (true, OnUnjudged::Deny))),
+        Some(p) => targeted_guardrail(config, &root, Path::new(p)),
+    };
+    if let Some(guardrail) = guardrail {
+        return unjudged_as(guardrail, OnUnjudged::Deny, Actor::Agent, path, why);
     }
     Verdict::new(
         "allow-unjudged",
         path,
         format!("urzua harness: urzua did NOT judge this call ({why}). It is allowed; run 'urzua harness status' and 'urzua check' before committing."),
     )
+}
+
+/// The denying guardrail that covers `path`, read from the raw configuration
+/// (a protected path, the configuration itself, or a record directory of a
+/// gated type), judging the path as written and as it resolves.
+fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option<&'static str> {
+    let config_path = config
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| crate::discovery::default_config_path(root));
+    let raw = gate::raw_gates(&std::fs::read_to_string(&config_path).ok()?)?;
+    let config_rel = crate::discovery::relative_to_root(root, &config_path).ok();
+    let lexical = crate::discovery::relative_to_root(root, path).ok();
+    let resolved = resolved_rel(root, path);
+    lexical
+        .iter()
+        .chain(resolved.iter())
+        .find_map(|rel| raw.covers(rel, config_rel.as_deref()))
 }
 
 /// Enters the repository that holds the file being edited when the request

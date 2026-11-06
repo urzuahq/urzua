@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.18'
+Version: '0.19'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -175,7 +175,8 @@ and this section claims only what each place does.
   say so. An edit the adapter could not hand to the engine (an unreadable payload, an edit whose text the
   translator cannot place, an engine that cannot be run) is refused the same way when `acceptance` or
   `protected-paths` is on with `on_unjudged: deny`, and only then; where the configuration allows, it is allowed with a
-  stated notice. This repository declares both gates and has the Claude Code bundle installed, so the refusal is
+  stated notice. An edit whose text the translator cannot place is refused only when its file is a protected path or
+  a gated record; for any other file it is allowed with the notice, because the edit tool fails by itself. This repository declares both gates and has the Claude Code bundle installed, so the refusal is
   wired into an agent session here.
 - **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), fed an `--actors` file the gate
   action (`.github/actions/urzua-gate`, input `actors: "true"`) writes from the GitHub API, requires the pull
@@ -252,3 +253,4 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.16`. Documents the generated drafting command for every record type, `/amend`, `/repin` and `/done` and the helper they call (`MILE-199`): what each refuses, that `/done` sets a state only through `urzua fix --apply` and `fix` refuses a state an `authority` gate names, and that this repository commits the commands for the types it lacked while `/adr`, `/rfc` and `/milestone` stay hand-written until `MILE-204`. **Why:** `ADR-89` section 1, `ADR-70` amendment of 2026-11-05. | **substantive** |
 > | 2026-11-06 | Bumped to `0.17`. This repository runs on the installed bundle: `/adr`, `/rfc` and `/milestone` are generated (their type-specific guidance moved into the type templates), `scripts/hooks` and `scripts/draft-record.sh` are deleted, the protected-path list no longer names `scripts/hooks`, and the commands run the helper through `bash` (a file the install writes carries no executable bit, so the direct call was denied). **Why:** `MILE-204`, `ADR-89` section 6. | **substantive** |
 > | 2026-11-06 | Bumped to `0.18`. The post-command check also reports a changed protected path (report only) and covers a commit made inside the command, comparing with the commit the last check saw; the edit gates match paths ASCII case-insensitively, judge a symlink edit as its target, find the repository from the file edited when `cwd` is outside it, and `.urzua/templates` is a protected path here; an adapter failure is refused where `acceptance` or `protected-paths` is on with `on_unjudged: deny`. **Why:** the second-pass review of `MILE-198` to `MILE-204` found the shell route to the guardrails silent, a commit hiding the change, and four ways an edit went unjudged although the configuration said deny. The drafting helper `urzua-record.sh` reads `URZUA_BIN` (as the translator does) and still accepts `URZUA`, and the bundle's instructions say the post-command check reports a shell edit of a guardrail. | **substantive** |
+> | 2026-11-06 | Bumped to `0.19`. An edit the translator cannot place is refused only on a protected path or a gated record; any other file is allowed with a notice (`SPEC-24`). **Why:** review of pull request 378: the refusal overreached onto ungated files. | **substantive** |

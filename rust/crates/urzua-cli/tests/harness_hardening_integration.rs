@@ -337,25 +337,60 @@ fn a_failed_engine_is_refused_when_the_configuration_denies_and_allowed_when_it_
     );
 }
 
+/// An `Edit` whose `old_string` is not in `file`, from `dir`.
+fn unplaceable(dir: &Path, file: &str) -> String {
+    serde_json::json!({
+        "tool_name": "Edit", "cwd": dir.to_string_lossy(),
+        "tool_input": {"file_path": dir.join(file).to_string_lossy(), "old_string": "absent text", "new_string": "x"},
+    })
+    .to_string()
+}
+
 #[test]
-fn an_edit_the_translator_cannot_place_is_refused_when_the_configuration_denies() {
-    let payload = |dir: &Path| {
-        serde_json::json!({
-            "tool_name": "Edit", "cwd": dir.to_string_lossy(),
-            "tool_input": {"file_path": dir.join(PATH_1).to_string_lossy(), "old_string": "absent text", "new_string": "x"},
-        })
-        .to_string()
-    };
+fn an_edit_the_translator_cannot_place_is_refused_on_a_gated_record_or_protected_path_when_the_configuration_denies(
+) {
     let dir = fixture("closed-place", &config(""));
-    let v = translate(&dir, &payload(&dir), &ENGINE);
-    assert_eq!(decision(&v), Some("deny"), "{v}");
+    // A gated record, a protected path and the configuration itself: refused.
+    for file in [PATH_1, ".claude/settings.json", ".urzua/config.yaml"] {
+        let v = translate(&dir, &unplaceable(&dir, file), &ENGINE);
+        assert_eq!(decision(&v), Some("deny"), "{file}: {v}");
+    }
+    // Case-variant spellings and a path through a symlink are the same files.
+    std::os::unix::fs::symlink("../.claude", dir.join("docs/cl")).unwrap();
+    for file in [
+        "Docs/ADR/ADR-1-a.md",
+        ".CLAUDE/settings.json",
+        "docs/cl/settings.json",
+    ] {
+        let v = translate(&dir, &unplaceable(&dir, file), &ENGINE);
+        assert_eq!(decision(&v), Some("deny"), "{file}: {v}");
+    }
     let dir = fixture("open-place", &config(", on_unjudged: allow"));
-    let v = translate(&dir, &payload(&dir), &ENGINE);
+    let v = translate(&dir, &unplaceable(&dir, PATH_1), &ENGINE);
     assert_eq!(decision(&v), None, "{v}");
     assert!(
         v["systemMessage"].as_str().unwrap().contains("NOT judge"),
         "{v}"
     );
+}
+
+#[test]
+fn an_edit_the_translator_cannot_place_is_allowed_with_a_notice_on_any_other_file() {
+    let dir = fixture("ungated-place", &config(""));
+    std::fs::write(dir.join("notes.txt"), "hello\n").unwrap();
+    // An existing ungated file, one that does not exist, and a record directory
+    // no gate names: the edit tool's own failure handles an absent old_string.
+    for file in ["notes.txt", "missing/nothing.txt", "README.md"] {
+        let v = translate(&dir, &unplaceable(&dir, file), &ENGINE);
+        assert_eq!(decision(&v), None, "{file}: {v}");
+        assert!(
+            v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+            "{file}: {v}"
+        );
+    }
+    // An unreadable payload names no file, so it is still refused.
+    let v = translate(&dir, "garbage{", &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
 }
 
 // ------------------------------------ 4. an edit from outside the repo
